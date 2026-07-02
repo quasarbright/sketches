@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cohesion — design system</title>
+  <link rel="stylesheet" href="./shared/cohesion.css" />
+  <script type="module" src="./shared/cohesion.js"></script>
+</head>
+<body>
+  <div class="page">
+    <h1 class="title">Cohesion design system</h1>
+    <p class="intro">
+      The shared house style for Mike's projects — <em>Refined Escher</em>: dark navy, indigo accent,
+      sans UI with mono for data. This page is the kitchen-sink demo. Re-theme any project by
+      overriding the CSS tokens; every component below reads them.
+    </p>
+
+    <div class="section-label">Buttons</div>
+    <div class="btn-row">
+      <button class="btn">Default</button>
+      <button class="btn btn-primary">Primary</button>
+      <button class="btn is-active">Active</button>
+      <button class="btn btn-danger">Danger</button>
+    </div>
+
+    <div class="section-label">Control panel (collapsible)</div>
+    <p class="muted">Click the header to collapse. Add <code>floating</code> for a semitransparent
+      panel fixed over a canvas — see the <a href="./sim.html">fullscreen sim demo</a>.</p>
+    <control-panel title="Controls">
+      <label class="check"><input type="checkbox" checked /> apply twist</label>
+      <label class="check"><input type="checkbox" /> center output</label>
+      <div class="control">
+        <div class="control-head"><span class="name">view zoom</span><span class="value" id="v1">0.03</span></div>
+        <input type="range" min="0" max="1" step="0.01" value="0.03" oninput="v1.textContent=(+this.value).toFixed(2)" />
+      </div>
+      <div class="control">
+        <div class="control-head"><span class="name">zoom speed</span><span class="value" id="v2">0.16×</span></div>
+        <input type="range" min="0" max="2" step="0.01" value="0.16" oninput="v2.textContent=(+this.value).toFixed(2)+'×'" />
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary">Zoom in</button>
+        <button class="btn">Zoom out</button>
+      </div>
+    </control-panel>
+
+    <div class="section-label">Upload dropzone</div>
+    <div class="dropzone" style="max-width:340px">
+      <div class="icon">🖼️</div>
+      <div>Click to upload an image</div>
+      <div class="hint">or drag &amp; drop · PNG, JPG, WEBP, GIF</div>
+    </div>
+
+    <div class="section-label">About modal (with KaTeX math)</div>
+    <about-modal label="about this demo">
+      <h2 class="title">Cohesion Demo</h2>
+      <p>A walkthrough of the shared components. The about-modal renders structured prose, inline
+        <code>code</code>, colored keywords, and math.</p>
+      <div class="section-label">Why math works</div>
+      <p>Energy change per tick: $\Delta E = c_\text{base} + c_\text{muscle}\sum_i |f_i| + c_\text{move}\cdot|a|$.
+        Display mode too:</p>
+      <p>$$ z_{n+1} = z_n^2 + c $$</p>
+    </about-modal>
+
+    <div class="section-label">OpenRouter key field (shared across all projects)</div>
+    <div class="panel" style="max-width:440px">
+      <openrouter-key></openrouter-key>
+    </div>
+  </div>
+
+  <mike-footer></mike-footer>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cymatics — resonant plate</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ---- token overrides: the "resonant plate" identity ---- */
+    :root {
+      --bg:        #14110d;   /* ink — the darkened room */
+      --panel:     #221f19;   /* steel */
+      --panel-2:   #2c2820;
+      --border:    #453c2e;   /* warm edge */
+      --text:      #e9dcc0;   /* sand */
+      --muted:     #a99f88;
+      --faint:     #6f6650;
+      --accent:    #c8962b;   /* brass */
+      --accent-hi: #e0ab3a;
+      --on-accent: #14110d;
+      --font-ui:      "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Fraunces", Georgia, serif;
+    }
+
+    body { min-height: 100vh; display: grid; place-items: center;
+      background:
+        radial-gradient(120% 90% at 50% 0%, #1b1712 0%, var(--bg) 60%);
+    }
+
+    .instrument { text-align: center; padding: 40px 20px 80px; }
+    .eyebrow {
+      font-family: var(--font-mono); font-size: .72rem; letter-spacing: .32em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+    }
+    .instrument h1 {
+      font-family: var(--font-display); font-weight: 900; font-size: clamp(2.6rem, 7vw, 4.5rem);
+      letter-spacing: -.02em; line-height: .95; margin: 0 0 8px;
+      font-optical-sizing: auto;
+    }
+    .instrument .sub { color: var(--muted); max-width: 44ch; margin: 0 auto 30px; }
+
+    /* ---- the signature: a plate clamped in a brass frame ---- */
+    .plate-frame {
+      position: relative; display: inline-block; padding: 14px;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #d9ad4e, #8a6a1e 55%, #c8962b);
+      box-shadow: 0 20px 60px rgba(0,0,0,.6), inset 0 1px 2px rgba(255,255,255,.35);
+    }
+    .plate-frame::before, .plate-frame::after,
+    .bolt { content: ""; position: absolute; width: 9px; height: 9px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #f4e2a8, #6b511a);
+      box-shadow: inset 0 0 1px rgba(0,0,0,.6); }
+    .plate-frame::before { top: 9px; left: 9px; }
+    .plate-frame::after  { top: 9px; right: 9px; }
+    .bolt.bl { bottom: 9px; left: 9px; }  .bolt.br { bottom: 9px; right: 9px; }
+    canvas#plate { display: block; border-radius: 4px; background: #1a1712;
+      width: min(72vw, 520px); height: min(72vw, 520px); }
+
+    .plate-readout {
+      font-family: var(--font-mono); color: var(--muted); font-size: .82rem;
+      letter-spacing: .04em; margin-top: 16px;
+    }
+    .plate-readout b { color: var(--text); font-weight: 500; }
+    .actions { margin-top: 22px; }
+  </style>
+</head>
+<body>
+  <main class="instrument">
+    <div class="eyebrow">Resonant Plate · No. 07</div>
+    <h1>Cymatics</h1>
+    <p class="sub">Drive a steel plate at a resonant frequency and scattered sand walks itself
+      into the silent lines — the places that do not move.</p>
+
+    <div class="plate-frame">
+      <span class="bolt bl"></span><span class="bolt br"></span>
+      <canvas id="plate" width="520" height="520"></canvas>
+    </div>
+
+    <div class="plate-readout">mode (m, n) = <b id="mn">(3, 2)</b> · <span id="grains">24,000</span> grains settled</div>
+
+    <div class="actions">
+      <about-modal label="the physics">
+        <h2 class="title">Chladni figures</h2>
+        <p>A plate clamped at its center and driven at a resonant frequency vibrates in a
+          <em>standing wave</em>. Some lines never move — the <b>nodal lines</b>. Sand bounces off
+          the moving regions and collects along these still lines, drawing the mode.</p>
+        <div class="section-label">The pattern</div>
+        <p>For a square plate the displacement of a simple mode is a difference of two standing waves,
+          and the figure is the set where it vanishes:</p>
+        <p>$$ \cos(n\pi x)\,\cos(m\pi y) \;-\; \cos(m\pi x)\,\cos(n\pi y) \;=\; 0 $$</p>
+        <p>The integers $m$ and $n$ count the half-waves along each axis. Raising them multiplies
+          the crossings — higher notes make busier figures.</p>
+      </about-modal>
+    </div>
+  </main>
+
+  <!-- the brass instrument's controls -->
+  <control-panel floating title="Drive">
+    <div class="control">
+      <div class="control-head"><span class="name">mode m</span><span class="value" id="vm">3</span></div>
+      <input type="range" id="m" min="1" max="9" step="1" value="3" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">mode n</span><span class="value" id="vn">2</span></div>
+      <input type="range" id="n" min="1" max="9" step="1" value="2" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">line width</span><span class="value" id="vw">0.015</span></div>
+      <input type="range" id="w" min="0.005" max="0.04" step="0.001" value="0.015" />
+    </div>
+  </control-panel>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const cv = document.getElementById("plate"), ctx = cv.getContext("2d");
+    const S = cv.width;
+    const css = getComputedStyle(document.documentElement);
+    const sand = css.getPropertyValue("--text").trim();
+    const steel = "#1a1712";
+    const $ = (id) => document.getElementById(id);
+
+    const chladni = (x, y, n, m) =>
+      Math.cos(n*Math.PI*x)*Math.cos(m*Math.PI*y) - Math.cos(m*Math.PI*x)*Math.cos(n*Math.PI*y);
+
+    function draw() {
+      const m = +$("m").value, n = +$("n").value, eps = +$("w").value;
+      ctx.fillStyle = steel; ctx.fillRect(0, 0, S, S);
+      // faint plate texture
+      ctx.fillStyle = "rgba(255,255,255,0.015)";
+      for (let i = 0; i < 1200; i++) ctx.fillRect(Math.random()*S, Math.random()*S, 1, 1);
+      // sand walks to the nodal lines
+      ctx.fillStyle = sand;
+      let placed = 0, tries = 0;
+      while (placed < 24000 && tries < 600000) {
+        tries++;
+        const x = Math.random(), y = Math.random();
+        if (Math.abs(chladni(x, y, n, m)) < eps) {
+          const jx = (Math.random()-.5)*1.5, jy = (Math.random()-.5)*1.5;
+          ctx.fillRect(x*S + jx, y*S + jy, 1.3, 1.3);
+          placed++;
+        }
+      }
+      $("mn").textContent = `(${m}, ${n})`;
+      $("vm").textContent = m; $("vn").textContent = n; $("vw").textContent = eps.toFixed(3);
+      $("grains").textContent = placed.toLocaleString();
+    }
+    ["m","n","w"].forEach(id => $(id).addEventListener("input", draw));
+    draw();
+  </script>
+</body>
+</html>

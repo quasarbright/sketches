@@ -1,0 +1,178 @@
+/* cohesion.css — Mike's house style (Refined Escher)
+ * Design tokens + presentational utility classes. Behavioral pieces live in cohesion.js.
+ * Import once: <link rel="stylesheet" href="/sketches/shared/cohesion.css">
+ * Re-theme a project by overriding tokens on :root (e.g. brass). Components read the vars.
+ */
+
+:root {
+  /* surfaces */
+  --bg:        #0e0f16;
+  --panel:     #171a24;
+  --panel-2:   #1f2330;
+  --border:    #2a2f3d;
+
+  /* text */
+  --text:      #e6e8ef;
+  --muted:     #8a8fa3;
+  --faint:     #5b6072;
+
+  /* accent */
+  --accent:    #7c8cf8;
+  --accent-hi: #9aa6ff;
+  --on-accent: #0e0f16;
+
+  /* status */
+  --danger:    #e0556b;
+  --success:   #5fd08a;
+
+  /* shape & motion */
+  --radius:    10px;
+  --radius-sm: 6px;
+  --gap:       12px;
+  --shadow:    0 8px 30px rgba(0,0,0,.45);
+
+  /* type — a project may override --font-display with a characterful face for headings */
+  --font-ui:      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  --font-display: var(--font-ui);
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hi); text-decoration: underline; }
+
+h1, h2, h3 { font-weight: 600; line-height: 1.2; margin: 0 0 .5em; }
+.title { font-size: 1.5rem; font-family: var(--font-display); }
+.section-label {
+  font-size: .8rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin: 1.25em 0 .5em;
+}
+.muted { color: var(--muted); }
+.intro { color: var(--muted); max-width: 60ch; }
+code, .mono { font-family: var(--font-mono); }
+code {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: .05em .35em; font-size: .9em;
+}
+
+/* ---- panel / card ---- */
+.panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+/* control panel (see the <control-panel> component). Static by default; add `floating`
+ * to fix it over a canvas with a semitransparent, blurred backdrop. */
+.control-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  max-width: 280px; overflow: hidden;
+}
+.control-panel.floating {
+  position: fixed; top: 16px; right: 16px; z-index: 5;
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.control-panel > .panel-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.control-panel > .panel-header .panel-title { font-size: .9rem; font-weight: 600; }
+.control-panel > .panel-header .panel-toggle {
+  color: var(--muted); font-size: .8rem; transition: transform .15s; line-height: 1;
+}
+.control-panel[collapsed] > .panel-header { border-bottom-color: transparent; }
+.control-panel[collapsed] > .panel-header .panel-toggle { transform: rotate(-90deg); }
+.control-panel > .panel-body {
+  display: flex; flex-direction: column; gap: 16px; padding: 14px;
+}
+.control-panel[collapsed] > .panel-body { display: none; }
+/* group adjacent checkboxes tighter than the 16px control rhythm */
+.control-panel > .panel-body > label.check + label.check { margin-top: -8px; }
+
+/* ---- buttons ---- */
+.btn, button.btn {
+  font: inherit; cursor: pointer;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 14px; transition: background .12s, border-color .12s;
+}
+.btn:hover { background: #272c3b; }
+.btn-primary, .btn.is-active {
+  background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600;
+}
+.btn-primary:hover { background: var(--accent-hi); }
+.btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- labeled slider with live readout ---- */
+.control { display: flex; flex-direction: column; gap: 8px; }
+.control-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.control-head .name { color: var(--muted); font-size: .9rem; }
+.control-head .value { font-family: var(--font-mono); font-size: .85rem; color: var(--text); }
+input[type="range"] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+  background: var(--border); border-radius: 2px; outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--bg);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--bg);
+}
+
+/* ---- text / number / select inputs ---- */
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  font: inherit; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 8px 10px; width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+}
+label.check { display: flex; align-items: center; gap: 8px; color: var(--muted); cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* ---- upload dropzone (image-effect projects) ---- */
+.dropzone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 32px; text-align: center; cursor: pointer; color: var(--muted);
+  transition: border-color .12s, background .12s;
+}
+.dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: rgba(124,140,248,.06); }
+.dropzone .icon { font-size: 2rem; }
+.dropzone .hint { font-size: .8rem; color: var(--faint); }
+
+/* ---- bottom control bar (fullscreen canvas sims) ---- */
+.control-bar {
+  position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%); z-index: 5;
+  display: flex; gap: 6px; align-items: center;
+  font-family: var(--font-mono);
+}
+.control-bar .btn { padding: 6px 12px; }
+
+/* ---- stats readout (top-left of sims) ---- */
+.readout {
+  position: fixed; top: 12px; left: 14px; z-index: 5;
+  font-family: var(--font-mono); font-size: .85rem; color: var(--muted);
+  pointer-events: none; white-space: pre;
+}
+
+/* ---- generic centered page wrapper for tool/non-canvas pages ---- */
+.page { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
