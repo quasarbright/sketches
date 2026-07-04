@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Abelian Sandpile</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: a rust-ochre/basalt palette grounded in sand, grain, avalanche, geology -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0b0a08;   /* basalt */
+      --panel:     #17140f;   /* slate */
+      --panel-2:   #201b14;   /* mudstone */
+      --border:    #332b1e;   /* seam */
+      --text:      #ece4d3;   /* quartz */
+      --muted:     #9c9280;
+      --faint:     #665c48;
+      --accent:    #d97b3f;   /* rust ochre */
+      --accent-hi: #f2a35f;
+      --on-accent: #0b0a08;
+      --font-ui:      "Inter", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Spectral", Georgia, serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+    #gl {
+      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+    }
+
+    #fallback {
+      position: fixed; inset: 0; display: none; place-items: center; padding: 40px;
+      font-family: var(--font-ui); color: var(--muted); text-align: center;
+    }
+
+    /* sits over a busy, high-contrast sim — no vignette/scrim (never darken the canvas for
+       chrome); legibility comes entirely from strong text color + shadow on the labels. */
+    .sandpile-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-style: italic; font-size: 1.3rem;
+      letter-spacing: .01em; color: var(--text);
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 16px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+    }
+
+    mike-footer[overlay], mike-footer[overlay] a {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+
+    /* ---- about modal: a quiet desert-survey feel — sun haze, dune horizon, trail-marker labels --- */
+    .cohesion-about {
+      background:
+        radial-gradient(120% 70% at 50% -10%, rgba(217,123,63,.14), transparent 60%),
+        repeating-linear-gradient(178deg, rgba(217,123,63,.05) 0px, transparent 2px 46px),
+        var(--panel);
+    }
+    .cohesion-about .title {
+      font-family: var(--font-display); font-style: italic; letter-spacing: .01em;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(to right, var(--accent), transparent 55%);
+      background-size: 100% 2px; background-repeat: no-repeat; background-position: bottom left;
+    }
+    .cohesion-about .section-label { position: relative; padding-left: 14px; }
+    .cohesion-about .section-label::before {
+      content: "△"; position: absolute; left: 0; top: -1px;
+      font-size: .65em; color: var(--accent);
+    }
+
+    .sp-diagram { display: flex; align-items: center; justify-content: center; gap: 22px; margin: 20px 0; flex-wrap: wrap; }
+    .sp-grid { display: grid; grid-template-columns: repeat(3, 34px); grid-template-rows: repeat(3, 34px); gap: 4px; }
+    .sp-cell {
+      display: flex; align-items: center; justify-content: center; border-radius: 4px;
+      font-family: var(--font-mono); font-size: .85rem; border: 1px solid rgba(0,0,0,.3);
+    }
+    .sp-cell--empty { visibility: hidden; }
+    .sp-arrow { font-family: var(--font-display); font-size: 1.6rem; color: var(--accent); }
+    .sp-caption { text-align: center; color: var(--muted); font-size: .82rem; margin-top: -8px; }
+
+    .sandpile-rate-btn { flex: 1; }
+
+    #brushIndicator {
+      position: fixed; z-index: 5; pointer-events: none; border-radius: 50%;
+      border: 1.5px solid var(--accent-hi);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 0 0 2px rgba(0,0,0,.4);
+      transform: translate(-50%, -50%); display: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="brushIndicator"></div>
+  <div id="fallback">
+    <div>
+      <p class="title" style="font-family: var(--font-display);">Abelian Sandpile needs a newer GPU pipeline</p>
+      <p>This sim runs the sandpile rule entirely in a WebGL2 shader with floating-point framebuffers
+        (<code>EXT_color_buffer_float</code>), which this browser doesn't expose. Try a recent
+        Chrome, Firefox, or Safari.</p>
+    </div>
+  </div>
+
+  <div class="sandpile-eyebrow">Abelian Sandpile</div>
+
+  <control-panel floating title="Abelian Sandpile">
+    <div class="control">
+      <div class="control-head"><span class="name">preset</span></div>
+      <select id="preset">
+        <option value="single">Single pile</option>
+        <option value="randomPiles">Random piles</option>
+        <option value="twoPiles">Two piles</option>
+        <option value="full">Full, with drip</option>
+        <option value="empty">Empty, draw your own</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">drive rate</span><span class="value" id="vDrive"></span></div>
+      <div class="btn-row">
+        <button class="btn sandpile-rate-btn" id="driveHalf">÷2</button>
+        <button class="btn sandpile-rate-btn" id="driveDouble">×2</button>
+      </div>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">relax speed</span><span class="value" id="vSteps">240/s</span></div>
+      <input type="range" id="steps" min="1" max="240" step="1" value="240" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">brush</span><span class="value" id="vBrush"></span></div>
+      <div class="btn-row">
+        <button class="btn sandpile-rate-btn" id="brushHalf">÷2</button>
+        <button class="btn sandpile-rate-btn" id="brushDouble">×2</button>
+      </div>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">brush radius</span><span class="value" id="vBrushRadius">8px</span></div>
+      <input type="range" id="brushRadius" min="0" max="80" step="1" value="8" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="pause" title="pause / resume">⏸</button>
+    <button class="btn" id="reseed" title="restart this preset">⟳</button>
+    <about-modal label="about">
+      <h2 class="title">Abelian Sandpile</h2>
+      <div class="section-label">the rule</div>
+      <p>Every cell on the grid holds a whole number of sand grains.</p>
+      <p>A cell with more than <b>3</b> grains is unstable: it <b>topples</b>, giving one grain to
+        each of its four neighbors and losing four itself —</p>
+      <p>$$ z_i \to z_i - 4, \qquad z_j \to z_j + 1 \ \text{ for each neighbor } j $$</p>
+      <div class="sp-diagram">
+        <div class="sp-grid">
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#3d2c1c;color:#ece4d3">0</div>
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#3d2c1c;color:#ece4d3">0</div>
+          <div class="sp-cell" style="background:#f5d9a8;color:#0b0a08">4</div>
+          <div class="sp-cell" style="background:#3d2c1c;color:#ece4d3">0</div>
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#3d2c1c;color:#ece4d3">0</div>
+          <div class="sp-cell sp-cell--empty"></div>
+        </div>
+        <div class="sp-arrow">→</div>
+        <div class="sp-grid">
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#8a5a2a;color:#ece4d3">1</div>
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#8a5a2a;color:#ece4d3">1</div>
+          <div class="sp-cell" style="background:#0b0a08;color:#665c48">0</div>
+          <div class="sp-cell" style="background:#8a5a2a;color:#ece4d3">1</div>
+          <div class="sp-cell sp-cell--empty"></div>
+          <div class="sp-cell" style="background:#8a5a2a;color:#ece4d3">1</div>
+          <div class="sp-cell sp-cell--empty"></div>
+        </div>
+      </div>
+      <p class="sp-caption">One cell topples: it hits 4, drops to 0, and each of its four neighbors
+        (not the diagonals) gains a single grain. If that pushes a neighbor past 3, it topples next.</p>
+      <p>A single toppled cell can push a neighbor over the edge, which topples in turn, which can
+        push <em>its</em> neighbors over — a cascade that ends only once every cell in the grid is
+        back at 3 grains or fewer. That cascade is the <b>avalanche</b>.</p>
+      <div class="section-label">why it's on the GPU</div>
+      <p>Toppling is applied to every unstable cell <em>simultaneously</em>, once per pass — exactly
+        the kind of local, parallel update a fragment shader is built for.</p>
+      <p>Each pixel reads its own grain count and its four neighbors' from a floating-point texture
+        and writes the next state; two textures ping-pong back and forth so an avalanche of any size
+        unfolds as a rapid series of GPU passes, with no simulation code running on the CPU at all.</p>
+      <div class="section-label">the driver</div>
+      <p>A stable pile (every cell &le; 3) never topples on its own, so something has to keep
+        disturbing it — the classic sandpile experiment does this by dropping grains in at random,
+        forever.</p>
+      <p>Each cell here is one screen pixel, so a single dropped grain is invisible against millions
+        of them. The <b>drive rate</b> instead scatters a batch of grains across random cells every
+        simulation step — the ÷2/×2 buttons trade off between "many grains every step" and "one
+        grain every few steps."</p>
+      <div class="section-label">the brush</div>
+      <p>You can disturb it on purpose too: click or drag anywhere to pour grains at the cursor.</p>
+      <p><b>Brush</b> sets how many grains land per step while held down, and <b>brush radius</b>
+        spreads them over an area instead of a single point.</p>
+      <div class="section-label">presets</div>
+      <p><b>Single pile</b> — the default: an empty grid with one enormous pile at the center,
+        relaxed at full speed with no further driving, so you watch one avalanche spread outward
+        from a point and freeze into the strangely intricate, often fractal-looking terrain that
+        gives self-organized criticality its name.</p>
+      <p><b>Random piles</b> — the same idea, but with fifteen piles scattered at random instead of
+        one, so their avalanches spread and collide unpredictably.</p>
+      <p><b>Two piles</b> — two piles placed so their avalanches collide.</p>
+      <p><b>Full, with drip</b> — every cell starts sitting exactly at the critical value, so each
+        dropped grain sets off a cascade immediately, with nothing needing to build up first.</p>
+      <p><b>Empty, draw your own</b> — a blank grid with no drive at all, just for drawing with the
+        brush.</p>
+      <div class="section-label">what's next</div>
+      <p>A later pass might add a webcam feed whose edges pour in sand.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const glCanvas = document.getElementById("gl");
+    const fallback = document.getElementById("fallback");
+    const $ = (id) => document.getElementById(id);
+
+    const gl = glCanvas.getContext("webgl2", { antialias: false, alpha: false });
+    const floatExt = gl && gl.getExtension("EXT_color_buffer_float");
+    if (!gl || !floatExt) {
+      glCanvas.style.display = "none";
+      fallback.style.display = "grid";
+      throw new Error("WebGL2 + EXT_color_buffer_float required");
+    }
+
+    // ---- palette fed to the render shader ----
+    const hex = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const C0 = hex("0b0a08"); // 0 grains — basalt
+    const C1 = hex("3d2c1c"); // 1 grain
+    const C2 = hex("8a5a2a"); // 2 grains
+    const C3 = hex("d97b3f"); // 3 grains — rust ochre (stable ceiling)
+    const HOT = hex("f5d9a8"); // mid-avalanche flash, cooling out of frame
+
+    // ---- shaders ----
+    const VERT = `#version 300 es
+      in vec2 aPos;
+      out vec2 vUv;
+      void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+    const MAX_DROPS = 128;
+    const UPDATE_FRAG = `#version 300 es
+      precision highp float;
+      precision highp int;
+      uniform sampler2D uState;
+      uniform ivec2 uSize;
+      uniform ivec2 uDrops[${MAX_DROPS}];
+      uniform int uDropCount;
+      out vec4 outColor;
+      // number of times a cell topples this pass — usually 0 or 1, but a cell seeded with a huge
+      // pile (the "single pile" preset) needs to shed many multiples of 4 at once; toppling is
+      // commutative, so draining it in one shot here is equivalent to many single-topple rounds.
+      float topple(ivec2 c) {
+        if (c.x < 0 || c.y < 0 || c.x >= uSize.x || c.y >= uSize.y) return 0.0;
+        return floor(texelFetch(uState, c, 0).r / 4.0);
+      }
+      void main() {
+        ivec2 p = ivec2(gl_FragCoord.xy);
+        float v = texelFetch(uState, p, 0).r;
+        float selfT = floor(v / 4.0);
+        float inc = topple(p + ivec2(1,0)) + topple(p + ivec2(-1,0))
+                  + topple(p + ivec2(0,1)) + topple(p + ivec2(0,-1));
+        float nv = v - 4.0 * selfT + inc;
+        // a single pixel is invisible against a multi-million-pixel grid, so the drive lands
+        // many grains at once, each pass, at independent random cells.
+        for (int i = 0; i < ${MAX_DROPS}; i++) {
+          if (i >= uDropCount) break;
+          if (p == uDrops[i]) nv += 1.0;
+        }
+        outColor = vec4(nv, 0.0, 0.0, 1.0);
+      }`;
+
+    const RENDER_FRAG = `#version 300 es
+      precision highp float;
+      in vec2 vUv;
+      uniform sampler2D uState;
+      uniform vec3 uC0, uC1, uC2, uC3, uHot;
+      out vec4 outColor;
+      void main() {
+        float v = texture(uState, vUv).r;
+        vec3 col;
+        if (v <= 1.0) col = mix(uC0, uC1, clamp(v, 0.0, 1.0));
+        else if (v <= 2.0) col = mix(uC1, uC2, clamp(v - 1.0, 0.0, 1.0));
+        else if (v <= 3.0) col = mix(uC2, uC3, clamp(v - 2.0, 0.0, 1.0));
+        else col = mix(uC3, uHot, clamp((v - 3.0) / 3.0, 0.0, 1.0));
+        outColor = vec4(col, 1.0);
+      }`;
+
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(s);
+        gl.deleteShader(s);
+        throw new Error(log);
+      }
+      return s;
+    }
+    function link(vertSrc, fragSrc) {
+      const p = gl.createProgram();
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, vertSrc));
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      return p;
+    }
+
+    const updateProg = link(VERT, UPDATE_FRAG);
+    const renderProg = link(VERT, RENDER_FRAG);
+
+    // shared fullscreen-quad geometry
+    const quadVao = gl.createVertexArray();
+    gl.bindVertexArray(quadVao);
+    const quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const locUpdatePos = gl.getAttribLocation(updateProg, "aPos");
+    const locRenderPos = gl.getAttribLocation(renderProg, "aPos");
+    gl.enableVertexAttribArray(locUpdatePos);
+    gl.vertexAttribPointer(locUpdatePos, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    const uUpdateState = gl.getUniformLocation(updateProg, "uState");
+    const uUpdateSize = gl.getUniformLocation(updateProg, "uSize");
+    const uUpdateDrops = gl.getUniformLocation(updateProg, "uDrops");
+    const uUpdateDropCount = gl.getUniformLocation(updateProg, "uDropCount");
+    const dropBuf = new Int32Array(MAX_DROPS * 2);
+    const uRenderState = gl.getUniformLocation(renderProg, "uState");
+    const uC = ["uC0", "uC1", "uC2", "uC3", "uHot"].map((n) => gl.getUniformLocation(renderProg, n));
+
+    function makeTexture(w, h, data) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, w, h, 0, gl.RED, gl.FLOAT, data);
+      return tex;
+    }
+    function makeFbo(tex) {
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return fbo;
+    }
+
+    let gridW, gridH;
+    let relaxAccumulator = 0;
+    let texA, texB, fboA, fboB, srcTex, srcFbo, dstTex, dstFbo;
+    let running = true;
+
+    // click/drag to pour grains at the cursor — canvas backing resolution is 1:1 with CSS
+    // pixels, so clientX/clientY map directly onto grid coordinates with no scaling. Y needs a
+    // flip: clientY is 0 at the *top* of the screen, but gl_FragCoord.y (and our texture rows)
+    // are 0 at the *bottom*, per WebGL's bottom-up convention.
+    let brushAmount = MAX_DROPS;
+    let brushRadius = 8;
+    let brushAccumulator = 0;
+    let pointerActive = false, pointerGX = 0, pointerGY = 0;
+    const brushIndicator = document.getElementById("brushIndicator");
+    function updatePointer(e) {
+      pointerGX = Math.floor(e.clientX);
+      pointerGY = gridH - 1 - Math.floor(e.clientY);
+    }
+    function updateBrushIndicator(e) {
+      const d = brushRadius * 2;
+      Object.assign(brushIndicator.style, {
+        left: e.clientX + "px", top: e.clientY + "px",
+        width: d + "px", height: d + "px", display: "block",
+      });
+    }
+    glCanvas.style.touchAction = "none";
+    glCanvas.addEventListener("pointerdown", (e) => {
+      pointerActive = true; brushAccumulator = 0;
+      updatePointer(e); updateBrushIndicator(e);
+      glCanvas.setPointerCapture(e.pointerId);
+    });
+    glCanvas.addEventListener("pointermove", (e) => {
+      if (pointerActive) updatePointer(e);
+      updateBrushIndicator(e);
+    });
+    glCanvas.addEventListener("pointerup", () => { pointerActive = false; });
+    glCanvas.addEventListener("pointercancel", () => { pointerActive = false; });
+    glCanvas.addEventListener("pointerleave", () => { brushIndicator.style.display = "none"; });
+    glCanvas.addEventListener("pointerenter", updateBrushIndicator);
+
+    // uniform-in-area random point within brushRadius of (cx, cy), clamped to the grid.
+    function randomInBrush(cx, cy) {
+      if (brushRadius <= 0) return [cx, cy];
+      const ang = Math.random() * Math.PI * 2;
+      const r = brushRadius * Math.sqrt(Math.random());
+      const x = Math.round(cx + Math.cos(ang) * r);
+      const y = Math.round(cy + Math.sin(ang) * r);
+      return [Math.max(0, Math.min(gridW - 1, x)), Math.max(0, Math.min(gridH - 1, y))];
+    }
+
+    // each preset pairs a starting layout with the drive/relax rates that make it interesting.
+    const PRESETS = {
+      single:      { kind: "centerPile",  drive: 0,     relax: 240 },
+      randomPiles: { kind: "randomPiles", drive: 0,     relax: 240 },
+      twoPiles:    { kind: "twoPiles",    drive: 0,     relax: 240 },
+      full:        { kind: "full",        drive: 1/64,  relax: 30  },
+      empty:       { kind: "empty",       drive: 0,     relax: 240 },
+    };
+    // drive rate is grains dropped at independent random cells *per relax step* — tied to
+    // simulation steps, not wall-clock time, so it scales automatically with relax speed. Below
+    // 1 it means "1 grain every N steps" instead (see formatRate) — the ÷2/×2 buttons move
+    // smoothly between both regimes. A grid this large (one cell per screen pixel) needs many
+    // simultaneous drops to read as "driven" at all — a single grain is invisible against
+    // millions of pixels.
+    let driveRate = PRESETS.single.drive;
+    let relaxHz = PRESETS.single.relax; // relaxation steps per second
+    let currentKind = PRESETS.single.kind;
+    let driveAccumulator = 0;
+
+    function makeState(kind, w, h) {
+      const data = new Float32Array(w * h);
+      if (kind === "full") {
+        // every cell sitting exactly at the critical value: starting from empty, a random single
+        // grain almost never lands on the same cell four times, so nothing would ever topple.
+        data.fill(3);
+      } else if (kind === "centerPile") {
+        const height = Math.round(Math.min(w, h) ** 2 * 1.0);
+        data[(h >> 1) * w + (w >> 1)] = height;
+      } else if (kind === "twoPiles") {
+        const height = Math.round(Math.min(w, h) ** 2 * 0.6);
+        const cy = h >> 1;
+        data[cy * w + Math.round(w * 0.35)] = height;
+        data[cy * w + Math.round(w * 0.65)] = height;
+      } else if (kind === "randomPiles") {
+        const height = Math.round(Math.min(w, h) ** 2 * 1.0);
+        for (let i = 0; i < 15; i++) {
+          const x = (Math.random() * w) | 0, y = (Math.random() * h) | 0;
+          data[y * w + x] = height;
+        }
+      }
+      return data;
+    }
+
+    function buildGrid() {
+      // one grid cell = one grain = exactly one CSS pixel
+      gridW = innerWidth;
+      gridH = innerHeight;
+      glCanvas.width = gridW; glCanvas.height = gridH;
+      glCanvas.style.width = "100vw"; glCanvas.style.height = "100vh";
+
+      if (texA) gl.deleteTexture(texA);
+      if (texB) gl.deleteTexture(texB);
+      if (fboA) gl.deleteFramebuffer(fboA);
+      if (fboB) gl.deleteFramebuffer(fboB);
+
+      texA = makeTexture(gridW, gridH, makeState(currentKind, gridW, gridH));
+      texB = makeTexture(gridW, gridH, new Float32Array(gridW * gridH));
+      fboA = makeFbo(texA);
+      fboB = makeFbo(texB);
+      srcTex = texA; srcFbo = fboA;
+      dstTex = texB; dstFbo = fboB;
+    }
+
+    function stepOnce(dropCount) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(updateProg);
+      gl.bindVertexArray(quadVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(uUpdateState, 0);
+      gl.uniform2i(uUpdateSize, gridW, gridH);
+      gl.uniform1i(uUpdateDropCount, dropCount);
+      if (dropCount > 0) gl.uniform2iv(uUpdateDrops, dropBuf.subarray(0, dropCount * 2));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      [srcTex, dstTex] = [dstTex, srcTex];
+      [srcFbo, dstFbo] = [dstFbo, srcFbo];
+    }
+
+    function render() {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(renderProg);
+      gl.bindVertexArray(quadVao);
+      gl.enableVertexAttribArray(locRenderPos);
+      gl.vertexAttribPointer(locRenderPos, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(uRenderState, 0);
+      [C0, C1, C2, C3, HOT].forEach((c, i) => gl.uniform3f(uC[i], c[0], c[1], c[2]));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    function frame() {
+      if (running) {
+        relaxAccumulator += relaxHz / 60;
+        // cap the catch-up burst (e.g. after a throttled/backgrounded tab) so it can't
+        // suddenly grind through hundreds of queued steps in one frame
+        if (relaxAccumulator > 240) relaxAccumulator = 240;
+        while (relaxAccumulator >= 1) {
+          relaxAccumulator -= 1;
+          // the brush claims its slots first — it's direct user input, so it should never be
+          // starved out by the ambient drive, even when the drive is maxed out at MAX_DROPS.
+          let n = 0;
+          if (pointerActive) {
+            brushAccumulator += brushAmount;
+            n = Math.min(MAX_DROPS, Math.floor(brushAccumulator));
+            brushAccumulator -= n;
+            for (let i = 0; i < n; i++) {
+              const [bx, by] = randomInBrush(pointerGX, pointerGY);
+              dropBuf[i * 2] = bx;
+              dropBuf[i * 2 + 1] = by;
+            }
+          }
+          // driveRate grains per step, filling whatever room is left — fractional rates (< 1)
+          // accumulate across several steps before firing, so "1 grain every 512 steps" works
+          // the same way as "64 grains/step".
+          driveAccumulator += driveRate;
+          if (driveAccumulator > MAX_DROPS) driveAccumulator = MAX_DROPS; // no backlog buildup
+          const driveN = Math.min(MAX_DROPS - n, Math.floor(driveAccumulator));
+          driveAccumulator -= driveN;
+          for (let i = 0; i < driveN; i++) {
+            dropBuf[(n + i) * 2] = (Math.random() * gridW) | 0;
+            dropBuf[(n + i) * 2 + 1] = (Math.random() * gridH) | 0;
+          }
+          n += driveN;
+          stepOnce(n);
+        }
+        render();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // shows the rate as a fraction with a 1 on whichever side keeps it a whole number:
+    // "64 grains / 1 step" at the top end, "1 grain / 512 steps" once it's been halved a lot.
+    function formatRate(v) {
+      if (v === 0) return "off";
+      if (v >= 1) {
+        const n = Math.round(v);
+        return n + (n === 1 ? " grain" : " grains") + " / 1 step";
+      }
+      const steps = Math.round(1 / v);
+      return "1 grain / " + steps + (steps === 1 ? " step" : " steps");
+    }
+    function doubled(v) { return v === 0 ? 1 / 512 : Math.min(MAX_DROPS, v * 2); }
+    function halved(v) { const n = v / 2; return n < 1 / 8192 ? 0 : n; }
+
+    buildGrid();
+    $("vDrive").textContent = formatRate(driveRate);
+    $("vBrush").textContent = formatRate(brushAmount);
+    frame();
+
+    addEventListener("resize", buildGrid);
+
+    $("preset").addEventListener("change", (e) => {
+      const p = PRESETS[e.target.value];
+      currentKind = p.kind;
+      driveRate = p.drive;
+      relaxHz = p.relax;
+      driveAccumulator = 0;
+      $("vDrive").textContent = formatRate(driveRate);
+      $("steps").value = p.relax; $("vSteps").textContent = p.relax + "/s";
+      buildGrid();
+    });
+    $("driveDouble").addEventListener("click", () => {
+      driveRate = doubled(driveRate); $("vDrive").textContent = formatRate(driveRate);
+    });
+    $("driveHalf").addEventListener("click", () => {
+      driveRate = halved(driveRate); $("vDrive").textContent = formatRate(driveRate);
+    });
+    $("steps").addEventListener("input", (e) => {
+      relaxHz = +e.target.value;
+      $("vSteps").textContent = e.target.value + "/s";
+    });
+    $("brushDouble").addEventListener("click", () => {
+      brushAmount = doubled(brushAmount); $("vBrush").textContent = formatRate(brushAmount);
+    });
+    $("brushHalf").addEventListener("click", () => {
+      brushAmount = halved(brushAmount); $("vBrush").textContent = formatRate(brushAmount);
+    });
+    $("brushRadius").addEventListener("input", (e) => {
+      brushRadius = +e.target.value;
+      $("vBrushRadius").textContent = e.target.value + "px";
+    });
+    $("pause").addEventListener("click", () => {
+      running = !running;
+      $("pause").textContent = running ? "⏸" : "▶";
+    });
+    $("reseed").addEventListener("click", () => buildGrid());
+  </script>
+</body>
+</html>
