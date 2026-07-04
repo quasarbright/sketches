@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Time Displacement Webcam</title>
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+  <style>
+    html, body { height: 100%; overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; }
+    #out { background: #000; image-rendering: auto; }
+    #status {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      text-align: center; padding: 2rem; color: var(--muted); font: 1rem/1.5 var(--font-ui);
+    }
+    #status button { margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <canvas id="out"></canvas>
+
+  <div id="status">
+    <div>
+      <p>requesting camera…</p>
+    </div>
+  </div>
+
+  <div class="readout" id="readout" style="display:none"></div>
+
+  <control-panel floating title="Controls" id="panel" style="display:none">
+    <div class="control">
+      <div class="control-head"><span class="name">mode</span></div>
+      <select id="mode" class="select">
+        <option value="topdown">top → down</option>
+        <option value="bottomup" selected>bottom → up</option>
+        <option value="center">center → out</option>
+        <option value="wave">wave</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">max delay</span><span class="value" id="vDelay"></span></div>
+      <input type="range" min="1" max="200" step="1" value="100" id="delay" />
+    </div>
+    <div class="control" id="waveControls" style="display:none">
+      <div class="control-head"><span class="name">wave freq</span><span class="value" id="vFreq"></span></div>
+      <input type="range" min="1" max="40" step="1" value="10" id="freq" />
+      <div class="control-head"><span class="name">wave speed</span><span class="value" id="vSpeed"></span></div>
+      <input type="range" min="0" max="10" step="0.5" value="3" id="speed" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar" style="display:none" id="bar">
+    <button class="btn" id="freeze">⏸ freeze</button>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const canvas = $("out");
+    const ctx = canvas.getContext("2d");
+    const video = document.createElement("video");
+    video.autoplay = true; video.muted = true; video.playsInline = true;
+
+    const MAX_DIM = 480;
+    let BW, BH, bufCanvas, bufCtx, buffer, maxFrames, bufIndex = 0, frameCount = 0;
+    let frozen = false;
+
+    function fitCanvasToViewport() {
+      const scale = Math.min(innerWidth / BW, innerHeight / BH);
+      canvas.style.width = Math.round(BW * scale) + "px";
+      canvas.style.height = Math.round(BH * scale) + "px";
+    }
+    addEventListener("resize", () => { if (BW) fitCanvasToViewport(); });
+
+    async function start() {
+      $("status").innerHTML = "<p>requesting camera…</p>";
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 } }, audio: false });
+        video.srcObject = stream;
+        await video.play();
+      } catch (err) {
+        $("status").innerHTML = `<p>Couldn't access the camera: ${err.message}</p>`;
+        return;
+      }
+
+      const vw = video.videoWidth, vh = video.videoHeight;
+      const scale = Math.min(1, MAX_DIM / Math.max(vw, vh));
+      BW = Math.round(vw * scale); BH = Math.round(vh * scale);
+
+      canvas.width = BW; canvas.height = BH;
+      fitCanvasToViewport();
+
+      bufCanvas = document.createElement("canvas");
+      bufCanvas.width = BW; bufCanvas.height = BH;
+      bufCtx = bufCanvas.getContext("2d", { willReadFrequently: true });
+
+      maxFrames = 300;
+      buffer = Array.from({ length: maxFrames }, () => new Uint8ClampedArray(BW * BH * 4));
+
+      $("status").style.display = "none";
+      $("readout").style.display = "";
+      $("panel").style.display = "";
+      $("bar").style.display = "";
+
+      requestAnimationFrame(loop);
+    }
+
+    function delayForRow(y, maxDelay, mode, t) {
+      const n = BH - 1 || 1;
+      switch (mode) {
+        case "bottomup": return maxDelay * (1 - y / n);
+        case "center": return maxDelay * Math.abs(y - n / 2) / (n / 2);
+        case "wave": {
+          const freq = +$("freq").value, spd = +$("speed").value;
+          return maxDelay * 0.5 * (1 + Math.sin(y / freq + t * spd * 0.05));
+        }
+        case "topdown":
+        default: return maxDelay * (y / n);
+      }
+    }
+
+    const outData = () => new Uint8ClampedArray(BW * BH * 4);
+    let outArr;
+
+    function loop() {
+      if (frozen) {
+        requestAnimationFrame(loop);
+        return;
+      }
+
+      bufCtx.save();
+      bufCtx.translate(BW, 0); bufCtx.scale(-1, 1);
+      bufCtx.drawImage(video, 0, 0, BW, BH);
+      bufCtx.restore();
+      const frame = bufCtx.getImageData(0, 0, BW, BH).data;
+      buffer[bufIndex].set(frame);
+
+      const mode = $("mode").value;
+      const maxDelay = +$("delay").value;
+      $("vDelay").textContent = maxDelay + "f";
+      $("vFreq").textContent = $("freq").value;
+      $("vSpeed").textContent = (+$("speed").value).toFixed(1);
+      $("waveControls").style.display = mode === "wave" ? "" : "none";
+
+      if (!outArr) outArr = outData();
+      const rowBytes = BW * 4;
+      const validFrames = Math.min(frameCount, maxFrames - 1);
+
+      for (let y = 0; y < BH; y++) {
+        let d = delayForRow(y, maxDelay, mode, frameCount);
+        d = Math.max(0, Math.min(d, validFrames));
+        const dFloor = Math.floor(d);
+        const dCeil = Math.min(dFloor + 1, validFrames);
+        const frac = d - dFloor;
+        const idxA = ((bufIndex - dFloor) % maxFrames + maxFrames) % maxFrames;
+        const idxB = ((bufIndex - dCeil) % maxFrames + maxFrames) % maxFrames;
+        const bufA = buffer[idxA], bufB = buffer[idxB];
+        const off = y * rowBytes;
+        if (frac === 0) {
+          outArr.set(bufA.subarray(off, off + rowBytes), off);
+        } else {
+          for (let i = off; i < off + rowBytes; i++) {
+            outArr[i] = bufA[i] + (bufB[i] - bufA[i]) * frac;
+          }
+        }
+      }
+
+      ctx.putImageData(new ImageData(outArr, BW, BH), 0, 0);
+
+      bufIndex = (bufIndex + 1) % maxFrames;
+      frameCount++;
+      requestAnimationFrame(loop);
+    }
+
+    $("freeze").onclick = () => {
+      frozen = !frozen;
+      $("freeze").textContent = frozen ? "▶ resume" : "⏸ freeze";
+    };
+
+    start();
+  </script>
+</body>
+</html>
