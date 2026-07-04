@@ -51,8 +51,6 @@
 
   <div id="hint">draw a closed curve<span class="sub">click / touch and drag — it'll close itself automatically</span></div>
 
-  <div class="readout" id="readout"></div>
-
   <control-panel floating title="Epicycles">
     <div class="control">
       <div class="control-head"><span class="name">epicycles</span><span class="value" id="vn">25</span></div>
@@ -65,19 +63,9 @@
     <about-modal label="about">
       <h2 class="title">Epicycles</h2>
       <p>Draw any closed curve and it gets approximated as a sum of rotating circles
-        (<strong>epicycles</strong>) — the same trick <a href="https://www.youtube.com/watch?v=r6sGWTCMz2k" target="_blank" rel="noopener">3blue1brown's video</a>
-        uses to explain the Fourier series.</p>
-      <p class="section-label">the math</p>
-      <p>The drawn curve is resampled to $M$ evenly spaced points and treated as a complex
-        signal $z_n = x_n + i y_n$. Its discrete Fourier transform</p>
-      <p>$$X_k = \frac{1}{M}\sum_{n=0}^{M-1} z_n \, e^{-2\pi i kn/M}$$</p>
-      <p>gives a coefficient for each integer frequency $k$. Reconstructing with only the
-        largest-amplitude coefficients,</p>
-      <p>$$z(t) \approx \sum_{k} X_k \, e^{i k t}$$</p>
-      <p>is exactly a chain of circles: the $k$-th term has radius $|X_k|$ and spins at
-        speed $k$, each one's center riding on the tip of the last. The <code>epicycles</code>
-        slider controls how many terms $k$ are kept — more terms, closer to your original
-        drawing.</p>
+        (<strong>epicycles</strong>) — learn more in
+        <a href="https://www.youtube.com/watch?v=r6sGWTCMz2k" target="_blank" rel="noopener">3blue1brown's video</a>
+        which inspired this webpage.</p>
     </about-modal>
   </div>
 
@@ -86,7 +74,7 @@
   <script>
     const cv = document.getElementById("c"), ctx = cv.getContext("2d");
     const $ = (id) => document.getElementById(id);
-    const hint = $("hint"), nSlider = $("n"), vn = $("vn"), readout = $("readout");
+    const hint = $("hint"), nSlider = $("n"), vn = $("vn");
     let W, H;
     function resize() {
       const dpr = window.devicePixelRatio || 1;
@@ -113,7 +101,6 @@
       mode = "idle"; raw = []; coeffs = []; dcCoeff = null; rotatingCoeffs = []; curveSamples = null; trail = []; t = 0; lastFrame = null;
       // the epicycle slider is left untouched here — it's a user setting, not curve state
       hint.style.opacity = "1";
-      readout.textContent = "";
     }
     reset();
 
@@ -327,8 +314,6 @@
       ctx.beginPath();
       ctx.arc(pen.x, pen.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
-
-      readout.textContent = `epicycles ${n} / ${rotatingCoeffs.length}`;
     }
   </script>
 </body>
