@@ -55,8 +55,8 @@
 
   <control-panel floating title="Epicycles">
     <div class="control">
-      <div class="control-head"><span class="name">epicycles</span><span class="value" id="vn">—</span></div>
-      <input type="range" min="1" max="1" step="1" value="1" id="n" disabled />
+      <div class="control-head"><span class="name">epicycles</span><span class="value" id="vn">25</span></div>
+      <input type="range" min="1" max="50" step="1" value="25" id="n" />
     </div>
   </control-panel>
 
@@ -111,7 +111,7 @@
 
     function reset() {
       mode = "idle"; raw = []; coeffs = []; dcCoeff = null; rotatingCoeffs = []; curveSamples = null; trail = []; t = 0; lastFrame = null;
-      nSlider.disabled = true; nSlider.max = 1; nSlider.value = 1; vn.textContent = "—";
+      // the epicycle slider is left untouched here — it's a user setting, not curve state
       hint.style.opacity = "1";
       readout.textContent = "";
     }
@@ -195,10 +195,7 @@
       coeffs = dft(samples);
       dcCoeff = coeffs.find((c) => c.freq === 0) || null;
       rotatingCoeffs = coeffs.filter((c) => c.freq !== 0);
-      nSlider.disabled = false;
-      nSlider.max = Math.min(50, rotatingCoeffs.length);
-      nSlider.value = Math.min(25, rotatingCoeffs.length);
-      vn.textContent = nSlider.value;
+      // the slider itself (range/value) is untouched — it's a user setting, not curve state
       t = 0; trail = []; lastFrame = null;
       mode = "playing";
     }
