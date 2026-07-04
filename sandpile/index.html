@@ -34,7 +34,11 @@
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
 
     #gl {
-      position: fixed; inset: 0; width: 100vw; height: 100vh;
+      /* size is set explicitly in JS (buildGrid), in px matching innerWidth/innerHeight exactly —
+         not 100vw/100vh, which on mobile Safari resolve to the "large" viewport and can diverge
+         from innerWidth/innerHeight (the "small" viewport) whenever the address bar is visible,
+         stretching the canvas and throwing off touch coordinates. */
+      position: fixed; top: 0; left: 0;
       display: block; image-rendering: pixelated; image-rendering: crisp-edges;
     }
 
@@ -509,7 +513,7 @@
       gridW = innerWidth;
       gridH = innerHeight;
       glCanvas.width = gridW; glCanvas.height = gridH;
-      glCanvas.style.width = "100vw"; glCanvas.style.height = "100vh";
+      glCanvas.style.width = gridW + "px"; glCanvas.style.height = gridH + "px";
 
       if (texA) gl.deleteTexture(texA);
       if (texB) gl.deleteTexture(texB);
