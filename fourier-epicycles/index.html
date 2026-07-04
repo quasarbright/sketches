@@ -103,12 +103,14 @@
     let mode = "idle";      // 'idle' | 'drawing' | 'playing'
     let raw = [];           // points captured while drawing
     let coeffs = [];        // {freq, re, im, amp} sorted by amp desc, full set
+    let dcCoeff = null;     // the k=0 term, pulled out separately — it's the fixed base, never an "epicycle"
+    let rotatingCoeffs = []; // coeffs minus the DC term, sorted by amp desc — what the slider counts
     let curveSamples = null; // the resampled closed curve, kept around to draw under the epicycles
     let trail = [];
     let t = 0, lastFrame = null;
 
     function reset() {
-      mode = "idle"; raw = []; coeffs = []; curveSamples = null; trail = []; t = 0; lastFrame = null;
+      mode = "idle"; raw = []; coeffs = []; dcCoeff = null; rotatingCoeffs = []; curveSamples = null; trail = []; t = 0; lastFrame = null;
       nSlider.disabled = true; nSlider.max = 1; nSlider.value = 1; vn.textContent = "—";
       hint.style.opacity = "1";
       readout.textContent = "";
@@ -191,9 +193,11 @@
       if (!samples) { reset(); return; }
       curveSamples = samples;
       coeffs = dft(samples);
+      dcCoeff = coeffs.find((c) => c.freq === 0) || null;
+      rotatingCoeffs = coeffs.filter((c) => c.freq !== 0);
       nSlider.disabled = false;
-      nSlider.max = coeffs.length;
-      nSlider.value = Math.min(40, coeffs.length);
+      nSlider.max = rotatingCoeffs.length;
+      nSlider.value = Math.min(40, rotatingCoeffs.length);
       vn.textContent = nSlider.value;
       t = 0; trail = []; lastFrame = null;
       mode = "playing";
@@ -206,16 +210,13 @@
 
     $("redraw").addEventListener("click", reset);
 
-    // ---- position at time t using the top-n coefficients (sorted by amplitude) ----
+    // ---- position at time t using the top-n rotating coefficients (sorted by amplitude) ----
     // The k=0 (DC) term never rotates — it's just the curve's average on-screen position, so it
-    // becomes the fixed base of the chain rather than a drawn circle. Everything else (the terms
-    // that actually spin) is chained on top of that base in amplitude order.
+    // becomes the fixed base of the chain rather than a drawn circle, and doesn't count toward n.
     // Returns { chain, terms }: chain[0] is the base, chain[i+1] the tip after terms[i].
     function chainAt(time, n) {
-      const selected = coeffs.slice(0, n);
-      const dc = selected.find((c) => c.freq === 0);
-      const terms = selected.filter((c) => c.freq !== 0);
-      let x = dc ? dc.re : 0, y = dc ? dc.im : 0;
+      const terms = rotatingCoeffs.slice(0, n);
+      let x = dcCoeff ? dcCoeff.re : 0, y = dcCoeff ? dcCoeff.im : 0;
       const chain = [{ x, y }];
       for (const c of terms) {
         const angle = c.freq * time;
@@ -319,7 +320,7 @@
       ctx.arc(pen.x, pen.y, 3.5, 0, Math.PI * 2);
       ctx.fill();
 
-      readout.textContent = `epicycles ${n} / ${coeffs.length}`;
+      readout.textContent = `epicycles ${n} / ${rotatingCoeffs.length}`;
     }
   </script>
 </body>
