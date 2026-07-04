@@ -67,12 +67,27 @@
     let BW, BH, bufCanvas, bufCtx, buffer, maxFrames, bufIndex = 0, frameCount = 0;
     let frozen = false;
 
+    // Canvas buffer matches the viewport's aspect ratio (not the camera's), so we
+    // fill the screen; cropCamToTarget() then crops the camera feed to match (cover-fit,
+    // like conway-webcam/blobify-webcam) instead of letterboxing it.
     function fitCanvasToViewport() {
-      const scale = Math.min(innerWidth / BW, innerHeight / BH);
-      canvas.style.width = Math.round(BW * scale) + "px";
-      canvas.style.height = Math.round(BH * scale) + "px";
+      canvas.style.width = innerWidth + "px";
+      canvas.style.height = innerHeight + "px";
     }
     addEventListener("resize", () => { if (BW) fitCanvasToViewport(); });
+
+    function cropCamToTarget(vw, vh, targetAR) {
+      const camAR = vw / vh;
+      let sx = 0, sy = 0, sw = vw, sh = vh;
+      if (camAR > targetAR) {
+        sw = vh * targetAR;
+        sx = (vw - sw) / 2;
+      } else {
+        sh = vw / targetAR;
+        sy = (vh - sh) / 2;
+      }
+      return { sx, sy, sw, sh };
+    }
 
     async function start() {
       $("status").innerHTML = "<p>requesting camera…</p>";
@@ -85,9 +100,9 @@
         return;
       }
 
-      const vw = video.videoWidth, vh = video.videoHeight;
-      const scale = Math.min(1, MAX_DIM / Math.max(vw, vh));
-      BW = Math.round(vw * scale); BH = Math.round(vh * scale);
+      const targetAR = innerWidth / innerHeight;
+      if (targetAR >= 1) { BW = MAX_DIM; BH = Math.round(MAX_DIM / targetAR); }
+      else { BH = MAX_DIM; BW = Math.round(MAX_DIM * targetAR); }
 
       canvas.width = BW; canvas.height = BH;
       fitCanvasToViewport();
@@ -130,9 +145,10 @@
         return;
       }
 
+      const { sx, sy, sw, sh } = cropCamToTarget(video.videoWidth, video.videoHeight, BW / BH);
       bufCtx.save();
       bufCtx.translate(BW, 0); bufCtx.scale(-1, 1);
-      bufCtx.drawImage(video, 0, 0, BW, BH);
+      bufCtx.drawImage(video, sx, sy, sw, sh, 0, 0, BW, BH);
       bufCtx.restore();
       const frame = bufCtx.getImageData(0, 0, BW, BH).data;
       buffer[bufIndex].set(frame);
