@@ -196,7 +196,7 @@
       dcCoeff = coeffs.find((c) => c.freq === 0) || null;
       rotatingCoeffs = coeffs.filter((c) => c.freq !== 0);
       nSlider.disabled = false;
-      nSlider.max = rotatingCoeffs.length;
+      nSlider.max = Math.min(50, rotatingCoeffs.length);
       nSlider.value = Math.min(40, rotatingCoeffs.length);
       vn.textContent = nSlider.value;
       t = 0; trail = []; lastFrame = null;
