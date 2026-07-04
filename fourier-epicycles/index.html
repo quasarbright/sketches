@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Epicycles — draw a curve, watch Fourier trace it</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: a chalkboard -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #10140f;
+      --panel:     #1a2019;
+      --panel-2:   #222b1f;
+      --border:    #34402f;
+      --text:      #eef0e6;
+      --muted:     #9aa38f;
+      --faint:     #5f6957;
+      --accent:    #e8c14c;
+      --accent-hi: #f5d772;
+      --on-accent: #10140f;
+      --font-ui:      "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Kalam", cursive;
+    }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      background:
+        radial-gradient(120% 90% at 50% 0%, #161c12 0%, var(--bg) 60%);
+    }
+    #c { display: block; touch-action: none; cursor: crosshair; }
+    #hint {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-family: var(--font-display); font-size: clamp(1.4rem, 4vw, 2.2rem);
+      color: var(--faint); pointer-events: none; text-align: center; z-index: 3;
+      transition: opacity .2s;
+    }
+    #hint .sub { display: block; font-family: var(--font-mono); font-size: .85rem;
+      color: var(--faint); margin-top: 10px; letter-spacing: .04em; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hint">draw a closed curve<span class="sub">click / touch and drag — it'll close itself automatically</span></div>
+
+  <div class="readout" id="readout"></div>
+
+  <control-panel floating title="Epicycles">
+    <div class="control">
+      <div class="control-head"><span class="name">epicycles</span><span class="value" id="vn">—</span></div>
+      <input type="range" min="1" max="1" step="1" value="1" id="n" disabled />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="redraw">clear / redraw</button>
+    <about-modal label="about">
+      <h2 class="title">Epicycles</h2>
+      <p>Draw any closed curve and it gets approximated as a sum of rotating circles
+        (<strong>epicycles</strong>) — the same trick <a href="https://www.youtube.com/watch?v=r6sGWTCMz2k" target="_blank" rel="noopener">3blue1brown's video</a>
+        uses to explain the Fourier series.</p>
+      <p class="section-label">the math</p>
+      <p>The drawn curve is resampled to $M$ evenly spaced points and treated as a complex
+        signal $z_n = x_n + i y_n$. Its discrete Fourier transform</p>
+      <p>$$X_k = \frac{1}{M}\sum_{n=0}^{M-1} z_n \, e^{-2\pi i kn/M}$$</p>
+      <p>gives a coefficient for each integer frequency $k$. Reconstructing with only the
+        largest-amplitude coefficients,</p>
+      <p>$$z(t) \approx \sum_{k} X_k \, e^{i k t}$$</p>
+      <p>is exactly a chain of circles: the $k$-th term has radius $|X_k|$ and spins at
+        speed $k$, each one's center riding on the tip of the last. The <code>epicycles</code>
+        slider controls how many terms $k$ are kept — more terms, closer to your original
+        drawing.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+    const $ = (id) => document.getElementById(id);
+    const hint = $("hint"), nSlider = $("n"), vn = $("vn"), readout = $("readout");
+    let W, H;
+    function resize() {
+      const dpr = window.devicePixelRatio || 1;
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    addEventListener("resize", resize); resize();
+
+    const M = 240;          // samples the drawn curve is resampled to
+    const LOOP_SECONDS = 7; // time for one full retrace
+
+    let mode = "idle";      // 'idle' | 'drawing' | 'playing'
+    let raw = [];           // points captured while drawing
+    let coeffs = [];        // {freq, re, im, amp} sorted by amp desc, full set
+    let curveSamples = null; // the resampled closed curve, kept around to draw under the epicycles
+    let trail = [];
+    let t = 0, lastFrame = null;
+
+    function reset() {
+      mode = "idle"; raw = []; coeffs = []; curveSamples = null; trail = []; t = 0; lastFrame = null;
+      nSlider.disabled = true; nSlider.max = 1; nSlider.value = 1; vn.textContent = "—";
+      hint.style.opacity = "1";
+      readout.textContent = "";
+    }
+    reset();
+
+    // ---- input: freehand draw ----
+    function posFromEvent(e) {
+      const r = cv.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    cv.addEventListener("pointerdown", (e) => {
+      if (mode === "playing") return; // must clear/redraw first
+      mode = "drawing"; raw = [posFromEvent(e)];
+      hint.style.opacity = "0";
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener("pointermove", (e) => {
+      if (mode !== "drawing") return;
+      const p = posFromEvent(e);
+      const last = raw[raw.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) > 2) raw.push(p);
+    });
+    cv.addEventListener("pointerup", finishDrawing);
+    cv.addEventListener("pointercancel", finishDrawing);
+    function finishDrawing() {
+      if (mode !== "drawing") return;
+      if (raw.length < 8) { reset(); return; } // too short / accidental click
+      startPlaying();
+    }
+
+    // ---- resample the closed loop (raw path + implicit closing segment) to M even points ----
+    function resampleClosed(points, m) {
+      const pts = points.concat([points[0]]); // close the loop
+      const segLens = [];
+      let total = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+        segLens.push(d); total += d;
+      }
+      if (total === 0) return null;
+      const step = total / m;
+      const out = [];
+      let seg = 0, segStart = 0;
+      for (let k = 0; k < m; k++) {
+        const target = k * step;
+        while (seg < segLens.length - 1 && segStart + segLens[seg] < target) {
+          segStart += segLens[seg]; seg++;
+        }
+        const segLen = segLens[seg] || 1e-9;
+        const frac = Math.min(1, Math.max(0, (target - segStart) / segLen));
+        const a = pts[seg], b = pts[seg + 1];
+        out.push({ x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac });
+      }
+      return out;
+    }
+
+    // ---- discrete Fourier transform of the M sampled points ----
+    function dft(samples) {
+      const m = samples.length;
+      const out = [];
+      for (let k = 0; k < m; k++) {
+        let re = 0, im = 0;
+        for (let n = 0; n < m; n++) {
+          const angle = (-2 * Math.PI * k * n) / m;
+          const cos = Math.cos(angle), sin = Math.sin(angle);
+          re += samples[n].x * cos - samples[n].y * sin;
+          im += samples[n].x * sin + samples[n].y * cos;
+        }
+        re /= m; im /= m;
+        const freq = k <= m / 2 ? k : k - m;
+        out.push({ freq, re, im, amp: Math.hypot(re, im) });
+      }
+      out.sort((a, b) => b.amp - a.amp);
+      return out;
+    }
+
+    function startPlaying() {
+      const samples = resampleClosed(raw, M);
+      if (!samples) { reset(); return; }
+      curveSamples = samples;
+      coeffs = dft(samples);
+      nSlider.disabled = false;
+      nSlider.max = coeffs.length;
+      nSlider.value = Math.min(40, coeffs.length);
+      vn.textContent = nSlider.value;
+      t = 0; trail = []; lastFrame = null;
+      mode = "playing";
+    }
+
+    nSlider.addEventListener("input", () => {
+      vn.textContent = nSlider.value;
+      t = 0; trail = []; lastFrame = null; // restart animation with the new count
+    });
+
+    $("redraw").addEventListener("click", reset);
+
+    // ---- position at time t using the top-n coefficients (sorted by amplitude) ----
+    // The k=0 (DC) term never rotates — it's just the curve's average on-screen position, so it
+    // becomes the fixed base of the chain rather than a drawn circle. Everything else (the terms
+    // that actually spin) is chained on top of that base in amplitude order.
+    // Returns { chain, terms }: chain[0] is the base, chain[i+1] the tip after terms[i].
+    function chainAt(time, n) {
+      const selected = coeffs.slice(0, n);
+      const dc = selected.find((c) => c.freq === 0);
+      const terms = selected.filter((c) => c.freq !== 0);
+      let x = dc ? dc.re : 0, y = dc ? dc.im : 0;
+      const chain = [{ x, y }];
+      for (const c of terms) {
+        const angle = c.freq * time;
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        x += c.re * cos - c.im * sin;
+        y += c.re * sin + c.im * cos;
+        chain.push({ x, y });
+      }
+      return { chain, terms };
+    }
+
+    function frame(now) {
+      requestAnimationFrame(frame);
+      ctx.clearRect(0, 0, W, H);
+
+      if (mode === "drawing") {
+        drawStrokeInProgress();
+      } else if (mode === "playing") {
+        if (lastFrame == null) lastFrame = now;
+        const dt = (now - lastFrame) / 1000; lastFrame = now;
+        t += (2 * Math.PI / LOOP_SECONDS) * dt;
+        if (t >= 2 * Math.PI) { t -= 2 * Math.PI; trail = []; }
+        drawEpicycles();
+      }
+    }
+    requestAnimationFrame(frame);
+
+    function drawStrokeInProgress() {
+      if (raw.length < 2) return;
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--text").trim();
+      ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(raw[0].x, raw[0].y);
+      for (let i = 1; i < raw.length; i++) ctx.lineTo(raw[i].x, raw[i].y);
+      ctx.stroke();
+
+      // preview: dashed closing segment back to the start, so it always reads as closed
+      const last = raw[raw.length - 1], first = raw[0];
+      ctx.save();
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue("--muted").trim();
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(first.x, first.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawEpicycles() {
+      const n = +nSlider.value;
+      // chain positions are already absolute canvas coords: the DC term (k=0) carries
+      // the drawn curve's average on-screen position, so no extra origin offset here.
+      const { chain, terms } = chainAt(t, n);
+
+      const faint = getComputedStyle(document.body).getPropertyValue("--faint").trim();
+      const border = getComputedStyle(document.body).getPropertyValue("--border").trim();
+      const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim();
+      const text = getComputedStyle(document.body).getPropertyValue("--text").trim();
+
+      // the original drawn curve, faint, underneath everything else
+      if (curveSamples) {
+        ctx.strokeStyle = border;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        curveSamples.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // circles + radius lines for the terms that actually rotate (DC is excluded already)
+      ctx.lineWidth = 1;
+      for (let i = 0; i < terms.length; i++) {
+        const center = chain[i], tip = chain[i + 1];
+        ctx.strokeStyle = border;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, terms[i].amp, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = faint;
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(tip.x, tip.y);
+        ctx.stroke();
+      }
+
+      // pen tip + trail
+      const pen = chain[chain.length - 1];
+      trail.push(pen);
+
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      trail.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+
+      ctx.fillStyle = text;
+      ctx.beginPath();
+      ctx.arc(pen.x, pen.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      readout.textContent = `epicycles ${n} / ${coeffs.length}`;
+    }
+  </script>
+</body>
+</html>
