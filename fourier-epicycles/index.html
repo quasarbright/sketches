@@ -263,6 +263,20 @@
       ctx.restore();
     }
 
+    // a line from (x0,y0) to (x1,y1) with a small arrowhead at the tip
+    function drawArrow(x0, y0, x1, y1) {
+      const angle = Math.atan2(y1 - y0, x1 - x0);
+      const headLen = 7;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - headLen * Math.cos(angle - Math.PI / 7), y1 - headLen * Math.sin(angle - Math.PI / 7));
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - headLen * Math.cos(angle + Math.PI / 7), y1 - headLen * Math.sin(angle + Math.PI / 7));
+      ctx.stroke();
+    }
+
     function drawEpicycles() {
       const n = +nSlider.value;
       // chain positions are already absolute canvas coords: the DC term (k=0) carries
@@ -296,10 +310,7 @@
         ctx.arc(center.x, center.y, terms[i].amp, 0, Math.PI * 2);
         ctx.stroke();
         ctx.strokeStyle = faint;
-        ctx.beginPath();
-        ctx.moveTo(center.x, center.y);
-        ctx.lineTo(tip.x, tip.y);
-        ctx.stroke();
+        drawArrow(center.x, center.y, tip.x, tip.y);
       }
 
       // pen tip + trail
