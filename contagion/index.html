@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forest Fire Simulator</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: an ash-and-ember palette for a forest fire simulator, whose
+       same underlying rule also reads as an SIR disease-spread model (see the about modal) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,800&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0c0d0a;   /* night pasture / char */
+      --panel:     #17190f;
+      --panel-2:   #202314;
+      --border:    #33361f;
+      --text:      #e9e6d8;   /* bone ash */
+      --muted:     #9a9a80;
+      --faint:     #5f6048;
+      --accent:    #d8542a;   /* ember */
+      --accent-hi: #ff7a3d;
+      --on-accent: #0c0d0a;
+      --font-ui:      "Work Sans", system-ui, sans-serif;
+      --font-mono:    "Space Mono", ui-monospace, monospace;
+      --font-display: "Fraunces", Georgia, serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+    #gl {
+      /* explicit px sizing matching innerWidth/innerHeight, not 100vw/100vh — those diverge on
+         mobile Safari when the address bar shows/hides, stretching the canvas and throwing off
+         touch coordinates. */
+      position: fixed; top: 0; left: 0;
+      display: block; image-rendering: pixelated; image-rendering: crisp-edges;
+    }
+
+    #fallback {
+      position: fixed; inset: 0; display: none; place-items: center; padding: 40px;
+      font-family: var(--font-ui); color: var(--muted); text-align: center;
+    }
+
+    /* no vignette/scrim over the sim — legibility comes from text-shadow on the chrome, never
+       from darkening the canvas. */
+    .contagion-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-weight: 600; font-size: 1.35rem;
+      letter-spacing: .01em; color: var(--text);
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 16px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+    }
+    .contagion-eyebrow::before { content: "\1F332  "; }
+
+    /* raw (non-cohesion) UI elements don't auto-hide under ?background like <control-panel>,
+       <about-modal>, and <mike-footer> do — hide them manually via the attribute cohesion.js
+       stamps onto <html> in background mode. */
+    html[data-background] .contagion-eyebrow,
+    html[data-background] .control-bar {
+      display: none;
+    }
+
+    mike-footer[overlay] {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+    /* the attribution link always carries the sketch's highlight color, never a muted/plain one */
+    mike-footer[overlay] a {
+      color: var(--accent-hi) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+
+    /* ---- signature: a cordon stripe — the one visual language shared by fire lines and
+       quarantine lines — marking the edge of the control panel and the about-modal title ---- */
+    .cordon-stripe {
+      height: 5px; border-radius: 3px 3px 0 0;
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--accent) 0px, var(--accent) 8px,
+        #16170f 8px, #16170f 16px
+      );
+    }
+    .control-panel.floating {
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid var(--border);
+      background: color-mix(in srgb, var(--panel) 86%, transparent);
+      box-shadow: 0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .control-panel .panel-title {
+      font-family: var(--font-display); font-weight: 600;
+    }
+    .control-head .name {
+      font-family: var(--font-mono); font-size: .7rem; letter-spacing: .07em; text-transform: uppercase;
+    }
+    .control-head .value { font-family: var(--font-mono); }
+
+    .brush-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .brush-btn { flex: 1; min-width: 64px; font-size: .78rem; }
+    .brush-btn[data-active="true"] {
+      background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+    }
+
+    #brushIndicator {
+      position: fixed; z-index: 5; pointer-events: none; border-radius: 50%;
+      border: 1.5px solid var(--accent-hi);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.7), 0 0 0 2px rgba(0,0,0,.4);
+      transform: translate(-50%, -50%); display: none;
+    }
+
+    /* ---- about modal: same cordon language, quieter ---- */
+    .cohesion-about {
+      background:
+        radial-gradient(120% 70% at 50% -10%, rgba(216,84,42,.13), transparent 60%),
+        var(--panel);
+    }
+    .cohesion-about .title {
+      font-family: var(--font-display); font-weight: 700;
+      padding-bottom: 12px; margin-bottom: 4px;
+    }
+    .cohesion-about .cordon-stripe { margin-bottom: 14px; height: 4px; border-radius: 2px; }
+    .cohesion-about .section-label { position: relative; padding-left: 14px; }
+    .cohesion-about .section-label::before {
+      content: "\1F332"; position: absolute; left: 0; top: 0;
+      font-size: .7em;
+    }
+    .contagion-legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 14px 0; }
+    .contagion-swatch { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); }
+    .contagion-swatch i {
+      width: 16px; height: 16px; border-radius: 4px; display: inline-block;
+      border: 1px solid rgba(0,0,0,.3);
+    }
+
+    /* ---- the state-machine diagram in the about modal ---- */
+    .ff-diagram { margin: 18px 0 22px; }
+    .ff-states { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+    .ff-node {
+      padding: 9px 16px; border-radius: 8px; font-family: var(--font-mono); font-size: .78rem;
+      font-weight: 600; text-align: center; color: #fff; border: 1px solid rgba(0,0,0,.35);
+      white-space: nowrap;
+    }
+    .ff-unburned { background: #216104; }
+    .ff-burning { background: #d9291c; }
+    .ff-burnt { background: #4a3527; }
+    .ff-scorched { background: #141410; }
+    .ff-edge { text-align: center; font-size: .68rem; color: var(--muted); line-height: 1.3; }
+    .ff-edge .ff-arrow { display: block; color: var(--accent-hi); font-size: 1.1rem; }
+    .ff-loopback, .ff-scorch-branch {
+      text-align: center; margin-top: 12px; font-size: .74rem; color: var(--muted);
+    }
+    .ff-scorch-branch { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .ff-scorch-branch .ff-arrow { color: var(--accent-hi); font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="brushIndicator"></div>
+  <div id="fallback">
+    <div>
+      <p class="title" style="font-family: var(--font-display); font-weight:700;">Forest Fire Simulator needs a newer GPU pipeline</p>
+      <p>This sim runs the SIR rule entirely in a WebGL2 shader with floating-point framebuffers
+        (<code>EXT_color_buffer_float</code>), which this browser doesn't expose. Try a recent
+        Chrome, Firefox, or Safari.</p>
+    </div>
+  </div>
+
+  <div class="contagion-eyebrow">Forest Fire Simulator</div>
+
+  <control-panel floating title="Controls">
+    <div class="cordon-stripe" style="margin: -1px -1px 8px;"></div>
+    <div class="control">
+      <div class="control-head"><span class="name">spread chance</span><span class="value" id="vInfect"></span></div>
+      <input type="range" id="infectiousness" min="0" max="100" step="1" value="7" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">burn duration</span><span class="value" id="vDuration"></span></div>
+      <input type="range" id="duration" min="0" max="1000" step="1" value="175" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">regrowth time</span><span class="value" id="vWindow"></span></div>
+      <input type="range" id="window" min="0" max="1000" step="1" value="750" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">scorch chance</span><span class="value" id="vDeath"></span></div>
+      <input type="range" id="death" min="0" max="100" step="1" value="0" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">lightning strikes</span><span class="value" id="vSparks"></span></div>
+      <input type="range" id="sparks" min="0" max="500" step="1" value="40" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">sim speed</span><span class="value" id="vSpeed"></span></div>
+      <input type="range" id="speed" min="1" max="1000" step="1" value="60" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">brush</span></div>
+      <div class="brush-row">
+        <button class="btn brush-btn" data-mode="0">Tree</button>
+        <button class="btn brush-btn" data-mode="1" data-active="true">Ignite</button>
+        <button class="btn brush-btn" data-mode="2">Burnt</button>
+        <button class="btn brush-btn" data-mode="3">Firebreak</button>
+      </div>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">brush radius</span><span class="value" id="vBrushRadius">12px</span></div>
+      <input type="range" id="brushRadius" min="0" max="80" step="1" value="12" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="pause" title="pause / resume">&#9208;</button>
+    <button class="btn" id="reseed" title="restart this landscape">&#8635;</button>
+    <about-modal label="about">
+      <h2 class="title">Forest Fire Simulator</h2>
+      <div class="cordon-stripe"></div>
+      <p>A forest of trees, embers spreading tree to tree, burnt ground slowly regrowing into
+        fresh fuel. Every tree is in one of three states: <b>unburned</b>, <b>burning</b>, or
+        <b>burnt</b> &mdash; cycling in one direction, unburned &rarr; burning &rarr; burnt &rarr;
+        back to unburned, forever.</p>
+
+      <div class="contagion-legend">
+        <span class="contagion-swatch"><i style="background:#6f9c46"></i>unburned (fuel)</span>
+        <span class="contagion-swatch"><i style="background:#d9291c"></i>burning, just ignited</span>
+        <span class="contagion-swatch"><i style="background:#ffd23f"></i>burning, nearly burnt out</span>
+        <span class="contagion-swatch"><i style="background:#4a3527"></i>burnt (regrowing)</span>
+        <span class="contagion-swatch"><i style="background:#141410"></i>scorched (permanent)</span>
+        <span class="contagion-swatch"><i style="background:#6b6f63"></i>firebreak</span>
+      </div>
+
+      <div class="section-label">the rule</div>
+      <div class="ff-diagram">
+        <div class="ff-states">
+          <div class="ff-node ff-unburned">Unburned</div>
+          <div class="ff-edge">spread chance<span class="ff-arrow">&rarr;</span></div>
+          <div class="ff-node ff-burning">Burning</div>
+          <div class="ff-edge">burn duration<span class="ff-arrow">&rarr;</span></div>
+          <div class="ff-node ff-burnt">Burnt</div>
+        </div>
+        <div class="ff-loopback">&#8630; regrowth time, back to Unburned</div>
+        <div class="ff-scorch-branch">
+          <span class="ff-arrow">&darr;</span>
+          scorch chance, instead of regrowing
+          <div class="ff-node ff-scorched">Scorched</div>
+        </div>
+      </div>
+      <p>An unburned tree has no clock running at all &mdash; it just stands there until
+        something ignites it. <b>Spread chance</b> is a flat chance, every step, that an unburned
+        tree catches fire from one specific burning neighbor. With <b>k</b> burning neighbors at
+        once, each is an independent coin flip, so the chance of catching fire from at least one
+        is:</p>
+      <p>$$ P(\text{ignites this step}) = 1 - (1 - \text{spread chance})^k $$</p>
+      <p>Once a tree <em>is</em> burning, its neighbors stop mattering: it just rides out the
+        <b>burn duration</b>, then forks one of two ways. Normally it becomes burnt ground, rides
+        out the <b>regrowth time</b>, and becomes unburned fuel again. But <b>scorch chance</b> is
+        a coin flip, checked once right when the burn duration ends, for skipping that recovery
+        entirely &mdash; heads, the ground is scorched forever instead of regrowing. Only the
+        unburned state and that one fork are chance-based; every other transition is a pure
+        duration. <b>Lightning strikes</b> add rare, randomly-placed ignitions on top of neighbor
+        spread, so a fire can restart even after burning itself out completely.</p>
+      <p>All durations here are counted in simulation <b>steps</b>, not seconds &mdash; the only
+        real-time knob is <b>sim speed</b>, which just sets how many steps run per second of
+        wall-clock time.</p>
+
+      <div class="section-label">the brush</div>
+      <p>Click or drag to paint: <b>Tree</b> resets cells to unburned, <b>Ignite</b> starts a
+        fire, <b>Burnt</b> paints already-burnt ground, and <b>Firebreak</b> places a permanent
+        barrier that neither catches nor spreads.</p>
+
+      <div class="section-label">the disease reading</div>
+      <p>The same rule has a second reading: unburned/burning/burnt is exactly a
+        <b>Susceptible &rarr; Infectious &rarr; Removed</b> epidemic model, the classic
+        compartmental model used for disease spread.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    if (matchMedia("(max-width: 700px)").matches) {
+      document.querySelector("control-panel").setAttribute("collapsed", "");
+    }
+
+    const glCanvas = document.getElementById("gl");
+    const fallback = document.getElementById("fallback");
+    const $ = (id) => document.getElementById(id);
+
+    const gl = glCanvas.getContext("webgl2", { antialias: false, alpha: false });
+    const floatExt = gl && gl.getExtension("EXT_color_buffer_float");
+    if (!gl || !floatExt) {
+      glCanvas.style.display = "none";
+      fallback.style.display = "grid";
+      throw new Error("WebGL2 + EXT_color_buffer_float required");
+    }
+
+    // ?background: a starker, more abstract palette for use as a portfolio hero backdrop —
+    // near-black terrain instead of green, and a red→blue burn instead of red→orange→yellow.
+    // Dead/scorched color is left as-is since scorch chance defaults to 0 (never visible there).
+    const isBackgroundMode = new URLSearchParams(location.search).has("background");
+
+    // ---- render palette: a richer fire gradient (fuel -> catching -> amber -> blaze -> white-hot
+    // peak -> warm ash -> cool ash -> back to fuel) instead of a flat two-stop mix ----
+    const hex = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const FUEL_LO = hex(isBackgroundMode ? "000000" : "113002");   // dense fuel
+    const FUEL_HI = hex(isBackgroundMode ? "141414" : "216104");   // sparse fuel
+    const INFECT_START = hex(isBackgroundMode ? "ff1a1a" : "d9291c"); // freshly infected
+    const INFECT_MID = hex(isBackgroundMode ? "4a0e99" : "ff8c2e");   // midway through the ramp
+    const INFECT_END = hex(isBackgroundMode ? "0f1f8f" : "ffd23f");   // about to become Removed
+    const REMOVED_START = hex(isBackgroundMode ? "0f1f8f" : "4a3527"); // just Removed
+    const CHAR = hex("141410");      // permanently dead
+    const WALL = hex("6b6f63");      // firebreak / quarantine line
+
+    const VERT = `#version 300 es
+      in vec2 aPos;
+      out vec2 vUv;
+      void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+    // state channels: r = level (-1 dead, 0 susceptible, 0..1 infectious ramp, 1..2 removed decay),
+    // g = fuel (baked-in per-cell terrain, passed through untouched), b = wall flag, a = dead flag
+    const UPDATE_FRAG = `#version 300 es
+      precision highp float;
+      precision highp int;
+      uniform sampler2D uState;
+      uniform ivec2 uSize;
+      uniform float uInfectiousness;
+      uniform float uProgressionRate;
+      uniform float uRemovedRate;
+      uniform float uDeathChance;
+      uniform ivec2 uSparkPoints[64];
+      uniform int uSparkCount;
+      uniform int uFrame;
+      uniform vec2 uBrushPos;
+      uniform float uBrushRadius;
+      uniform int uBrushMode;
+      out vec4 outColor;
+
+      // integer hash (pcg2d, Jarzynski & Olano) instead of a float fract() hash — a float hash
+      // that adds an ever-growing frame counter before taking fract() loses precision once that
+      // counter gets large (float32 only has ~7 decimal digits), and once it does, the "random"
+      // output collapses to nearly the same value for every pixel at once. x and y are also
+      // cross-mixed here rather than pre-summed into one scalar before hashing — summing first
+      // and running the result through a 1D bit-mixer can leave a residual linear correlation in
+      // the mixer's high bits, which is exactly what a rare-probability check like death chance
+      // reads (see the comment at the spark ignition check for how visible that made itself).
+      uvec2 pcg2d(uvec2 v) {
+        v = v * 1664525u + 1013904223u;
+        v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+        v ^= v >> 16u;
+        v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+        v ^= v >> 16u;
+        return v;
+      }
+      float hash(ivec2 p, int frame, int salt) {
+        uvec2 h = pcg2d(uvec2(p) ^ uvec2(uint(frame) * 747796405u, uint(salt) * 2891336453u));
+        return float(h.x) * (1.0 / 4294967295.0);
+      }
+
+      // an S cell only cares about its 8 immediate neighbors (no distance weighting, no wider
+      // sampling ring) — counts how many are currently Infectious (0 < level < 1), walls block.
+      int countInfectiousNeighbors(ivec2 p) {
+        int k = 0;
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            ivec2 np = p + ivec2(dx, dy);
+            if (np.x < 0 || np.y < 0 || np.x >= uSize.x || np.y >= uSize.y) continue;
+            vec4 ns = texelFetch(uState, np, 0);
+            if (ns.b > 0.5) continue; // walls block spread
+            if (ns.r > 0.0 && ns.r < 1.0) k++;
+          }
+        }
+        return k;
+      }
+
+      void main() {
+        ivec2 p = ivec2(gl_FragCoord.xy);
+        vec4 s = texelFetch(uState, p, 0);
+        float fuel = s.g;
+
+        // painting bypasses the rule entirely
+        if (uBrushPos.x >= 0.0 && distance(vec2(p), uBrushPos) <= uBrushRadius) {
+          if (uBrushMode == 0) outColor = vec4(0.0, fuel, 0.0, 0.0);
+          else if (uBrushMode == 1) outColor = vec4(0.02, fuel, 0.0, 0.0);
+          else if (uBrushMode == 2) outColor = vec4(1.05, fuel, 0.0, 0.0);
+          else outColor = vec4(0.0, fuel, 1.0, 0.0);
+          return;
+        }
+
+        float level = s.r, wall = s.b, dead = s.a;
+        if (wall > 0.5 || dead > 0.5) { outColor = s; return; }
+
+        float newLevel = level;
+        float newDead = 0.0;
+        if (level <= 0.0) {
+          // Susceptible: infection is a one-shot probabilistic event, not a gradual buildup.
+          // uInfectiousness (times this cell's fuel) is a flat chance per step, per Infectious
+          // neighbor — the same kind of knob as death chance, not a rate fed through a time
+          // constant. Multiple Infectious neighbors combine as independent coin flips: the
+          // chance of catching it from at least one of k neighbors is 1-(1-chance)^k.
+          int k = countInfectiousNeighbors(p);
+          newLevel = 0.0;
+          if (k > 0) {
+            float chance = clamp(uInfectiousness * fuel, 0.0, 1.0);
+            float pInfect = 1.0 - pow(1.0 - chance, float(k));
+            if (hash(p, uFrame, 3) < pInfect) newLevel = 0.02;
+          }
+          // a rare spontaneous spark keeps the landscape from ever going permanently quiet, even
+          // if a run of waves happens to burn itself out completely. Picked on the CPU with real
+          // Math.random() and passed down as exact points — asking every pixel to roll dice
+          // against a tiny GPU-hashed probability each frame sounds equivalent, but checking
+          // "hash < tiny epsilon" mostly tests the hash's *high* bits, and even a well-mixed hash
+          // can retain a residual linear correlation there, which shows up as sparks landing in
+          // a visible diagonal line instead of scattered randomly.
+          for (int i = 0; i < 64; i++) {
+            if (i >= uSparkCount) break;
+            if (p == uSparkPoints[i]) { newLevel = 0.02; break; }
+          }
+        } else if (level < 1.0) {
+          // Infectious: advances by a fixed fraction of the ramp every step, independent of
+          // neighbors — durations here are step-counts, not seconds (see uProgressionRate).
+          newLevel = level + uProgressionRate;
+          // The scorch/regrow fork happens right here, at the moment a burning cell finishes —
+          // it either becomes Removed (normal recovery) or, with scorch chance, skips straight
+          // to permanently scorched instead. It does NOT belong at the Removed→Susceptible
+          // transition (regrowing ground doesn't "fail to regrow" after it's already regrowing).
+          if (newLevel >= 1.0) {
+            float r = hash(p, uFrame, 2);
+            if (r < uDeathChance) { newDead = 1.0; newLevel = -1.0; }
+          }
+        } else {
+          // Removed: advances by a fixed fraction of the decay every step, always recovering
+          // to Susceptible once the window elapses — no chance involved here.
+          newLevel = level + uRemovedRate;
+          if (newLevel >= 2.0) newLevel = 0.0;
+        }
+
+        outColor = vec4(clamp(newLevel, -1.0, 2.0), fuel, 0.0, newDead);
+      }`;
+
+    const RENDER_FRAG = `#version 300 es
+      precision highp float;
+      in vec2 vUv;
+      uniform sampler2D uState;
+      uniform vec3 uFuelLo, uFuelHi, uInfectStart, uInfectMid, uInfectEnd, uRemovedStart, uChar, uWall;
+      out vec4 outColor;
+      void main() {
+        vec4 s = texture(uState, vUv);
+        float level = s.r, fuel = s.g, wall = s.b, dead = s.a;
+        vec3 baseline = mix(uFuelLo, uFuelHi, fuel);
+        vec3 col;
+        if (wall > 0.5) col = uWall;
+        else if (dead > 0.5 || level < 0.0) col = uChar;
+        else if (level <= 0.0) col = baseline; // Susceptible
+        // Infectious: red at the moment of infection, through orange, to yellow right before Removed
+        else if (level < 0.5) col = mix(uInfectStart, uInfectMid, level / 0.5);
+        else if (level < 1.0) col = mix(uInfectMid, uInfectEnd, (level - 0.5) / 0.5);
+        // Removed: gray right away, fading back to this cell's own fuel green as it nears Susceptible
+        else col = mix(uRemovedStart, baseline, level - 1.0);
+        outColor = vec4(col, 1.0);
+      }`;
+
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(s);
+        gl.deleteShader(s);
+        throw new Error(log);
+      }
+      return s;
+    }
+    function link(vertSrc, fragSrc) {
+      const p = gl.createProgram();
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, vertSrc));
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      return p;
+    }
+
+    const updateProg = link(VERT, UPDATE_FRAG);
+    const renderProg = link(VERT, RENDER_FRAG);
+
+    const quadVao = gl.createVertexArray();
+    gl.bindVertexArray(quadVao);
+    const quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const locUpdatePos = gl.getAttribLocation(updateProg, "aPos");
+    const locRenderPos = gl.getAttribLocation(renderProg, "aPos");
+    gl.enableVertexAttribArray(locUpdatePos);
+    gl.vertexAttribPointer(locUpdatePos, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    const U = {};
+    ["uState", "uSize", "uInfectiousness", "uProgressionRate",
+     "uRemovedRate", "uDeathChance", "uSparkPoints", "uSparkCount", "uFrame",
+     "uBrushPos", "uBrushRadius", "uBrushMode"]
+      .forEach((n) => { U[n] = gl.getUniformLocation(updateProg, n); });
+    const uRenderState = gl.getUniformLocation(renderProg, "uState");
+    const uRC = ["uFuelLo", "uFuelHi", "uInfectStart", "uInfectMid", "uInfectEnd", "uRemovedStart", "uChar", "uWall"]
+      .map((n) => gl.getUniformLocation(renderProg, n));
+
+    function makeTexture(w, h, data) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data);
+      return tex;
+    }
+    function makeFbo(tex) {
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return fbo;
+    }
+
+    // smooth value noise (bilinear-interpolated random lattice) — used once per build for the
+    // baked-in "fuel density" field, not evaluated per frame.
+    function valueNoise(w, h, cell) {
+      const nx = Math.ceil(w / cell) + 2, ny = Math.ceil(h / cell) + 2;
+      const lattice = new Float32Array(nx * ny);
+      for (let i = 0; i < lattice.length; i++) lattice[i] = Math.random();
+      const smooth = (t) => t * t * (3 - 2 * t);
+      const out = new Float32Array(w * h);
+      for (let y = 0; y < h; y++) {
+        const gy = y / cell, iy = gy | 0, fy = smooth(gy - iy);
+        for (let x = 0; x < w; x++) {
+          const gx = x / cell, ix = gx | 0, fx = smooth(gx - ix);
+          const v00 = lattice[iy * nx + ix], v10 = lattice[iy * nx + ix + 1];
+          const v01 = lattice[(iy + 1) * nx + ix], v11 = lattice[(iy + 1) * nx + ix + 1];
+          const a = v00 + (v10 - v00) * fx, b = v01 + (v11 - v01) * fx;
+          out[y * w + x] = a + (b - a) * fy;
+        }
+      }
+      return out;
+    }
+
+    let gridW, gridH;
+    let texA, texB, fboA, fboB, srcTex, srcFbo, dstTex, dstFbo;
+    let running = true;
+    let frameCounter = 0;
+
+    let brushMode = 1;
+    let brushRadius = 12;
+    let pointerActive = false, pointerGX = 0, pointerGY = 0;
+    const brushIndicator = document.getElementById("brushIndicator");
+    function updatePointer(e) {
+      pointerGX = Math.floor(e.clientX);
+      pointerGY = gridH - 1 - Math.floor(e.clientY);
+    }
+    function updateBrushIndicator(e) {
+      const d = brushRadius * 2;
+      Object.assign(brushIndicator.style, {
+        left: e.clientX + "px", top: e.clientY + "px",
+        width: d + "px", height: d + "px", display: "block",
+      });
+    }
+    glCanvas.style.touchAction = "none";
+    glCanvas.addEventListener("pointerdown", (e) => {
+      pointerActive = true;
+      updatePointer(e); updateBrushIndicator(e);
+      glCanvas.setPointerCapture(e.pointerId);
+    });
+    glCanvas.addEventListener("pointermove", (e) => {
+      if (pointerActive) updatePointer(e);
+      updateBrushIndicator(e);
+    });
+    glCanvas.addEventListener("pointerup", () => { pointerActive = false; });
+    glCanvas.addEventListener("pointercancel", () => { pointerActive = false; });
+    glCanvas.addEventListener("pointerleave", () => { brushIndicator.style.display = "none"; });
+    glCanvas.addEventListener("pointerenter", updateBrushIndicator);
+
+    // a turbulent random-phase start is the classic way to get self-sustaining spiral wave
+    // chaos in an excitable-media automaton like this one — many asynchronous fronts collide
+    // and break each other up, which is what keeps producing new fronts instead of one clean
+    // ring that expands once and quietly dies.
+    const FUEL_CELL = 140, FUEL_FIELD_LO = 0.4, FUEL_FIELD_HI = 1.0;
+
+    function makeState(w, h) {
+      const noise = valueNoise(w, h, FUEL_CELL);
+      const data = new Float32Array(w * h * 4);
+      for (let i = 0; i < w * h; i++) {
+        data[i * 4] = 0; // level: susceptible
+        data[i * 4 + 1] = FUEL_FIELD_LO + noise[i] * (FUEL_FIELD_HI - FUEL_FIELD_LO); // fuel
+        data[i * 4 + 2] = 0; // wall
+        data[i * 4 + 3] = 0; // dead
+      }
+      // sparse, spatially-coherent patches, each at one random point in the cycle — not
+      // independent per-pixel noise, which puts an infectious neighbor within reach of nearly
+      // every cell at once and ignites the whole grid in lockstep instead of leaving room for
+      // real traveling fronts to form and collide.
+      const count = Math.max(4, Math.round((w * h) / 150000));
+      for (let i = 0; i < count; i++) {
+        const cx = (Math.random() * w) | 0, cy = (Math.random() * h) | 0;
+        const r = (8 + Math.random() * 14) | 0;
+        const phase = Math.random() * 2;
+        for (let y = -r; y <= r; y++) {
+          for (let x = -r; x <= r; x++) {
+            if (x * x + y * y > r * r) continue;
+            const px = cx + x, py = cy + y;
+            if (px < 0 || py < 0 || px >= w || py >= h) continue;
+            data[(py * w + px) * 4] = phase;
+          }
+        }
+      }
+      return data;
+    }
+
+    function buildGrid() {
+      gridW = innerWidth; gridH = innerHeight;
+      glCanvas.width = gridW; glCanvas.height = gridH;
+      glCanvas.style.width = gridW + "px"; glCanvas.style.height = gridH + "px";
+
+      if (texA) gl.deleteTexture(texA);
+      if (texB) gl.deleteTexture(texB);
+      if (fboA) gl.deleteFramebuffer(fboA);
+      if (fboB) gl.deleteFramebuffer(fboB);
+
+      const initial = makeState(gridW, gridH);
+      texA = makeTexture(gridW, gridH, initial);
+      texB = makeTexture(gridW, gridH, new Float32Array(gridW * gridH * 4));
+      fboA = makeFbo(texA);
+      fboB = makeFbo(texB);
+      srcTex = texA; srcFbo = fboA;
+      dstTex = texB; dstFbo = fboB;
+    }
+
+    // Every duration in this sim is a step-count, not a length of real time — a cellular
+    // automaton's "clock" is the step, and tying rules to seconds instead just makes them
+    // secretly depend on frame rate / sim speed. The one legitimate exception is sim speed
+    // itself (stepsPerSec below), which is the deliberate real-time/step-time conversion knob.
+    let infectiousness = 0.07, durationSteps = 5, windowSteps = 1000, deathChance = 0;
+    let sparkPeriodSteps = isBackgroundMode ? 1 : 40, stepsPerSec = 60;
+    let stepsSinceSpark = 0;
+    const MAX_SPARKS = 1;
+    const sparkBuf = new Int32Array(MAX_SPARKS * 2);
+
+    function stepOnce() {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(updateProg);
+      gl.bindVertexArray(quadVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(U.uState, 0);
+      gl.uniform2i(U.uSize, gridW, gridH);
+      gl.uniform1f(U.uInfectiousness, infectiousness);
+      gl.uniform1f(U.uProgressionRate, 1 / durationSteps);
+      gl.uniform1f(U.uRemovedRate, 1 / windowSteps);
+      gl.uniform1f(U.uDeathChance, deathChance);
+      gl.uniform1i(U.uFrame, (frameCounter++) % 1000000);
+
+      // one spark exactly every sparkPeriodSteps steps — a fixed cadence in step-counts, chosen
+      // on the CPU with Math.random(), not a real-time rate rolled per-pixel on the GPU (see the
+      // comment at the ignition check in UPDATE_FRAG for why not).
+      stepsSinceSpark++;
+      let sparkCount = 0;
+      if (sparkPeriodSteps > 0 && stepsSinceSpark >= sparkPeriodSteps) {
+        stepsSinceSpark = 0;
+        sparkCount = 1;
+        sparkBuf[0] = (Math.random() * gridW) | 0;
+        sparkBuf[1] = (Math.random() * gridH) | 0;
+      }
+      gl.uniform1i(U.uSparkCount, sparkCount);
+      if (sparkCount > 0) gl.uniform2iv(U.uSparkPoints, sparkBuf.subarray(0, sparkCount * 2));
+      if (pointerActive) {
+        gl.uniform2f(U.uBrushPos, pointerGX, pointerGY);
+        gl.uniform1f(U.uBrushRadius, brushRadius);
+        gl.uniform1i(U.uBrushMode, brushMode);
+      } else {
+        gl.uniform2f(U.uBrushPos, -1, -1);
+      }
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      [srcTex, dstTex] = [dstTex, srcTex];
+      [srcFbo, dstFbo] = [dstFbo, srcFbo];
+    }
+
+    function render() {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(renderProg);
+      gl.bindVertexArray(quadVao);
+      gl.enableVertexAttribArray(locRenderPos);
+      gl.vertexAttribPointer(locRenderPos, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(uRenderState, 0);
+      [FUEL_LO, FUEL_HI, INFECT_START, INFECT_MID, INFECT_END, REMOVED_START, CHAR, WALL].forEach((c, i) =>
+        gl.uniform3f(uRC[i], c[0], c[1], c[2]));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    // sim speed (stepsPerSec) is the only place real time enters this simulation — it just
+    // decides how many discrete steps to run per second of wall-clock time, same idea as a
+    // frame-independent physics accumulator.
+    let stepAccumulator = 0;
+    function frame() {
+      if (running) {
+        stepAccumulator += stepsPerSec / 60;
+        const steps = Math.min(2000, Math.floor(stepAccumulator)); // cap catch-up after e.g. a backgrounded tab
+        stepAccumulator -= steps;
+        for (let i = 0; i < steps; i++) stepOnce();
+        render();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    buildGrid();
+    frame();
+    addEventListener("resize", buildGrid);
+
+    // log-scale mapping for duration/window sliders: slider position 0..1000 maps onto
+    // 1..10000 steps exponentially, so the same physical drag covers "tune by 1 step" at the
+    // low end and "tune by hundreds of steps" at the high end.
+    const STEPS_MIN = 1, STEPS_MAX = 10000;
+    const LOG_MIN = Math.log(STEPS_MIN), LOG_MAX = Math.log(STEPS_MAX);
+    function stepsFromSliderPos(pos) {
+      return Math.max(STEPS_MIN, Math.round(Math.exp(LOG_MIN + (LOG_MAX - LOG_MIN) * (pos / 1000))));
+    }
+    function stepsLabel(n) { return n + (n === 1 ? " step" : " steps"); }
+
+    $("infectiousness").addEventListener("input", (e) => {
+      infectiousness = +e.target.value / 100; $("vInfect").textContent = e.target.value + "%";
+    });
+    $("duration").addEventListener("input", (e) => {
+      durationSteps = stepsFromSliderPos(+e.target.value); $("vDuration").textContent = stepsLabel(durationSteps);
+    });
+    $("window").addEventListener("input", (e) => {
+      windowSteps = stepsFromSliderPos(+e.target.value); $("vWindow").textContent = stepsLabel(windowSteps);
+    });
+    $("death").addEventListener("input", (e) => {
+      deathChance = +e.target.value / 100; $("vDeath").textContent = e.target.value + "%";
+    });
+    $("sparks").addEventListener("input", (e) => {
+      sparkPeriodSteps = +e.target.value;
+      $("vSparks").textContent = sparkPeriodSteps === 0 ? "off" : "every " + stepsLabel(sparkPeriodSteps);
+    });
+    $("speed").addEventListener("input", (e) => {
+      stepsPerSec = +e.target.value; $("vSpeed").textContent = stepsPerSec + "/s";
+    });
+    $("brushRadius").addEventListener("input", (e) => {
+      brushRadius = +e.target.value; $("vBrushRadius").textContent = e.target.value + "px";
+    });
+    document.querySelectorAll(".brush-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        brushMode = +btn.dataset.mode;
+        document.querySelectorAll(".brush-btn").forEach((b) => delete b.dataset.active);
+        btn.dataset.active = "true";
+      });
+    });
+    $("pause").addEventListener("click", () => {
+      running = !running;
+      $("pause").textContent = running ? "⏸" : "▶";
+    });
+    $("reseed").addEventListener("click", () => buildGrid());
+
+    $("vInfect").textContent = Math.round(infectiousness * 100) + "%";
+    $("vDuration").textContent = stepsLabel(durationSteps);
+    $("vWindow").textContent = stepsLabel(windowSteps);
+    $("vDeath").textContent = "0%";
+    $("vSparks").textContent = "every " + stepsLabel(sparkPeriodSteps);
+    $("vSpeed").textContent = stepsPerSec + "/s";
+  </script>
+</body>
+</html>
