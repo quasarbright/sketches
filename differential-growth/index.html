@@ -190,26 +190,15 @@
     // script is deferred and may not have run yet by the time this inline script executes at the
     // bottom of the page.
     const isBg = new URLSearchParams(location.search).has("background");
-    let W, H, dpr = 1;
-    // Chrome/Firefox scale shadowBlur by the canvas's current transform (our ctx.setTransform
-    // dpr scale below) just like stroke widths and positions, so it already looks right there.
-    // WebKit (Safari, and — since Apple requires it — every browser on iOS, "Chrome" included)
-    // does not: shadowBlur stays a fixed size in device pixels regardless of the transform, so on
-    // a high-dpr iPhone the glow ends up looking thin relative to everything else that did scale
-    // up. Detect that engine and pre-multiply shadowBlur by dpr only there to compensate.
-    const isWebKitShadowQuirk =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) || // iPadOS reports as Mac
-      /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent); // desktop Safari
+    let W, H;
     function buildCanvas() {
-      dpr = window.devicePixelRatio || 1;
+      const dpr = window.devicePixelRatio || 1;
       W = innerWidth; H = innerHeight;
       cv.width = W * dpr; cv.height = H * dpr;
       cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     addEventListener("resize", buildCanvas); buildCanvas();
-    const shadowBlurScale = isWebKitShadowQuirk ? dpr : 1;
 
     // ---- tuning ----
     const SPRING_K = 0.3;
@@ -792,7 +781,7 @@
     function strokeShape(points, color, closed, alpha) {
       ctx.save();
       ctx.globalAlpha = alpha == null ? 1 : Math.max(0, alpha);
-      ctx.shadowColor = color; ctx.shadowBlur = 16 * shadowBlurScale;
+      ctx.shadowColor = color; ctx.shadowBlur = 16;
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
       ctx.beginPath();
@@ -805,7 +794,7 @@
     function drawDot(x, y, color, alpha) {
       ctx.save();
       ctx.globalAlpha = alpha == null ? 1 : Math.max(0, alpha);
-      ctx.shadowColor = color; ctx.shadowBlur = 12 * shadowBlurScale;
+      ctx.shadowColor = color; ctx.shadowBlur = 12;
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(x, y, EMBER_RADIUS, 0, Math.PI * 2);
