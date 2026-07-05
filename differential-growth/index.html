@@ -70,7 +70,8 @@
       box-shadow: 0 0 6px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
     }
 
-    #play {
+    /* pulses only while waiting for the first press — a running/paused sim shouldn't nag */
+    #play.cta {
       box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
       animation: dg-play-pulse 1.8s ease-out infinite;
     }
@@ -80,7 +81,7 @@
       100% { box-shadow: 0 0 0 0 transparent; }
     }
     @media (prefers-reduced-motion: reduce) {
-      #play { animation: none; box-shadow: 0 0 12px 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+      #play.cta { animation: none; box-shadow: 0 0 12px 1px color-mix(in srgb, var(--accent) 55%, transparent); }
     }
 
     mike-footer[overlay] {
@@ -109,6 +110,15 @@
 
   <control-panel floating title="Controls">
     <div class="control">
+      <div class="control-head"><span class="name">mode</span></div>
+      <select id="seedMode">
+        <option value="draw">Draw your own</option>
+        <option value="snowflake">Snowflake — tiny hexagon seed</option>
+        <option value="growshrink">Grow and shrink</option>
+        <option value="fireworks">Fireworks</option>
+      </select>
+    </div>
+    <div class="control">
       <div class="control-head"><span class="name">speed</span><span class="value" id="vSpeed">60/s</span></div>
       <input type="range" id="speed" min="0" max="100" step="1" value="61" />
     </div>
@@ -136,7 +146,6 @@
 
   <div class="control-bar">
     <button class="btn" id="play" title="start growing" style="display:none;">▶ grow</button>
-    <button class="btn" id="pause" title="pause / resume">⏸</button>
     <button class="btn" id="clear">clear</button>
     <about-modal label="about">
       <h2 class="title">Differential Growth</h2>
@@ -176,8 +185,10 @@
     const cv = document.getElementById("c"), ctx = cv.getContext("2d");
     const $ = (id) => document.getElementById(id);
     const hint = $("hint");
-    // read directly rather than cohesion's isBackground() — that module script is deferred and
-    // may not have run yet by the time this inline script executes at the bottom of the page.
+    // ?background just preselects "grow and shrink" mode and hides all UI chrome, for use as an
+    // ambient hero visual. Read directly rather than cohesion's isBackground() — that module
+    // script is deferred and may not have run yet by the time this inline script executes at the
+    // bottom of the page.
     const isBg = new URLSearchParams(location.search).has("background");
     let W, H;
     function buildCanvas() {
@@ -204,15 +215,47 @@
     const SPEED_MIN = 5, SPEED_MAX = 300; // steps/sec range for the log-scale speed slider
     const STEP_CATCH_UP_CAP = 240; // don't burn through hundreds of queued steps after a throttled tab
 
-    // ?background breathing cycle: grow for a while, then disable splitting and reverse it by
-    // deleting points (the springs pulling survivors back toward `spacing` apart naturally
-    // contracts the shape as points thin out — the same forces driving growth, running in
-    // reverse), hold briefly once fully collapsed, then let it grow again. All durations are in
+    // "grow and shrink" mode's breathing cycle: grow for a while, then disable splitting and
+    // reverse it by deleting points (the springs pulling survivors back toward `spacing` apart
+    // naturally contracts the shape as points thin out — the same forces driving growth, running
+    // in reverse), hold briefly once fully collapsed, then let it grow again. All durations are in
     // simulation steps, not seconds, so they stay correct regardless of the sim-speed setting.
     const BG_GROW_STEPS = 500;       // ~8.3s at the default 60 steps/sec
     const BG_HOLD_STEPS = 90;        // ~1.5s pause once fully collapsed, before regrowing
     const BG_SHRINK_FRACTION = 0.012; // fraction of a curve's current points removed per shrink step
     const MIN_POINTS_CLOSED = 3, MIN_POINTS_OPEN = 2;
+
+    // "fireworks" mode: a tiny seed circle (same shape grow-and-shrink uses) launches from the
+    // bottom on a randomized upward arc, apexes, then grows normally in place — like snowflake
+    // mode, growth is capped by a point budget rather than a step count — until it maxes out.
+    // It then "relaxes": still sitting in the normal spring/repulsion sim (so the shape keeps
+    // settling under the same forces that grew it) while its rendered lines fade from full
+    // opacity to nothing. Only once that fade completes does it actually leave the sim — its
+    // points cut loose into independent, fully-opaque falling embers that fade out on their own
+    // separate (much slower) timescale. Rather than picking a launch speed and hoping it lands
+    // somewhere reasonable, we solve the constant-acceleration kinematics for the gravity +
+    // launch speed that put the apex at a randomized target height after a randomized amount of
+    // time — d = ½at², and v0 = a·t since velocity hits exactly 0 at the apex — so every rocket
+    // reliably bursts in the upper-middle of the screen instead of fizzling near the bottom, and
+    // the ascent takes as long as we ask for regardless of how far it has to rise.
+    const FW_SEED_RADIUS_MIN = 18, FW_SEED_RADIUS_MAX = 36; // matches grow-and-shrink's loop seeds
+    const FW_VX_SPREAD = 0.6;             // small random horizontal drift while rising, ± this much
+    const FW_RISE_STEPS_MIN = 180, FW_RISE_STEPS_MAX = 260; // ~3-4.3s at the default 60 steps/sec
+    const FW_APEX_FRAC_MIN = 0.28, FW_APEX_FRAC_MAX = 0.55; // apex height, as a fraction of screen height from the top
+    const FW_MAX_POINTS_PER_BURST = 700;  // each burst grows independently up to this many points, then stops
+    const FW_MAX_GROWTH_STEPS = 400;      // fallback: stop growing after this many steps even if the point cap is never reached
+    const FW_RELAX_STEPS = 180;           // how long a maxed-out burst relaxes in the sim, lines fading, before its points go free as embers
+    const FW_MAX_CONCURRENT = 4;          // cap simultaneous rising + growing fireworks
+    const FW_LAUNCH_INTERVAL_MIN = 177, FW_LAUNCH_INTERVAL_MAX = 443; // steps between launches, at FW_REFERENCE_WIDTH
+    const FW_LAUNCH_MARGIN_FRAC = 0.15;   // keep launches out of this fraction of screen width on each side
+    // narrower screens (phones) launch less often — interval scales up as width drops below this
+    const FW_REFERENCE_WIDTH = 1600;
+    // embers: detached points with no spring/repulsion — they don't interact with anything, they
+    // just drift very slowly downward, fading out, until they're either fully faded or cross the
+    // bottom edge (whichever comes first — the fade duration is tuned to finish first in practice).
+    const EMBER_GRAVITY = 0.0025;
+    const EMBER_FADE_STEPS = 360;         // ~6s at the default 60 steps/sec
+    const EMBER_RADIUS = 1;               // dot radius, px
 
     // on-theme palette — vivid fluorescence-microscopy channel colors, distinct from each other
     // against the dark field. Curves are assigned these in order, cycling if more than 10 are drawn.
@@ -223,17 +266,65 @@
 
     let mode = "idle";        // 'idle' | 'drawing' | 'ready' | 'growing'
     let raw = [];              // points captured while drawing the in-progress stroke
-    let curves = [];           // {points: [{x,y}], closed, color}
+    let curves = [];           // {points: [{x,y}], closed, color} — fireworks mode: growing-phase curves also get pointCap, holdStepsLeft
+    let launching = [];        // fireworks mode: {points, color, vx, vy, gravity} rigid seeds still rising, not yet in `curves`
+    let embers = [];           // fireworks mode: {x, y, vx, vy, color, alpha} independent falling points, post-relax
+    let fwSpawnCountdown = 0, fwColorIndex = 0; // fireworks mode: steps until next launch, next PALETTE index
     let running = true;
     let stepAccumulator = 0;
-    const MAX_POINTS = 10000;  // shared across all curves combined
+    // point budget is shared across all curves combined, but a lower cap for snowflake mode keeps
+    // its dense radial branching from bogging down the frame rate — draw mode's curves are
+    // usually sparser per-pixel, so they can afford the higher ceiling.
+    const MAX_POINTS_DRAW = 10000, MAX_POINTS_SNOWFLAKE = 1000;
+    let seedMode = "draw";     // 'draw' | 'snowflake' | 'growshrink' | 'fireworks' — driven by the mode <select>
+    let maxPoints = MAX_POINTS_DRAW;
+    function setSeedMode(next) {
+      seedMode = next;
+      maxPoints = seedMode === "snowflake" ? MAX_POINTS_SNOWFLAKE : MAX_POINTS_DRAW;
+    }
     let stepsPerSec = 60, spacing = 10, repulsionRadius = 24, repulsionStrength = 10, smoothing = 0.15, splitRatio = 1.5;
-    let bgPhase = "growing", bgPhaseSteps = 0; // ?background only: 'growing' | 'shrinking' | 'holding'
+    let bgPhase = "growing", bgPhaseSteps = 0; // growshrink mode only: 'growing' | 'shrinking' | 'holding'
+
+    // a single tiny 6-point hexagon at center, instead of a hand-drawn curve — the same three
+    // growth rules applied to a perfectly symmetric seed, to see whether the folding stays
+    // 6-fold symmetric (a snowflake) or breaks symmetry into an asymmetric coral blob.
+    // a hexagon sized exactly to `spacing` sits in a stable force equilibrium below the split
+    // threshold and never grows — repulsion from all 5 other vertices (all within
+    // repulsionRadius at that scale) balances the spring pulling edges back to spacing before
+    // any edge stretches past the splitRatio threshold. Seeding it larger than that threshold
+    // guarantees edges start already-stretched, so growth kicks off immediately.
+    function seedSnowflake() {
+      curves.push(makeHexagon(W / 2, H / 2, spacing * splitRatio * 1.2, "#39d9ff"));
+      mode = "ready";
+      hint.style.opacity = "0";
+    }
+
+    // seeds a handful of small closed loops at random spots and starts growing immediately — no
+    // play button needed, since this mode's whole point is to run as an ambient, ever-cycling
+    // visual (grow, shrink back down, hold briefly, repeat — see the bgPhase machine below).
+    function seedGrowShrink() {
+      seedBackgroundLoops(10);
+      mode = "growing";
+      hint.style.opacity = "0";
+      bgPhase = "growing"; bgPhaseSteps = 0;
+    }
+
+    // no play button here either — launches its own first rocket immediately and keeps launching
+    // more on a randomized cadence for as long as fireworks mode stays selected.
+    function seedFireworks() {
+      launching = []; embers = []; fwColorIndex = 0;
+      fwSpawnCountdown = 0; // launch the first rocket right away
+      mode = "growing";
+      hint.style.opacity = "0";
+    }
 
     function reset() {
-      mode = "idle"; raw = []; curves = []; stepAccumulator = 0;
+      mode = "idle"; raw = []; curves = []; stepAccumulator = 0; running = true;
+      launching = []; embers = [];
       hint.style.opacity = "1";
-      $("play").style.display = "none";
+      if (seedMode === "snowflake") seedSnowflake();
+      else if (seedMode === "growshrink") seedGrowShrink();
+      else if (seedMode === "fireworks") seedFireworks();
     }
     reset();
 
@@ -243,8 +334,13 @@
       hint.style.display = "none";
       document.querySelector(".control-bar").style.display = "none";
       document.querySelector(".dg-eyebrow").style.display = "none";
-      seedBackgroundLoops(10);
-      mode = "growing";
+      setSeedMode(Math.random() < 0.5 ? "growshrink" : "fireworks");
+      reset();
+    } else {
+      $("seedMode").addEventListener("change", (e) => {
+        setSeedMode(e.target.value);
+        reset();
+      });
     }
 
     // ---- input: freehand draw ----
@@ -300,13 +396,24 @@
       return out;
     }
 
-    // ?background: skip the draw/play flow entirely — seed a handful of small closed loops at
-    // random spots and start growing immediately, for use as an ambient, auto-running hero visual.
+    // grow-and-shrink mode: seeds a handful of small closed loops at random spots, used both as
+    // an ambient hero visual (?background) and as a UI-selectable mode.
     function makeLoopCurve(cx, cy, radius, color) {
       const n = Math.max(6, Math.round((2 * Math.PI * radius) / spacing));
       const points = [];
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
+        points.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
+      }
+      return { points, closed: true, color };
+    }
+
+    // a perfect 6-point hexagon — circumradius r gives edge length r exactly (2·r·sin(30°) = r),
+    // so a hexagon sized to `spacing` starts already near the spring's resting length.
+    function makeHexagon(cx, cy, radius, color) {
+      const points = [];
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 - Math.PI / 2; // point at top, like a snowflake tip
         points.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
       }
       return { points, closed: true, color };
@@ -330,6 +437,70 @@
       }
     }
 
+    // steps until the next launch — scaled up on narrow screens (phones) so a cramped canvas
+    // doesn't get overwhelmed with as many concurrent bursts as a wide desktop window would.
+    function fwLaunchInterval() {
+      const widthScale = Math.min(3, Math.max(1, FW_REFERENCE_WIDTH / W));
+      return (FW_LAUNCH_INTERVAL_MIN + Math.random() * (FW_LAUNCH_INTERVAL_MAX - FW_LAUNCH_INTERVAL_MIN)) * widthScale;
+    }
+
+    // launches a tiny circle seed (the same shape grow-and-shrink uses) from a random spot along
+    // the bottom edge. Solves the constant-acceleration kinematics (d = ½at², v0 = a·t) for the
+    // gravity + launch speed that reach a randomized target apex height after a randomized rise
+    // time, so the rocket reliably bursts in the upper-middle of the screen rather than wherever
+    // a guessed launch speed happens to run out of steam.
+    function spawnFirework() {
+      const edgeMargin = Math.max(MARGIN, W * FW_LAUNCH_MARGIN_FRAC);
+      const x = edgeMargin + Math.random() * (W - 2 * edgeMargin);
+      const color = PALETTE[fwColorIndex++ % PALETTE.length];
+      const radius = FW_SEED_RADIUS_MIN + Math.random() * (FW_SEED_RADIUS_MAX - FW_SEED_RADIUS_MIN);
+      const seed = makeLoopCurve(x, H - MARGIN, radius, color);
+      const riseSteps = FW_RISE_STEPS_MIN + Math.random() * (FW_RISE_STEPS_MAX - FW_RISE_STEPS_MIN);
+      const apexY = H * (FW_APEX_FRAC_MIN + Math.random() * (FW_APEX_FRAC_MAX - FW_APEX_FRAC_MIN));
+      const riseDist = Math.max(1, (H - MARGIN) - apexY);
+      const gravity = (2 * riseDist) / (riseSteps * riseSteps);
+      launching.push({
+        points: seed.points, color, gravity,
+        vx: (Math.random() - 0.5) * 2 * FW_VX_SPREAD,
+        vy: -gravity * riseSteps, // solved so velocity hits exactly 0 at apexY after riseSteps
+      });
+    }
+
+    // rigid-body translation only — a rising rocket keeps its exact seed shape and doesn't run
+    // the spring/repulsion sim or sit in the spatial grid, since it isn't "growing" yet.
+    function updateFireworksLaunching() {
+      for (let i = launching.length - 1; i >= 0; i--) {
+        const f = launching[i];
+        f.vy += f.gravity;
+        for (const p of f.points) {
+          p.x += f.vx; p.y += f.vy;
+          p.x = Math.min(W - MARGIN, Math.max(MARGIN, p.x));
+          p.y = Math.max(MARGIN, p.y);
+        }
+        if (f.vy >= 0) { // apex: rise has slowed to a stop — hand off to the growth sim
+          launching.splice(i, 1);
+          curves.push({
+            points: f.points, closed: true, color: f.color,
+            pointCap: FW_MAX_POINTS_PER_BURST, holdStepsLeft: null, growthStepsElapsed: 0,
+          });
+        }
+      }
+    }
+
+    // embers have no spring/repulsion and never enter the spatial grid — they don't interact with
+    // anything, including each other. They drift very slowly under gravity, fading out, until
+    // they're either fully faded or cross the bottom edge (whichever happens first).
+    function updateEmbers() {
+      for (let i = embers.length - 1; i >= 0; i--) {
+        const e = embers[i];
+        e.vy += EMBER_GRAVITY;
+        e.x += e.vx; e.y += e.vy;
+        e.alpha -= 1 / EMBER_FADE_STEPS;
+        if (e.alpha <= 0 || e.y > H) embers.splice(i, 1);
+      }
+    }
+
+
     function addCurveFromRaw() {
       const first = raw[0], last = raw[raw.length - 1];
       const closed = Math.hypot(last.x - first.x, last.y - first.y) < CLOSE_DIST;
@@ -339,19 +510,30 @@
       const color = PALETTE[curves.length % PALETTE.length];
       curves.push({ points: sampled, closed, color });
       mode = "ready";
-      $("play").style.display = "";
     }
 
+    // single button doubles as ▶ grow (while a curve is drawn but not yet growing) and ⏸/▶
+    // pause-resume (once it's growing) — kept in sync every frame by updatePlayButton(), so
+    // there's one state machine instead of two buttons that can drift out of sync with each other.
     $("play").addEventListener("click", () => {
-      if (mode !== "ready" || curves.length === 0) return;
-      mode = "growing";
-      $("play").style.display = "none";
+      if (mode === "ready") {
+        if (curves.length === 0) return;
+        mode = "growing"; running = true;
+      } else if (mode === "growing") {
+        running = !running;
+      }
     });
+    function updatePlayButton() {
+      const btn = $("play");
+      if (mode === "growing") {
+        btn.style.display = ""; btn.textContent = running ? "⏸" : "▶"; btn.classList.remove("cta");
+      } else if (mode === "ready") {
+        btn.style.display = ""; btn.textContent = "▶ grow"; btn.classList.add("cta");
+      } else {
+        btn.style.display = "none"; btn.classList.remove("cta");
+      }
+    }
     $("clear").addEventListener("click", reset);
-    $("pause").addEventListener("click", () => {
-      running = !running;
-      $("pause").textContent = running ? "⏸" : "▶";
-    });
 
     function applySpeedSlider(pos01) {
       stepsPerSec = Math.round(SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, pos01));
@@ -393,6 +575,14 @@
     }
 
     function physicsStep() {
+      if (seedMode === "fireworks") {
+        updateFireworksLaunching();
+        updateEmbers();
+        if (--fwSpawnCountdown <= 0 && launching.length + curves.length < FW_MAX_CONCURRENT) {
+          spawnFirework();
+          fwSpawnCountdown = fwLaunchInterval();
+        }
+      }
       if (curves.length === 0) return;
       const cellSize = Math.max(repulsionRadius, 1);
       const { grid, flat } = buildGrid(cellSize);
@@ -456,14 +646,54 @@
         }
       });
 
-      curves.forEach((c, ci) => { c.points = nextByCurve[ci]; });
+      curves.forEach((c, ci) => {
+        const next = nextByCurve[ci];
+        // fireworks mode: track each point's last-step velocity so that when a relaxing burst's
+        // points are cut loose into embers, they keep drifting the way they already were —
+        // instead of getting assigned a fresh random velocity, which reads as a sudden kick.
+        if (seedMode === "fireworks") {
+          for (let i = 0; i < next.length; i++) {
+            next[i].vx = next[i].x - c.points[i].x;
+            next[i].vy = next[i].y - c.points[i].y;
+          }
+        }
+        c.points = next;
+      });
 
-      if (!isBg) {
+      if (seedMode !== "growshrink") {
         growEdges();
+        if (seedMode === "snowflake" && curves.reduce((sum, c) => sum + c.points.length, 0) >= maxPoints) {
+          running = false;
+        }
+        if (seedMode === "fireworks") {
+          // growth *is* the firework's burst — once a curve maxes out its own point cap (the
+          // growEdges() call above stops growing it further at that point, same mechanism as
+          // snowflake mode) — or FW_MAX_GROWTH_STEPS elapses without ever reaching the cap, as a
+          // fallback so a burst can't hang around growing forever — it starts relaxing: it stays
+          // in the sim (still under normal spring/repulsion forces, drawn via drawCurves() with a
+          // fading alpha computed from holdStepsLeft) for FW_RELAX_STEPS before its points are cut
+          // loose into independent, fully-opaque embers that fade out on their own separately.
+          for (let i = curves.length - 1; i >= 0; i--) {
+            const c = curves[i];
+            if (c.holdStepsLeft == null) {
+              if (c.points.length >= c.pointCap || ++c.growthStepsElapsed >= FW_MAX_GROWTH_STEPS) {
+                c.holdStepsLeft = FW_RELAX_STEPS;
+              }
+              continue;
+            }
+            if (--c.holdStepsLeft > 0) continue;
+            curves.splice(i, 1);
+            for (const p of c.points) {
+              // carry over the velocity it already had from the relax-phase physics, rather than
+              // assigning a fresh random one — no kick, it just keeps drifting the way it was
+              embers.push({ x: p.x, y: p.y, color: c.color, alpha: 1, vx: p.vx || 0, vy: p.vy || 0 });
+            }
+          }
+        }
         return;
       }
 
-      // background breathing cycle: grow → shrink → hold → repeat
+      // grow-and-shrink breathing cycle: grow → shrink → hold → repeat
       bgPhaseSteps++;
       if (bgPhase === "growing") {
         growEdges();
@@ -478,23 +708,28 @@
     }
 
     // splits stretched edges within each curve independently, sharing one point budget
-    // (MAX_POINTS) across all curves combined so drawing many curves stays affordable.
+    // (maxPoints) across all curves combined so drawing many curves stays affordable. A curve can
+    // also carry its own individual `pointCap` (fireworks mode) so it stops growing on its own
+    // once it's fully bloomed, independent of every other curve's budget.
     function growEdges() {
       let total = curves.reduce((sum, c) => sum + c.points.length, 0);
       const threshold = spacing * splitRatio;
       for (const curve of curves) {
-        if (total >= MAX_POINTS) break;
+        if (total >= maxPoints) break;
+        const cap = curve.pointCap || Infinity;
+        if (curve.points.length >= cap) continue;
         const n = curve.points.length;
         const edgeCount = curve.closed ? n : n - 1;
         const grown = [];
+        let curveTotal = n;
         for (let i = 0; i < edgeCount; i++) {
           const a = curve.points[i];
           grown.push(a);
           const b = curve.points[(i + 1) % n];
           const d = Math.hypot(b.x - a.x, b.y - a.y);
-          if (d > threshold && total < MAX_POINTS) {
+          if (d > threshold && total < maxPoints && curveTotal < cap) {
             grown.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-            total++;
+            total++; curveTotal++;
           }
         }
         if (!curve.closed) grown.push(curve.points[n - 1]); // final point has no outgoing edge to walk
@@ -518,7 +753,7 @@
       if (bestIdx !== -1) curve.points.splice(bestIdx, 1);
     }
 
-    // background-only: removes a fraction of a curve's points per step (geometric decay, so a
+    // grow-and-shrink mode only: removes a fraction of a curve's points per step (geometric decay, so a
     // curve that grew huge collapses in about the same number of steps as a small one) down to a
     // minimal triangle/segment. Returns true once that curve has reached its floor.
     function shrinkCurve(curve) {
@@ -543,18 +778,54 @@
       ctx.stroke();
     }
 
+    function strokeShape(points, color, closed, alpha) {
+      ctx.save();
+      ctx.globalAlpha = alpha == null ? 1 : Math.max(0, alpha);
+      ctx.shadowColor = color; ctx.shadowBlur = 16;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      if (closed) ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawDot(x, y, color, alpha) {
+      ctx.save();
+      ctx.globalAlpha = alpha == null ? 1 : Math.max(0, alpha);
+      ctx.shadowColor = color; ctx.shadowBlur = 12;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, EMBER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     function drawCurves() {
       for (const curve of curves) {
-        ctx.save();
-        ctx.shadowColor = curve.color; ctx.shadowBlur = 8;
-        ctx.strokeStyle = curve.color;
-        ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
-        ctx.beginPath();
-        curve.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        if (curve.closed) ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
+        if (curve.holdStepsLeft == null) {
+          strokeShape(curve.points, curve.color, curve.closed, 1);
+          continue;
+        }
+        // fireworks mode: a relaxing burst fades only its connecting lines out over
+        // FW_RELAX_STEPS while still sitting in the normal physics sim — its points are drawn as
+        // fully-opaque dots the whole time (identical to how embers render), so there's no pop-in
+        // once the lines finish fading and the points actually become free-falling embers.
+        const alpha = curve.holdStepsLeft / FW_RELAX_STEPS;
+        strokeShape(curve.points, curve.color, curve.closed, alpha);
+        for (const p of curve.points) drawDot(p.x, p.y, curve.color, 1);
       }
+    }
+
+    // fireworks mode: rising rockets (not yet in `curves`) drawn the same way as a growing curve
+    function drawLaunching() {
+      for (const f of launching) strokeShape(f.points, f.color, true);
+    }
+
+    // fireworks mode: independent falling embers, drawn as small glowing dots that fade with alpha
+    function drawEmbers() {
+      for (const e of embers) drawDot(e.x, e.y, e.color, e.alpha);
     }
 
     function frame() {
@@ -566,8 +837,11 @@
         if (stepAccumulator > STEP_CATCH_UP_CAP) stepAccumulator = STEP_CATCH_UP_CAP;
         while (stepAccumulator >= 1) { stepAccumulator -= 1; physicsStep(); }
       }
+      updatePlayButton();
 
+      drawLaunching();
       drawCurves();
+      drawEmbers();
       if (mode === "drawing") drawStrokeInProgress();
     }
     requestAnimationFrame(frame);
