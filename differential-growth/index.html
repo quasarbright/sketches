@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Differential Growth — draw a curve, watch it fold</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: a dark-field microscopy specimen, single fluorescent channel -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #050807;   /* dark field */
+      --panel:     #0d1512;
+      --panel-2:   #142019;
+      --border:    #22332b;
+      --text:      #d9f2e6;
+      --muted:     #6f9484;
+      --faint:     #3f5a4d;
+      --accent:    #39ff8e;   /* GFP channel green */
+      --accent-hi: #7dffb8;
+      --on-accent: #04120a;
+      --font-ui:      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Space Grotesk", var(--font-ui);
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+    #c {
+      /* explicit px sizing (see buildCanvas) — not 100vw/100vh, which diverges from
+         innerWidth/innerHeight on mobile Safari when the address bar shows/hides */
+      position: fixed; top: 0; left: 0; display: block; touch-action: none; cursor: crosshair;
+    }
+
+    .dg-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-weight: 600; letter-spacing: .02em;
+      font-size: 1.15rem; color: var(--text); text-transform: uppercase;
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 16px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+    }
+    .dg-eyebrow::before {
+      content: "● "; color: var(--accent);
+      text-shadow: 0 0 4px var(--accent), 0 0 12px var(--accent), 0 2px 4px rgba(0,0,0,.9);
+    }
+
+
+    #hint {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      font-family: var(--font-display); font-weight: 500; font-size: clamp(1.1rem, 3.4vw, 1.7rem);
+      color: var(--faint); pointer-events: none; text-align: center; z-index: 3;
+      transition: opacity .2s;
+    }
+    #hint .sub { display: block; font-family: var(--font-mono); font-size: .8rem;
+      color: var(--faint); margin-top: 10px; letter-spacing: .03em; text-transform: none; }
+
+    .control-panel .panel-title { font-family: var(--font-display); font-weight: 600; letter-spacing: .01em; }
+    .control-head .name { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
+
+    /* neon bloom on the accent-colored slider thumbs, to match the glowing curve strokes */
+    input[type="range"]::-webkit-slider-thumb {
+      box-shadow: 0 0 6px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+    }
+    input[type="range"]::-moz-range-thumb {
+      box-shadow: 0 0 6px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+    }
+
+    #play {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+      animation: dg-play-pulse 1.8s ease-out infinite;
+    }
+    @keyframes dg-play-pulse {
+      0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+      70%  { box-shadow: 0 0 0 10px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #play { animation: none; box-shadow: 0 0 12px 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+    }
+
+    mike-footer[overlay] {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+    mike-footer[overlay] a {
+      color: var(--accent) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+
+    .cohesion-about .title { font-family: var(--font-display); font-weight: 600; }
+    .cohesion-about .section-label::before {
+      content: "● "; color: var(--accent);
+      text-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent);
+    }
+    .cohesion-about .section-label { position: relative; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hint">draw a curve<span class="sub">click / drag — closes into a loop if you end near where you started<br>draw as many as you like, then press ▶ grow</span></div>
+
+  <div class="dg-eyebrow">Differential Growth</div>
+
+  <control-panel floating title="Controls">
+    <div class="control">
+      <div class="control-head"><span class="name">speed</span><span class="value" id="vSpeed">60/s</span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="61" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">point spacing</span><span class="value" id="vSpacing">10px</span></div>
+      <input type="range" id="spacing" min="3" max="30" step="1" value="10" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">repulsion radius</span><span class="value" id="vRadius">24px</span></div>
+      <input type="range" id="radius" min="12" max="100" step="1" value="24" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">repulsion strength</span><span class="value" id="vStrength">10</span></div>
+      <input type="range" id="strength" min="1" max="40" step="1" value="10" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">smoothing</span><span class="value" id="vSmooth">0.15</span></div>
+      <input type="range" id="smooth" min="0" max="50" step="1" value="15" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">split at</span><span class="value" id="vSplit">1.5×</span></div>
+      <input type="range" id="split" min="1" max="50" step="1" value="15" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="play" title="start growing" style="display:none;">▶ grow</button>
+    <button class="btn" id="pause" title="pause / resume">⏸</button>
+    <button class="btn" id="clear">clear</button>
+    <about-modal label="about">
+      <h2 class="title">Differential Growth</h2>
+      <p>The curve is a chain of points connected by edges, like beads on a string. Every step,
+        each point feels a few simple rules:</p>
+      <div class="section-label">stay connected</div>
+      <p>Each point is pulled toward its neighbors so edges hold a target length — the chain
+        doesn't fall apart or stretch into spaghetti.</p>
+      <div class="section-label">personal space</div>
+      <p>Any two points that drift too close, even ones far apart along the chain, push each other
+        away. This is the key rule: the curve refuses to touch or crowd itself. If you draw more than
+        one curve, this rule applies between them too — separate curves push each other apart, but
+        each one only holds itself together, so they compete for the same limited space.</p>
+      <div class="section-label">smoothing</div>
+      <p>Each point is nudged toward the average of its neighbors, relaxing sharp kinks into
+        gentler curves. Turn it down for jagged, fingerprint-like ridges; up for smoother,
+        coral-like folds.</p>
+      <div class="section-label">growth</div>
+      <p>Whenever an edge gets stretched past a length limit, it splits in two. The curve is
+        constantly gaining new points and total length.</p>
+      <div class="section-label">why it folds</div>
+      <p>The curve keeps growing longer, but it's stuck in a bounded dish and forbidden from
+        overlapping itself. The only way to pack ever more length into a fixed area without
+        self-touching is to buckle and wrinkle — nobody programs the folds, they're forced by
+        <em>growing length + no self-overlap + bounded space</em>. The same three rules produce the
+        convolutions of brain cortex, coral, kale leaves, intestines, and fingerprints.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    if (matchMedia("(max-width: 700px)").matches) {
+      document.querySelector("control-panel").setAttribute("collapsed", "");
+    }
+
+    const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+    const $ = (id) => document.getElementById(id);
+    const hint = $("hint");
+    // read directly rather than cohesion's isBackground() — that module script is deferred and
+    // may not have run yet by the time this inline script executes at the bottom of the page.
+    const isBg = new URLSearchParams(location.search).has("background");
+    let W, H;
+    function buildCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      W = innerWidth; H = innerHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    addEventListener("resize", buildCanvas); buildCanvas();
+
+    // ---- tuning ----
+    const SPRING_K = 0.3;
+    // Forces are computed at full spring/repulsion strength, then scaled down by STEP_DT before
+    // being applied as a position delta. Without this, a single step's raw force can overshoot an
+    // equilibrium distance and land past it on the *other* side, so the next step's force reverses
+    // and overshoots back — a visible two-frame jitter. Scaling the force (and taking many small
+    // steps via the speed accumulator below, rather than one big one) is the standard fix for this
+    // kind of explicit-Euler instability.
+    const STEP_DT = 0.2;
+    const MAX_FORCE = 4;         // per-step displacement cap (post STEP_DT), keeps things stable
+    const MARGIN = 22;           // the dish wall
+    const CLOSE_DIST = 48;       // release-near-start distance that closes the loop
+    const SPEED_MIN = 5, SPEED_MAX = 300; // steps/sec range for the log-scale speed slider
+    const STEP_CATCH_UP_CAP = 240; // don't burn through hundreds of queued steps after a throttled tab
+
+    // ?background breathing cycle: grow for a while, then disable splitting and reverse it by
+    // deleting points (the springs pulling survivors back toward `spacing` apart naturally
+    // contracts the shape as points thin out — the same forces driving growth, running in
+    // reverse), hold briefly once fully collapsed, then let it grow again. All durations are in
+    // simulation steps, not seconds, so they stay correct regardless of the sim-speed setting.
+    const BG_GROW_STEPS = 500;       // ~8.3s at the default 60 steps/sec
+    const BG_HOLD_STEPS = 90;        // ~1.5s pause once fully collapsed, before regrowing
+    const BG_SHRINK_FRACTION = 0.012; // fraction of a curve's current points removed per shrink step
+    const MIN_POINTS_CLOSED = 3, MIN_POINTS_OPEN = 2;
+
+    // on-theme palette — vivid fluorescence-microscopy channel colors, distinct from each other
+    // against the dark field. Curves are assigned these in order, cycling if more than 10 are drawn.
+    const PALETTE = [
+      "#39ff8e", "#39d9ff", "#e8ff39", "#ff4d6d", "#ff39d0",
+      "#ff9d39", "#4d7bff", "#9d4dff", "#39ffd0", "#ffd139",
+    ];
+
+    let mode = "idle";        // 'idle' | 'drawing' | 'ready' | 'growing'
+    let raw = [];              // points captured while drawing the in-progress stroke
+    let curves = [];           // {points: [{x,y}], closed, color}
+    let running = true;
+    let stepAccumulator = 0;
+    const MAX_POINTS = 10000;  // shared across all curves combined
+    let stepsPerSec = 60, spacing = 10, repulsionRadius = 24, repulsionStrength = 10, smoothing = 0.15, splitRatio = 1.5;
+    let bgPhase = "growing", bgPhaseSteps = 0; // ?background only: 'growing' | 'shrinking' | 'holding'
+
+    function reset() {
+      mode = "idle"; raw = []; curves = []; stepAccumulator = 0;
+      hint.style.opacity = "1";
+      $("play").style.display = "none";
+    }
+    reset();
+
+    if (isBg) {
+      // <control-panel> and <mike-footer> hide themselves under ?background; the hint text and
+      // the plain control-bar div aren't cohesion components, so they need it done by hand.
+      hint.style.display = "none";
+      document.querySelector(".control-bar").style.display = "none";
+      document.querySelector(".dg-eyebrow").style.display = "none";
+      seedBackgroundLoops(10);
+      mode = "growing";
+    }
+
+    // ---- input: freehand draw ----
+    function posFromEvent(e) {
+      const r = cv.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    cv.addEventListener("pointerdown", (e) => {
+      if (mode === "growing") return; // clear first
+      mode = "drawing"; raw = [posFromEvent(e)];
+      hint.style.opacity = "0";
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener("pointermove", (e) => {
+      if (mode !== "drawing") return;
+      const p = posFromEvent(e);
+      const last = raw[raw.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) > 2) raw.push(p);
+    });
+    cv.addEventListener("pointerup", finishDrawing);
+    cv.addEventListener("pointercancel", finishDrawing);
+    function finishDrawing() {
+      if (mode !== "drawing") return;
+      if (raw.length < 6) { raw = []; mode = curves.length ? "ready" : "idle"; return; }
+      addCurveFromRaw();
+    }
+
+    // resample a polyline to even spacing; if `wrap` the path implicitly closes back to point 0
+    function resample(pts, spacing, wrap) {
+      const path = wrap ? pts.concat([pts[0]]) : pts;
+      const segLens = [];
+      let total = 0;
+      for (let i = 0; i < path.length - 1; i++) {
+        const d = Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
+        segLens.push(d); total += d;
+      }
+      if (total < spacing) return null;
+      const count = Math.max(4, Math.round(total / spacing));
+      const step = total / count;
+      const out = [];
+      let seg = 0, segStart = 0;
+      const n = wrap ? count : count + 1; // open chains keep their final endpoint
+      for (let k = 0; k < n; k++) {
+        const target = k * step;
+        while (seg < segLens.length - 1 && segStart + segLens[seg] < target) {
+          segStart += segLens[seg]; seg++;
+        }
+        const segLen = segLens[seg] || 1e-9;
+        const frac = Math.min(1, Math.max(0, (target - segStart) / segLen));
+        const a = path[seg], b = path[seg + 1];
+        out.push({ x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac });
+      }
+      return out;
+    }
+
+    // ?background: skip the draw/play flow entirely — seed a handful of small closed loops at
+    // random spots and start growing immediately, for use as an ambient, auto-running hero visual.
+    function makeLoopCurve(cx, cy, radius, color) {
+      const n = Math.max(6, Math.round((2 * Math.PI * radius) / spacing));
+      const points = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        points.push({ x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius });
+      }
+      return { points, closed: true, color };
+    }
+
+    function seedBackgroundLoops(count) {
+      const placed = [];
+      for (let i = 0; i < count; i++) {
+        const radius = 18 + Math.random() * 18; // small loops, ~18-36px
+        let cx, cy, tries = 0;
+        do {
+          cx = MARGIN + radius + Math.random() * Math.max(1, W - 2 * (MARGIN + radius));
+          cy = MARGIN + radius + Math.random() * Math.max(1, H - 2 * (MARGIN + radius));
+          tries++;
+        } while (
+          tries < 20 &&
+          placed.some((p) => Math.hypot(p.x - cx, p.y - cy) < (p.r + radius) * 1.4)
+        );
+        placed.push({ x: cx, y: cy, r: radius });
+        curves.push(makeLoopCurve(cx, cy, radius, PALETTE[i % PALETTE.length]));
+      }
+    }
+
+    function addCurveFromRaw() {
+      const first = raw[0], last = raw[raw.length - 1];
+      const closed = Math.hypot(last.x - first.x, last.y - first.y) < CLOSE_DIST;
+      const sampled = resample(raw, spacing, closed);
+      raw = [];
+      if (!sampled) { mode = curves.length ? "ready" : "idle"; return; }
+      const color = PALETTE[curves.length % PALETTE.length];
+      curves.push({ points: sampled, closed, color });
+      mode = "ready";
+      $("play").style.display = "";
+    }
+
+    $("play").addEventListener("click", () => {
+      if (mode !== "ready" || curves.length === 0) return;
+      mode = "growing";
+      $("play").style.display = "none";
+    });
+    $("clear").addEventListener("click", reset);
+    $("pause").addEventListener("click", () => {
+      running = !running;
+      $("pause").textContent = running ? "⏸" : "▶";
+    });
+
+    function applySpeedSlider(pos01) {
+      stepsPerSec = Math.round(SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, pos01));
+      $("vSpeed").textContent = stepsPerSec + "/s";
+    }
+    $("speed").addEventListener("input", (e) => applySpeedSlider(+e.target.value / 100));
+    applySpeedSlider(+$("speed").value / 100);
+    $("spacing").addEventListener("input", (e) => { spacing = +e.target.value; $("vSpacing").textContent = e.target.value + "px"; });
+    $("radius").addEventListener("input", (e) => { repulsionRadius = +e.target.value; $("vRadius").textContent = e.target.value + "px"; });
+    $("strength").addEventListener("input", (e) => { repulsionStrength = +e.target.value; $("vStrength").textContent = e.target.value; });
+    $("smooth").addEventListener("input", (e) => { smoothing = (+e.target.value) / 100; $("vSmooth").textContent = smoothing.toFixed(2); });
+    $("split").addEventListener("input", (e) => { splitRatio = (+e.target.value) / 10; $("vSplit").textContent = splitRatio.toFixed(1) + "×"; });
+
+    // ---- spatial hash over *all* curves' points, so repulsion (which runs between curves too)
+    // doesn't degrade to O(n^2) as the total point count grows ----
+    function buildGrid(cellSize) {
+      const grid = new Map();
+      const flat = []; // {x, y, ci, pi} for every point across every curve
+      curves.forEach((c, ci) => {
+        c.points.forEach((p, pi) => {
+          const idx = flat.length;
+          flat.push({ x: p.x, y: p.y, ci, pi });
+          const key = Math.floor(p.x / cellSize) + "," + Math.floor(p.y / cellSize);
+          let bucket = grid.get(key);
+          if (!bucket) grid.set(key, bucket = []);
+          bucket.push(idx);
+        });
+      });
+      return { grid, flat };
+    }
+
+    function neighborsOf(curve, i) {
+      const n = curve.points.length;
+      if (curve.closed) return [(i - 1 + n) % n, (i + 1) % n];
+      const arr = [];
+      if (i > 0) arr.push(i - 1);
+      if (i < n - 1) arr.push(i + 1);
+      return arr;
+    }
+
+    function physicsStep() {
+      if (curves.length === 0) return;
+      const cellSize = Math.max(repulsionRadius, 1);
+      const { grid, flat } = buildGrid(cellSize);
+      const nextByCurve = curves.map((c) => c.points.slice());
+
+      curves.forEach((curve, ci) => {
+        const n = curve.points.length;
+        if (n < 3) return;
+
+        for (let i = 0; i < n; i++) {
+          const p = curve.points[i];
+          let fx = 0, fy = 0;
+          const nb = neighborsOf(curve, i);
+
+          // spring + smoothing only pull a point toward its own curve's neighbors — a curve
+          // holds itself together, but has no attraction to any other curve.
+          for (const j of nb) {
+            const q = curve.points[j];
+            const dx = q.x - p.x, dy = q.y - p.y;
+            const d = Math.hypot(dx, dy) || 1e-6;
+            const f = (d - spacing) * SPRING_K;
+            fx += (dx / d) * f; fy += (dy / d) * f;
+          }
+
+          if (smoothing > 0 && nb.length === 2) {
+            const a = curve.points[nb[0]], b = curve.points[nb[1]];
+            fx += ((a.x + b.x) / 2 - p.x) * smoothing;
+            fy += ((a.y + b.y) / 2 - p.y) * smoothing;
+          }
+
+          // repulsion runs against every other point *from any curve*, including this curve's
+          // own chain neighbors — that tug-of-war with the spring above is what keeps stretching
+          // edges past the split threshold, the actual engine of growth. Between different
+          // curves, this is the only force: separate curves compete for space but never bond.
+          const cx = Math.floor(p.x / cellSize), cy = Math.floor(p.y / cellSize);
+          for (let gx = cx - 1; gx <= cx + 1; gx++) {
+            for (let gy = cy - 1; gy <= cy + 1; gy++) {
+              const bucket = grid.get(gx + "," + gy);
+              if (!bucket) continue;
+              for (const idx of bucket) {
+                const o = flat[idx];
+                if (o.ci === ci && o.pi === i) continue; // skip self
+                const dx = p.x - o.x, dy = p.y - o.y;
+                const d = Math.hypot(dx, dy);
+                if (d > 0 && d < repulsionRadius) {
+                  const f = ((repulsionRadius - d) / repulsionRadius) * repulsionStrength;
+                  fx += (dx / d) * f; fy += (dy / d) * f;
+                }
+              }
+            }
+          }
+
+          fx *= STEP_DT; fy *= STEP_DT;
+          const mag = Math.hypot(fx, fy);
+          if (mag > MAX_FORCE) { fx = (fx / mag) * MAX_FORCE; fy = (fy / mag) * MAX_FORCE; }
+
+          let nx = p.x + fx, ny = p.y + fy;
+          nx = Math.min(W - MARGIN, Math.max(MARGIN, nx));
+          ny = Math.min(H - MARGIN, Math.max(MARGIN, ny));
+          nextByCurve[ci][i] = { x: nx, y: ny };
+        }
+      });
+
+      curves.forEach((c, ci) => { c.points = nextByCurve[ci]; });
+
+      if (!isBg) {
+        growEdges();
+        return;
+      }
+
+      // background breathing cycle: grow → shrink → hold → repeat
+      bgPhaseSteps++;
+      if (bgPhase === "growing") {
+        growEdges();
+        if (bgPhaseSteps >= BG_GROW_STEPS) { bgPhase = "shrinking"; bgPhaseSteps = 0; }
+      } else if (bgPhase === "shrinking") {
+        let allDone = true;
+        for (const curve of curves) { if (!shrinkCurve(curve)) allDone = false; }
+        if (allDone) { bgPhase = "holding"; bgPhaseSteps = 0; }
+      } else if (bgPhase === "holding") {
+        if (bgPhaseSteps >= BG_HOLD_STEPS) { bgPhase = "growing"; bgPhaseSteps = 0; }
+      }
+    }
+
+    // splits stretched edges within each curve independently, sharing one point budget
+    // (MAX_POINTS) across all curves combined so drawing many curves stays affordable.
+    function growEdges() {
+      let total = curves.reduce((sum, c) => sum + c.points.length, 0);
+      const threshold = spacing * splitRatio;
+      for (const curve of curves) {
+        if (total >= MAX_POINTS) break;
+        const n = curve.points.length;
+        const edgeCount = curve.closed ? n : n - 1;
+        const grown = [];
+        for (let i = 0; i < edgeCount; i++) {
+          const a = curve.points[i];
+          grown.push(a);
+          const b = curve.points[(i + 1) % n];
+          const d = Math.hypot(b.x - a.x, b.y - a.y);
+          if (d > threshold && total < MAX_POINTS) {
+            grown.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+            total++;
+          }
+        }
+        if (!curve.closed) grown.push(curve.points[n - 1]); // final point has no outgoing edge to walk
+        curve.points = grown;
+      }
+    }
+
+    // removes the interior point that deviates least from a straight line between its own
+    // neighbors — the "least detail" point — so fine texture collapses first and the coarse
+    // silhouette holds until near the very end, instead of random jagged bites.
+    function removeLeastDetailPoint(curve) {
+      const n = curve.points.length;
+      let bestIdx = -1, bestScore = Infinity;
+      for (let i = 0; i < n; i++) {
+        const nb = neighborsOf(curve, i);
+        if (nb.length < 2) continue; // open-chain endpoints have no "straight line" to deviate from
+        const a = curve.points[nb[0]], b = curve.points[nb[1]], p = curve.points[i];
+        const score = Math.hypot(p.x - (a.x + b.x) / 2, p.y - (a.y + b.y) / 2);
+        if (score < bestScore) { bestScore = score; bestIdx = i; }
+      }
+      if (bestIdx !== -1) curve.points.splice(bestIdx, 1);
+    }
+
+    // background-only: removes a fraction of a curve's points per step (geometric decay, so a
+    // curve that grew huge collapses in about the same number of steps as a small one) down to a
+    // minimal triangle/segment. Returns true once that curve has reached its floor.
+    function shrinkCurve(curve) {
+      const minN = curve.closed ? MIN_POINTS_CLOSED : MIN_POINTS_OPEN;
+      const n = curve.points.length;
+      if (n <= minN) return true;
+      const removeCount = Math.max(1, Math.ceil((n - minN) * BG_SHRINK_FRACTION));
+      for (let r = 0; r < removeCount && curve.points.length > minN; r++) {
+        removeLeastDetailPoint(curve);
+      }
+      return curve.points.length <= minN;
+    }
+
+    function drawStrokeInProgress() {
+      if (raw.length < 2) return;
+      // previews in the color this curve will be assigned once it's finished
+      ctx.strokeStyle = PALETTE[curves.length % PALETTE.length];
+      ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(raw[0].x, raw[0].y);
+      for (let i = 1; i < raw.length; i++) ctx.lineTo(raw[i].x, raw[i].y);
+      ctx.stroke();
+    }
+
+    function drawCurves() {
+      for (const curve of curves) {
+        ctx.save();
+        ctx.shadowColor = curve.color; ctx.shadowBlur = 8;
+        ctx.strokeStyle = curve.color;
+        ctx.lineWidth = 1.6; ctx.lineJoin = "round"; ctx.lineCap = "round";
+        ctx.beginPath();
+        curve.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        if (curve.closed) ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function frame() {
+      requestAnimationFrame(frame);
+      ctx.clearRect(0, 0, W, H);
+
+      if (mode === "growing" && running) {
+        stepAccumulator += stepsPerSec / 60;
+        if (stepAccumulator > STEP_CATCH_UP_CAP) stepAccumulator = STEP_CATCH_UP_CAP;
+        while (stepAccumulator >= 1) { stepAccumulator -= 1; physicsStep(); }
+      }
+
+      drawCurves();
+      if (mode === "drawing") drawStrokeInProgress();
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
