@@ -1,0 +1,849 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Differential Growth 3D — a vent colony folding into itself</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: an ROV headlamp in the abyss, lighting a growing
+       tubeworm/coral colony — a new point flashes its complementary color (a spark that
+       contrasts any base hue) and cools into the colony's own vivid bioluminescent color -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg:        #05080a;   /* abyssal black */
+      --panel:     #0d1416;
+      --panel-2:   #131b1e;
+      --border:    #1c2628;
+      --text:      #cfd8d6;
+      --muted:     #7c8a88;
+      --faint:     #445250;
+      --accent:    #ffb020;   /* UI chrome accent — a warm gold, echoing the sim's complementary spark hue */
+      --accent-hi: #ffd166;
+      --on-accent: #180402;
+      --tube:      #345fe6;   /* the colony's own identity color — a vivid, deep bioluminescent blue */
+      --font-ui:      "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Fraunces", Georgia, serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+    #c { position: fixed; top: 0; left: 0; display: block; touch-action: none; }
+
+    .dg-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-weight: 600; letter-spacing: .01em;
+      font-size: 1.2rem; color: var(--text); font-variant: small-caps;
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 16px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+    }
+    .dg-eyebrow::before {
+      content: "● "; color: var(--accent);
+      text-shadow: 0 0 4px var(--accent), 0 0 12px var(--accent), 0 2px 4px rgba(0,0,0,.9);
+    }
+
+    .dg-readout {
+      position: fixed; top: 20px; right: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-mono); font-size: .78rem; letter-spacing: .03em;
+      color: var(--muted); text-align: right; line-height: 1.6;
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.85);
+    }
+    .dg-readout b { color: var(--text); font-weight: 500; }
+
+    .control-panel .panel-title { font-family: var(--font-display); font-weight: 600; letter-spacing: .01em; }
+    .control-head .name { font-family: var(--font-mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
+
+    input[type="range"]::-webkit-slider-thumb {
+      box-shadow: 0 0 6px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+    }
+    input[type="range"]::-moz-range-thumb {
+      box-shadow: 0 0 6px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
+    }
+
+    #play.cta {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+      animation: dg-play-pulse 1.8s ease-out infinite;
+    }
+    @keyframes dg-play-pulse {
+      0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+      70%  { box-shadow: 0 0 0 10px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #play.cta { animation: none; box-shadow: 0 0 12px 1px color-mix(in srgb, var(--accent) 55%, transparent); }
+    }
+
+    mike-footer[overlay] {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+    mike-footer[overlay] a {
+      color: var(--accent) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+
+    .cohesion-about .title { font-family: var(--font-display); font-weight: 600; }
+    .cohesion-about .section-label { position: relative; }
+    .cohesion-about .section-label::before {
+      content: "● "; color: var(--accent);
+      text-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="dg-eyebrow">Differential Growth 3D</div>
+  <div class="dg-readout" id="readout"><b id="rVerts">0</b> verts &middot; step <b id="rStep">0</b></div>
+
+  <control-panel floating title="Controls">
+    <div class="control">
+      <div class="control-head"><span class="name">form</span></div>
+      <select id="formMode">
+        <option value="line">Line — folding tubeworm colony</option>
+        <option value="surface">Surface — folding coral membrane</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">speed</span><span class="value" id="vSpeed">60/s</span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="61" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">edge length</span><span class="value" id="vSpacing">16</span></div>
+      <input type="range" id="spacing" min="6" max="40" step="1" value="16" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">repulsion radius</span><span class="value" id="vRadius">50</span></div>
+      <input type="range" id="radius" min="15" max="80" step="1" value="50" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">repulsion strength</span><span class="value" id="vStrength">10</span></div>
+      <input type="range" id="strength" min="1" max="40" step="1" value="10" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">smoothing</span><span class="value" id="vSmooth">0.10</span></div>
+      <input type="range" id="smooth" min="0" max="50" step="1" value="10" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">split at</span><span class="value" id="vSplit">1.6×</span></div>
+      <input type="range" id="split" min="10" max="30" step="1" value="16" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">enclosure radius</span><span class="value" id="vEnclose">400</span></div>
+      <input type="range" id="enclose" min="24" max="800" step="8" value="400" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn cta" id="play">⏸ pause</button>
+    <button class="btn" id="reset">reset</button>
+    <about-modal label="about">
+      <h2 class="title">Differential Growth, in 3D</h2>
+      <p>The 2D version is a chain of beads on a string, refusing to touch itself in a bounded dish.
+        This is the same idea lifted into a volume: either a <b>surface</b> — a mesh of vertices
+        stitched into triangles, like a growing membrane — or a <b>line</b> — several closed loops
+        of points, each its own color, like separate growing tubes. Every step, every point feels
+        the same few rules — and, in line mode, competes for space with every other curve too.</p>
+      <div class="section-label">stay connected</div>
+      <p>Each point is pulled toward its mesh or chain neighbors so edges hold a target length.
+        On the surface, it's also nudged toward the average position of its neighbors — smoothing
+        relaxes sharp creases into gentler, more coral-like folds.</p>
+      <div class="section-label">personal space</div>
+      <p>Any two points that drift too close — even ones far apart along the mesh or chain — push
+        each other away. This is what keeps the growing form from passing through itself.</p>
+      <div class="section-label">growth</div>
+      <p>Whenever an edge stretches past a length limit, it splits: a new point is born at its
+        midpoint. On the surface, splitting an edge also splits the one or two triangles that share
+        it. The form is constantly gaining points and surface area.</p>
+      <div class="section-label">the enclosure</div>
+      <p>All of this happens inside an invisible sphere — cross its radius and you're pulled back
+        in. A surface that must hold ever more area inside a fixed volume has only one option:
+        buckle and wrinkle, the same reason a folded cortex fits more brain inside a fixed skull.
+        Nobody programs the folds; they're forced by <em>growing area + no self-overlap + a fixed
+        enclosure</em>.</p>
+      <div class="section-label">why it looks like this</div>
+      <p>A point sparks in its colony's <em>complementary</em> color the instant it's born from a
+        split, then cools within a couple dozen steps into the colony's own vivid blue — a spark
+        that contrasts against any color the colony could be, not a fixed color that would vanish
+        against a same-colored colony.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+    import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+    import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+
+    const $ = (id) => document.getElementById(id);
+    const isBg = new URLSearchParams(location.search).has("background");
+    if (matchMedia("(max-width: 700px)").matches) {
+      document.querySelector("control-panel").setAttribute("collapsed", "");
+    }
+
+    // ---- tuning ----
+    const SPRING_K = 0.3;
+    // forces computed at full strength, then scaled by STEP_DT before becoming a position delta —
+    // taking the full force as one step overshoots the equilibrium distance and oscillates forever
+    // (explicit-Euler instability); a small STEP_DT plus a per-step displacement cap keeps the
+    // integration stable. The cap is sized relative to spacing (not an absolute constant) so it
+    // stays proportionate however the sliders are scaled.
+    const STEP_DT = 0.2;
+    const MAX_FORCE_FRACTION = 0.4; // max fraction of target edge length a point can move per step — matches the 2D sketch's maxForce/spacing ratio (4/10)
+    const SPEED_MIN = 5, SPEED_MAX = 300;
+    const STEP_CATCH_UP_CAP = 240;
+    const SPARK_FADE_STEPS = 22;          // steps for a newly split point's spark to cool into its curve's own color
+    // capped well below the line form's budget — rebuilding the adjacency/edge maps from scratch
+    // every step is O(V), and surface mode's face count grows roughly 2x its vertex count, so it
+    // gets expensive fast (measured ~150ms/step at 5200 verts, unusably slow for a 60fps sim).
+    const MAX_VERTS_SURFACE = 4000;
+    const MAX_VERTS_LINE = 4500;
+    // uncapped, growMesh() splits *every* edge past threshold each call, so growth from seed to
+    // the full 1600-vertex budget was exploding in ~60 steps flat — far too fast for the physics to
+    // ever develop actual 3D buckling between growth increments, so it just settled into whatever
+    // compresses fastest: a uniformly denser but still perfectly smooth shell. Pacing growth out
+    // over many more steps (closer to the 2D sketch's much more gradual growth timeline) gives
+    // buckling time to actually happen as each small batch of new material gets added.
+    const SURFACE_GROWTH_PER_STEP = 6;
+
+    // slider values ARE world units directly — no separate display/world scale factor, since a
+    // mismatch there is exactly what caused the seed mesh to explosively inflate on step one
+    // (target spacing and repulsion radius both far bigger than the actual seed geometry).
+    let params = {
+      spacing: 16, repulsionRadius: 50, repulsionStrength: 10, smoothing: 0.10,
+      splitRatio: 1.6, containmentRadius: 400,
+    };
+    let stepsPerSec = 60;
+    function readParams() {
+      params.spacing = +$("spacing").value;
+      params.repulsionRadius = +$("radius").value;
+      params.repulsionStrength = +$("strength").value;
+      params.smoothing = (+$("smooth").value) / 100;
+      params.splitRatio = (+$("split").value) / 10;
+      params.containmentRadius = +$("enclose").value;
+    }
+    readParams();
+
+    const tubeColor = new THREE.Color(getComputedStyle(document.body).getPropertyValue("--tube").trim() || "#345fe6");
+    const bgColor = new THREE.Color(getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#05080a");
+
+    // a point's "identity" color is whatever hue its curve/species was assigned (just tubeColor for
+    // now — one curve — but every color computation below takes a base color as a parameter so a
+    // future palette of many differently-colored curves drops in without changing this logic).
+    // A fixed hot color (e.g. red) only reads as "hot" against hues that contrast with it — it's
+    // invisible on a red curve. The complementary hue (180° around the color wheel) contrasts with
+    // *any* base color by construction, so it's the one "spark" choice that generalizes to a palette.
+    function complementOf(color) {
+      const hsl = {};
+      color.getHSL(hsl);
+      return new THREE.Color().setHSL((hsl.h + 0.5) % 1, hsl.s, Math.min(0.75, hsl.l * 1.3));
+    }
+
+    // line mode's palette — the same fluorescence-microscopy palette as the 2D sketch, cycling if
+    // more curves than colors are ever drawn.
+    const LINE_PALETTE = [
+      "#39ff8e", "#39d9ff", "#e8ff39", "#ff4d6d", "#ff39d0",
+      "#ff9d39", "#4d7bff", "#9d4dff", "#39ffd0", "#ffd139",
+    ].map((hex) => new THREE.Color(hex));
+    const LINE_CURVE_COUNT = 5;
+
+    // a point is born flashing its curve's complementary color and cools quickly (over
+    // SPARK_FADE_STEPS) into that curve's own identity color, where it stays — like a spark at the
+    // moment of splitting that fades as the material settles into the colony's own hue.
+    function ageColor(age, base) {
+      const heat = Math.max(0, 1 - age / SPARK_FADE_STEPS);
+      return base.clone().lerp(complementOf(base), heat * heat);
+    }
+
+    // ---- spatial hash, shared by both growth forms ----
+    function buildGrid(positions, cellSize) {
+      const grid = new Map();
+      for (let i = 0; i < positions.length; i++) {
+        const p = positions[i];
+        const key = Math.floor(p.x / cellSize) + "," + Math.floor(p.y / cellSize) + "," + Math.floor(p.z / cellSize);
+        let bucket = grid.get(key);
+        if (!bucket) grid.set(key, bucket = []);
+        bucket.push(i);
+      }
+      return grid;
+    }
+    function forEachNearby(grid, positions, i, cellSize, radius, cb) {
+      const p = positions[i];
+      const cx = Math.floor(p.x / cellSize), cy = Math.floor(p.y / cellSize), cz = Math.floor(p.z / cellSize);
+      for (let gx = cx - 1; gx <= cx + 1; gx++)
+        for (let gy = cy - 1; gy <= cy + 1; gy++)
+          for (let gz = cz - 1; gz <= cz + 1; gz++) {
+            const bucket = grid.get(gx + "," + gy + "," + gz);
+            if (!bucket) continue;
+            for (const j of bucket) {
+              if (j === i) continue;
+              const d = p.distanceTo(positions[j]);
+              if (d > 0 && d < radius) cb(j, d);
+            }
+          }
+    }
+    function containVec(p, r) {
+      const len = p.length();
+      if (len > r) p.multiplyScalar(r / len);
+    }
+
+
+    // =========================== SURFACE FORM ===========================
+    // a mesh of vertices stitched into triangles, grown by splitting stretched edges. Repulsion
+    // between vertices includes their own mesh neighbors (memory: gotcha-repulsion-must-include-neighbors)
+    // — that tug-of-war against the spring is what forces edges past the split threshold at all.
+    const Surface = {
+      positions: [], ages: [], faces: [], step: 0,
+      init() {
+        // a flat hexagonal patch — a center point plus 6 around it — instead of a closed sphere.
+        // A closed mesh can hide all its folding *inside itself*: one region collapses into a
+        // crumpled interior lump while the rest simply forms a smooth outer shell around it,
+        // which reads as a plain sphere from outside (confirmed by inspecting the actual radial
+        // distribution — most vertices really were sitting in a smooth outer shell). An open sheet
+        // with a free boundary has nowhere to hide: the growing edge is always on the outside,
+        // like a real coral plate or kale leaf ruffling as it grows.
+        const segLen = params.spacing * params.splitRatio * 1.2; // a regular hexagon's side length equals its circumradius, so every spoke and every outer edge starts at this same stretched length
+        const positions = [new THREE.Vector3(0, 0, 0)];
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          positions.push(new THREE.Vector3(Math.cos(a) * segLen, Math.sin(a) * segLen, 0));
+        }
+        for (const p of positions) p.z += (Math.random() - 0.5) * params.spacing * 0.05; // tiny jitter breaks perfect planarity
+        const faces = [];
+        for (let i = 0; i < 6; i++) faces.push([0, 1 + i, 1 + ((i + 1) % 6)]);
+        this.positions = positions;
+        this.ages = this.positions.map(() => SPARK_FADE_STEPS); // seed mesh starts already "mature"
+        this.faces = faces;
+        this.step = 0;
+      },
+      buildAdjacency() {
+        const adj = this.positions.map(() => new Set());
+        for (const f of this.faces) {
+          for (let i = 0; i < 3; i++) { adj[f[i]].add(f[(i + 1) % 3]); adj[f[(i + 1) % 3]].add(f[i]); }
+        }
+        return adj.map((s) => [...s]);
+      },
+      physicsStep() {
+        const n = this.positions.length;
+        const cell = Math.max(params.repulsionRadius, 0.001);
+        const grid = buildGrid(this.positions, cell);
+        const adj = this.buildAdjacency();
+        const next = this.positions.map((p) => p.clone());
+        const tmp = new THREE.Vector3();
+        for (let i = 0; i < n; i++) {
+          const p = this.positions[i];
+          const f = new THREE.Vector3();
+          for (const j of adj[i]) {
+            const q = this.positions[j];
+            const d = p.distanceTo(q) || 1e-6;
+            tmp.copy(q).sub(p).multiplyScalar(((d - params.spacing) * SPRING_K) / d);
+            f.add(tmp);
+          }
+          // unlike line mode, surface mode ignores the shared smoothing slider entirely — Laplacian
+          // relaxation is a low-pass filter, and confirmed by direct comparison, it doesn't just
+          // fail to help buckling, it actively irons already-formed folds back out as growth
+          // continues (verified: identical growth held its fold structure through the full vertex
+          // budget with smoothing off, but visibly re-smoothed by the same point with it on).
+          forEachNearby(grid, this.positions, i, cell, params.repulsionRadius, (j, d) => {
+            const strength = ((params.repulsionRadius - d) / params.repulsionRadius) * params.repulsionStrength;
+            tmp.copy(p).sub(this.positions[j]).multiplyScalar(strength / d);
+            f.add(tmp);
+          });
+          f.multiplyScalar(STEP_DT);
+          const maxForce = params.spacing * MAX_FORCE_FRACTION;
+          if (f.length() > maxForce) f.setLength(maxForce);
+          const np = p.clone().add(f);
+          containVec(np, params.containmentRadius);
+          next[i] = np;
+        }
+        this.positions = next;
+        for (let i = 0; i < this.ages.length; i++) this.ages[i] = Math.min(this.ages[i] + 1, SPARK_FADE_STEPS);
+        this.growMesh();
+        this.step++;
+      },
+      growMesh() {
+        if (this.positions.length >= MAX_VERTS_SURFACE) return;
+        const edgeFaces = new Map();
+        this.faces.forEach((f, fi) => {
+          for (let i = 0; i < 3; i++) {
+            const a = f[i], b = f[(i + 1) % 3];
+            const key = a < b ? a + "_" + b : b + "_" + a;
+            let arr = edgeFaces.get(key);
+            if (!arr) edgeFaces.set(key, arr = []);
+            arr.push(fi);
+          }
+        });
+        // grow by splitting the longest remaining edges every step, regardless of whether they've
+        // stretched past the nominal split threshold. Gating growth on "stretched past threshold"
+        // is fine in an unconfined system, but under a tight enclosure it's self-defeating: once
+        // compression sets in, edges settle *below* that threshold and growth halts permanently at
+        // a comfortable, smooth, but never actually crowded equilibrium — the mesh simply never
+        // reaches the overcrowded state that forces buckling in the first place. Growing at a
+        // steady pace regardless of current tension keeps pushing material in until repulsion
+        // truly has nowhere left to put it but out of the tangent plane.
+        const edges = [...edgeFaces.entries()].map(([key, faceIdxs]) => {
+          const [aStr, bStr] = key.split("_");
+          const a = +aStr, b = +bStr;
+          return { faceIdxs, a, b, len: this.positions[a].distanceTo(this.positions[b]) };
+        });
+        edges.sort((x, y) => y.len - x.len);
+        const removed = new Set();
+        const additions = [];
+        let added = 0;
+        for (const e of edges) {
+          if (this.positions.length >= MAX_VERTS_SURFACE || added >= SURFACE_GROWTH_PER_STEP) break;
+          if (e.faceIdxs.some((fi) => removed.has(fi))) continue;
+          const { a, b } = e;
+          const m = this.positions.length;
+          this.positions.push(this.positions[a].clone().add(this.positions[b]).multiplyScalar(0.5));
+          this.ages.push(0);
+          added++;
+          for (const fi of e.faceIdxs) {
+            removed.add(fi);
+            const f = this.faces[fi];
+            let i = f.indexOf(a);
+            let p, q, r;
+            if (f[(i + 1) % 3] === b) { p = a; q = b; r = f[(i + 2) % 3]; }
+            else { i = f.indexOf(b); p = b; q = a; r = f[(i + 2) % 3]; }
+            additions.push([p, m, r], [m, q, r]);
+          }
+        }
+        if (additions.length === 0) return;
+        const kept = this.faces.filter((_, fi) => !removed.has(fi));
+        this.faces = kept.concat(additions);
+      },
+      buildGeometry(mesh) {
+        const n = this.positions.length;
+        const posArr = new Float32Array(n * 3), colArr = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          const p = this.positions[i];
+          posArr[i * 3] = p.x; posArr[i * 3 + 1] = p.y; posArr[i * 3 + 2] = p.z;
+          const c = ageColor(this.ages[i], tubeColor);
+          colArr[i * 3] = c.r; colArr[i * 3 + 1] = c.g; colArr[i * 3 + 2] = c.b;
+        }
+        const idxArr = new Uint32Array(this.faces.length * 3);
+        this.faces.forEach((f, fi) => { idxArr[fi * 3] = f[0]; idxArr[fi * 3 + 1] = f[1]; idxArr[fi * 3 + 2] = f[2]; });
+        // a fresh BufferGeometry every call, rather than mutating the mesh's existing one — reusing
+        // the same geometry left its "normal" attribute sized for the old (smaller) vertex count,
+        // since computeVertexNormals() only zeroes an existing normal array in place rather than
+        // resizing it, silently corrupting the draw call once the mesh had grown.
+        mesh.geometry.dispose();
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(posArr, 3));
+        geo.setAttribute("color", new THREE.BufferAttribute(colArr, 3));
+        geo.setIndex(new THREE.BufferAttribute(idxArr, 1));
+        geo.computeVertexNormals();
+        mesh.geometry = geo;
+      },
+      vertCount() { return this.positions.length; },
+    };
+
+    // ============================= LINE FORM =============================
+    // a closed loop of points, grown the same way as the 2D sketch but embedded in 3D and rendered
+    // as a tube ribbon with parallel-transported frames (avoids the twisting a naive Frenet frame
+    // gets near inflection points / straight runs).
+    const Line = {
+      curves: [], step: 0,
+      init() {
+        // a loop where the segment length between neighbors already sits stretched past the split
+        // threshold — a loop seeded at exactly `spacing` sits in a stable force equilibrium *below*
+        // that threshold (repulsion vs. spring exactly balance there) and never grows on its own,
+        // the same trap the 2D sketch's hexagon seed comment calls out. Seeding stretched guarantees
+        // growth starts immediately instead of sitting inert forever.
+        const segLen = params.spacing * params.splitRatio * 1.2;
+        // sized to 1/4 of the original default radius (which used a 14-point ring at this segLen),
+        // keeping segLen itself unchanged so each curve still starts stretched past threshold.
+        const seedRadius = ((14 * segLen) / (2 * Math.PI)) * 0.25;
+        const n = Math.max(6, Math.round((2 * Math.PI * seedRadius) / segLen));
+
+        this.curves = [];
+        const placedCenters = [];
+        for (let k = 0; k < LINE_CURVE_COUNT; k++) {
+          // scatter curves inside the enclosure, spread out enough to start mostly apart —
+          // repulsion between curves (below) takes it from there as they grow into each other.
+          let center, tries = 0;
+          do {
+            const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+            center = dir.multiplyScalar(Math.random() * params.containmentRadius * 0.55);
+            tries++;
+          } while (tries < 20 && placedCenters.some((c) => c.distanceTo(center) < seedRadius * 5));
+          placedCenters.push(center);
+
+          const positions = [];
+          for (let i = 0; i < n; i++) {
+            const a = (i / n) * Math.PI * 2;
+            positions.push(new THREE.Vector3(
+              center.x + Math.cos(a) * seedRadius,
+              center.y + Math.sin(a) * seedRadius,
+              center.z + (Math.random() - 0.5) * params.spacing * 0.1 // small z jitter — a planar loop won't fold in 3D
+            ));
+          }
+          this.curves.push({ positions, ages: positions.map(() => SPARK_FADE_STEPS), color: LINE_PALETTE[k % LINE_PALETTE.length] });
+        }
+        this.step = 0;
+      },
+      physicsStep() {
+        // springs/smoothing only pull a point toward its own curve's neighbors — each curve holds
+        // itself together independently — but repulsion runs against every point from every curve
+        // (flattened into one grid below), so separate curves compete for the same space and push
+        // each other apart rather than growing straight through one another.
+        const cell = Math.max(params.repulsionRadius, 0.001);
+        const flatPositions = [];
+        this.curves.forEach((c) => c.positions.forEach((p) => flatPositions.push(p)));
+        const grid = buildGrid(flatPositions, cell);
+        const nextByCurve = this.curves.map((c) => c.positions.map((p) => p.clone()));
+        const tmp = new THREE.Vector3();
+        const maxForce = params.spacing * MAX_FORCE_FRACTION;
+        let flatBase = 0;
+        this.curves.forEach((curve, ci) => {
+          const n = curve.positions.length;
+          for (let i = 0; i < n; i++) {
+            const p = curve.positions[i];
+            const f = new THREE.Vector3();
+            const prev = curve.positions[(i - 1 + n) % n], nextP = curve.positions[(i + 1) % n];
+            for (const q of [prev, nextP]) {
+              const d = p.distanceTo(q) || 1e-6;
+              tmp.copy(q).sub(p).multiplyScalar(((d - params.spacing) * SPRING_K) / d);
+              f.add(tmp);
+            }
+            if (params.smoothing > 0) {
+              tmp.copy(prev).add(nextP).multiplyScalar(0.5).sub(p).multiplyScalar(params.smoothing);
+              f.add(tmp);
+            }
+            forEachNearby(grid, flatPositions, flatBase + i, cell, params.repulsionRadius, (j, d) => {
+              const strength = ((params.repulsionRadius - d) / params.repulsionRadius) * params.repulsionStrength;
+              tmp.copy(p).sub(flatPositions[j]).multiplyScalar(strength / d);
+              f.add(tmp);
+            });
+            f.multiplyScalar(STEP_DT);
+            if (f.length() > maxForce) f.setLength(maxForce);
+            const np = p.clone().add(f);
+            containVec(np, params.containmentRadius);
+            nextByCurve[ci][i] = np;
+          }
+          flatBase += n;
+        });
+        this.curves.forEach((c, ci) => { c.positions = nextByCurve[ci]; });
+        this.curves.forEach((c) => { for (let i = 0; i < c.ages.length; i++) c.ages[i] = Math.min(c.ages[i] + 1, SPARK_FADE_STEPS); });
+        this.growEdges();
+        this.step++;
+      },
+      growEdges() {
+        // one shared point budget across all curves combined, like the 2D sketch's multi-curve mode.
+        const threshold = params.spacing * params.splitRatio;
+        let total = this.curves.reduce((s, c) => s + c.positions.length, 0);
+        for (const curve of this.curves) {
+          if (total >= MAX_VERTS_LINE) break;
+          const n = curve.positions.length;
+          const grownP = [], grownA = [];
+          for (let i = 0; i < n; i++) {
+            grownP.push(curve.positions[i]); grownA.push(curve.ages[i]);
+            const a = curve.positions[i], b = curve.positions[(i + 1) % n];
+            if (a.distanceTo(b) > threshold && total < MAX_VERTS_LINE) {
+              grownP.push(a.clone().add(b).multiplyScalar(0.5));
+              grownA.push(0);
+              total++;
+            }
+          }
+          curve.positions = grownP; curve.ages = grownA;
+        }
+      },
+      buildGeometry(meshes, radius) {
+        this.curves.forEach((curve, k) => {
+          const mesh = meshes[k];
+          const n = curve.positions.length;
+          if (n < 3) { mesh.visible = false; return; }
+          mesh.visible = true;
+          const sides = 6;
+          const posArr = new Float32Array(n * sides * 3), colArr = new Float32Array(n * sides * 3);
+          const idxArr = [];
+          // parallel transport: carry the previous ring's "up" vector forward, projected to stay
+          // perpendicular to the new tangent, instead of recomputing from scratch each ring (which
+          // is what causes Frenet-frame flips wherever curvature passes through zero).
+          let up = new THREE.Vector3(0, 1, 0);
+          for (let i = 0; i < n; i++) {
+            const prev = curve.positions[(i - 1 + n) % n], cur = curve.positions[i], nxt = curve.positions[(i + 1) % n];
+            const tangent = nxt.clone().sub(prev).normalize();
+            if (Math.abs(tangent.dot(up)) > 0.99) up.set(1, 0, 0);
+            const right = new THREE.Vector3().crossVectors(tangent, up).normalize();
+            up = new THREE.Vector3().crossVectors(right, tangent).normalize();
+            const c = ageColor(curve.ages[i], curve.color);
+            for (let s = 0; s < sides; s++) {
+              const a = (s / sides) * Math.PI * 2;
+              const dir = right.clone().multiplyScalar(Math.cos(a)).add(up.clone().multiplyScalar(Math.sin(a)));
+              const v = cur.clone().add(dir.multiplyScalar(radius));
+              const vi = i * sides + s;
+              posArr[vi * 3] = v.x; posArr[vi * 3 + 1] = v.y; posArr[vi * 3 + 2] = v.z;
+              colArr[vi * 3] = c.r; colArr[vi * 3 + 1] = c.g; colArr[vi * 3 + 2] = c.b;
+            }
+          }
+          for (let i = 0; i < n; i++) {
+            const ni = (i + 1) % n;
+            for (let s = 0; s < sides; s++) {
+              const ns = (s + 1) % sides;
+              const a = i * sides + s, b = i * sides + ns, cc = ni * sides + s, d = ni * sides + ns;
+              idxArr.push(a, cc, b, b, cc, d);
+            }
+          }
+          mesh.geometry.dispose();
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute("position", new THREE.BufferAttribute(posArr, 3));
+          geo.setAttribute("color", new THREE.BufferAttribute(colArr, 3));
+          geo.setIndex(idxArr);
+          geo.computeVertexNormals();
+          mesh.geometry = geo;
+        });
+      },
+      vertCount() { return this.curves.reduce((s, c) => s + c.positions.length, 0); },
+    };
+
+    // ============================= THREE.JS SCENE =============================
+    const canvas = $("c");
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio || 1));
+    const scene = new THREE.Scene();
+    scene.background = bgColor;
+    scene.fog = new THREE.FogExp2(bgColor.getHex(), 0.00015);
+
+    const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1, 12000);
+    // far enough back to fit the full default enclosure radius (800) in frame with margin —
+    // distance needed to just fit a sphere of radius R at this FOV is R/sin(halfFOV) ≈ R/0.42.
+    camera.position.set(1600, 1000, 1600);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 10;
+    controls.maxDistance = 5600;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.6;
+    // auto-orbit resumes on its own after a couple seconds of no manual input, rather than staying
+    // off forever after the first interaction. OrbitControls fires "change" for *any* camera
+    // update, including the ones autoRotate itself causes — listening to it unconditionally would
+    // have autoRotate's own motion continually reset the idle clock and never let itself resume.
+    // Gating "change" behind isInteracting (true only between "start" and "end", i.e. an actual
+    // drag) keeps a long drag from re-triggering autoRotate mid-gesture, without autoRotate's own
+    // updates ever counting as "interaction".
+    const AUTO_ORBIT_IDLE_MS = 2000;
+    let lastInteraction = -Infinity, isInteracting = false;
+    controls.addEventListener("start", () => { isInteracting = true; lastInteraction = performance.now(); });
+    controls.addEventListener("change", () => { if (isInteracting) lastInteraction = performance.now(); });
+    controls.addEventListener("end", () => { isInteracting = false; lastInteraction = performance.now(); });
+
+    // faint, cool ambient fill only — the colony's own glow (below) does the real lighting, so this
+    // just keeps the unlit backs of folds from going pure black rather than competing for mood.
+    scene.add(new THREE.HemisphereLight(0x223038, 0x05080a, 0.65));
+    const headlamp = new THREE.PointLight(0xfff2e0, 0.25, 6800, 2);
+    // surface mode uses a fixed, off-axis key light instead of relying on the camera-mounted
+    // headlamp — a light that shines exactly along the view direction flattens shading to nothing
+    // (the same reason on-camera flash photography kills visible shadow), which is exactly what
+    // was hiding real folding behind an apparently smooth silhouette earlier.
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0);
+    keyLight.position.set(1, 1.4, 0.6);
+    // dimmer fill light from the opposite side, so the far side of the mesh doesn't fall into
+    // pure black — folds on the shadowed side still need to read as folds, not a silhouette.
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0);
+    fillLight.position.set(-1, -1.4, -0.6);
+    camera.add(headlamp);
+    scene.add(camera);
+    scene.add(keyLight);
+    scene.add(fillLight);
+
+    // both meshes glow from their own vertex colors (age) rather than only reflecting light — a
+    // standard material's emissive is a single uniform color, not per-vertex, so onBeforeCompile
+    // patches the fragment shader to add the interpolated vertex color into emissive radiance too.
+    // Combined with the bloom pass below, only the hot young end of the age gradient is bright
+    // enough to actually bloom — mature growth reflects dim ambient light only, it doesn't glow.
+    //
+    // emissive is a flat additive term with no normal/lighting dependence at all, so cranking it up
+    // too far floods every fold in uniform flat color and erases the headlamp's shading — the
+    // tangle reads as a silhouette, not a 3D surface. A dimmer headlamp (below) plus leaving a
+    // sliver of room under full emissiveIntensity keeps some lit-diffuse falloff visible on top,
+    // so curvature still reads while the glow (the point of this material) stays dominant.
+    function makeGlowMaterial(opts) {
+      const mat = new THREE.MeshStandardMaterial({ vertexColors: true, emissive: 0xffffff, emissiveIntensity: 0.85, ...opts });
+      mat.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <emissivemap_fragment>",
+          "#include <emissivemap_fragment>\n totalEmissiveRadiance *= vColor.rgb;"
+        );
+      };
+      return mat;
+    }
+    const surfaceMaterial = makeGlowMaterial({ roughness: 0.55, metalness: 0.1, side: THREE.DoubleSide, emissiveIntensity: 0.5 });
+    const surfaceMesh = new THREE.Mesh(new THREE.BufferGeometry(), surfaceMaterial);
+    // kept around (hidden) as a quick way to re-inspect the raw triangulation if something looks
+    // off again later — see applyModeVisuals().
+    const surfaceWireMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.35 }));
+    const lineMaterial = makeGlowMaterial({ roughness: 0.8, metalness: 0.05, side: THREE.DoubleSide });
+    // one mesh per curve (they share this material — the color difference lives in each mesh's own
+    // vertex-color attribute, not the material), sized to line mode's curve count.
+    const lineMeshes = Array.from({ length: LINE_CURVE_COUNT }, () => new THREE.Mesh(new THREE.BufferGeometry(), lineMaterial));
+    window.__debug = { Surface, params, get surfaceMesh() { return surfaceMesh; }, get lineMeshes() { return lineMeshes; }, get composer() { return composer; }, get camera() { return camera; }, get renderer() { return renderer; }, get scene() { return scene; } };
+    scene.add(surfaceMesh, surfaceWireMesh, ...lineMeshes);
+
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    // disabled (via applyModeVisuals) while in surface mode's plain-lit debug view — bloom blurs
+    // away exactly the fine surface detail needed to tell folding from smooth glow. Still on for
+    // line mode, which keeps its usual glowing look untouched.
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.88, 0.5, 0.1);
+    composer.addPass(bloomPass);
+
+    function resize() {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      composer.setSize(innerWidth, innerHeight);
+    }
+    addEventListener("resize", resize); resize();
+
+    // ============================= MODE / RUN STATE =============================
+    let form = "line";
+    let running = true;
+    let stepAccumulator = 0;
+
+    function active() { return form === "surface" ? Surface : Line; }
+
+    // surface's natural scale (capped by its much smaller vertex budget) is a fraction of line
+    // mode's — keep the current orbit angle but rescale distance to fit whichever form is active,
+    // rather than leaving surface looking like a speck in a view framed for line mode's enclosure.
+    // marginMult is tuned per mode by eye rather than shared: the enclosure radius is a ceiling
+    // grown structures rarely fully reach (vertex budget runs out first), so framing tightly to
+    // the *enclosure* leaves most of the frame empty — how much empty margin looks right differs
+    // between a single surface blob and several separate scattered line loops.
+    const LINE_CAMERA_MARGIN = 1.3;
+    const SURFACE_CAMERA_MARGIN = 0.53;
+    function frameCameraForRadius(radius, marginMult) {
+      const dist = (radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2))) * marginMult;
+      const dir = camera.position.lengthSq() < 1e-6 ? new THREE.Vector3(1, 1, 1) : camera.position.clone();
+      camera.position.copy(dir.normalize().multiplyScalar(dist));
+    }
+
+    function reset() {
+      readParams();
+      Surface.init();
+      Line.init();
+      stepAccumulator = 0;
+      applyModeVisuals();
+      syncGeometry();
+    }
+
+    function syncGeometry() {
+      if (form === "surface") {
+        Surface.buildGeometry(surfaceMesh);
+        surfaceWireMesh.geometry = surfaceMesh.geometry;
+      } else {
+        Line.buildGeometry(lineMeshes, params.spacing * 0.18);
+      }
+    }
+
+    function applyModeVisuals() {
+      surfaceMesh.visible = form === "surface";
+      surfaceWireMesh.visible = false; // was a debug aid for inspecting the raw triangulation; not part of the look
+      lineMeshes.forEach((m) => { m.visible = form === "line"; });
+      // surface mode uses the fixed off-axis key light so folding reads via real shading; line
+      // mode keeps its camera-mounted headlamp, which works fine for a thin glowing tube.
+      headlamp.intensity = form === "surface" ? 0 : 0.25;
+      keyLight.intensity = form === "surface" ? 0.7 : 0;
+      fillLight.intensity = form === "surface" ? 0.35 : 0;
+      bloomPass.strength = form === "surface" ? 1 : 0.7;
+    }
+
+    function updateReadout() {
+      $("rVerts").textContent = active().vertCount();
+      $("rStep").textContent = active().step;
+    }
+
+    $("formMode").addEventListener("change", (e) => {
+      form = e.target.value;
+      setEnclosureRadius(form === "surface" ? SURFACE_DEFAULT_ENCLOSURE : LINE_DEFAULT_ENCLOSURE);
+      reset();
+      frameCameraForRadius(params.containmentRadius, form === "surface" ? SURFACE_CAMERA_MARGIN : LINE_CAMERA_MARGIN);
+    });
+
+    function applySpeedSlider(pos01) {
+      stepsPerSec = Math.round(SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, pos01));
+      $("vSpeed").textContent = stepsPerSec + "/s";
+    }
+    $("speed").addEventListener("input", (e) => applySpeedSlider(+e.target.value / 100));
+    applySpeedSlider(+$("speed").value / 100);
+    $("spacing").addEventListener("input", (e) => { readParams(); $("vSpacing").textContent = params.spacing; });
+    $("radius").addEventListener("input", (e) => { readParams(); $("vRadius").textContent = params.repulsionRadius; });
+    $("strength").addEventListener("input", (e) => { readParams(); $("vStrength").textContent = params.repulsionStrength; });
+    $("smooth").addEventListener("input", (e) => { readParams(); $("vSmooth").textContent = params.smoothing.toFixed(2); });
+    $("split").addEventListener("input", (e) => { readParams(); $("vSplit").textContent = params.splitRatio.toFixed(1) + "×"; });
+    $("enclose").addEventListener("input", (e) => { readParams(); $("vEnclose").textContent = params.containmentRadius; });
+    $("vSpacing").textContent = params.spacing;
+    $("vRadius").textContent = params.repulsionRadius;
+    $("vEnclose").textContent = params.containmentRadius;
+
+    // the enclosure slider actually drives the physics directly (see the containVec call above) —
+    // it must never silently disagree with the number on screen, so switching modes moves the
+    // slider itself to a sensible default for that mode, rather than overriding the value
+    // underneath it. Both modes default to the same 400 currently, but keeping separate constants
+    // means they can diverge again without hunting down every call site.
+    const LINE_DEFAULT_ENCLOSURE = 400;
+    const SURFACE_DEFAULT_ENCLOSURE = 800;
+    function setEnclosureRadius(value) {
+      $("enclose").value = value;
+      $("vEnclose").textContent = value;
+      readParams();
+    }
+
+    $("play").addEventListener("click", () => {
+      running = !running;
+      $("play").textContent = running ? "⏸ pause" : "▶ resume";
+      $("play").classList.toggle("cta", !running);
+    });
+    $("reset").addEventListener("click", reset);
+
+    if (isBg) {
+      document.querySelector("control-panel").style.display = "none";
+      document.querySelector(".control-bar").style.display = "none";
+      document.querySelector(".dg-eyebrow").style.display = "none";
+      document.querySelector(".dg-readout").style.display = "none";
+      form = Math.random() < 0.5 ? "surface" : "line";
+      $("formMode").value = form;
+      if (form === "surface") setEnclosureRadius(SURFACE_DEFAULT_ENCLOSURE);
+    }
+
+    reset();
+    frameCameraForRadius(params.containmentRadius, form === "surface" ? SURFACE_CAMERA_MARGIN : LINE_CAMERA_MARGIN);
+
+    function frame() {
+      requestAnimationFrame(frame);
+      if (running) {
+        stepAccumulator += stepsPerSec / 60;
+        if (stepAccumulator > STEP_CATCH_UP_CAP) stepAccumulator = STEP_CATCH_UP_CAP;
+        let did = false;
+        while (stepAccumulator >= 1) { stepAccumulator -= 1; active().physicsStep(); did = true; }
+        if (did) syncGeometry();
+      }
+      updateReadout();
+      controls.autoRotate = performance.now() - lastInteraction > AUTO_ORBIT_IDLE_MS;
+      controls.update();
+      composer.render();
+    }
+    frame();
+  </script>
+</body>
+</html>
