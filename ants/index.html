@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ants — stigmergy</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: dark soil, two-channel pheromone chemistry — cyan (to food) +
+       amber (to nest) that add into a white-gold glow wherever the trails have converged, which is
+       the shortest path revealing itself -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #14100c;   /* soil */
+      --panel:     #1e1811;
+      --panel-2:   #271f16;
+      --border:    #3a2f22;
+      --text:      #ede6d8;
+      --muted:     #a89676;
+      --faint:     #6b5d47;
+      --accent:    #4fd8c4;   /* to-food pheromone, teal */
+      --accent-hi: #7ff0dc;
+      --on-accent: #0e0f16;
+      --font-ui:      "Inter", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Space Grotesk", system-ui, sans-serif;
+
+      --home-pher: #e8a544;  /* to-nest pheromone, amber */
+      --food-col:  #8fd13a;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+    #c {
+      position: fixed; top: 0; left: 0;
+      display: block; touch-action: none;
+    }
+
+    /* the one recurring signature: an eyebrow using the display face + the antennae glyph,
+       matching sandpile's pattern of a fixed corner mark instead of a centered title */
+    .ants-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-weight: 500; font-size: 1.2rem;
+      letter-spacing: .01em; color: var(--text);
+      text-shadow: 0 2px 4px rgba(0,0,0,.95), 0 0 16px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,1);
+    }
+    .ants-eyebrow::before { content: "∿ "; color: var(--accent); font-style: normal; }
+    .ants-eyebrow span { color: var(--home-pher); }
+
+    .ants-readout {
+      position: fixed; top: 20px; right: 24px; z-index: 3;
+      font-family: var(--font-mono); font-size: .8rem; color: var(--muted);
+      text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 10px rgba(0,0,0,.8);
+      text-align: right; line-height: 1.5;
+    }
+    .ants-readout b { color: var(--text); font-weight: 500; }
+
+    .ants-modebar { display: flex; gap: 6px; }
+    .ants-modebar .btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="ants-eyebrow">colony <span>&amp; trail</span></div>
+  <div class="ants-readout" id="readout">ants 0 · food 0</div>
+
+  <control-panel floating title="Colony">
+    <div class="control">
+      <div class="control-head"><span class="name">ants</span><span class="value" id="v-ants">300</span></div>
+      <input type="range" min="20" max="800" step="10" value="300" id="ants" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">speed</span><span class="value" id="v-speed">60/s</span></div>
+      <input type="range" min="0" max="100" step="1" value="70" id="speed" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">evaporation</span><span class="value" id="v-evap">2%/step</span></div>
+      <input type="range" min="0" max="100" step="1" value="30" id="evap" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">wander</span><span class="value" id="v-wander">40%</span></div>
+      <input type="range" min="0" max="100" step="1" value="40" id="wander" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">trail strength</span><span class="value" id="v-deposit">35</span></div>
+      <input type="range" min="5" max="80" step="1" value="35" id="deposit" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">trail patience</span><span class="value" id="v-horizon">300 steps</span></div>
+      <input type="range" min="0" max="100" step="1" value="54" id="horizon" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">signal threshold</span><span class="value" id="v-thresh">55</span></div>
+      <input type="range" min="0" max="200" step="1" value="55" id="thresh" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name">sense of direction</span><span class="value" id="v-homing">0.08</span></div>
+      <input type="range" min="0" max="30" step="1" value="8" id="homing" />
+    </div>
+    <label class="check"><input type="checkbox" id="showpher" checked /> show pheromone</label>
+    <div class="btn-row">
+      <button class="btn" id="clear-trails">clear trails</button>
+      <button class="btn" id="reset">reset colony</button>
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <div class="ants-modebar">
+      <button class="btn active" id="mode-food" title="click/drag to drop food">food</button>
+      <button class="btn" id="mode-wall" title="drag to draw an obstacle">wall</button>
+      <button class="btn" id="mode-erase" title="drag to erase obstacles">erase</button>
+    </div>
+    <button class="btn" id="pause">⏸</button>
+    <about-modal label="about">
+      <h2 class="title">Ants &amp; Pheromones</h2>
+      <p>No ant here knows where the food is, or that a shortest path even exists. Each one just
+        follows two simple rules, and the shortest route between nest and food emerges anyway —
+        <strong>stigmergy</strong>: coordination through traces left in a shared environment, rather
+        than through communication or planning.</p>
+      <h3>SECTION — TWO PHEROMONES</h3>
+      <ul>
+        <li><code>to-food</code> (teal): laid by ants <em>carrying food back</em>, marking the route
+          they took. Ants still searching follow rising <code>to-food</code> concentration —
+          it points toward food.</li>
+        <li><code>to-nest</code> (amber): laid by ants <em>out searching</em>, marking their way
+          out. Ants carrying food follow rising <code>to-nest</code> concentration to get home.</li>
+      </ul>
+      <p>Wherever both trails have built up along the same route, the colors add into a bright
+        white-gold glow — that glow <em>is</em> the shortest path the colony has converged on, drawn
+        by the chemistry itself.</p>
+      <h3>SECTION — WHY SHORTER PATHS WIN</h3>
+      <p>Every tick, pheromone evaporates a little: $\,p_{t+1} = p_t(1-\varepsilon)$. A short path
+        gets walked, reinforced, and re-walked faster than a long one, so its trail decays less
+        between reinforcements and pulls ahead — the same positive-feedback-plus-evaporation loop
+        behind real ant colony optimization algorithms for problems like the travelling salesman.</p>
+      <h3>SECTION — TRY THIS</h3>
+      <p>Drop a second food source and watch the colony split its effort, then let one run out and
+        see traffic drain off that trail. Draw a wall across an established route mid-flow and watch
+        the glow fracture and reroute around it in real time.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const cv = $("c"), ctx = cv.getContext("2d");
+
+    const CELL = 5;
+    let W, H, cols, rows;
+    let pher, pherNext;      // Float32Array, interleaved [toFood, toNest] per cell
+    let obstacle;            // Uint8Array
+    let food;                // Float32Array, food units per cell
+    let fieldCanvas, fieldCtx, fieldImage;
+
+    function resize() {
+      W = cv.width = innerWidth; H = cv.height = innerHeight;
+      cols = Math.ceil(W / CELL); rows = Math.ceil(H / CELL);
+      pher = new Float32Array(cols * rows * 2);
+      pherNext = new Float32Array(cols * rows * 2);
+      obstacle = new Uint8Array(cols * rows);
+      food = new Float32Array(cols * rows);
+      fieldCanvas = document.createElement("canvas");
+      fieldCanvas.width = cols; fieldCanvas.height = rows;
+      fieldCtx = fieldCanvas.getContext("2d");
+      fieldImage = fieldCtx.createImageData(cols, rows);
+      seedAnts(+$("ants").value);
+    }
+
+    function cellIndex(px, py) {
+      const cx = Math.min(cols - 1, Math.max(0, Math.floor(px / CELL)));
+      const cy = Math.min(rows - 1, Math.max(0, Math.floor(py / CELL)));
+      return cy * cols + cx;
+    }
+
+    // --- colony state ---
+    let nest = { x: 0, y: 0 };
+    let ants = [];
+    let stepAccumulator = 0;
+    let running = true;
+    let stepCount = 0;
+
+    function seedAnts(n) {
+      nest = { x: W * 0.28, y: H * 0.5 };
+      ants = Array.from({ length: n }, () => ({
+        x: nest.x, y: nest.y,
+        heading: Math.random() * Math.PI * 2,
+        carrying: false,
+        stepsSinceEvent: 0,
+      }));
+    }
+
+    function resetColony() {
+      pher.fill(0); food.fill(0); obstacle.fill(0);
+      seedAnts(+$("ants").value);
+      stepCount = 0;
+    }
+
+    function clearTrails() { pher.fill(0); }
+
+    // --- interaction ---
+    let mode = "food"; // food | wall | erase
+    function setMode(m) {
+      mode = m;
+      for (const id of ["mode-food", "mode-wall", "mode-erase"]) $(id).classList.remove("active");
+      $("mode-" + m).classList.add("active");
+    }
+    $("mode-food").onclick = () => setMode("food");
+    $("mode-wall").onclick = () => setMode("wall");
+    $("mode-erase").onclick = () => setMode("erase");
+
+    let pointerDown = false;
+    function applyAt(px, py) {
+      const idx = cellIndex(px, py);
+      if (mode === "food") {
+        const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL);
+        const r = 3;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const x = cx + dx, y = cy + dy;
+          if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+          if (dx * dx + dy * dy > r * r) continue;
+          food[y * cols + x] = Math.min(60, food[y * cols + x] + 20);
+        }
+      } else if (mode === "wall") {
+        const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL);
+        const r = 2;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const x = cx + dx, y = cy + dy;
+          if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+          if (dx * dx + dy * dy > r * r) continue;
+          obstacle[y * cols + x] = 1;
+          pher[(y * cols + x) * 2] = 0; pher[(y * cols + x) * 2 + 1] = 0;
+        }
+      } else if (mode === "erase") {
+        const cx = Math.floor(px / CELL), cy = Math.floor(py / CELL);
+        const r = 3;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const x = cx + dx, y = cy + dy;
+          if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+          if (dx * dx + dy * dy > r * r) continue;
+          obstacle[y * cols + x] = 0;
+        }
+      }
+    }
+    function eventPos(e) {
+      const t = e.touches ? e.touches[0] : e;
+      const r = cv.getBoundingClientRect();
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+    cv.addEventListener("pointerdown", (e) => { pointerDown = true; const p = eventPos(e); applyAt(p.x, p.y); });
+    cv.addEventListener("pointermove", (e) => { if (pointerDown) { const p = eventPos(e); applyAt(p.x, p.y); } });
+    addEventListener("pointerup", () => { pointerDown = false; });
+
+    // --- simulation step ---
+    const SENSOR_DIST = 10, SENSOR_ANGLE = 0.5, TURN_RATE = 0.35, MOVE_DIST = 2.2;
+    const NEST_R = 16, FOOD_R = 5;
+    // "trail patience" slider maps log-scale onto this range: how many steps since an ant's last
+    // confirmed anchor (leaving the nest / picking up food) before its trail-laying and homing
+    // confidence has decayed to ~37%.
+    const HORIZON_MIN = 20, HORIZON_MAX = 3000;
+    // MAX_PHER used to be low enough (220) that a route saturated after ~5 visits, after which two
+    // routes of very different quality read as identical to the sensors and nothing could ever win.
+    // this is now just a runaway-growth safety ceiling, not the thing differentiating routes — the
+    // color mapping below uses a saturating curve instead of value/MAX_PHER for that.
+    const MAX_PHER = 4000;
+
+    function sense(x, y, angle, channel) {
+      const sx = x + Math.cos(angle) * SENSOR_DIST;
+      const sy = y + Math.sin(angle) * SENSOR_DIST;
+      if (sx < 0 || sy < 0 || sx >= W || sy >= H) return -1;
+      const idx = cellIndex(sx, sy);
+      if (obstacle[idx]) return -1;
+      return pher[idx * 2 + channel];
+    }
+
+    function step(wanderAmt) {
+      stepCount++;
+      const evap = +$("evap").value / 100 * 0.02; // 0..2% per step
+      // decay pheromone in place
+      for (let i = 0; i < pher.length; i++) pher[i] *= (1 - evap);
+
+      const depositBase = +$("deposit").value;
+      const threshold = +$("thresh").value;
+      const homingBase = +$("homing").value / 100;
+      const horizon = HORIZON_MIN * Math.pow(HORIZON_MAX / HORIZON_MIN, +$("horizon").value / 100);
+
+      for (const a of ants) {
+        const channel = a.carrying ? 1 : 0; // carrying -> follow to-nest; searching -> follow to-food
+        const left = sense(a.x, a.y, a.heading - SENSOR_ANGLE, channel);
+        const center = sense(a.x, a.y, a.heading, channel);
+        const right = sense(a.x, a.y, a.heading + SENSOR_ANGLE, channel);
+
+        if (Math.max(left, center, right) > threshold) {
+          if (center >= left && center >= right) {
+            // keep heading, strongest signal is straight ahead
+          } else if (left > right) {
+            a.heading -= TURN_RATE;
+          } else {
+            a.heading += TURN_RATE;
+          }
+        } else {
+          // no meaningful trail signal: drift toward a slowly-resampled wander target instead of
+          // integrating fresh random noise into heading every tick — the latter is an unbounded
+          // random walk in heading that reliably spirals into closed loops given enough steps,
+          // independent of any pheromone (the bug behind the racetrack-shaped trails).
+          if (a.wanderTarget === undefined || Math.random() < 0.01 + wanderAmt * 0.04) {
+            a.wanderTarget = Math.random() * Math.PI * 2;
+          }
+          let diff = a.wanderTarget - a.heading;
+          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+          a.heading += diff * (0.05 + wanderAmt * 0.08);
+        }
+
+        let nx = a.x + Math.cos(a.heading) * MOVE_DIST;
+        let ny = a.y + Math.sin(a.heading) * MOVE_DIST;
+
+        let blocked = nx < 0 || ny < 0 || nx >= W || ny >= H;
+        if (!blocked) blocked = obstacle[cellIndex(nx, ny)] === 1;
+        if (blocked) {
+          a.heading += Math.PI + (Math.random() - 0.5) * 1.2;
+          nx = a.x + Math.cos(a.heading) * MOVE_DIST;
+          ny = a.y + Math.sin(a.heading) * MOVE_DIST;
+          nx = Math.min(W - 1, Math.max(0, nx));
+          ny = Math.min(H - 1, Math.max(0, ny));
+          if (obstacle[cellIndex(nx, ny)] === 1) { nx = a.x; ny = a.y; }
+        }
+        a.x = nx; a.y = ny;
+
+        const idx = cellIndex(a.x, a.y);
+
+        // confidence in the ant's own trail/homing sense decays smoothly the longer it's been
+        // since its last confirmed anchor (leaving the nest, or picking up food) — a fresh searcher
+        // is a reliable marker of "the nest is near," but one that's been wandering for ages with
+        // nothing to show for it is not, and shouldn't get to mislead anyone as if it were. this
+        // single mechanism also naturally rewards short round-trips: a short trip stays confident
+        // for its whole length, while a long one tapers off well before it's back, so it never gets
+        // reinforced as strongly end-to-end as a genuinely short route does.
+        const confidence = Math.exp(-a.stepsSinceEvent / horizon);
+
+        // deposit is cross-wired from the sensing channel above: a searching ant is walking a
+        // path *away from* the nest, so it lays the to-nest trail (for later carriers to follow
+        // home); a carrying ant is walking a path *to* the nest from food, so it lays the
+        // to-food trail (for later searchers to follow toward food).
+        if (a.carrying) {
+          pher[idx * 2] = Math.min(MAX_PHER, pher[idx * 2] + depositBase * confidence);
+        } else {
+          pher[idx * 2 + 1] = Math.min(MAX_PHER, pher[idx * 2 + 1] + depositBase * confidence);
+        }
+
+        // path integration (dead reckoning) toward the nest, also scaled by the same confidence —
+        // an ant fresh off finding food has a sharp sense of where home is; one that's been
+        // carrying for ages (a long, roundabout trip) trusts that sense less.
+        if (a.carrying) {
+          const desired = Math.atan2(nest.y - a.y, nest.x - a.x);
+          let diff = desired - a.heading;
+          diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+          a.heading += diff * homingBase * confidence;
+        }
+
+        let transitioned = false;
+        if (!a.carrying) {
+          const dx = a.x - nest.x, dy = a.y - nest.y;
+          if (dx * dx + dy * dy > NEST_R * NEST_R * 4 && food[idx] > 0) {
+            food[idx] -= 1;
+            a.carrying = true;
+            a.heading += Math.PI;
+            transitioned = true;
+          }
+        } else {
+          const dx = a.x - nest.x, dy = a.y - nest.y;
+          if (dx * dx + dy * dy < NEST_R * NEST_R) {
+            a.carrying = false;
+            a.heading += Math.PI;
+            transitioned = true;
+          }
+        }
+        a.stepsSinceEvent = transitioned ? 0 : a.stepsSinceEvent + 1;
+      }
+    }
+
+    // --- rendering ---
+    function renderField() {
+      const data = fieldImage.data;
+      for (let i = 0; i < cols * rows; i++) {
+        const toFood = pher[i * 2], toNest = pher[i * 2 + 1];
+        const o = i * 4;
+        if (obstacle[i]) {
+          data[o] = 58; data[o + 1] = 47; data[o + 2] = 34; data[o + 3] = 255;
+          continue;
+        }
+        const fd = food[i];
+        if (fd > 0) {
+          data[o] = 143; data[o + 1] = 209; data[o + 2] = 58; data[o + 3] = 255;
+          continue;
+        }
+        // additive: teal (to-food) + amber (to-nest) -> converges to warm white-gold.
+        // saturating curve (not toFood/MAX_PHER) so a lightly-visited cell and a heavily-reinforced
+        // one still look visibly different — a hard-clamped ratio would make everything above a few
+        // deposits look identically "full," hiding the exact exploitation signal we want to see.
+        const COLOR_REF = 140;
+        const tf = toFood / (toFood + COLOR_REF), tn = toNest / (toNest + COLOR_REF);
+        const r = 20 + tf * 55 + tn * 220;
+        const g = 16 + tf * 190 + tn * 145;
+        const b = 12 + tf * 165 + tn * 40;
+        data[o] = Math.min(255, r); data[o + 1] = Math.min(255, g); data[o + 2] = Math.min(255, b);
+        data[o + 3] = 255;
+      }
+      fieldCtx.putImageData(fieldImage, 0, 0);
+    }
+
+    function draw() {
+      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#14100c";
+      ctx.fillRect(0, 0, W, H);
+
+      if ($("showpher").checked) {
+        renderField();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(fieldCanvas, 0, 0, cols, rows, 0, 0, W, H);
+      }
+
+      // nest
+      ctx.beginPath(); ctx.arc(nest.x, nest.y, NEST_R, 0, 7);
+      ctx.fillStyle = "#0e0f16"; ctx.fill();
+      ctx.strokeStyle = "#e8a544"; ctx.lineWidth = 2; ctx.stroke();
+
+      // ants
+      for (const a of ants) {
+        ctx.fillStyle = a.carrying ? "#8fd13a" : "#2a1f14";
+        ctx.beginPath(); ctx.arc(a.x, a.y, a.carrying ? 1.6 : 1.3, 0, 7); ctx.fill();
+      }
+
+      let foodCells = 0;
+      for (let i = 0; i < food.length; i++) if (food[i] > 0) foodCells++;
+      $("readout").innerHTML = `ants <b>${ants.length}</b> · food cells <b>${foodCells}</b> · steps <b>${stepCount}</b>`;
+    }
+
+    function frame() {
+      const speed = +$("speed").value; // steps per second, 0..~240
+      const stepsPerSec = speed * 2.4;
+      stepAccumulator += stepsPerSec / 60;
+      if (stepAccumulator > 30) stepAccumulator = 30;
+      const wanderAmt = (+$("wander").value / 100) * 0.9;
+      while (stepAccumulator >= 1) { stepAccumulator -= 1; step(wanderAmt); }
+      draw();
+      if (running) requestAnimationFrame(frame);
+    }
+
+    addEventListener("resize", resize);
+    resize();
+    frame();
+
+    $("ants").oninput = (e) => { $("v-ants").textContent = e.target.value; seedAnts(+e.target.value); };
+    $("speed").oninput = (e) => { $("v-speed").textContent = Math.round(+e.target.value * 2.4) + "/s"; };
+    $("evap").oninput = (e) => { $("v-evap").textContent = e.target.value + "%/step"; };
+    $("wander").oninput = (e) => { $("v-wander").textContent = e.target.value + "%"; };
+    $("deposit").oninput = (e) => { $("v-deposit").textContent = e.target.value; };
+    $("horizon").oninput = (e) => {
+      const steps = Math.round(HORIZON_MIN * Math.pow(HORIZON_MAX / HORIZON_MIN, +e.target.value / 100));
+      $("v-horizon").textContent = steps + " steps";
+    };
+    $("thresh").oninput = (e) => { $("v-thresh").textContent = e.target.value; };
+    $("homing").oninput = (e) => { $("v-homing").textContent = (+e.target.value / 100).toFixed(2); };
+    $("v-speed").textContent = Math.round(+$("speed").value * 2.4) + "/s";
+    $("v-horizon").textContent = Math.round(HORIZON_MIN * Math.pow(HORIZON_MAX / HORIZON_MIN, +$("horizon").value / 100)) + " steps";
+    $("clear-trails").onclick = clearTrails;
+    $("reset").onclick = resetColony;
+    $("pause").onclick = () => {
+      running = !running; $("pause").textContent = running ? "⏸" : "▶";
+      if (running) frame();
+    };
+  </script>
+</body>
+</html>
