@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Colony</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: an agar plate under dark-field/GFP microscopy — amber glass,
+       parchment specimen labels, bioluminescent colony glow -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,500;1,500;1,600&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0f0c08;   /* agar in shadow */
+      --panel:     #1c150d;   /* dish under dim light */
+      --panel-2:   #241a10;
+      --border:    #3a2a17;   /* glass rim */
+      --text:      #e8dfc8;   /* parchment */
+      --muted:     #9c8f74;
+      --faint:     #6a5d45;
+      --accent:    #6bffb0;   /* GFP bioluminescence */
+      --accent-hi: #9dffcf;
+      --on-accent: #06140c;
+      --font-ui:      "Archivo", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Newsreader", Georgia, serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+    #gl {
+      /* explicit px sizing matching innerWidth/innerHeight, not 100vw/100vh — see
+         mobile-canvas-vw-vh-viewport-mismatch memory */
+      position: fixed; top: 0; left: 0;
+      display: block;
+    }
+
+    #fallback {
+      position: fixed; inset: 0; display: none; place-items: center; padding: 40px;
+      font-family: var(--font-ui); color: var(--muted); text-align: center;
+    }
+
+    /* ---- specimen tag: the signature — a live pseudo-taxonomic label for the colony's
+       current "species", styled like a museum/lab specimen card ---- */
+    .specimen-tag {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      max-width: 320px;
+      padding: 10px 16px 12px;
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--panel) 78%, transparent);
+      box-shadow: 0 12px 32px rgba(0,0,0,.5);
+    }
+    .specimen-tag .eyebrow {
+      font-family: var(--font-mono); font-size: .62rem; letter-spacing: .16em;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .specimen-tag .binomial {
+      font-family: var(--font-display); font-style: italic; font-weight: 600;
+      font-size: 1.24rem; color: var(--accent-hi); letter-spacing: .01em;
+      line-height: 1.2; margin-top: 2px;
+    }
+    .specimen-tag .variety {
+      font-family: var(--font-display); font-style: italic; font-weight: 500;
+      font-size: .92rem; color: var(--text); opacity: .85;
+    }
+    .specimen-tag .stats {
+      margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border);
+      font-family: var(--font-mono); font-size: .68rem; letter-spacing: .03em;
+      color: var(--muted); display: flex; gap: 14px;
+    }
+    .specimen-tag .stats b { color: var(--text); font-weight: 500; }
+
+    mike-footer[overlay], mike-footer[overlay] a {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1);
+    }
+
+    /* ---- control panel: amber-lit lab glass, not a generic dark card ---- */
+    .control-panel.floating {
+      border-radius: 12px;
+      border: 1.5px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+      background:
+        radial-gradient(130% 160% at 10% -10%, rgba(107,255,176,.10), transparent 55%),
+        color-mix(in srgb, var(--panel) 86%, transparent);
+      box-shadow: 0 18px 44px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    .control-panel > .panel-header { border-bottom-color: color-mix(in srgb, var(--accent) 25%, var(--border)); }
+    .control-panel .panel-title {
+      font-family: var(--font-display); font-style: italic; letter-spacing: .01em; font-weight: 500;
+    }
+    .control-head .name {
+      font-family: var(--font-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase;
+    }
+    .btn:hover { border-color: var(--accent-hi); }
+    input[type="range"]::-webkit-slider-thumb {
+      box-shadow: 0 0 0 2px rgba(0,0,0,.55), 0 0 7px rgba(107,255,176,.5);
+    }
+    input[type="range"]::-moz-range-thumb {
+      box-shadow: 0 0 0 2px rgba(0,0,0,.55), 0 0 7px rgba(107,255,176,.5);
+    }
+
+    /* ---- about modal: agar-plate glow, specimen-label section markers ---- */
+    .cohesion-about {
+      background:
+        radial-gradient(120% 70% at 50% -10%, rgba(107,255,176,.10), transparent 60%),
+        var(--panel);
+    }
+    .cohesion-about .title {
+      font-family: var(--font-display); font-style: italic; letter-spacing: .01em;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .cohesion-about .section-label { position: relative; padding-left: 14px; }
+    .cohesion-about .section-label::before {
+      content: "\25CF"; position: absolute; left: 0; top: 2px;
+      font-size: .5em; color: var(--accent);
+    }
+
+    @media (max-width: 700px) {
+      .specimen-tag { max-width: 220px; padding: 8px 12px 10px; }
+      .specimen-tag .binomial { font-size: 1.02rem; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="fallback">
+    <div>
+      <p class="title" style="font-family: var(--font-display); font-style: italic;">Colony needs a newer GPU pipeline</p>
+      <p>This sim runs nutrient diffusion, chemotaxis, and growth entirely in a WebGL2 shader with
+        floating-point framebuffers (<code>EXT_color_buffer_float</code>), which this browser
+        doesn't expose. Try a recent Chrome, Firefox, or Safari.</p>
+    </div>
+  </div>
+
+  <div class="specimen-tag">
+    <div class="eyebrow">specimen</div>
+    <div class="binomial" id="binomial">Bacillus dendriticus</div>
+    <div class="variety" id="variety"></div>
+    <div class="stats">
+      <span>step <b id="vStep">0</b></span>
+      <span>diam <b id="vDiam">0</b>px</span>
+    </div>
+  </div>
+
+  <control-panel floating title="Culture conditions">
+    <div class="control">
+      <div class="control-head"><span class="name" title="Jump to one of four starting conditions known to grow into a distinct shape">preset</span></div>
+      <select id="preset" title="Jump to one of four starting conditions known to grow into a distinct shape">
+        <option value="dendritic">Dendritic (starved)</option>
+        <option value="rings">Concentric rings</option>
+        <option value="chiral">Chiral vortex</option>
+        <option value="compact">Compact disc</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How much food is baked into the agar to start. Low = the colony runs out fast and starves into thin branches; high = it never runs out, so growth stays solid">nutrient level</span><span class="value" id="vNutrient"></span></div>
+      <input type="range" id="nutrient" min="0.2" max="1.6" step="0.02" value="1.0"
+        title="How much food is baked into the agar to start. Low = the colony runs out fast and starves into thin branches; high = it never runs out, so growth stays solid" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How fast food flows from patches that still have it into nearby patches that have been eaten — the same real diffusion that lets dissolved sugar spread through a gel. Low = eaten patches stay starved for a long time, so growth can only keep going at a few lucky points that race ahead into fresh territory (branches). High = food flows in fast enough to keep the whole edge fed, so it advances evenly as a solid disc">nutrient diffusion</span><span class="value" id="vDiffN"></span></div>
+      <input type="range" id="diffN" min="0.01" max="0.4" step="0.005" value="0.08"
+        title="How fast food flows from patches that still have it into nearby patches that have been eaten — the same real diffusion that lets dissolved sugar spread through a gel. Low = eaten patches stay starved for a long time, so growth can only keep going at a few lucky points that race ahead into fresh territory (branches). High = food flows in fast enough to keep the whole edge fed, so it advances evenly as a solid disc" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How much the bacteria themselves spread into empty neighboring patches on their own, the way gas spreads through a room — separate from growth triggered by nutrient and crowding. Low keeps branches thin and sharp; high fattens and blurs them back toward a solid blob, since plain spreading smooths shape out instead of sharpening it">bacterial spreading</span><span class="value" id="vDiffM"></span></div>
+      <input type="range" id="diffM" min="0" max="0.15" step="0.002" value="0.01"
+        title="How much the bacteria themselves spread into empty neighboring patches on their own, the way gas spreads through a room — separate from growth triggered by nutrient and crowding. Low keeps branches thin and sharp; high fattens and blurs them back toward a solid blob, since plain spreading smooths shape out instead of sharpening it" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How strongly growth is pulled toward the scent trail other bacteria leave behind. Higher pulls separate branches back toward each other instead of letting them spread apart">chemotaxis</span><span class="value" id="vChemo"></span></div>
+      <input type="range" id="chemo" min="0" max="4" step="0.05" value="0.6"
+        title="How strongly growth is pulled toward the scent trail other bacteria leave behind. Higher pulls separate branches back toward each other instead of letting them spread apart" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="A constant bias to curl left or right as a branch grows outward. Zero grows straight branches; away from zero curls them into a spiral pinwheel (sign picks the direction)">chirality</span><span class="value" id="vChiral"></span></div>
+      <input type="range" id="chiral" min="-1" max="1" step="0.02" value="0"
+        title="A constant bias to curl left or right as a branch grows outward. Zero grows straight branches; away from zero curls them into a spiral pinwheel (sign picks the direction)" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="Instead of growing nonstop, switch growth on and off everywhere at once on a repeating timer (measured in simulation steps), leaving bands behind like tree rings. Off disables the pulsing">ring period</span><span class="value" id="vRing"></span></div>
+      <input type="range" id="ring" min="0" max="600" step="10" value="0"
+        title="Instead of growing nonstop, switch growth on and off everywhere at once on a repeating timer (measured in simulation steps), leaving bands behind like tree rings. Off disables the pulsing" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How quickly an empty patch next to the colony gets colonized once conditions are right. Higher just speeds up growth overall without changing its shape">growth rate</span><span class="value" id="vGrow"></span></div>
+      <input type="range" id="grow" min="0.2" max="3" step="0.05" value="1.2"
+        title="How quickly an empty patch next to the colony gets colonized once conditions are right. Higher just speeds up growth overall without changing its shape" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How many simulation steps run per second of real time — the playback speed, not a change to the colony's behavior">sim speed</span><span class="value" id="vSpeed">120/s</span></div>
+      <input type="range" id="speed" min="10" max="300" step="5" value="120"
+        title="How many simulation steps run per second of real time — the playback speed, not a change to the colony's behavior" />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="pause" title="pause / resume">&#9208;</button>
+    <button class="btn" id="reseed" title="restart with a fresh inoculum">&#8635;</button>
+    <about-modal label="about">
+      <h2 class="title">Colony</h2>
+      <div class="section-label">the real thing</div>
+      <p>A petri dish is a shallow round dish filled with <b>agar</b> &mdash; a clear gel with food
+        mixed into it. Smear a drop of bacteria onto it and, over the next hours or days, it eats
+        the food, multiplies, and spreads into a visible fuzzy blob: a <b>colony</b>. Depending on
+        how much food is around and how it's mixed in, real colonies grow into solid round discs,
+        frost-like branching patterns, concentric rings, or curling pinwheels &mdash; all from the
+        same bacteria, just different conditions.</p>
+      <div class="section-label">how the computer fakes this</div>
+      <p>It doesn't simulate individual bacteria &mdash; a real colony has billions. Instead the
+        screen is divided into a grid of squares, one per pixel, like graph paper laid over the
+        dish. (To avoid confusion with an actual living bacterium, this page calls these
+        <b>grid squares</b>, never "cells.")</p>
+      <p>Every grid square tracks three things: how much <b>food</b> is left in that patch of agar,
+        how much <b>colony</b> has grown there (0 = bare agar, up to full), and how strong a
+        <b>scent trail</b> is sitting on it &mdash; a chemical that growing colony releases, which
+        pulls other growth toward it.</p>
+      <p>Each tick: food and scent both flow a little into neighboring squares, the way a drop of
+        dye spreads through water. Any square with colony on it eats a bit of its own food and adds
+        a bit of scent. Any <em>empty</em> square next to the colony has a chance to get colonized
+        next, faster if there's food left in it and faster still if a strong scent trail is coming
+        from next door.</p>
+      <div class="section-label">why it branches</div>
+      <p>When food is scarce, a square that gets colonized eats up what little food its immediate
+        neighbors had too, so they can't grow anymore. Growth can then only continue by racing
+        outward at a few lucky, still-fed points &mdash; each one racing ahead while the gaps between
+        stay bare. That's the branching, frost-like shape.</p>
+      <p>Turn food level and food diffusion (how fast food flows back into eaten patches) up, and
+        no patch stays starved for long, so the whole growing edge advances evenly instead &mdash; a
+        solid, compact disc.</p>
+      <p><b>Bacterial spreading</b> works against that same branching, from a different direction:
+        it lets the bacteria themselves leak a little into empty neighboring squares on their own,
+        the way gas spreads through a room, regardless of food or crowding. Since that's a smoothing
+        effect rather than a starvation-driven one, turning it up fattens and blurs sharp branches
+        back toward a solid shape even while food stays scarce.</p>
+      <div class="section-label">the other knobs</div>
+      <p><b>Chemotaxis</b> makes growth prefer squares with a strong scent trail, which pulls
+        separate branches back toward each other instead of letting them spread apart.</p>
+      <p><b>Chirality</b> adds a small, consistent bias toward turning one direction as a branch
+        extends &mdash; the same asymmetry that makes real colonies of some E. coli strains curl into
+        pinwheels instead of growing straight out.</p>
+      <p><b>Ring period</b> pulses the whole colony's growth rate on a repeating timer instead of
+        letting it grow continuously &mdash; real colonies do this too, synchronizing bursts of
+        growth through chemical signaling, which leaves rings behind the way tree rings mark a
+        season.</p>
+      <div class="section-label">the name</div>
+      <p>The specimen label in the corner isn't decoration &mdash; it's read directly off whichever
+        knobs are currently dominant, the way a field microbiologist would tentatively name an
+        unfamiliar isolate by its colony's shape.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    if (matchMedia("(max-width: 700px)").matches) {
+      document.querySelector("control-panel").setAttribute("collapsed", "");
+    }
+
+    const glCanvas = document.getElementById("gl");
+    const fallback = document.getElementById("fallback");
+    const $ = (id) => document.getElementById(id);
+
+    const gl = glCanvas.getContext("webgl2", { antialias: false, alpha: false });
+    const floatExt = gl && gl.getExtension("EXT_color_buffer_float");
+    if (!gl || !floatExt) {
+      glCanvas.style.display = "none";
+      fallback.style.display = "grid";
+      throw new Error("WebGL2 + EXT_color_buffer_float required");
+    }
+
+    const VERT = `#version 300 es
+      in vec2 aPos;
+      out vec2 vUv;
+      void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+    // state texture: R = colony mass, G = nutrient, B = attractant, A = infection progress / age
+    const UPDATE_FRAG = `#version 300 es
+      precision highp float;
+      precision highp int;
+      uniform sampler2D uState;
+      uniform ivec2 uSize;
+      uniform vec2 uCenter;
+      uniform float uDt;
+      uniform float uDiffM;
+      uniform float uDiffN;
+      uniform float uDiffC;
+      uniform float uConsume;
+      uniform float uSecrete;
+      uniform float uDecayC;
+      uniform float uGrow;
+      uniform float uChemo;
+      uniform float uChiral;
+      uniform float uDensify;
+      uniform float uMassCap;
+      uniform float uRingPeriod;
+      uniform float uStep;
+      out vec4 outColor;
+
+      // zero-flux (Neumann) boundary: clamp to the edge cell instead of reading past it, so the
+      // plate rim doesn't act as an artificial nutrient/attractant sink.
+      vec4 fetchP(ivec2 c) {
+        c = clamp(c, ivec2(0), uSize - ivec2(1));
+        return texelFetch(uState, c, 0);
+      }
+
+      void main() {
+        ivec2 p = ivec2(gl_FragCoord.xy);
+        vec4 s = texelFetch(uState, p, 0);
+        float mass = s.r, nutrient = s.g, attract = s.b, prog = s.a;
+
+        vec4 sN = fetchP(p + ivec2(0, 1));
+        vec4 sS = fetchP(p + ivec2(0, -1));
+        vec4 sE = fetchP(p + ivec2(1, 0));
+        vec4 sW = fetchP(p + ivec2(-1, 0));
+        vec4 sNE = fetchP(p + ivec2(1, 1));
+        vec4 sNW = fetchP(p + ivec2(-1, 1));
+        vec4 sSE = fetchP(p + ivec2(1, -1));
+        vec4 sSW = fetchP(p + ivec2(-1, -1));
+
+        float lapN = sN.g + sS.g + sE.g + sW.g - 4.0 * nutrient;
+        float consumed = uConsume * mass * nutrient;
+        float nNext = clamp(nutrient + uDt * (uDiffN * lapN - consumed), 0.0, 2.0);
+
+        float lapC = sN.b + sS.b + sE.b + sW.b - 4.0 * attract;
+        float cNext = max(0.0, attract + uDt * (uDiffC * lapC + uSecrete * mass - uDecayC * attract));
+
+        float massNext = mass;
+        float progNext = prog;
+
+        // A cell only competes for growth (the tip-vs-notch race below) while it's still "empty."
+        // That threshold has to sit well above whatever plain diffusion can leak in on its own —
+        // otherwise bacterial spreading quietly promotes every adjacent cell to "already colonized"
+        // within about one step, at any diffusion setting, which skips the whole competition that
+        // produces branching. 0.05 matches the "counts as a real neighbor" threshold used below.
+        if (mass <= 0.05) {
+          // deterministic growth accumulator — no per-pixel GPU randomness, since a rare per-frame
+          // coin flip is unsafe/biased when hashed per-pixel on the GPU (any asymmetry here comes
+          // from the CPU-seeded initial nutrient noise instead, see makeState below).
+          vec2 toCenter = vec2(p) - uCenter;
+          float rad = length(toCenter) + 1e-4;
+          vec2 radialDir = toCenter / rad;
+          vec2 tangentDir = vec2(-radialDir.y, radialDir.x);
+
+          // 8-neighbor stencil, weighted by 1/distance — a 4-neighbor-only rule grows a visibly
+          // axis-aligned diamond on this grid; folding in the diagonals with distance weighting
+          // keeps the front closer to isotropic.
+          const float diag = 0.70710678;
+          vec2 dirs[8];
+          dirs[0] = vec2(0.0, 1.0);         dirs[1] = vec2(0.0, -1.0);
+          dirs[2] = vec2(1.0, 0.0);         dirs[3] = vec2(-1.0, 0.0);
+          dirs[4] = vec2(diag, diag);       dirs[5] = vec2(-diag, diag);
+          dirs[6] = vec2(diag, -diag);      dirs[7] = vec2(-diag, -diag);
+          float weight[8];
+          weight[0] = 1.0; weight[1] = 1.0; weight[2] = 1.0; weight[3] = 1.0;
+          weight[4] = diag; weight[5] = diag; weight[6] = diag; weight[7] = diag;
+          vec4 samples[8];
+          samples[0] = sN; samples[1] = sS; samples[2] = sE; samples[3] = sW;
+          samples[4] = sNE; samples[5] = sNW; samples[6] = sSE; samples[7] = sSW;
+
+          // chirality rotates the *preferred incoming direction* away from straight-out-from-center
+          // by a fixed angle, rather than scoring each neighbor by its own tangential offset — the
+          // neighbor that does most of the feeding during ordinary outward growth sits directly
+          // toward the center, which is perpendicular to tangentDir by construction, so weighting by
+          // that neighbor's tangential component (the old approach) barely moved regardless of the
+          // slider. Rotating the target direction itself still favors "mostly outward" growth but
+          // consistently skews it, which is what accumulates into a spiral.
+          float chiralAngle = uChiral * 1.1;
+          vec2 growDir = radialDir * cos(chiralAngle) + tangentDir * sin(chiralAngle);
+
+          // take the single strongest-feeding neighbor, not the sum of all of them — summing lets a
+          // notch boxed in by several already-grown neighbors out-accelerate an exposed lone tip
+          // just by having more neighbors, which is backwards: real branching comes from exposed
+          // tips outrunning enclosed notches (the notch's neighbors quietly starve it and each
+          // other), not from being more surrounded. Local nutrient (below) already favors tips
+          // correctly since enclosed spots get depleted from more sides; summing was fighting that.
+          float neigh = 0.0;
+          for (int i = 0; i < 8; i++) {
+            float m = samples[i].r;
+            if (m > 0.05) {
+              vec2 fromNeighborToP = -dirs[i];
+              float chemoTerm = 1.0 + uChemo * (samples[i].b - attract);
+              float chiralWeight = 0.2 + 0.8 * clamp(dot(fromNeighborToP, growDir), 0.0, 1.0);
+              neigh = max(neigh, weight[i] * m * max(0.0, chemoTerm) * chiralWeight);
+            }
+          }
+
+          float ringMod = 1.0;
+          if (uRingPeriod > 0.5) {
+            float wave = 0.5 + 0.5 * sin(6.28318530718 * uStep / uRingPeriod);
+            ringMod = 0.15 + 0.85 * wave;
+          }
+
+          float rate = uGrow * neigh * nutrient * ringMod;
+          progNext = prog + uDt * rate;
+          if (progNext >= 1.0) {
+            massNext = 0.32;
+            progNext = 0.0;
+          }
+        } else {
+          massNext = min(uMassCap, mass + uDt * uDensify * nutrient * (uMassCap - mass));
+          progNext = prog + uDt;
+        }
+
+        // real bacterial diffusion: mass bleeds a little into neighboring squares on its own,
+        // the way gas spreads through a room, independent of the discrete frontier-infection rule
+        // above. This is a genuinely different growth channel than everything else in this shader
+        // — it's smoothing/isotropic rather than starvation-selective, so it competes against the
+        // branching instability instead of reinforcing it: turn it up and fine branches fatten and
+        // blur back toward a solid blob, the same tension real chemotaxis-diffusion PDEs balance.
+        // Standard isotropic 9-point stencil (not the plain 4-neighbor diff used for nutrient/
+        // attractant above) — a 4-neighbor Laplacian visibly regrows the axis-aligned diamond
+        // artifact already fixed once for the growth rule, since mass diffusion runs every step
+        // on every pixel instead of only at a thin, noise-broken frontier.
+        float lapM = 0.2 * (sN.r + sS.r + sE.r + sW.r)
+                   + 0.05 * (sNE.r + sNW.r + sSE.r + sSW.r)
+                   - mass;
+        massNext = clamp(massNext + uDt * uDiffM * lapM, 0.0, uMassCap);
+
+        outColor = vec4(massNext, nNext, cNext, progNext);
+      }`;
+
+    const RENDER_FRAG = `#version 300 es
+      precision highp float;
+      in vec2 vUv;
+      uniform sampler2D uState;
+      uniform vec3 uBg, uDepleted, uColonyCore, uColonyEdge, uGlow;
+      out vec4 outColor;
+      void main() {
+        vec4 s = texture(uState, vUv);
+        float mass = s.r, nutrient = s.g, attract = s.b, age = s.a;
+        vec3 col = uBg;
+        float depletion = clamp(1.0 - nutrient, 0.0, 1.0);
+        col = mix(col, uDepleted, depletion * 0.32);
+        col += uGlow * clamp(attract, 0.0, 1.0) * 0.22 * (1.0 - step(0.05, mass));
+        if (mass > 0.001) {
+          float t = clamp(age / 500.0, 0.0, 1.0);
+          vec3 colonyColor = mix(uColonyEdge, uColonyCore, t);
+          col = mix(col, colonyColor, clamp(mass, 0.0, 1.0));
+        }
+        outColor = vec4(col, 1.0);
+      }`;
+
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(s);
+        gl.deleteShader(s);
+        throw new Error(log);
+      }
+      return s;
+    }
+    function link(vertSrc, fragSrc) {
+      const p = gl.createProgram();
+      gl.attachShader(p, compile(gl.VERTEX_SHADER, vertSrc));
+      gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc));
+      gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      return p;
+    }
+
+    const updateProg = link(VERT, UPDATE_FRAG);
+    const renderProg = link(VERT, RENDER_FRAG);
+
+    const quadVao = gl.createVertexArray();
+    gl.bindVertexArray(quadVao);
+    const quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const locUpdatePos = gl.getAttribLocation(updateProg, "aPos");
+    const locRenderPos = gl.getAttribLocation(renderProg, "aPos");
+    gl.enableVertexAttribArray(locUpdatePos);
+    gl.vertexAttribPointer(locUpdatePos, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+
+    const U = {};
+    ["uState", "uSize", "uCenter", "uDt", "uDiffM", "uDiffN", "uDiffC", "uConsume", "uSecrete", "uDecayC",
+     "uGrow", "uChemo", "uChiral", "uDensify", "uMassCap", "uRingPeriod", "uStep"]
+      .forEach((n) => { U[n] = gl.getUniformLocation(updateProg, n); });
+    const uRenderState = gl.getUniformLocation(renderProg, "uState");
+    const RC = ["uBg", "uDepleted", "uColonyCore", "uColonyEdge", "uGlow"]
+      .reduce((o, n) => { o[n] = gl.getUniformLocation(renderProg, n); return o; }, {});
+
+    const hex = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+    const COLORS = {
+      uBg:         hex("0f0c08"),
+      uDepleted:   hex("241408"),
+      uColonyCore: hex("18402c"),
+      uColonyEdge: hex("9dffcf"),
+      uGlow:       hex("6bffb0"),
+    };
+
+    function makeTexture(w, h, data) {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, w, h, 0, gl.RGBA, gl.FLOAT, data);
+      return tex;
+    }
+    function makeFbo(tex) {
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      return fbo;
+    }
+
+    let gridW, gridH;
+    let texA, texB, fboA, fboB, srcTex, srcFbo, dstTex, dstFbo;
+    let running = true;
+    let stepCount = 0;
+
+    let nutrientLevel = +$("nutrient").value;
+    let diffM = +$("diffM").value;
+    let diffN = +$("diffN").value;
+    let diffC = 0.12;
+    let consume = 0.9;
+    let secrete = 1.6;
+    let decayC = 0.03;
+    let chemo = +$("chemo").value;
+    let chiral = +$("chiral").value;
+    let ringPeriod = +$("ring").value;
+    let growRate = +$("grow").value;
+    let densify = 0.6;
+    let simHz = +$("speed").value;
+
+    // frontier growth depends on local nutrient noise to break perfect radial symmetry — this
+    // randomness is seeded once on the CPU (Math.random), never drawn per-pixel on the GPU each
+    // frame (a per-pixel GPU hash is biased/unsafe for rare probability events).
+    function makeState(w, h) {
+      const data = new Float32Array(w * h * 4);
+      for (let i = 0; i < w * h; i++) {
+        const noise = 0.9 + Math.random() * 0.2;
+        data[i * 4 + 0] = 0;                       // mass
+        data[i * 4 + 1] = nutrientLevel * noise;   // nutrient
+        data[i * 4 + 2] = 0;                       // attractant
+        data[i * 4 + 3] = 0;                       // progress/age
+      }
+      const cx = w >> 1, cy = h >> 1;
+      const seedR = Math.max(2, Math.round(Math.min(w, h) * 0.004));
+      for (let y = -seedR; y <= seedR; y++) {
+        for (let x = -seedR; x <= seedR; x++) {
+          if (x * x + y * y > seedR * seedR) continue;
+          const px = cx + x, py = cy + y;
+          if (px < 0 || py < 0 || px >= w || py >= h) continue;
+          const idx = (py * w + px) * 4;
+          data[idx + 0] = 0.32;
+        }
+      }
+      return data;
+    }
+
+    function buildGrid() {
+      gridW = innerWidth;
+      gridH = innerHeight;
+      glCanvas.width = gridW; glCanvas.height = gridH;
+      glCanvas.style.width = gridW + "px"; glCanvas.style.height = gridH + "px";
+
+      if (texA) gl.deleteTexture(texA);
+      if (texB) gl.deleteTexture(texB);
+      if (fboA) gl.deleteFramebuffer(fboA);
+      if (fboB) gl.deleteFramebuffer(fboB);
+
+      texA = makeTexture(gridW, gridH, makeState(gridW, gridH));
+      texB = makeTexture(gridW, gridH, new Float32Array(gridW * gridH * 4));
+      fboA = makeFbo(texA);
+      fboB = makeFbo(texB);
+      srcTex = texA; srcFbo = fboA;
+      dstTex = texB; dstFbo = fboB;
+      stepCount = 0;
+    }
+
+    function stepOnce() {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dstFbo);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(updateProg);
+      gl.bindVertexArray(quadVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(U.uState, 0);
+      gl.uniform2i(U.uSize, gridW, gridH);
+      gl.uniform2f(U.uCenter, gridW / 2, gridH / 2);
+      gl.uniform1f(U.uDt, 1.0);
+      gl.uniform1f(U.uDiffM, diffM);
+      gl.uniform1f(U.uDiffN, diffN);
+      gl.uniform1f(U.uDiffC, diffC);
+      gl.uniform1f(U.uConsume, consume);
+      gl.uniform1f(U.uSecrete, secrete);
+      gl.uniform1f(U.uDecayC, decayC);
+      gl.uniform1f(U.uGrow, growRate * 0.02);
+      gl.uniform1f(U.uChemo, chemo);
+      gl.uniform1f(U.uChiral, chiral);
+      gl.uniform1f(U.uDensify, densify);
+      gl.uniform1f(U.uMassCap, 1.0);
+      gl.uniform1f(U.uRingPeriod, ringPeriod);
+      gl.uniform1f(U.uStep, stepCount);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      [srcTex, dstTex] = [dstTex, srcTex];
+      [srcFbo, dstFbo] = [dstFbo, srcFbo];
+      stepCount++;
+    }
+
+    function render() {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, gridW, gridH);
+      gl.useProgram(renderProg);
+      gl.bindVertexArray(quadVao);
+      gl.enableVertexAttribArray(locRenderPos);
+      gl.vertexAttribPointer(locRenderPos, 2, gl.FLOAT, false, 0, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, srcTex);
+      gl.uniform1i(uRenderState, 0);
+      Object.entries(COLORS).forEach(([n, c]) => gl.uniform3f(RC[n], c[0], c[1], c[2]));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+
+    // colony diameter readout: sampled from the CPU-side texture occasionally (cheap relative to
+    // the sim itself) by reading back a thin cross through the center, not a full-frame readback.
+    let diamCounter = 0;
+    function estimateDiameter() {
+      const rowBuf = new Float32Array(gridW * 4);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, srcFbo);
+      gl.readPixels(0, gridH >> 1, gridW, 1, gl.RGBA, gl.FLOAT, rowBuf);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      let minX = -1, maxX = -1;
+      for (let x = 0; x < gridW; x++) {
+        if (rowBuf[x * 4] > 0.05) {
+          if (minX === -1) minX = x;
+          maxX = x;
+        }
+      }
+      return minX === -1 ? 0 : maxX - minX;
+    }
+
+    let accumulator = 0;
+    let lastTime = performance.now();
+    function frame(now) {
+      const dtReal = Math.min(0.25, (now - lastTime) / 1000);
+      lastTime = now;
+      if (running) {
+        accumulator += simHz * dtReal;
+        if (accumulator > simHz) accumulator = simHz; // cap catch-up burst
+        while (accumulator >= 1) {
+          accumulator -= 1;
+          stepOnce();
+        }
+        render();
+        diamCounter++;
+        if (diamCounter >= 20) {
+          diamCounter = 0;
+          $("vDiam").textContent = estimateDiameter();
+        }
+        $("vStep").textContent = stepCount;
+        updateSpecimenLabel();
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function updateSpecimenLabel() {
+      let epithet = "compactus";
+      if (Math.abs(chiral) > 0.35) epithet = "chiralis";
+      else if (ringPeriod > 40) epithet = "anulatus";
+      else if (diffN < 0.05 && nutrientLevel < 0.8) epithet = "dendriticus";
+      $("binomial").textContent = "Bacillus " + epithet;
+      const variety = [];
+      if (epithet !== "chiralis" && Math.abs(chiral) > 0.35) variety.push("chiralis");
+      if (epithet !== "anulatus" && ringPeriod > 40) variety.push("anulatus");
+      if (epithet !== "dendriticus" && diffN < 0.05 && nutrientLevel < 0.8) variety.push("dendriticus");
+      $("variety").textContent = variety.length ? "var. " + variety.join(" ") : "";
+    }
+
+    const PRESETS = {
+      dendritic: { nutrient: 0.5, diffM: 0.001, diffN: 0.02, chemo: 0.2, chiral: 0, ring: 0, grow: 1.4 },
+      rings:     { nutrient: 1.1, diffM: 0.015, diffN: 0.15, chemo: 0.8, chiral: 0, ring: 260, grow: 1.4 },
+      chiral:    { nutrient: 0.7, diffM: 0.003, diffN: 0.05, chemo: 0.5, chiral: 0.55, ring: 0, grow: 1.3 },
+      compact:   { nutrient: 1.5, diffM: 0.05,  diffN: 0.3,  chemo: 1.2, chiral: 0, ring: 0, grow: 1.2 },
+    };
+
+    function applyPreset(name) {
+      const p = PRESETS[name];
+      nutrientLevel = p.nutrient; diffM = p.diffM; diffN = p.diffN; chemo = p.chemo;
+      chiral = p.chiral; ringPeriod = p.ring; growRate = p.grow;
+      $("nutrient").value = nutrientLevel; $("vNutrient").textContent = nutrientLevel.toFixed(2);
+      $("diffM").value = diffM; $("vDiffM").textContent = diffM.toFixed(3);
+      $("diffN").value = diffN; $("vDiffN").textContent = diffN.toFixed(3);
+      $("chemo").value = chemo; $("vChemo").textContent = chemo.toFixed(2);
+      $("chiral").value = chiral; $("vChiral").textContent = chiral.toFixed(2);
+      $("ring").value = ringPeriod; $("vRing").textContent = ringPeriod > 0 ? ringPeriod + " steps" : "off";
+      $("grow").value = growRate; $("vGrow").textContent = growRate.toFixed(2);
+      buildGrid();
+    }
+
+    $("vSpeed").textContent = simHz + "/s";
+
+    applyPreset("dendritic");
+    requestAnimationFrame(frame);
+
+    addEventListener("resize", buildGrid);
+
+    $("preset").addEventListener("change", (e) => applyPreset(e.target.value));
+    $("nutrient").addEventListener("input", (e) => {
+      nutrientLevel = +e.target.value; $("vNutrient").textContent = nutrientLevel.toFixed(2);
+    });
+    $("diffM").addEventListener("input", (e) => {
+      diffM = +e.target.value; $("vDiffM").textContent = diffM.toFixed(3);
+    });
+    $("diffN").addEventListener("input", (e) => {
+      diffN = +e.target.value; $("vDiffN").textContent = diffN.toFixed(3);
+    });
+    $("chemo").addEventListener("input", (e) => {
+      chemo = +e.target.value; $("vChemo").textContent = chemo.toFixed(2);
+    });
+    $("chiral").addEventListener("input", (e) => {
+      chiral = +e.target.value; $("vChiral").textContent = chiral.toFixed(2);
+    });
+    $("ring").addEventListener("input", (e) => {
+      ringPeriod = +e.target.value;
+      $("vRing").textContent = ringPeriod > 0 ? ringPeriod + " steps" : "off";
+    });
+    $("grow").addEventListener("input", (e) => {
+      growRate = +e.target.value; $("vGrow").textContent = growRate.toFixed(2);
+    });
+    $("speed").addEventListener("input", (e) => {
+      simHz = +e.target.value; $("vSpeed").textContent = simHz + "/s";
+    });
+    $("pause").addEventListener("click", () => {
+      running = !running;
+      $("pause").textContent = running ? "⏸" : "▶";
+      if (running) lastTime = performance.now();
+    });
+    $("reseed").addEventListener("click", () => buildGrid());
+  </script>
+</body>
+</html>
