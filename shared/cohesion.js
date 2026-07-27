@@ -6,11 +6,13 @@
  *   web components  <mike-footer> <about-modal> <openrouter-key>
  *   AI runtime      getOpenRouterKey / setOpenRouterKey / clearOpenRouterKey /
  *                   requireOpenRouterKey / openrouterChat
- *   helpers         isBackground()
+ *   helpers         isBackground() / onAboutModalToggle()
  * Conventions handled automatically on load: ?api-key ingest+strip, ?background chrome-hiding.
  */
 
-const PORTFOLIO_URL = "https://quasarbright.github.io/portfolio/";
+// The canonical "Mike Delmonaco" link points at the site root, not a fixed path,
+// so it keeps working if root is ever repointed to something other than the portfolio.
+const HOME_URL = "https://quasarbright.github.io/";
 const KEY_STORAGE = "quasarbright:openrouter-key";
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -92,7 +94,7 @@ export async function openrouterChat(opts, _retried = false) {
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${key}`,
-      "HTTP-Referer": PORTFOLIO_URL,          // OpenRouter attribution
+      "HTTP-Referer": HOME_URL,          // OpenRouter attribution
       "X-Title": document.title || "quasarbright",
     },
     body: JSON.stringify({ model, messages, stream: !!onToken, ...rest }),
@@ -139,6 +141,12 @@ export async function openrouterChat(opts, _retried = false) {
  * Esc-to-close, and backdrop-click-to-close.
  *   const { el, close } = openModal(html, { className, onClose });
  * `el` is the content container (query it to wire buttons / render math).
+ *
+ * Also dispatches `cohesion-modal-open` / `cohesion-modal-close` on `document`
+ * (detail: { className, el }) — content inside a modal only exists in the DOM
+ * while it's open, so a live/animated diagram needs these to start its own
+ * rAF loop on open and cancel it on close rather than assuming it can run
+ * continuously. See onAboutModalToggle() for the about-modal-specific case.
  * ------------------------------------------------------------------ */
 export function openModal(html, { className = "", onClose } = {}) {
   const back = document.createElement("div");
@@ -148,11 +156,13 @@ export function openModal(html, { className = "", onClose } = {}) {
       `<button class="cohesion-modal-close" aria-label="Close" title="Close">&times;</button>` +
       `<div class="cohesion-modal-content">${html}</div>` +
     `</div>`;
+  const contentEl = back.querySelector(".cohesion-modal-content");
   let closed = false;
   const close = () => {
     if (closed) return; closed = true;
     back.remove();
     document.removeEventListener("keydown", onKey);
+    document.dispatchEvent(new CustomEvent("cohesion-modal-close", { detail: { className } }));
     onClose && onClose();
   };
   const onKey = (e) => { if (e.key === "Escape") close(); };
@@ -160,7 +170,26 @@ export function openModal(html, { className = "", onClose } = {}) {
   back.addEventListener("click", (e) => { if (e.target === back) close(); });
   document.addEventListener("keydown", onKey);
   document.body.appendChild(back);
-  return { el: back.querySelector(".cohesion-modal-content"), backdrop: back, close };
+  document.dispatchEvent(new CustomEvent("cohesion-modal-open", { detail: { className, el: contentEl } }));
+  return { el: contentEl, backdrop: back, close };
+}
+
+/* ------------------------------------------------------------------ *
+ * onAboutModalToggle(onOpen, onClose) — start/stop a live diagram's rAF
+ * loop exactly while an <about-modal> is open. onOpen receives the modal's
+ * content element (queryable for your diagram's DOM); onClose takes nothing.
+ *   const stop = () => cancelAnimationFrame(raf);
+ *   cohesion.onAboutModalToggle((el) => { raf = requestAnimationFrame(tick); }, stop);
+ * Safe to call before the module has finished loading (it's just
+ * addEventListener), so classic scripts can call this at top level.
+ * ------------------------------------------------------------------ */
+export function onAboutModalToggle(onOpen, onClose) {
+  document.addEventListener("cohesion-modal-open", (e) => {
+    if (e.detail.className?.includes("cohesion-about")) onOpen(e.detail.el);
+  });
+  document.addEventListener("cohesion-modal-close", (e) => {
+    if (e.detail.className?.includes("cohesion-about")) onClose();
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -199,7 +228,7 @@ class MikeFooter extends HTMLElement {
     const overlay = this.hasAttribute("overlay");
     this.innerHTML =
       `Made with <span style="color:var(--danger)">&hearts;</span> by ` +
-      `<a href="${PORTFOLIO_URL}">Mike Delmonaco</a>`;
+      `<a href="${HOME_URL}">Mike Delmonaco</a>`;
     Object.assign(this.style, {
       display: "block", textAlign: "center", color: "var(--muted)",
       fontSize: ".85rem", padding: "16px",
@@ -310,8 +339,13 @@ style.textContent = `
     background: rgba(6,7,12,.7); padding: 20px;
   }
   .cohesion-modal {
-    position: relative; max-height: 85vh; overflow: auto;
-    box-shadow: var(--shadow); padding-right: 40px;
+    position: relative; max-height: 85vh; overflow: hidden;
+    box-shadow: var(--shadow); padding: 0;
+    display: flex; flex-direction: column;
+  }
+  .cohesion-modal-content {
+    overflow-y: auto; min-height: 0;
+    padding: 16px; padding-right: 40px;
   }
   .cohesion-modal-close {
     position: absolute; top: 8px; right: 10px; z-index: 1;
@@ -329,8 +363,8 @@ document.head.appendChild(style);
  * non-module convenience global
  * ------------------------------------------------------------------ */
 const cohesion = {
-  isBackground, openModal, getOpenRouterKey, setOpenRouterKey, clearOpenRouterKey,
-  requireOpenRouterKey, openrouterChat,
+  isBackground, openModal, onAboutModalToggle, getOpenRouterKey, setOpenRouterKey,
+  clearOpenRouterKey, requireOpenRouterKey, openrouterChat,
 };
 if (typeof window !== "undefined") window.cohesion = cohesion;
 export default cohesion;

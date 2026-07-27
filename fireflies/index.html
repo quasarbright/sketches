@@ -718,16 +718,15 @@
       }
       aboutRAF = requestAnimationFrame(tick);
     }
-    new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1 && node.classList?.contains("cohesion-modal-backdrop")) startAboutAnimations();
-        }
-        for (const node of m.removedNodes) {
-          if (node.nodeType === 1 && node.classList?.contains("cohesion-modal-backdrop")) stopAboutAnimations();
-        }
-      }
-    }).observe(document.body, { childList: true });
+    // cohesion.js dispatches these on document whenever any modal (including the
+    // about-modal) opens/closes; safe to listen before the module has finished
+    // loading since this is just addEventListener, no dependency on window.cohesion.
+    document.addEventListener("cohesion-modal-open", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) startAboutAnimations();
+    });
+    document.addEventListener("cohesion-modal-close", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) stopAboutAnimations();
+    });
 
     function isBackground() { return new URLSearchParams(location.search).has("background"); }
 
