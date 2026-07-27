@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fireflies</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: near-black meadow night, yellow-green bioluminescent glow -->
+  <style>
+    :root {
+      --bg:        #0a0f0b;
+      --panel:     #131a14;
+      --panel-2:   #1a231b;
+      --border:    #253026;
+      --text:      #dfe8e0;
+      --muted:     #8a998c;
+      --faint:     #566158;
+      --accent:    #c9e876;
+      --accent-hi: #e4ff9a;
+      --on-accent: #0a0f0b;
+    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+    #glow, #crisp {
+      position: fixed; inset: 0; display: block;
+    }
+    #glow { filter: blur(7px); }
+
+    /* signature motif: a small glowing dot marks each about-modal section, echoing the
+       fireflies themselves rather than bolting on unrelated chrome */
+    .cohesion-about .section-label { position: relative; padding-left: 14px; }
+    .cohesion-about .section-label::before {
+      content: ""; position: absolute; left: 0; top: .45em;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 6px 1px var(--accent);
+    }
+
+    #readout { text-shadow: 0 0 8px rgba(201, 232, 118, 0.35); }
+
+    [data-background] #readout,
+    [data-background] .control-bar { display: none; }
+
+    /* about-modal diagrams */
+    .fireflies-viz-glow-row { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 10px 0; }
+    .fireflies-viz-glow-row .fireflies-viz-wave { width: 100%; margin: 0; }
+    .fireflies-viz-firefly { flex: none; }
+    .viz-demo-dot { fill: var(--muted); }
+    .fireflies-viz-wave { width: 100%; height: auto; display: block; margin: 10px 0; }
+    .viz-axis { stroke: var(--border); stroke-width: 1; }
+    .viz-wave-line { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+    .viz-sweep-line { stroke: var(--text); stroke-width: 1; opacity: .5; }
+    .fireflies-viz-sympathy-row {
+      display: flex; justify-content: center; align-items: flex-start; gap: 24px;
+      flex-wrap: wrap; margin: 10px 0;
+    }
+    .fireflies-viz-sympathy-col {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .fireflies-viz-sympathy-col svg { display: block; margin: 0 auto; }
+    /* traces the turn a nudge just caused, on the receiving firefly's own circle;
+       opacity is driven by the blinker's brightness each frame, not a fixed timer */
+    .viz-nudge-arc { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; opacity: 0; }
+    .fireflies-viz-arrows {
+      display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin: 10px 0;
+    }
+    .fireflies-viz-arrows figure { margin: 0; text-align: center; }
+    .fireflies-viz-arrows svg { width: 150px; height: 150px; display: block; margin: 0 auto; }
+    .fireflies-viz-arrows svg.fireflies-pop-grid { height: 56px; margin-bottom: 4px; }
+    .fireflies-viz-arrows figcaption {
+      font-family: var(--font-mono); font-size: .8rem; color: var(--muted); margin-top: 4px;
+    }
+    .pop-dot { fill: var(--muted); }
+    .viz-circle { fill: none; stroke: var(--border); stroke-dasharray: 3 3; }
+    .orbit-ref-line { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 4 3; }
+    .orbit-arrows { transform-origin: 90px 90px; }
+    .orbit-arrow { stroke: var(--muted); stroke-width: 2.5; opacity: .8; }
+    .orbit-result { stroke: var(--accent); stroke-width: 4.5; }
+    .viz-arrowhead-dim { fill: var(--muted); }
+    .viz-arrowhead-result { fill: var(--accent); }
+  </style>
+</head>
+<body>
+  <canvas id="glow"></canvas>
+  <canvas id="crisp"></canvas>
+
+  <div class="readout" id="readout">kuramoto order parameter 0.00 (1 means perfectly synced)</div>
+
+  <control-panel floating title="Controls">
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How long it takes a firefly to complete one blink cycle.">period</span>
+        <span class="value" id="v-period">2.0s</span>
+      </div>
+      <input type="range" id="period" min="0.5" max="5" step="0.1" value="2"
+        title="How long it takes a firefly to complete one blink cycle." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How strongly a firefly shifts its own rhythm toward a neighbor's when it reacts.">sync strength</span>
+        <span class="value" id="v-coupling">0.05</span>
+      </div>
+      <input type="range" id="coupling" min="0" max="1" step="0.01" value="0.05"
+        title="How strongly a firefly shifts its own rhythm toward a neighbor's when it reacts." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How fast fireflies fly around.">movement speed</span>
+        <span class="value" id="v-speed">150</span>
+      </div>
+      <input type="range" id="speed" min="0" max="300" step="1" value="150"
+        title="How fast fireflies fly around." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How far away a firefly can notice another one blink.">vision radius</span>
+        <span class="value" id="v-radius">120</span>
+      </div>
+      <input type="range" id="radius" min="20" max="500" step="5" value="120"
+        title="How far away a firefly can notice another one blink." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How many fireflies are out.">count</span>
+        <span class="value" id="v-count">170</span>
+      </div>
+      <input type="range" id="count" min="5" max="250" step="1" value="170"
+        title="How many fireflies are out." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How quickly a blink brightens up to full glow.">attack</span>
+        <span class="value" id="v-attack">0.09s</span>
+      </div>
+      <input type="range" id="attack" min="0.02" max="1" step="0.01" value="0.09"
+        title="How quickly a blink brightens up to full glow." />
+    </div>
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How slowly a blink fades back out to dark.">decay</span>
+        <span class="value" id="v-decay">1.27s</span>
+      </div>
+      <input type="range" id="decay" min="0.02" max="2" step="0.01" value="1.27"
+        title="How slowly a blink fades back out to dark." />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="scatter" title="give every firefly a fresh random rhythm">randomize</button>
+    <about-modal label="about">
+      <h2 class="title">Fireflies</h2>
+      <p class="intro">Some firefly species in Southeast Asia synchronize their flashing across an
+        entire tree, with no leader and no signal telling them all to start at once. Each insect just
+        watches its neighbors and nudges its own rhythm toward theirs, and that's enough for the
+        whole group to fall into a shared beat.</p>
+
+      <div class="section-label">the rule</div>
+      <p>Every firefly blinks on the same <code>period</code>, but each has its own
+        <code>phase offset</code>, which is where in the cycle it happens to be. A firefly's
+        brightness follows a wave shaped by its offset: mostly dark, with one glowing pulse per
+        period. A blink is the moment that pulse peaks.</p>
+
+      <div class="section-label">how they sync</div>
+      <p>When a firefly blinks, every other firefly within <code>vision radius</code> nudges its own
+        phase offset toward it, by an amount set by <code>sync strength</code>. Here are two
+        fireflies actually doing it, live: each one's phase offset is the arrow underneath it, and
+        the arrow jumps the instant its firefly gets nudged by the other's blink. Once they're
+        synced up they scatter to fresh random phases and start over:</p>
+      <div class="fireflies-viz-sympathy">
+        <div class="fireflies-viz-sympathy-row">
+          <div class="fireflies-viz-sympathy-col">
+            <svg class="fireflies-viz-firefly" viewBox="0 0 80 80" width="80" height="80" role="img"
+              aria-label="First of two fireflies, blinking live and syncing with the second.">
+              <circle cx="40" cy="40" r="15" id="sym-dot-0" class="viz-demo-dot" />
+            </svg>
+            <svg viewBox="0 0 180 180" width="150" height="150" role="img"
+              aria-label="First firefly's phase, as an arrow that jumps when it's nudged.">
+              <defs><marker id="sym-head-0" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker></defs>
+              <circle cx="90" cy="90" r="65" class="viz-circle" />
+              <line x1="90" y1="90" x2="155" y2="90" class="orbit-ref-line" />
+              <path id="sym-arc-0" class="viz-nudge-arc" fill="none" />
+              <line x1="90" y1="90" x2="155" y2="90" id="sym-line-0" class="orbit-arrow" marker-end="url(#sym-head-0)" />
+            </svg>
+          </div>
+          <div class="fireflies-viz-sympathy-col">
+            <svg class="fireflies-viz-firefly" viewBox="0 0 80 80" width="80" height="80" role="img"
+              aria-label="Second of two fireflies, blinking live and syncing with the first.">
+              <circle cx="40" cy="40" r="15" id="sym-dot-1" class="viz-demo-dot" />
+            </svg>
+            <svg viewBox="0 0 180 180" width="150" height="150" role="img"
+              aria-label="Second firefly's phase, as an arrow that jumps when it's nudged.">
+              <defs><marker id="sym-head-1" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker></defs>
+              <circle cx="90" cy="90" r="65" class="viz-circle" />
+              <line x1="90" y1="90" x2="155" y2="90" class="orbit-ref-line" />
+              <path id="sym-arc-1" class="viz-nudge-arc" fill="none" />
+              <line x1="90" y1="90" x2="155" y2="90" id="sym-line-1" class="orbit-arrow" marker-end="url(#sym-head-1)" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label">reading the glow</div>
+      <p>Each blink has a sharp <code>attack</code> (fast brighten) and a softer <code>decay</code>
+        (slower fade). Real firefly flashes turn on quicker than they fade, which is part of what
+        gives a single blink its shape against the dark. Here's one blink cycle, sweeping in real
+        time along with an actual firefly blinking on the real <code>period</code>:</p>
+      <div class="fireflies-viz-glow-row">
+        <svg class="fireflies-viz-firefly" viewBox="0 0 80 80" width="80" height="80" role="img"
+          aria-label="A firefly, blinking live on the real period, attack, and decay.">
+          <circle cx="40" cy="40" r="15" id="glow-demo-dot" class="viz-demo-dot" />
+        </svg>
+        <svg class="fireflies-viz-wave" viewBox="0 0 380 180" preserveAspectRatio="none" role="img"
+          aria-label="One blink cycle's brightness curve, with a line sweeping across it in real time to show where the firefly currently is in its cycle.">
+          <line x1="10" y1="170" x2="370" y2="170" class="viz-axis" />
+          <polyline points="" id="wave-curve" class="viz-wave-line" />
+          <line x1="190" y1="10" x2="190" y2="170" id="wave-cursor" class="viz-sweep-line" />
+        </svg>
+      </div>
+      <p class="muted" style="font-size:.8rem">Sharp rise up the left side of the spike, slower
+        fall down the right: that asymmetry is <code>attack</code> vs <code>decay</code>.</p>
+
+      <div class="section-label">the sync number</div>
+      <p>The number in the top left is the <code>kuramoto order parameter</code>, the standard way
+        to measure how in-sync a crowd of oscillators is. Picture every firefly's phase offset as an
+        arrow pointing out from the center of a clock face. As time passes every arrow sweeps around
+        together at the real <code>period</code>. The dotted line marks $\theta = 0$, and an arrow
+        lights up with the real <code>attack</code>/<code>decay</code> shape whenever it crosses it,
+        exactly like an actual blink. The solid triangle is the average of all the others; it sweeps
+        around with them, but its <em>length</em> never changes. Above each diagram is that same
+        group as an actual population of fireflies:</p>
+      <div class="fireflies-viz-arrows">
+        <figure>
+          <svg class="fireflies-pop-grid" viewBox="0 0 160 60" role="img"
+            aria-label="A small population of fireflies at this same, mostly unsynchronized, level.">
+            <circle class="pop-dot" data-offset="-1.368" cx="20" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="-0.892" cx="60" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="-0.415" cx="100" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.062" cx="140" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.538" cx="20" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="1.015" cx="60" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="1.492" cx="100" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="1.968" cx="140" cy="45" r="7" />
+          </svg>
+          <svg class="fireflies-orbit" viewBox="0 0 180 180" role="img" aria-label="Eight arrows sweeping around together, spread across a wide range of angles, with a medium-length resultant triangle: a partly synchronized group.">
+            <defs>
+              <marker id="scat-head-0" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-1" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-2" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-3" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-4" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-5" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-6" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-head-7" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="scat-rhead" markerWidth="9" markerHeight="9" refX="0" refY="4.5" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" class="viz-arrowhead-result" /></marker>
+            </defs>
+            <circle cx="90" cy="90" r="65" class="viz-circle" />
+            <line x1="90" y1="90" x2="155" y2="90" class="orbit-ref-line" />
+            <g class="orbit-arrows">
+              <line x1="90" y1="90" x2="103.1" y2="26.3" class="orbit-arrow" data-offset="-1.368" data-head-id="scat-head-0" marker-end="url(#scat-head-0)" />
+              <line x1="90" y1="90" x2="130.8" y2="39.4" class="orbit-arrow" data-offset="-0.892" data-head-id="scat-head-1" marker-end="url(#scat-head-1)" />
+              <line x1="90" y1="90" x2="149.5" y2="63.8" class="orbit-arrow" data-offset="-0.415" data-head-id="scat-head-2" marker-end="url(#scat-head-2)" />
+              <line x1="90" y1="90" x2="154.9" y2="94.0" class="orbit-arrow" data-offset="0.062" data-head-id="scat-head-3" marker-end="url(#scat-head-3)" />
+              <line x1="90" y1="90" x2="145.8" y2="123.3" class="orbit-arrow" data-offset="0.538" data-head-id="scat-head-4" marker-end="url(#scat-head-4)" />
+              <line x1="90" y1="90" x2="124.3" y2="145.2" class="orbit-arrow" data-offset="1.015" data-head-id="scat-head-5" marker-end="url(#scat-head-5)" />
+              <line x1="90" y1="90" x2="95.1" y2="154.8" class="orbit-arrow" data-offset="1.492" data-head-id="scat-head-6" marker-end="url(#scat-head-6)" />
+              <line x1="90" y1="90" x2="64.9" y2="149.9" class="orbit-arrow" data-offset="1.968" data-head-id="scat-head-7" marker-end="url(#scat-head-7)" />
+              <line x1="90" y1="90" x2="121.0" y2="99.6" class="orbit-result" marker-end="url(#scat-rhead)" />
+            </g>
+          </svg>
+          <figcaption>not synced, order &asymp; 0.5</figcaption>
+        </figure>
+        <figure>
+          <svg class="fireflies-pop-grid" viewBox="0 0 160 60" role="img"
+            aria-label="A small population of fireflies at this same, nearly fully synchronized, level.">
+            <circle class="pop-dot" data-offset="0.05" cx="20" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.15" cx="60" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.25" cx="100" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.3" cx="140" cy="15" r="7" />
+            <circle class="pop-dot" data-offset="0.35" cx="20" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="0.42" cx="60" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="0.5" cx="100" cy="45" r="7" />
+            <circle class="pop-dot" data-offset="0.58" cx="140" cy="45" r="7" />
+          </svg>
+          <svg class="fireflies-orbit" viewBox="0 0 180 180" role="img" aria-label="Eight arrows sweeping around together, tightly clustered at nearly the same angle, with a long resultant triangle: a synchronized group.">
+            <defs>
+              <marker id="clus-head-0" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-1" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-2" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-3" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-4" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-5" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-6" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-head-7" markerWidth="8" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L8,4 L0,8 Z" class="viz-arrowhead-dim" /></marker>
+              <marker id="clus-rhead" markerWidth="9" markerHeight="9" refX="0" refY="4.5" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" class="viz-arrowhead-result" /></marker>
+            </defs>
+            <circle cx="90" cy="90" r="65" class="viz-circle" />
+            <line x1="90" y1="90" x2="155" y2="90" class="orbit-ref-line" />
+            <g class="orbit-arrows">
+              <line x1="90" y1="90" x2="154.9" y2="93.2" class="orbit-arrow" data-offset="0.05" data-head-id="clus-head-0" marker-end="url(#clus-head-0)" />
+              <line x1="90" y1="90" x2="154.3" y2="99.7" class="orbit-arrow" data-offset="0.15" data-head-id="clus-head-1" marker-end="url(#clus-head-1)" />
+              <line x1="90" y1="90" x2="153.0" y2="106.1" class="orbit-arrow" data-offset="0.25" data-head-id="clus-head-2" marker-end="url(#clus-head-2)" />
+              <line x1="90" y1="90" x2="152.1" y2="109.2" class="orbit-arrow" data-offset="0.3" data-head-id="clus-head-3" marker-end="url(#clus-head-3)" />
+              <line x1="90" y1="90" x2="151.1" y2="112.3" class="orbit-arrow" data-offset="0.35" data-head-id="clus-head-4" marker-end="url(#clus-head-4)" />
+              <line x1="90" y1="90" x2="149.4" y2="116.5" class="orbit-arrow" data-offset="0.42" data-head-id="clus-head-5" marker-end="url(#clus-head-5)" />
+              <line x1="90" y1="90" x2="147.0" y2="121.2" class="orbit-arrow" data-offset="0.5" data-head-id="clus-head-6" marker-end="url(#clus-head-6)" />
+              <line x1="90" y1="90" x2="144.4" y2="125.6" class="orbit-arrow" data-offset="0.58" data-head-id="clus-head-7" marker-end="url(#clus-head-7)" />
+              <line x1="90" y1="90" x2="150.7" y2="110.5" class="orbit-result" marker-end="url(#clus-rhead)" />
+            </g>
+          </svg>
+          <figcaption>synced, order &asymp; 0.99</figcaption>
+        </figure>
+      </div>
+      <p class="muted" style="font-size:.8rem">The thin arrows are the individual fireflies; the
+        solid triangle is their average. Scattered arrows cancel out to almost nothing ($0$);
+        aligned arrows add up to nearly full length ($1$), and that length is the order parameter.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    // <control-panel> removes itself from the DOM under ?background, taking every slider
+    // with it. Fall back to the slider's own default whenever the element is gone.
+    const DEFAULTS = { period: 2, coupling: 0.05, speed: 150, radius: 120, count: 170, attack: 0.09, decay: 1.27 };
+    const val = (id) => { const el = $(id); return el ? +el.value : DEFAULTS[id]; };
+    const glowCv = $("glow"), crispCv = $("crisp");
+    const glowCtx = glowCv.getContext("2d"), crispCtx = crispCv.getContext("2d");
+
+    let W, H;
+    function resize() {
+      W = innerWidth; H = innerHeight;
+      for (const cv of [glowCv, crispCv]) { cv.width = W; cv.height = H; }
+    }
+    addEventListener("resize", resize); resize();
+
+    const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#c9e876";
+    const bodyColor = getComputedStyle(document.body).getPropertyValue("--faint").trim() || "#566158";
+    const mutedColor = getComputedStyle(document.body).getPropertyValue("--muted").trim() || "#8a8fa3";
+
+    function hexToRgb(hex) {
+      const n = parseInt(hex.replace("#", ""), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    function lerpRgb(a, b, t) {
+      const r = a[0] + (b[0] - a[0]) * t;
+      const g = a[1] + (b[1] - a[1]) * t;
+      const bl = a[2] + (b[2] - a[2]) * t;
+      return `rgb(${r.toFixed(0)}, ${g.toFixed(0)}, ${bl.toFixed(0)})`;
+    }
+    const mutedRgb = hexToRgb(mutedColor), accentRgb = hexToRgb(accent);
+    // continuous fade from dim to accent, so decay reads as smooth rather than an on/off pop
+    function glowColor(t) { return lerpRgb(mutedRgb, accentRgb, t); }
+
+    // a real bioluminescent flash reads hotter than its own ambient glow right at the peak,
+    // like a filament rather than just a tinted floodlight; the core warms toward this
+    // near-white green as brightness climbs, while the surrounding halo stays pure accent
+    const hotRgb = hexToRgb("#fbffe8");
+    function coreColor(t) { return lerpRgb(accentRgb, hotRgb, t); }
+
+    const TWO_PI = Math.PI * 2;
+    // shortest signed distance from `a` to `b` around a circle of circumference 2*pi
+    function circularDelta(a, b) {
+      return (((b - a + Math.PI) % TWO_PI) + TWO_PI) % TWO_PI - Math.PI;
+    }
+
+    // brightness of a blink: sharp attack rising into the peak, softer decay falling out of
+    // it. dtSigned is signed time-until-peak (negative = before, positive = after).
+    function blinkBrightness(dtSigned, attack, decay) {
+      if (dtSigned <= 0 && dtSigned > -attack) {
+        const x = 1 + dtSigned / attack;
+        return x * x * (3 - 2 * x);
+      } else if (dtSigned > 0 && dtSigned < decay) {
+        const x = dtSigned / decay;
+        return 1 - x * x * (3 - 2 * x);
+      } else if (dtSigned === 0) {
+        return 1;
+      }
+      return 0;
+    }
+
+    let fireflies = [];
+    let simClock = 0; // shared elapsed seconds
+
+    // Every firefly's clock shares the same baseline (as if it had been running since
+    // simClock=0). theta must NOT be seeded randomly per firefly, or two fireflies could
+    // share a phaseOffset and still blink at unrelated times, which breaks nudging: it
+    // would converge phaseOffsets without ever converging blink times. phaseOffset is the
+    // only thing that's supposed to be free to sync.
+    function makeFirefly() {
+      const period = val("period");
+      const phaseOffset = Math.random() * TWO_PI;
+      const theta = (simClock / period) * TWO_PI;
+      return {
+        x: Math.random() * W, y: Math.random() * H,
+        vx: 0, vy: 0,
+        theta, phaseOffset,
+        prevRawPhase: ((theta - phaseOffset) % TWO_PI + TWO_PI) % TWO_PI,
+      };
+    }
+
+    function seed(n) { fireflies = Array.from({ length: n }, makeFirefly); }
+    seed(val("count"));
+
+    let lastTime = performance.now();
+
+    function frame(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.1);
+      lastTime = now;
+
+      simClock += dt;
+      const period = val("period");
+      const coupling = val("coupling");
+      const speed = val("speed");
+      const radius = val("radius");
+      const attack = val("attack");
+      const decay = val("decay");
+
+      for (const f of fireflies) f.theta += (dt / period) * TWO_PI;
+
+      // movement: smoothed Brownian motion. A tiny random force nudges velocity each
+      // frame, damping bleeds it off, so velocity itself does a smooth random walk
+      // instead of position jittering directly (an Ornstein-Uhlenbeck process)
+      const damping = 1.2; // 1/s
+      const force = speed * 6; // px/s^2 scale of the random kick
+      for (const f of fireflies) {
+        f.vx = (f.vx + (Math.random() - 0.5) * force * dt) * Math.max(0, 1 - damping * dt);
+        f.vy = (f.vy + (Math.random() - 0.5) * force * dt) * Math.max(0, 1 - damping * dt);
+        f.x = (f.x + f.vx * dt + W) % W;
+        f.y = (f.y + f.vy * dt + H) % H;
+      }
+
+      // detect blinks, nudge neighbors right away toward the blinker's phase offset
+      const blinked = [];
+      for (const f of fireflies) {
+        const rawPhase = ((f.theta - f.phaseOffset) % TWO_PI + TWO_PI) % TWO_PI;
+        if (rawPhase - f.prevRawPhase < -Math.PI) blinked.push(f);
+        f.prevRawPhase = rawPhase;
+      }
+      for (const b of blinked) {
+        for (const f of fireflies) {
+          if (f === b) continue;
+          const dx = f.x - b.x, dy = f.y - b.y;
+          if (dx * dx + dy * dy <= radius * radius) {
+            f.phaseOffset = (f.phaseOffset + circularDelta(f.phaseOffset, b.phaseOffset) * coupling + TWO_PI) % TWO_PI;
+          }
+        }
+      }
+
+      // Kuramoto order parameter: treat each firefly's phase offset as a unit vector and
+      // average them. Vectors pointing every which way cancel out (r near 0, incoherent);
+      // vectors all pointing the same way add up (r near 1, everyone in the same phase).
+      let sx = 0, sy = 0;
+      for (const f of fireflies) { sx += Math.cos(f.phaseOffset); sy += Math.sin(f.phaseOffset); }
+      const orderR = Math.sqrt(sx * sx + sy * sy) / fireflies.length;
+      $("readout").textContent = "kuramoto order parameter " + orderR.toFixed(2) + " (1 means perfectly synced)";
+
+      // render
+      glowCtx.clearRect(0, 0, W, H);
+      crispCtx.clearRect(0, 0, W, H);
+      glowCtx.globalCompositeOperation = "lighter";
+
+      for (const f of fireflies) {
+        const rawPhase = ((f.theta - f.phaseOffset) % TWO_PI + TWO_PI) % TWO_PI;
+        let dtSigned = (rawPhase / TWO_PI) * period;
+        // Wrap right after decay ends (not at period/2): wrapping at a fixed midpoint
+        // truncates whichever of attack/decay is longer than half the period (true by
+        // default: decay 1.27s > 1.0s), popping brightness straight to 0 instead of
+        // fading there. period - attack is guaranteed dark as long as attack+decay <= period.
+        if (dtSigned > period - attack) dtSigned -= period;
+        const brightness = blinkBrightness(dtSigned, attack, decay);
+
+        crispCtx.fillStyle = bodyColor;
+        crispCtx.beginPath(); crispCtx.arc(f.x, f.y, 1.4, 0, TWO_PI); crispCtx.fill();
+
+        if (brightness > 0.01) {
+          // soft ambient halo: real bioluminescence scatters through the night air around
+          // the insect rather than visibly ballooning outward, so its radius grows only a
+          // little; brightness (alpha) does almost all the work of reading as "flashing"
+          glowCtx.fillStyle = accent;
+          glowCtx.globalAlpha = brightness * 0.85;
+          glowCtx.beginPath(); glowCtx.arc(f.x, f.y, 4 + brightness * 2, 0, TWO_PI); glowCtx.fill();
+          glowCtx.globalAlpha = 1;
+
+          // hot core: the light organ itself, warming toward a near-white flash at peak
+          // brightness rather than staying a flat tint of the halo around it
+          crispCtx.fillStyle = coreColor(brightness);
+          crispCtx.globalAlpha = Math.min(1, brightness * 1.2);
+          crispCtx.beginPath(); crispCtx.arc(f.x, f.y, 1.6, 0, TWO_PI); crispCtx.fill();
+          crispCtx.globalAlpha = 1;
+        }
+      }
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame((now) => { lastTime = now; requestAnimationFrame(frame); });
+
+    // about-modal live diagrams: the "orbit" arrows are a fixed illustrative set (not live
+    // sim data) but sweep around at the real period, and glow with the real attack/decay
+    // when crossing theta=0; the glow-section wave graph and its firefly dot animate the
+    // same way. The about-modal only exists in the DOM while open, so start/stop these
+    // animations by watching for the modal backdrop to appear/disappear.
+    // Graph domain starts exactly at the beginning of attack (brightness 0) and runs one
+    // full period, so the whole rise-and-fall is visible without being clipped by the
+    // window edge (guaranteed to fit as long as attack + decay <= period).
+    function buildWavePoints(period, attack, decay, W, H, pad, N) {
+      const pts = [];
+      for (let i = 0; i <= N; i++) {
+        const tView = (i / N) * period;
+        const dtSigned = tView - attack;
+        const b = blinkBrightness(dtSigned, attack, decay);
+        const px = pad + (i / N) * (W - 2 * pad);
+        const py = (H - pad) - b * (H - 2 * pad);
+        pts.push(px.toFixed(1) + "," + py.toFixed(1));
+      }
+      return pts.join(" ");
+    }
+
+    let aboutRAF = null;
+    function stopAboutAnimations() { if (aboutRAF) cancelAnimationFrame(aboutRAF); aboutRAF = null; }
+    function startAboutAnimations() {
+      stopAboutAnimations();
+      const groups = [...document.querySelectorAll(".orbit-arrows")];
+      const arrowSets = groups.map(g => [...g.querySelectorAll(".orbit-arrow")]);
+      const popDots = [...document.querySelectorAll(".pop-dot")];
+      // shuffle which grid cell gets which offset (within each grid only) so the population
+      // doesn't look like a suspiciously tidy left-to-right sweep of sorted phases, which is
+      // what plain grid order + evenly-spaced offsets would otherwise show every time
+      [...document.querySelectorAll(".fireflies-pop-grid")].forEach(svg => {
+        const dots = [...svg.querySelectorAll(".pop-dot")];
+        const offsets = dots.map(d => d.dataset.offset);
+        for (let i = offsets.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [offsets[i], offsets[j]] = [offsets[j], offsets[i]];
+        }
+        dots.forEach((d, i) => { d.dataset.offset = offsets[i]; });
+      });
+      const waveCurve = document.getElementById("wave-curve");
+      const waveCursor = document.getElementById("wave-cursor");
+      const demoDot = document.getElementById("glow-demo-dot");
+      const symDots = [document.getElementById("sym-dot-0"), document.getElementById("sym-dot-1")];
+      const symLines = [document.getElementById("sym-line-0"), document.getElementById("sym-line-1")];
+      const symArcs = [document.getElementById("sym-arc-0"), document.getElementById("sym-arc-1")];
+      const hasOrbits = groups.length > 0;
+      const hasPop = popDots.length > 0;
+      const hasWave = !!(waveCurve && waveCursor && demoDot);
+      const hasSympathy = symDots.every(Boolean) && symLines.every(Boolean) && symArcs.every(Boolean);
+      if (!hasOrbits && !hasWave && !hasSympathy) return;
+
+      const waveW = 380, waveH = 180, wavePad = 10;
+      if (hasWave) {
+        waveCurve.setAttribute(
+          "points",
+          buildWavePoints(val("period"), val("attack"), val("decay"), waveW, waveH, wavePad, 300)
+        );
+      }
+
+      // two-firefly sympathy demo: this literally runs the same nudge rule as the main
+      // sim (see the "detect blinks, nudge neighbors" block in frame() above), just on a
+      // population of 2 with an always-in-range vision radius. phaseOffset is the only
+      // state that persists between frames; theta is recomputed from the shared clock.
+      let sym = null;
+      function resetSympathyDemo() {
+        // start 120 degrees apart (a fresh random base angle each time, not the same spot)
+        const base = Math.random() * TWO_PI;
+        const phaseOffset = [base, base + (TWO_PI / 3)];
+        sym = {
+          phaseOffset,
+          prevRawPhase: phaseOffset.map(po => ((0 - po) % TWO_PI + TWO_PI) % TWO_PI),
+          lastNudge: [null, null], // { blinkerIndex, fromPhaseOffset, toPhaseOffset } per firefly
+        };
+      }
+      if (hasSympathy) resetSympathyDemo();
+
+      // an SVG arc path tracing the turn from `fromAngle` to `toAngle` (shortest way
+      // around), both measured the same way the arrows are: as angles on the r=65 circle
+      function nudgeArcPath(fromAngle, toAngle) {
+        const cx = 90, cy = 90, r = 65;
+        let delta = ((toAngle - fromAngle + Math.PI) % TWO_PI + TWO_PI) % TWO_PI - Math.PI;
+        const end = fromAngle + delta;
+        const x1 = cx + r * Math.cos(fromAngle), y1 = cy + r * Math.sin(fromAngle);
+        const x2 = cx + r * Math.cos(end), y2 = cy + r * Math.sin(end);
+        const largeArc = Math.abs(delta) > Math.PI ? 1 : 0;
+        const sweep = delta >= 0 ? 1 : 0;
+        return `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${largeArc} ${sweep} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+      }
+
+      const start = performance.now();
+      function tick(now) {
+        const elapsed = (now - start) / 1000;
+        const period = val("period"), attack = val("attack"), decay = val("decay"), coupling = val("coupling");
+        const rotationRad = ((elapsed / period) * TWO_PI) % TWO_PI;
+
+        if (hasOrbits) {
+          const rotationDeg = (rotationRad * 180) / Math.PI;
+          groups.forEach(g => { g.style.transform = `rotate(${rotationDeg}deg)`; });
+          arrowSets.forEach(arrows => {
+            for (const el of arrows) {
+              const offset = parseFloat(el.dataset.offset);
+              const angle = ((rotationRad + offset) % TWO_PI + TWO_PI) % TWO_PI;
+              let dtSigned = (angle / TWO_PI) * period;
+              if (dtSigned > period - attack) dtSigned -= period;
+              const b = blinkBrightness(dtSigned, attack, decay);
+              const color = glowColor(b);
+              // bloom scales continuously with brightness (0 at rest, so it never pops in/out)
+              // and only ever touches fill/stroke color and this drop-shadow. Never touch
+              // stroke-width or marker geometry here: SVG markers default to
+              // markerUnits="strokeWidth", so resizing the line would resize the arrowhead
+              // too, which is the bug that made arrowheads visibly grow when they glowed.
+              const bloom = b > 0.01 ? `drop-shadow(0 0 ${(b * 3.5).toFixed(1)}px ${color})` : "";
+              el.style.stroke = color;
+              el.style.filter = bloom;
+              const head = document.getElementById(el.dataset.headId)?.firstElementChild;
+              if (head) { head.style.fill = color; head.style.filter = bloom; }
+            }
+          });
+        }
+
+        if (hasPop) {
+          // same fixed illustrative offsets as the arrows above them, just rendered as a
+          // literal grid of fireflies instead of vectors
+          for (const dot of popDots) {
+            const offset = parseFloat(dot.dataset.offset);
+            const angle = ((rotationRad + offset) % TWO_PI + TWO_PI) % TWO_PI;
+            let dtSigned = (angle / TWO_PI) * period;
+            if (dtSigned > period - attack) dtSigned -= period;
+            const b = blinkBrightness(dtSigned, attack, decay);
+            const color = glowColor(b);
+            dot.style.fill = color;
+            dot.style.filter = b > 0.01 ? `drop-shadow(0 0 ${(b * 3).toFixed(1)}px ${color})` : "";
+          }
+        }
+
+        if (hasWave) {
+          const tMod = ((elapsed % period) + period) % period; // 0..period, 0 = peak
+          let dtSigned = tMod;
+          if (dtSigned > period - attack) dtSigned -= period;
+          const b = blinkBrightness(dtSigned, attack, decay);
+          const color = glowColor(b);
+          const bloom = b > 0.01 ? `drop-shadow(0 0 ${(b * 4).toFixed(1)}px ${color})` : "";
+          // tView matches buildWavePoints' domain: 0 at the start of attack, through
+          // the peak, decay, and the dark remainder, back to `period` (= 0 again).
+          const tView = (tMod + attack) % period;
+          const cursorX = wavePad + (tView / period) * (waveW - 2 * wavePad);
+          waveCursor.setAttribute("x1", cursorX.toFixed(1));
+          waveCursor.setAttribute("x2", cursorX.toFixed(1));
+          demoDot.style.fill = color;
+          demoDot.style.filter = bloom;
+        }
+
+        if (hasSympathy) {
+          const thetaShared = (elapsed / period) * TWO_PI;
+          // doubled from the real sync strength slider: with only 2 fireflies (vs. a
+          // whole population sharing the nudging load) the demo needs a stronger pull to
+          // visibly converge in a reasonable time
+          const symCoupling = Math.min(1, coupling * 2);
+
+          const blinked = [];
+          for (let i = 0; i < 2; i++) {
+            const rawPhase = ((thetaShared - sym.phaseOffset[i]) % TWO_PI + TWO_PI) % TWO_PI;
+            if (rawPhase - sym.prevRawPhase[i] < -Math.PI) blinked.push(i);
+            sym.prevRawPhase[i] = rawPhase;
+          }
+          for (const i of blinked) {
+            const j = 1 - i;
+            const fromPhaseOffset = sym.phaseOffset[j];
+            const toPhaseOffset = (fromPhaseOffset
+              + circularDelta(fromPhaseOffset, sym.phaseOffset[i]) * symCoupling + TWO_PI) % TWO_PI;
+            sym.phaseOffset[j] = toPhaseOffset;
+            sym.lastNudge[j] = { blinkerIndex: i, fromPhaseOffset, toPhaseOffset };
+          }
+
+          let sx = 0, sy = 0;
+          for (let i = 0; i < 2; i++) { sx += Math.cos(sym.phaseOffset[i]); sy += Math.sin(sym.phaseOffset[i]); }
+          const symOrder = Math.sqrt(sx * sx + sy * sy) / 2;
+          if (symOrder >= 0.99) resetSympathyDemo();
+
+          for (let i = 0; i < 2; i++) {
+            const rawPhase = ((thetaShared - sym.phaseOffset[i]) % TWO_PI + TWO_PI) % TWO_PI;
+            let dtSigned = (rawPhase / TWO_PI) * period;
+            if (dtSigned > period - attack) dtSigned -= period;
+            const b = blinkBrightness(dtSigned, attack, decay);
+            const color = glowColor(b);
+            const bloom = b > 0.01 ? `drop-shadow(0 0 ${(b * 4).toFixed(1)}px ${color})` : "";
+            symDots[i].style.fill = color;
+            symDots[i].style.filter = bloom;
+            // the arrow tracks rawPhase (not phaseOffset alone), so it sweeps continuously
+            // like the sync-number diagrams' arrows, and still visibly jumps the instant
+            // phaseOffset gets nudged, since that's an instant jump in rawPhase too
+            const ang = rawPhase;
+            symLines[i].setAttribute("x2", (90 + 65 * Math.cos(ang)).toFixed(1));
+            symLines[i].setAttribute("y2", (90 + 65 * Math.sin(ang)).toFixed(1));
+            symLines[i].style.stroke = color;
+            symLines[i].style.filter = bloom;
+            const head = document.getElementById(`sym-head-${i}`)?.firstElementChild;
+            if (head) { head.style.fill = color; head.style.filter = bloom; }
+
+            // the nudge arc lives on the RECEIVING firefly's own circle (j), tracing the
+            // turn its phase just took. Both endpoints are fixed phaseOffsets minus the
+            // shared clock, so the arc rotates in lockstep with the arrows for free. Its
+            // opacity is the BLINKER's (i's) live brightness, so it fades out on i's own
+            // decay, not some separate timer.
+            const j = 1 - i;
+            const nudge = sym.lastNudge[j];
+            if (nudge && nudge.blinkerIndex === i) {
+              const fromAngle = ((thetaShared - nudge.fromPhaseOffset) % TWO_PI + TWO_PI) % TWO_PI;
+              const toAngle = ((thetaShared - nudge.toPhaseOffset) % TWO_PI + TWO_PI) % TWO_PI;
+              symArcs[j].setAttribute("d", nudgeArcPath(fromAngle, toAngle));
+              symArcs[j].style.stroke = color;
+              symArcs[j].style.opacity = b;
+            }
+          }
+        }
+
+        aboutRAF = requestAnimationFrame(tick);
+      }
+      aboutRAF = requestAnimationFrame(tick);
+    }
+    new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1 && node.classList?.contains("cohesion-modal-backdrop")) startAboutAnimations();
+        }
+        for (const node of m.removedNodes) {
+          if (node.nodeType === 1 && node.classList?.contains("cohesion-modal-backdrop")) stopAboutAnimations();
+        }
+      }
+    }).observe(document.body, { childList: true });
+
+    function isBackground() { return new URLSearchParams(location.search).has("background"); }
+
+    if (!isBackground()) {
+      $("period").oninput = (e) => { $("v-period").textContent = (+e.target.value).toFixed(1) + "s"; };
+      $("coupling").oninput = (e) => { $("v-coupling").textContent = (+e.target.value).toFixed(2); };
+      $("speed").oninput = (e) => { $("v-speed").textContent = e.target.value; };
+      $("radius").oninput = (e) => { $("v-radius").textContent = e.target.value; };
+      $("attack").oninput = (e) => { $("v-attack").textContent = (+e.target.value).toFixed(2) + "s"; };
+      $("decay").oninput = (e) => { $("v-decay").textContent = (+e.target.value).toFixed(2) + "s"; };
+      $("count").oninput = (e) => {
+        const n = +e.target.value;
+        $("v-count").textContent = n;
+        if (n > fireflies.length) {
+          while (fireflies.length < n) fireflies.push(makeFirefly());
+        } else {
+          fireflies.length = n;
+        }
+      };
+      $("scatter").onclick = () => {
+        for (const f of fireflies) { f.phaseOffset = Math.random() * TWO_PI; }
+      };
+    }
+  </script>
+</body>
+</html>
