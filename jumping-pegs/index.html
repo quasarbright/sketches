@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jumping Pegs</title>
+
+  <!-- shared connective tissue -->
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- this project's own identity: quiet dark neutral, one warm accent, no literal theming -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #1a1a1f;
+      --panel:     #232329;
+      --panel-2:   #292930;
+      --border:    #3a3a42;
+      --text:      #f0ede6;
+      --muted:     #8a8a92;
+      --faint:     #55555e;
+      --accent:    #e8623c;
+      --accent-hi: #ff7d54;
+      --on-accent: #1a1a1f;
+      --font-ui:      "Inter", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Space Grotesk", system-ui, sans-serif;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+
+    #board {
+      position: fixed; top: 0; left: 0;
+      display: block;
+      cursor: pointer;
+    }
+
+    .pegs-eyebrow {
+      position: fixed; top: 20px; left: 24px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-weight: 600; font-size: 1.3rem;
+      letter-spacing: -.01em; color: var(--text);
+    }
+    .pegs-eyebrow .sub {
+      display: block; margin-top: 2px;
+      font-family: var(--font-ui); font-weight: 400; font-size: .78rem;
+      letter-spacing: .01em; color: var(--muted);
+    }
+
+    .pegs-win {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(.96);
+      z-index: 5; pointer-events: none;
+      background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px 26px; text-align: center;
+      font-family: var(--font-display); color: var(--text);
+      opacity: 0; transition: opacity .3s ease, transform .3s ease;
+    }
+    .pegs-win.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    .pegs-win .headline { font-size: 1.15rem; font-weight: 600; color: var(--accent-hi); }
+    .pegs-win .sub { margin-top: 4px; font-family: var(--font-mono); font-size: .82rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <canvas id="board"></canvas>
+
+  <div class="pegs-eyebrow">
+    Jumping pegs
+    <span class="sub">click a peg, then click one to jump it over</span>
+  </div>
+
+  <div class="pegs-win" id="win">
+    <div class="headline">Reached the fourth corner</div>
+    <div class="sub" id="winMoves"></div>
+  </div>
+
+  <div class="readout" id="readout">moves 0</div>
+
+  <div class="control-bar">
+    <button class="btn" id="undo">Undo</button>
+    <button class="btn" id="reset">Reset</button>
+    <about-modal label="about">
+      <h2 class="title">Jumping Pegs</h2>
+      <p>A puzzle from 3Blue1Brown's monthly series with MoMath. Three pegs sit at three corners
+        of a square, on an ordinary continuous plane &mdash; no grid.</p>
+      <p>A move takes one peg and jumps it over another: it lands the same distance past the peg
+        it jumped, along whatever line the two pegs happen to define. The peg jumped over doesn't
+        move. You can jump along any of the three pairs, in either direction, as many times as
+        you like.</p>
+      <p>The question: can you ever get a peg onto the fourth corner of the square? If so, what's
+        the fewest moves it takes. If not, why not.</p>
+      <p>The faint dashed lines are sightlines &mdash; a record of every jump, start through pivot
+        to landing point &mdash; left on the board as you play.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+    const cv = document.getElementById("board"), ctx = cv.getContext("2d");
+    const $ = (id) => document.getElementById(id);
+    const cs = getComputedStyle(document.body);
+    const col = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
+    const COLOR = {
+      bg: col("--bg", "#1a1a1f"),
+      panel: col("--panel", "#232329"),
+      border: col("--border", "#3a3a42"),
+      text: col("--text", "#f0ede6"),
+      muted: col("--muted", "#8a8a92"),
+      faint: col("--faint", "#55555e"),
+      accent: col("--accent", "#e8623c"),
+      accentHi: col("--accent-hi", "#ff7d54"),
+    };
+
+    let W, H, DPR;
+    function resize() {
+      DPR = window.devicePixelRatio || 1;
+      W = innerWidth; H = innerHeight;
+      cv.width = W * DPR; cv.height = H * DPR;
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    addEventListener("resize", resize); resize();
+
+    // --- puzzle state ---------------------------------------------------
+    // three pegs at three corners of the unit square; target is the fourth.
+    const START = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+    const TARGET = { x: 1, y: 1 };
+    const EPS = 1e-6;
+
+    let pegs = START.map((p) => ({ ...p }));
+    let sightlines = []; // { from, pivot, to }
+    let history = []; // { pegs snapshot, sightlines length before }
+    let selected = -1; // index of the mover peg, or -1
+    let moves = 0;
+    let won = false;
+
+    function sameSpot(a, b) { return Math.abs(a.x - b.x) < EPS && Math.abs(a.y - b.y) < EPS; }
+
+    function doJump(moverIdx, pivotIdx) {
+      if (moverIdx === pivotIdx) return;
+      history.push({ pegs: pegs.map((p) => ({ ...p })), sl: sightlines.length, moves });
+      const mover = pegs[moverIdx], pivot = pegs[pivotIdx];
+      const from = { ...mover };
+      const to = { x: 2 * pivot.x - mover.x, y: 2 * pivot.y - mover.y };
+      sightlines.push({ from, pivot: { ...pivot }, to });
+      pegs[moverIdx] = to;
+      moves++;
+      selected = -1;
+      if (!won && pegs.some((p) => sameSpot(p, TARGET))) {
+        won = true;
+        $("win").classList.add("show");
+        $("winMoves").textContent = moves + (moves === 1 ? " move" : " moves");
+      }
+      updateReadout();
+    }
+
+    function undo() {
+      if (!history.length) return;
+      const h = history.pop();
+      pegs = h.pegs;
+      sightlines.length = h.sl;
+      moves = h.moves;
+      selected = -1;
+      if (won) { won = false; $("win").classList.remove("show"); }
+      updateReadout();
+    }
+
+    function reset() {
+      pegs = START.map((p) => ({ ...p }));
+      sightlines = [];
+      history = [];
+      selected = -1;
+      moves = 0;
+      if (won) { won = false; $("win").classList.remove("show"); }
+      updateReadout();
+    }
+
+    function updateReadout() {
+      $("readout").textContent = "moves " + moves;
+    }
+
+    // --- camera: autofit world bounds, smoothed ---------------------------
+    let cam = { cx: 0.5, cy: 0.5, scale: 160 }; // world->screen scale, px per unit
+    let camTarget = { ...cam };
+
+    function computeFit() {
+      const pts = [...pegs, TARGET];
+      let minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
+      let minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      const spanX = Math.max(maxX - minX, 0.001), spanY = Math.max(maxY - minY, 0.001);
+      const pad = 0.48; // fraction of viewport reserved as margin
+      const availW = W * (1 - pad), availH = H * (1 - pad * 1.4);
+      const scale = Math.min(availW / spanX, availH / spanY, 420);
+      camTarget = { cx, cy, scale: Math.max(scale, 4) };
+    }
+
+    // world (x,y) -> screen px. y is flipped so +y is up.
+    function toScreen(p) {
+      return { x: W / 2 + (p.x - cam.cx) * cam.scale, y: H / 2 - (p.y - cam.cy) * cam.scale };
+    }
+
+    function drawGrid() {
+      const step = 1;
+      const left = cam.cx - (W / 2) / cam.scale, right = cam.cx + (W / 2) / cam.scale;
+      const bottom = cam.cy - (H / 2) / cam.scale, top = cam.cy + (H / 2) / cam.scale;
+      ctx.strokeStyle = COLOR.faint;
+      ctx.globalAlpha = 0.28;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = Math.floor(left / step) * step; x <= right; x += step) {
+        const s = toScreen({ x, y: 0 });
+        ctx.moveTo(s.x + 0.5, 0); ctx.lineTo(s.x + 0.5, H);
+      }
+      for (let y = Math.floor(bottom / step) * step; y <= top; y += step) {
+        const s = toScreen({ x: 0, y });
+        ctx.moveTo(0, s.y + 0.5); ctx.lineTo(W, s.y + 0.5);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawSightlines() {
+      ctx.lineWidth = 1.25;
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = COLOR.muted;
+      ctx.globalAlpha = 0.5;
+      for (const sl of sightlines) {
+        const a = toScreen(sl.from), b = toScreen(sl.to), p = toScreen(sl.pivot);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p.x - 5, p.y - 5); ctx.lineTo(p.x + 5, p.y + 5);
+        ctx.moveTo(p.x - 5, p.y + 5); ctx.lineTo(p.x + 5, p.y - 5);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawTarget() {
+      const s = toScreen(TARGET);
+      ctx.strokeStyle = won ? COLOR.accentHi : COLOR.accent;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      const r = 11;
+      ctx.strokeRect(s.x - r, s.y - r, r * 2, r * 2);
+      ctx.setLineDash([]);
+    }
+
+    function drawPegs() {
+      pegs.forEach((p, i) => {
+        const s = toScreen(p);
+        const isSel = i === selected;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+        ctx.fillStyle = isSel ? COLOR.accentHi : COLOR.text;
+        ctx.fill();
+        if (isSel) {
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
+          ctx.strokeStyle = COLOR.accentHi;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        ctx.font = "11px " + getComputedStyle(document.body).getPropertyValue("--font-mono");
+        ctx.fillStyle = COLOR.muted;
+        ctx.textAlign = "center";
+        ctx.fillText(`${fmt(p.x)}, ${fmt(p.y)}`, s.x, s.y + 26);
+      });
+    }
+
+    function fmt(v) {
+      const r = Math.round(v);
+      return Math.abs(v - r) < EPS ? String(r) : v.toFixed(2);
+    }
+
+    function frame() {
+      computeFit();
+      const t = 0.12;
+      cam.cx += (camTarget.cx - cam.cx) * t;
+      cam.cy += (camTarget.cy - cam.cy) * t;
+      cam.scale += (camTarget.scale - cam.scale) * t;
+
+      ctx.fillStyle = COLOR.bg;
+      ctx.fillRect(0, 0, W, H);
+      drawGrid();
+      drawSightlines();
+      drawTarget();
+      drawPegs();
+
+      requestAnimationFrame(frame);
+    }
+    frame();
+
+    // --- input ------------------------------------------------------------
+    function pegAt(sx, sy) {
+      for (let i = 0; i < pegs.length; i++) {
+        const s = toScreen(pegs[i]);
+        if (Math.hypot(s.x - sx, s.y - sy) < 16) return i;
+      }
+      return -1;
+    }
+
+    cv.addEventListener("pointerdown", (e) => {
+      const rect = cv.getBoundingClientRect();
+      const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+      const idx = pegAt(sx, sy);
+      if (idx === -1) { selected = -1; return; }
+      if (selected === -1) { selected = idx; return; }
+      if (selected === idx) { selected = -1; return; }
+      doJump(selected, idx);
+    });
+
+    $("undo").onclick = undo;
+    $("reset").onclick = reset;
+    updateReadout();
+  </script>
+</body>
+</html>
