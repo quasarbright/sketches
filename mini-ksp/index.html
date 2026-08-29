@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mini ksp</title>
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #05070d;
+      --panel: #10141d;
+      --panel-2: #171c28;
+      --border: #232a3a;
+      --accent: #5fb2ff;
+      --accent-hi: #8cc8ff;
+      --on-accent: #05070d;
+      --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+      /* burn-component + plan-stage colors (functional, not decorative) */
+      --pro: #ffd45e;   /* prograde/retrograde */
+      --rad: #59e3e3;   /* radial in/out */
+      --plan: #ffb454;  /* planned trajectory, stage 1 */
+    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+    canvas { position: fixed; inset: 0; display: block; }
+    .panel-title, .title { font-family: var(--font-display); letter-spacing: .02em; }
+
+    .mk-title {
+      position: fixed; top: 14px; left: 16px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); color: var(--text);
+      text-shadow: 0 1px 2px rgba(0,0,0,.8), 0 0 8px rgba(0,0,0,.6);
+    }
+    .mk-title .mk-name { font-size: 1.05rem; font-weight: 600; }
+    .mk-title .mk-sub { font-size: .72rem; color: var(--muted); font-family: var(--font-mono); }
+    html[data-background] .mk-title { display: none; }
+
+    control-panel.floating { width: 248px; max-height: calc(100vh - 90px); overflow-y: auto; }
+    .mk-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 1px 0; }
+    .mk-k { color: var(--muted); font-size: .8rem; }
+    .mk-v { font-family: var(--font-mono); font-size: .8rem; color: var(--text); text-align: right; }
+    .mk-v.mk-danger { color: var(--danger); }
+    .mk-hint { color: var(--faint); font-size: .78rem; line-height: 1.4; margin: 2px 0 4px; }
+    .mk-dv { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+    .mk-dv .mk-dvlab { font-size: .78rem; width: 62px; }
+    .mk-dv .mk-v { flex: 1; white-space: nowrap; }
+    .control-bar .btn { white-space: nowrap; }
+    .mk-step { padding: 0 8px; line-height: 1.5; font-family: var(--font-mono); }
+    .mk-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .mk-jump { display: flex; gap: 6px; margin-top: 4px; }
+    .mk-jump input {
+      flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-mono);
+      font-size: .78rem; padding: 4px 8px;
+    }
+    .mk-sect { margin-top: 10px; }
+    select#targetSel {
+      width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); padding: 4px 6px; font-size: .82rem;
+    }
+    .control-bar { font-family: var(--font-mono); }
+    .control-bar .mk-clock { font-size: .8rem; color: var(--text); min-width: 118px; text-align: center; }
+    .control-bar .mk-rate { font-size: .8rem; color: var(--accent); min-width: 64px; text-align: center; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="mk-title">
+    <div class="mk-name">mini ksp</div>
+    <div class="mk-sub">patched-conic sandbox</div>
+  </div>
+
+  <control-panel floating title="flight">
+    <div class="section-label">ship</div>
+    <div class="mk-row"><span class="mk-k" title="what the ship is currently doing, and around which body">status</span><span class="mk-v" id="roStatus">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="height above the surface of the body you're orbiting">altitude</span><span class="mk-v" id="roAlt">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="speed relative to the body you're orbiting">velocity</span><span class="mk-v" id="roVel">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="apoapsis — the highest point of the current orbit, as altitude">Ap</span><span class="mk-v" id="roAp">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="periapsis — the lowest point of the current orbit, as altitude. Red means it dips below the surface">Pe</span><span class="mk-v" id="roPe">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="time for one full revolution of the current orbit">period</span><span class="mk-v" id="roPeriod">—</span></div>
+
+    <div class="section-label mk-sect">target</div>
+    <div class="control">
+      <select id="targetSel" title="pick a body to track — shows where your path comes closest to it">
+        <option value="">no target</option>
+        <option value="lume">Lume (moon)</option>
+      </select>
+    </div>
+    <div id="targetInfo" style="display:none">
+      <div class="mk-row"><span class="mk-k" title="the nearest your planned path gets to the target">closest</span><span class="mk-v" id="roCa">—</span></div>
+      <div class="mk-row"><span class="mk-k" title="when that closest pass happens">at</span><span class="mk-v" id="roCaT">—</span></div>
+    </div>
+
+    <div class="section-label mk-sect">maneuver</div>
+    <div id="nodeHint" class="mk-hint">Click the orbit to place a burn. Drag its yellow handles for prograde/retrograde, cyan for radial. Drag the node itself to slide it in time (snaps to Ap/Pe).</div>
+    <div id="nodeEditor" style="display:none">
+      <div class="mk-row"><span class="mk-k" title="when this burn fires — burns execute automatically at their time">burn at</span><span class="mk-v" id="ndT">—</span></div>
+      <div class="mk-dv">
+        <span class="mk-dvlab" style="color:var(--pro)" title="speed change along your direction of motion — positive raises the far side of the orbit, negative lowers it">prograde</span>
+        <button class="btn mk-step" data-ax="prograde" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
+        <span class="mk-v" id="ndPro">0.0</span>
+        <button class="btn mk-step" data-ax="prograde" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+      </div>
+      <div class="mk-dv">
+        <span class="mk-dvlab" style="color:var(--rad)" title="speed change straight away from the body (positive) or toward it (negative) — rotates the orbit">radial</span>
+        <button class="btn mk-step" data-ax="radial" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
+        <span class="mk-v" id="ndRad">0.0</span>
+        <button class="btn mk-step" data-ax="radial" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+      </div>
+      <div class="mk-row"><span class="mk-k" title="total speed change this burn costs">burn Δv</span><span class="mk-v" id="ndDv">—</span></div>
+      <div id="ndDone" class="mk-hint" style="display:none">This burn is in the past. Rewind to before it to edit it.</div>
+      <div class="mk-actions">
+        <button class="btn" id="warpNode" title="jump time to just before this burn">go to burn</button>
+        <button class="btn" id="delNode" title="remove this burn from the flight plan">delete</button>
+      </div>
+    </div>
+
+    <div class="section-label mk-sect">flight plan</div>
+    <div class="mk-row"><span class="mk-k" title="how many burns are in the plan">burns</span><span class="mk-v" id="fpCount">0</span></div>
+    <div class="mk-row"><span class="mk-k" title="total speed change the whole plan costs">total Δv</span><span class="mk-v" id="fpDv">0 m/s</span></div>
+    <div class="mk-actions"><button class="btn" id="clearNodes" title="remove every burn">clear all</button></div>
+
+    <div class="section-label mk-sect">time</div>
+    <div class="mk-jump">
+      <input id="jumpIn" placeholder="+2h30m · 1d4h · 3600" title="jump to a time — plain seconds or 1d2h30m; prefix + or − to jump relative to now" />
+      <button class="btn" id="jumpGo" title="jump to the entered time">go</button>
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="slower" title="slow down time — keeps going into reverse (rewind)">◀◀</button>
+    <button class="btn" id="pause" title="pause / resume time (space)">⏸</button>
+    <button class="btn" id="faster" title="speed up time">▶▶</button>
+    <span class="mk-rate" id="rate" title="current time-warp rate — negative means rewinding">1×</span>
+    <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
+    <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
+    <about-modal label="about">
+      <h2 class="title">mini ksp</h2>
+      <p>An orbital mechanics sandbox with no rocket — just a ship, a planet (Vesper), a moon (Lume),
+        and Kepler. Everything counterintuitive about orbits lives here: to catch up to something,
+        slow down; to go faster at the far side, burn at the near side.</p>
+      <div class="section-label">the model</div>
+      <p>Motion is one two-body problem at a time. Near Vesper you're on a conic (ellipse or
+        hyperbola) around Vesper; inside Lume's <em>sphere of influence</em> — the region where the
+        moon's gravity dominates, drawn as the dashed circle — you're on a conic around Lume. The
+        path is these conics patched together at the boundary. Each conic obeys vis-viva,
+        $v^2 = \mu\left(\frac{2}{r} - \frac{1}{a}\right)$, and is solved in closed form: no
+        simulation steps, just Kepler's equation. Burns are instant velocity changes that fire
+        automatically at their planned time.</p>
+      <div class="section-label">why time travel is free</div>
+      <p>Because everything is closed-form, your position is a pure function of the clock and the
+        flight plan. Warp, rewind, and jump don't fast-forward a simulation — they just move the
+        clock. Rewinding to before a burn un-executes it, and the future re-forms the moment you
+        edit the plan.</p>
+      <div class="section-label">flying</div>
+      <ul>
+        <li>Click your trajectory to place a burn; it snaps to Ap/Pe when close.</li>
+        <li>Drag the <span style="color:var(--pro)">yellow</span> handles for prograde/retrograde,
+            <span style="color:var(--rad)">cyan</span> for radial. Hold shift while dragging for fine control.</li>
+        <li>Select Lume as target to see your closest approach; raise your orbit until the paths kiss.</li>
+        <li>Scroll to zoom, drag to pan; the camera stays on the ship.</li>
+      </ul>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { isBackground } from "../shared/cohesion.js";
+
+    /* ============================== bodies ============================== */
+    // units: km, s, km/s. mu in km^3/s^2. Kerbin/Mun-like numbers.
+    const VESPER = { name: "Vesper", mu: 3531.6, radius: 600 };
+    const LUME = (() => {
+      const mu = 65.14, orbitRadius = 12000, radius = 200, phase0 = 2.2;
+      const n = Math.sqrt(VESPER.mu / orbitRadius ** 3);
+      return {
+        name: "Lume", mu, radius, orbitRadius, phase0, n,
+        period: 2 * Math.PI / n,
+        soi: orbitRadius * (mu / VESPER.mu) ** 0.4,
+      };
+    })();
+    const BODIES = { vesper: VESPER, lume: LUME };
+
+    function moonState(t) {
+      const a = LUME.phase0 + LUME.n * t, c = Math.cos(a), s = Math.sin(a);
+      return {
+        x: LUME.orbitRadius * c, y: LUME.orbitRadius * s,
+        vx: -LUME.orbitRadius * LUME.n * s, vy: LUME.orbitRadius * LUME.n * c,
+      };
+    }
+
+    /* ============================== kepler ============================== */
+    const TAU = Math.PI * 2;
+    const clampN = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+    // 2D orbit from a state vector. Handles ellipse + hyperbola, both directions.
+    // Perifocal frame: p̂ toward periapsis, q̂ = ±90° so true anomaly always increases with time.
+    function stateToOrbit(mu, rx, ry, vx, vy, t) {
+      const r = Math.hypot(rx, ry);
+      const v2 = vx * vx + vy * vy;
+      const hz = rx * vy - ry * vx;
+      const rv = rx * vx + ry * vy;
+      let energy = v2 / 2 - mu / r;
+      if (Math.abs(energy) < 1e-9) energy = -1e-9; // dodge exact parabola
+      const a = -mu / (2 * energy);
+      let ex = ((v2 - mu / r) * rx - rv * vx) / mu;
+      let ey = ((v2 - mu / r) * ry - rv * vy) / mu;
+      let e = Math.hypot(ex, ey);
+      let px, py;
+      if (e < 1e-9) { e = 0; px = rx / r; py = ry / r; }
+      else { px = ex / e; py = ey / e; }
+      const s = hz >= 0 ? 1 : -1;
+      const qx = -s * py, qy = s * px;
+      const p = hz * hz / mu;
+      const elliptic = a > 0;
+      const n = Math.sqrt(mu / Math.abs(a * a * a));
+      const nu0 = Math.atan2(rx * qx + ry * qy, rx * px + ry * py);
+      let tp;
+      if (elliptic) {
+        const E0 = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu0 / 2), Math.sqrt(1 + e) * Math.cos(nu0 / 2));
+        tp = t - (E0 - e * Math.sin(E0)) / n;
+      } else {
+        const H0 = 2 * Math.atanh(clampN(Math.sqrt((e - 1) / (e + 1)) * Math.tan(nu0 / 2), -0.999999999, 0.999999999));
+        tp = t - (e * Math.sinh(H0) - H0) / n;
+      }
+      return {
+        mu, a, e, p, px, py, qx, qy, n, tp, elliptic,
+        period: elliptic ? TAU / n : Infinity,
+        rp: p / (1 + e),
+        ra: elliptic ? p / (1 - e) : Infinity,
+      };
+    }
+
+    function solveE(Mw, e) {
+      let E = e < 0.8 ? Mw : Math.PI * Math.sign(Mw || 1);
+      for (let i = 0; i < 40; i++) {
+        const d = (E - e * Math.sin(E) - Mw) / (1 - e * Math.cos(E));
+        E -= d;
+        if (Math.abs(d) < 1e-12) break;
+      }
+      return E;
+    }
+    function solveH(M, e) {
+      let H = Math.asinh(M / e);
+      for (let i = 0; i < 60; i++) {
+        const d = (e * Math.sinh(H) - H - M) / (e * Math.cosh(H) - 1);
+        H -= d;
+        if (Math.abs(d) < 1e-12) break;
+      }
+      return H;
+    }
+    // eccentric anomaly at mean anomaly M, unwrapped (keeps winding count)
+    function unwrapE(o, M) {
+      const k = Math.floor((M + Math.PI) / TAU);
+      return solveE(M - TAU * k, o.e) + TAU * k;
+    }
+
+    function posVelAt(o, t) {
+      const M = o.n * (t - o.tp);
+      let cx, cy, r, nu;
+      if (o.elliptic) {
+        const E = unwrapE(o, M);
+        const b = o.a * Math.sqrt(1 - o.e * o.e);
+        cx = o.a * (Math.cos(E) - o.e);
+        cy = b * Math.sin(E);
+        r = o.a * (1 - o.e * Math.cos(E));
+      } else {
+        const H = solveH(M, o.e);
+        const bh = -o.a * Math.sqrt(o.e * o.e - 1);
+        cx = o.a * (Math.cosh(H) - o.e);
+        cy = bh * Math.sinh(H);
+        r = o.a * (1 - o.e * Math.cosh(H));
+      }
+      nu = Math.atan2(cy, cx);
+      const x = cx * o.px + cy * o.qx, y = cx * o.py + cy * o.qy;
+      const sq = Math.sqrt(o.mu / o.p);
+      const vxp = -sq * Math.sin(nu), vyp = sq * (o.e + Math.cos(nu));
+      return {
+        x, y, r, nu,
+        vx: vxp * o.px + vyp * o.qx,
+        vy: vxp * o.py + vyp * o.qy,
+      };
+    }
+
+    // first time ≥ tAfter at which true anomaly = nu (null if never)
+    function tAtNu(o, nu, tAfter) {
+      if (o.elliptic) {
+        const E = 2 * Math.atan2(Math.sqrt(1 - o.e) * Math.sin(nu / 2), Math.sqrt(1 + o.e) * Math.cos(nu / 2));
+        let t0 = o.tp + (E - o.e * Math.sin(E)) / o.n;
+        t0 += Math.ceil((tAfter - t0) / o.period - 1e-9) * o.period;
+        return t0;
+      }
+      const arg = Math.sqrt((o.e - 1) / (o.e + 1)) * Math.tan(nu / 2);
+      if (Math.abs(arg) >= 1) return null;
+      const H = 2 * Math.atanh(arg);
+      const t0 = o.tp + (o.e * Math.sinh(H) - H) / o.n;
+      return t0 >= tAfter ? t0 : null;
+    }
+
+    // |true anomaly| at which radius = rr (null if orbit never reaches it)
+    function nuAtRadius(o, rr) {
+      if (o.e < 1e-9) return null;
+      const c = (o.p / rr - 1) / o.e;
+      if (c > 1 || c < -1) return null;
+      return Math.acos(c);
+    }
+
+    /* ======================= trajectory compiler ======================= */
+    const EPOCH = { rx: 800, ry: 0, vx: 0, vy: Math.sqrt(VESPER.mu / 800) }; // 200 km circular, CCW
+
+    function findSoiEntry(o, tStart, tLimit) {
+      const lo = LUME.orbitRadius - LUME.soi, hi = LUME.orbitRadius + LUME.soi;
+      if (o.ra < lo || o.rp > hi) return null;
+      let windowEnd;
+      if (o.elliptic) {
+        windowEnd = tStart + Math.min(Math.max(3 * o.period, 2 * LUME.period), 20 * LUME.period);
+      } else {
+        const nuH = nuAtRadius(o, hi);
+        const tHi = nuH != null ? tAtNu(o, nuH, tStart + 1e-6) : null;
+        windowEnd = tHi ?? tStart;
+      }
+      windowEnd = Math.min(windowEnd, tLimit);
+      if (windowEnd <= tStart) return null;
+      const step = Math.max(1, Math.min(o.elliptic ? o.period : Infinity, LUME.period) / 300);
+      const f = (t) => {
+        const s = posVelAt(o, t), m = moonState(t);
+        return Math.hypot(s.x - m.x, s.y - m.y) - LUME.soi;
+      };
+      let tPrev = tStart + 1e-3, fPrev = f(tPrev);
+      while (fPrev <= 0 && tPrev < windowEnd) { tPrev += step; fPrev = f(tPrev); } // skip if starting inside
+      for (let t = tPrev + step; ; t += step) {
+        const tc = Math.min(t, windowEnd);
+        const fc = f(tc);
+        if (fPrev > 0 && fc <= 0) {
+          let a = tPrev, b = tc;
+          for (let i = 0; i < 60; i++) { const mid = (a + b) / 2; if (f(mid) > 0) a = mid; else b = mid; }
+          return b; // just inside the SOI
+        }
+        tPrev = tc; fPrev = fc;
+        if (tc >= windowEnd) return null;
+      }
+    }
+
+    function findSegEnd(o, body, tStart, tLimit) {
+      const cands = [];
+      const B = BODIES[body];
+      if (o.rp < B.radius) {
+        const nuI = nuAtRadius(o, B.radius);
+        if (nuI != null) {
+          const ti = tAtNu(o, -nuI, tStart + 1e-3); // inbound crossing
+          if (ti != null) cands.push({ t: ti, type: "impact" });
+        }
+      }
+      if (body === "lume") {
+        if (!o.elliptic || o.ra > LUME.soi) {
+          const nuX = nuAtRadius(o, LUME.soi);
+          if (nuX != null) {
+            const tx = tAtNu(o, nuX, tStart + 1e-3); // outbound crossing
+            if (tx != null) cands.push({ t: tx, type: "soiExit" });
+          }
+        }
+      } else {
+        const te = findSoiEntry(o, tStart, tLimit);
+        if (te != null) cands.push({ t: te, type: "soiEnter" });
+      }
+      cands.sort((a, b) => a.t - b.t);
+      return cands[0] || null;
+    }
+
+    // sample a segment's conic for drawing + hit testing (world coords rel. to its body)
+    function sampleSeg(seg) {
+      const o = seg.orbit, pts = [];
+      const N = 240;
+      if (o.elliptic) {
+        const full = seg.tEnd === Infinity || (seg.tEnd - seg.tStart) >= o.period - 1e-6;
+        const E1 = unwrapE(o, o.n * (seg.tStart - o.tp));
+        const E2 = full ? E1 + TAU : unwrapE(o, o.n * (seg.tEnd - o.tp));
+        const b = o.a * Math.sqrt(1 - o.e * o.e);
+        for (let i = 0; i <= N; i++) {
+          const E = E1 + (E2 - E1) * i / N;
+          const cx = o.a * (Math.cos(E) - o.e), cy = b * Math.sin(E);
+          pts.push({
+            x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy,
+            t: o.tp + (E - o.e * Math.sin(E)) / o.n,
+          });
+        }
+      } else {
+        const H1 = solveH(o.n * (seg.tStart - o.tp), o.e);
+        let H2;
+        if (seg.tEnd === Infinity) {
+          H2 = Math.acosh(Math.max(1, (1 - 1.5e5 / o.a) / o.e)); // draw out to 150,000 km
+        } else {
+          H2 = solveH(o.n * (seg.tEnd - o.tp), o.e);
+        }
+        const bh = -o.a * Math.sqrt(o.e * o.e - 1);
+        for (let i = 0; i <= N; i++) {
+          const H = H1 + (H2 - H1) * i / N;
+          const cx = o.a * (Math.cosh(H) - o.e), cy = bh * Math.sinh(H);
+          pts.push({
+            x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy,
+            t: o.tp + (o.e * Math.sinh(H) - H) / o.n,
+          });
+        }
+      }
+      return pts;
+    }
+
+    function segApsides(seg) {
+      const o = seg.orbit, B = BODIES[seg.body], out = [];
+      const horizon = Math.min(seg.tEnd, seg.tStart + (o.elliptic ? o.period : Infinity));
+      const tPe = tAtNu(o, 0, seg.tStart + 1e-3);
+      if (tPe != null && tPe <= horizon) {
+        out.push({ kind: "Pe", nu: 0, x: o.rp * o.px, y: o.rp * o.py, alt: o.rp - B.radius });
+      }
+      if (o.elliptic) {
+        const tAp = tAtNu(o, Math.PI, seg.tStart + 1e-3);
+        if (tAp != null && tAp <= horizon) {
+          out.push({ kind: "Ap", nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py, alt: o.ra - B.radius });
+        }
+      }
+      return out;
+    }
+
+    function compileTrajectory(nodes) {
+      const sorted = [...nodes].sort((a, b) => a.t - b.t);
+      const segs = [], nodeInfo = new Map();
+      let body = "vesper";
+      let { rx, ry, vx, vy } = EPOCH;
+      let t = 0, stage = 0;
+      for (let guard = 0; guard < 24; guard++) {
+        const orbit = stateToOrbit(BODIES[body].mu, rx, ry, vx, vy, t);
+        const nextNode = sorted.find((nd) => nd.t > t + 1e-6);
+        const tLimit = nextNode ? nextNode.t : Infinity;
+        const ev = findSegEnd(orbit, body, t, tLimit);
+        let tEnd, endType;
+        if (ev && ev.t < tLimit) { tEnd = ev.t; endType = ev.type; }
+        else if (nextNode) { tEnd = nextNode.t; endType = "node"; }
+        else { tEnd = Infinity; endType = "none"; }
+        const seg = { orbit, body, tStart: t, tEnd, endType, stage };
+        seg.samples = sampleSeg(seg);
+        seg.apsides = segApsides(seg);
+        segs.push(seg);
+        if (endType === "none" || endType === "impact") break;
+        const st = posVelAt(orbit, tEnd);
+        if (endType === "node") {
+          const vm = Math.hypot(st.vx, st.vy) || 1;
+          const rm = Math.hypot(st.x, st.y) || 1;
+          const pgx = st.vx / vm, pgy = st.vy / vm;
+          const rox = st.x / rm, roy = st.y / rm;
+          nodeInfo.set(nextNode.id, { body, t: tEnd, relX: st.x, relY: st.y, pgx, pgy, rox, roy, seg });
+          rx = st.x; ry = st.y;
+          vx = st.vx + (nextNode.prograde / 1000) * pgx + (nextNode.radial / 1000) * rox;
+          vy = st.vy + (nextNode.prograde / 1000) * pgy + (nextNode.radial / 1000) * roy;
+          // keep angular momentum away from exactly zero (degenerate radial orbit)
+          if (Math.abs(rx * vy - ry * vx) < 0.5) { vx += -roy * 0.002; vy += rox * 0.002; }
+          stage++;
+        } else if (endType === "soiEnter") {
+          const m = moonState(tEnd);
+          rx = st.x - m.x; ry = st.y - m.y; vx = st.vx - m.vx; vy = st.vy - m.vy;
+          body = "lume";
+        } else {
+          const m = moonState(tEnd);
+          rx = st.x + m.x; ry = st.y + m.y; vx = st.vx + m.vx; vy = st.vy + m.vy;
+          body = "vesper";
+        }
+        t = tEnd;
+      }
+      return { segs, nodeInfo, sorted };
+    }
+
+    function shipStateAt(traj, t) {
+      const segs = traj.segs;
+      let seg = segs[segs.length - 1];
+      for (const s of segs) if (t < s.tEnd) { seg = s; break; }
+      const tc = seg.endType === "impact" ? Math.min(t, seg.tEnd) : t;
+      const st = posVelAt(seg.orbit, Math.max(tc, seg.tStart));
+      let ax = st.x, ay = st.y;
+      if (seg.body === "lume") { const m = moonState(t); ax += m.x; ay += m.y; }
+      return { seg, rel: st, x: ax, y: ay };
+    }
+
+    /* ============================ sim state ============================ */
+    const bg = isBackground();
+    const nodes = [];        // { id, t, prograde, radial }  (m/s components)
+    let nodeSeq = 1;
+    let tNow = 0;
+    let paused = false;
+    const RATES = [1, 5, 25, 100, 1000, 10000, 100000];
+    let rateIdx = 0, rateDir = 1;
+    let selectedId = null;
+    let target = null;       // null | "lume"
+    let traj = compileTrajectory(nodes);
+    let dirty = false;
+    let ca = null;           // { fromT, best: {t, d} | null }
+    let caWall = 0;
+
+    function markDirty() { dirty = true; }
+    function recompileIfDirty() {
+      if (!dirty) return;
+      dirty = false;
+      traj = compileTrajectory(nodes);
+      ca = null;
+    }
+
+    function planHasEncounter() {
+      return traj.segs.some((s) => s.endType === "soiEnter" && s.tEnd > tNow);
+    }
+
+    function computeCA(fromT) {
+      let best = null;
+      for (const seg of traj.segs) {
+        if (seg.body !== "vesper" || seg.tEnd < fromT) continue;
+        const o = seg.orbit;
+        const t0 = Math.max(seg.tStart, fromT);
+        const win = o.elliptic
+          ? Math.min(Math.max(2 * o.period, 1.5 * LUME.period), 12 * LUME.period)
+          : 2 * LUME.period;
+        const wEnd = Math.min(seg.tEnd, t0 + win);
+        if (wEnd <= t0) continue;
+        const dist = (t) => {
+          const s = posVelAt(o, t), m = moonState(t);
+          return Math.hypot(s.x - m.x, s.y - m.y);
+        };
+        const N = 400, dt = (wEnd - t0) / N;
+        let bt = t0, bd = Infinity;
+        for (let i = 0; i <= N; i++) {
+          const t = t0 + i * dt, d = dist(t);
+          if (d < bd) { bd = d; bt = t; }
+        }
+        let a = Math.max(t0, bt - dt), b = Math.min(wEnd, bt + dt);
+        for (let i = 0; i < 50; i++) {
+          const m1 = a + (b - a) / 3, m2 = b - (b - a) / 3;
+          if (dist(m1) < dist(m2)) b = m2; else a = m1;
+        }
+        const t = (a + b) / 2, d = dist(t);
+        if (!best || d < best.d) best = { t, d };
+      }
+      return { fromT, best };
+    }
+
+    function updateCA() {
+      if (!target || planHasEncounter()) { ca = null; return; }
+      const stale = !ca || tNow < ca.fromT - 1 || (ca.best && tNow > ca.best.t + 1);
+      if (stale && performance.now() - caWall > 150) {
+        caWall = performance.now();
+        ca = computeCA(tNow);
+      }
+    }
+
+    /* ============================== camera ============================== */
+    const cv = document.getElementById("c");
+    const ctx = cv.getContext("2d");
+    let W = 0, H = 0, dpr = 1;
+    const cam = { zoom: 0.3, panX: 0, panY: 0 }; // pan in km, relative to ship
+    let defaultZoom = 0.3;
+    let userZoomed = false; // until the user zooms, resizes keep re-deriving the default
+
+    function resize() {
+      dpr = window.devicePixelRatio || 1;
+      W = window.innerWidth; H = window.innerHeight;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      cv.style.width = W + "px"; cv.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      defaultZoom = 0.55 * Math.min(W, H) / 1600;
+      if (!userZoomed || !(cam.zoom > 0)) cam.zoom = defaultZoom;
+      makeStars();
+    }
+
+    let ship = shipStateAt(traj, 0);
+    function w2s(x, y) {
+      return {
+        x: W / 2 + (x - ship.x - cam.panX) * cam.zoom,
+        y: H / 2 - (y - ship.y - cam.panY) * cam.zoom,
+      };
+    }
+    function s2w(sx, sy) {
+      return {
+        x: ship.x + cam.panX + (sx - W / 2) / cam.zoom,
+        y: ship.y + cam.panY - (sy - H / 2) / cam.zoom,
+      };
+    }
+    function v2s(vx, vy) { // direction only
+      const m = Math.hypot(vx, vy) || 1;
+      return { x: vx / m, y: -vy / m };
+    }
+
+    /* ============================== stars ============================== */
+    let stars = [];
+    function makeStars() {
+      stars = [];
+      let s = 12345;
+      const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      const count = Math.round((W * H) / 6000);
+      for (let i = 0; i < count; i++) {
+        stars.push({ x: rnd() * W, y: rnd() * H, a: 0.08 + rnd() * 0.3, r: rnd() < 0.12 ? 1.3 : 0.8 });
+      }
+    }
+
+    /* ============================ formatting ============================ */
+    function fmtKm(v) {
+      const av = Math.abs(v);
+      if (av < 100) return v.toFixed(1) + " km";
+      return Math.round(v).toLocaleString("en-US") + " km";
+    }
+    function fmtMps(v) {
+      const av = Math.abs(v);
+      return (av < 10 ? v.toFixed(2) : av < 100 ? v.toFixed(1) : Math.round(v).toLocaleString("en-US")) + " m/s";
+    }
+    function fmtClock(t) {
+      const d = Math.floor(t / 86400);
+      const h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+      const pad = (x) => String(x).padStart(2, "0");
+      return `T+ ${d}d ${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    function fmtDur(t) {
+      t = Math.max(0, t);
+      const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+      if (d > 0) return `${d}d ${h}h`;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+    function parseTimeInput(str) {
+      str = str.trim();
+      if (!str) return null;
+      let rel = 0;
+      if (str[0] === "+" || str[0] === "-" || str[0] === "−") {
+        rel = (str[0] === "+") ? 1 : -1;
+        str = str.slice(1).trim();
+      }
+      let sec;
+      if (/^\d+(\.\d+)?$/.test(str)) sec = parseFloat(str);
+      else {
+        let sum = 0, ok = false;
+        for (const m of str.matchAll(/(\d+(?:\.\d+)?)\s*([dhms])/gi)) {
+          ok = true;
+          sum += parseFloat(m[1]) * { d: 86400, h: 3600, m: 60, s: 1 }[m[2].toLowerCase()];
+        }
+        if (!ok) return null;
+        sec = sum;
+      }
+      return rel ? tNow + rel * sec : sec;
+    }
+
+    /* ============================== render ============================== */
+    const STAGE_COLORS = ["#5fb2ff", "#ffb454", "#ff8a5c", "#c979ff", "#59e3e3", "#9ef0a0"];
+    const stageColor = (s) => STAGE_COLORS[s % STAGE_COLORS.length];
+    const MONO = '11px "IBM Plex Mono", monospace';
+
+    function segOrigin(seg) {
+      if (seg.body !== "lume") return { x: 0, y: 0 };
+      const tRef = tNow >= seg.tStart ? tNow : seg.tStart;
+      return moonState(tRef);
+    }
+
+    function label(text, sx, sy, color, align = "left") {
+      ctx.font = MONO;
+      ctx.textAlign = align;
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(5,7,13,0.85)";
+      ctx.strokeText(text, sx, sy);
+      ctx.fillStyle = color;
+      ctx.fillText(text, sx, sy);
+    }
+
+    function drawBody(bx, by, radius, fill, rim) {
+      const s = w2s(bx, by);
+      const r = Math.max(radius * cam.zoom, 2);
+      const g = ctx.createRadialGradient(s.x - r * 0.35, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
+      g.addColorStop(0, rim);
+      g.addColorStop(1, fill);
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r, 0, TAU);
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "#05070d";
+      ctx.fillRect(0, 0, W, H);
+
+      // stars (screen space, faint parallax)
+      const par = 0.02 * cam.zoom;
+      ctx.fillStyle = "#cdd6e8";
+      for (const st of stars) {
+        const x = ((st.x - (ship.x + cam.panX) * par) % W + W) % W;
+        const y = ((st.y + (ship.y + cam.panY) * par) % H + H) % H;
+        ctx.globalAlpha = st.a;
+        ctx.fillRect(x, y, st.r, st.r);
+      }
+      ctx.globalAlpha = 1;
+
+      const moon = moonState(tNow);
+
+      // moon's orbit
+      {
+        const c = w2s(0, 0);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, LUME.orbitRadius * cam.zoom, 0, TAU);
+        ctx.strokeStyle = "rgba(138,143,163,0.18)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // trajectory segments (skip fully-past ones)
+      for (const seg of traj.segs) {
+        if (seg.tEnd < tNow) continue;
+        // solid = what the ship will do with no further burns; dashed = after a planned burn.
+        // Executed burns are history, so only nodes still in the future count.
+        const planStage = traj.sorted.reduce((c, n) => c + (n.t > tNow && n.t <= seg.tStart + 1e-6 ? 1 : 0), 0);
+        const org = segOrigin(seg);
+        ctx.beginPath();
+        let started = false;
+        for (const p of seg.samples) {
+          const s = w2s(p.x + org.x, p.y + org.y);
+          if (!started) { ctx.moveTo(s.x, s.y); started = true; }
+          else ctx.lineTo(s.x, s.y);
+        }
+        ctx.strokeStyle = stageColor(planStage);
+        ctx.globalAlpha = planStage === 0 ? 0.9 : 0.85;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash(planStage === 0 ? [] : [6, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+
+        // apsis markers
+        for (const ap of seg.apsides) {
+          const s = w2s(ap.x + org.x, ap.y + org.y);
+          if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x + 4, s.y); ctx.lineTo(s.x, s.y + 4); ctx.lineTo(s.x - 4, s.y);
+          ctx.closePath();
+          ctx.fillStyle = stageColor(planStage);
+          ctx.fill();
+          label(`${ap.kind} ${fmtKm(ap.alt)}`, s.x + 8, s.y - 8, ap.alt < 0 ? "#e0556b" : "rgba(230,232,239,0.85)");
+        }
+
+        // encounter / exit / impact markers at segment ends
+        if (seg.endType === "soiEnter" && seg.tEnd > tNow) {
+          const st = posVelAt(seg.orbit, seg.tEnd);
+          const s = w2s(st.x + org.x, st.y + org.y);
+          label("Lume encounter ▸", s.x + 8, s.y, "#ffb454");
+          // ghost moon at encounter
+          const gm = moonState(seg.tEnd);
+          const g = w2s(gm.x, gm.y);
+          ctx.beginPath();
+          ctx.arc(g.x, g.y, Math.max(LUME.radius * cam.zoom, 2), 0, TAU);
+          ctx.strokeStyle = "rgba(154,163,178,0.5)";
+          ctx.setLineDash([3, 4]);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(g.x, g.y, LUME.soi * cam.zoom, 0, TAU);
+          ctx.strokeStyle = "rgba(154,163,178,0.2)";
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        if (seg.endType === "impact") {
+          const st = posVelAt(seg.orbit, seg.tEnd);
+          const s = w2s(st.x + org.x, st.y + org.y);
+          ctx.strokeStyle = "#e0556b";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x + 4, s.y + 4);
+          ctx.moveTo(s.x + 4, s.y - 4); ctx.lineTo(s.x - 4, s.y + 4);
+          ctx.stroke();
+          label("impact", s.x + 8, s.y, "#e0556b");
+        }
+      }
+
+      // closest approach markers
+      if (target && ca?.best && ca.best.t >= tNow) {
+        const b = ca.best;
+        const sp = posVelAt(trajSegAt(b.t).orbit, b.t);
+        const mp = moonState(b.t);
+        const s1 = w2s(sp.x, sp.y), s2 = w2s(mp.x, mp.y);
+        ctx.beginPath();
+        ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y);
+        ctx.strokeStyle = "rgba(154,163,178,0.35)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const s of [s1, s2]) {
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 3.5, 0, TAU);
+          ctx.strokeStyle = "#9aa3b2";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
+      }
+
+      // bodies
+      drawBody(0, 0, VESPER.radius, "#1d2c47", "#3f5b8c");
+      drawBody(moon.x, moon.y, LUME.radius, "#4d5364", "#8f97a8");
+      {
+        const s = w2s(moon.x, moon.y);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, LUME.soi * cam.zoom, 0, TAU);
+        ctx.strokeStyle = target === "lume" ? "rgba(140,200,255,0.4)" : "rgba(154,163,178,0.22)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        label("Lume", s.x, s.y - Math.max(LUME.radius * cam.zoom, 2) - 10, "rgba(154,163,178,0.9)", "center");
+        const pv = w2s(0, 0);
+        label("Vesper", pv.x, pv.y - Math.max(VESPER.radius * cam.zoom, 2) - 10, "rgba(154,163,178,0.9)", "center");
+      }
+
+      // maneuver nodes
+      hitNodes.length = 0;
+      hitHandles.length = 0;
+      for (const nd of nodes) {
+        const info = traj.nodeInfo.get(nd.id);
+        if (!info) continue;
+        const org = segOrigin(info.seg);
+        const s = w2s(info.relX + org.x, info.relY + org.y);
+        const executed = nd.t <= tNow;
+        const sel = nd.id === selectedId;
+        ctx.globalAlpha = executed ? 0.35 : 1;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, sel ? 7 : 5, 0, TAU);
+        ctx.strokeStyle = "#ffb454";
+        ctx.lineWidth = sel ? 2 : 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 2, 0, TAU);
+        ctx.fillStyle = "#ffb454";
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        hitNodes.push({ id: nd.id, x: s.x, y: s.y });
+        const dvTot = Math.hypot(nd.prograde, nd.radial);
+        if (dvTot > 0.05 && !executed) label(fmtMps(dvTot), s.x + 10, s.y + 12, "#ffb454");
+
+        if (sel && !executed) {
+          const pg = v2s(info.pgx, info.pgy);
+          const ro = v2s(info.rox, info.roy);
+          const handles = [
+            { ax: "prograde", dir: 1, ux: pg.x, uy: pg.y, color: "#ffd45e" },
+            { ax: "prograde", dir: -1, ux: -pg.x, uy: -pg.y, color: "#ffd45e" },
+            { ax: "radial", dir: 1, ux: ro.x, uy: ro.y, color: "#59e3e3" },
+            { ax: "radial", dir: -1, ux: -ro.x, uy: -ro.y, color: "#59e3e3" },
+          ];
+          for (const h of handles) {
+            const x0 = s.x + h.ux * 10, y0 = s.y + h.uy * 10;
+            const x1 = s.x + h.ux * 28, y1 = s.y + h.uy * 28;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+            ctx.strokeStyle = h.color;
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // arrowhead
+            const px = -h.uy, py = h.ux;
+            ctx.beginPath();
+            ctx.moveTo(x1 + h.ux * 7, y1 + h.uy * 7);
+            ctx.lineTo(x1 + px * 4, y1 + py * 4);
+            ctx.lineTo(x1 - px * 4, y1 - py * 4);
+            ctx.closePath();
+            ctx.fillStyle = h.color;
+            ctx.fill();
+            hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1 + h.ux * 3, y: y1 + h.uy * 3, pgS: pg, roS: ro });
+          }
+        }
+      }
+
+      // ship
+      {
+        const s = w2s(ship.x, ship.y);
+        const dir = v2s(ship.rel.vx, ship.rel.vy);
+        const px = -dir.y, py = dir.x;
+        ctx.beginPath();
+        ctx.moveTo(s.x + dir.x * 7, s.y + dir.y * 7);
+        ctx.lineTo(s.x - dir.x * 5 + px * 4.5, s.y - dir.y * 5 + py * 4.5);
+        ctx.lineTo(s.x - dir.x * 5 - px * 4.5, s.y - dir.y * 5 - py * 4.5);
+        ctx.closePath();
+        ctx.fillStyle = "#e6e8ef";
+        ctx.fill();
+        ctx.strokeStyle = "#5fb2ff";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // snap highlight while dragging/placing
+      if (snapFlash) {
+        ctx.beginPath();
+        ctx.arc(snapFlash.x, snapFlash.y, 9, 0, TAU);
+        ctx.strokeStyle = "#8cc8ff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    function trajSegAt(t) {
+      for (const s of traj.segs) if (t < s.tEnd) return s;
+      return traj.segs[traj.segs.length - 1];
+    }
+
+    /* ============================ interaction ============================ */
+    const hitNodes = [];   // rebuilt every frame
+    const hitHandles = [];
+    let snapFlash = null;
+    let drag = null;       // {kind:'pan'|'node'|'handle', ...}
+    const pointers = new Map();
+    let pinchDist = 0;
+
+    function trajectoryHit(sx, sy, minT) {
+      // nearest point on any drawn segment within 12 px; returns {t} or null
+      let best = null;
+      for (const seg of traj.segs) {
+        if (seg.tEnd < tNow) continue;
+        const org = segOrigin(seg);
+        let prev = null;
+        for (const p of seg.samples) {
+          const s = w2s(p.x + org.x, p.y + org.y);
+          if (prev) {
+            const dx = s.x - prev.x, dy = s.y - prev.y;
+            const len2 = dx * dx + dy * dy || 1;
+            let u = ((sx - prev.x) * dx + (sy - prev.y) * dy) / len2;
+            u = clampN(u, 0, 1);
+            const qx = prev.x + dx * u, qy = prev.y + dy * u;
+            const d = Math.hypot(sx - qx, sy - qy);
+            const t = prev.t + (p.t - prev.t) * u;
+            if (d < 12 && t > minT && (!best || d < best.d)) best = { d, t, seg };
+          }
+          prev = { ...s, t: p.t };
+        }
+      }
+      return best;
+    }
+
+    // snap a candidate time to a nearby Ap/Pe of its segment's orbit (screen-space threshold)
+    function applySnap(t, seg) {
+      snapFlash = null;
+      const o = seg.orbit;
+      const org = segOrigin(seg);
+      const cur = posVelAt(o, t);
+      const sc = w2s(cur.x + org.x, cur.y + org.y);
+      const cands = [{ nu: 0, x: o.rp * o.px, y: o.rp * o.py }];
+      if (o.elliptic) cands.push({ nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py });
+      for (const c of cands) {
+        const s = w2s(c.x + org.x, c.y + org.y);
+        if (Math.hypot(sc.x - s.x, sc.y - s.y) < 16) {
+          const ts = tAtNu(o, c.nu, Math.max(tNow, seg.tStart) + 1e-3);
+          if (ts != null && Math.abs(ts - t) < (o.elliptic ? o.period : Infinity)) {
+            snapFlash = s;
+            return ts;
+          }
+        }
+      }
+      return t;
+    }
+
+    cv.addEventListener("pointerdown", (e) => {
+      cv.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+        drag = { kind: "pinch" };
+        return;
+      }
+      const sx = e.clientX, sy = e.clientY;
+      // handles first
+      for (const h of hitHandles) {
+        if (Math.hypot(sx - h.x, sy - h.y) < 13) {
+          drag = { kind: "handle", h, lastX: sx, lastY: sy };
+          return;
+        }
+      }
+      for (const n of hitNodes) {
+        if (Math.hypot(sx - n.x, sy - n.y) < 12) {
+          const nd = nodes.find((x) => x.id === n.id);
+          const info = traj.nodeInfo.get(n.id);
+          selectedId = n.id;
+          if (nd && info && nd.t > tNow) {
+            // pre-compute the pre-burn orbit's full path for time-dragging
+            const full = { orbit: info.seg.orbit, body: info.seg.body, tStart: info.seg.tStart, tEnd: Infinity };
+            drag = { kind: "node", nd, seg: { ...full, samples: sampleSeg(full) }, moved: false, lastX: sx, lastY: sy };
+          }
+          updatePanel();
+          return;
+        }
+      }
+      drag = { kind: "pan", lastX: sx, lastY: sy, moved: false, downX: sx, downY: sy };
+    });
+
+    cv.addEventListener("pointermove", (e) => {
+      if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!drag) return;
+      if (drag.kind === "pinch" && pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinchDist > 0) {
+          const f = d / pinchDist;
+          cam.zoom = clampN(cam.zoom * f, 0.004, 60);
+          userZoomed = true;
+        }
+        pinchDist = d;
+        return;
+      }
+      const sx = e.clientX, sy = e.clientY;
+      if (drag.kind === "pan") {
+        const dx = sx - drag.lastX, dy = sy - drag.lastY;
+        if (Math.hypot(sx - drag.downX, sy - drag.downY) > 4) drag.moved = true;
+        if (drag.moved) {
+          cam.panX -= dx / cam.zoom;
+          cam.panY += dy / cam.zoom;
+        }
+        drag.lastX = sx; drag.lastY = sy;
+      } else if (drag.kind === "handle") {
+        const dx = sx - drag.lastX, dy = sy - drag.lastY;
+        drag.lastX = sx; drag.lastY = sy;
+        const gain = (e.shiftKey ? 0.06 : 1.2);
+        const h = drag.h;
+        const nd = nodes.find((x) => x.id === h.nodeId);
+        if (!nd) return;
+        const axis = h.ax === "prograde" ? h.pgS : h.roS;
+        const dv = (dx * axis.x + dy * axis.y) * gain;
+        nd[h.ax] = clampN(nd[h.ax] + dv, -20000, 20000);
+        markDirty();
+        updatePanel();
+      } else if (drag.kind === "node") {
+        drag.moved = true;
+        // nearest time on the node's pre-burn orbit
+        let best = null, prev = null;
+        const org = segOrigin(drag.seg);
+        for (const p of drag.seg.samples) {
+          const s = w2s(p.x + org.x, p.y + org.y);
+          if (prev) {
+            const dx = s.x - prev.x, dy = s.y - prev.y;
+            const len2 = dx * dx + dy * dy || 1;
+            let u = clampN(((sx - prev.x) * dx + (sy - prev.y) * dy) / len2, 0, 1);
+            const qx = prev.x + dx * u, qy = prev.y + dy * u;
+            const d = Math.hypot(sx - qx, sy - qy);
+            if (!best || d < best.d) best = { d, t: prev.t + (p.t - prev.t) * u };
+          }
+          prev = { ...s, t: p.t };
+        }
+        if (best) {
+          let t = applySnap(best.t, drag.seg);
+          const lo = Math.max(tNow, drag.seg.tStart) + 1;
+          t = Math.max(t, lo);
+          drag.nd.t = t;
+          markDirty();
+          updatePanel();
+        }
+      }
+    });
+
+    function endPointer(e) {
+      pointers.delete(e.pointerId);
+      if (!drag) return;
+      if (drag.kind === "pan" && !drag.moved) {
+        // click: select moon as target, place node, or deselect
+        const sx = e.clientX, sy = e.clientY;
+        const m = moonState(tNow);
+        const ms = w2s(m.x, m.y);
+        if (Math.hypot(sx - ms.x, sy - ms.y) < Math.max(LUME.radius * cam.zoom, 10) + 4) {
+          target = target === "lume" ? null : "lume";
+          ca = null;
+          if (targetSel) targetSel.value = target || "";
+          updatePanel();
+        } else {
+          const hit = trajectoryHit(sx, sy, tNow + 1);
+          if (hit) {
+            const t = applySnap(hit.t, hit.seg);
+            const nd = { id: nodeSeq++, t: Math.max(t, tNow + 1), prograde: 0, radial: 0 };
+            nodes.push(nd);
+            selectedId = nd.id;
+            markDirty();
+          } else {
+            selectedId = null;
+          }
+          updatePanel();
+        }
+      }
+      if (drag.kind === "node") snapFlash = null;
+      drag = null;
+      pinchDist = 0;
+    }
+    cv.addEventListener("pointerup", endPointer);
+    cv.addEventListener("pointercancel", endPointer);
+
+    cv.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const f = Math.pow(1.0015, -e.deltaY);
+      const before = s2w(e.clientX, e.clientY);
+      cam.zoom = clampN(cam.zoom * f, 0.004, 60);
+      userZoomed = true;
+      const after = s2w(e.clientX, e.clientY);
+      cam.panX += before.x - after.x;
+      cam.panY += before.y - after.y;
+    }, { passive: false });
+
+    /* ============================== UI ============================== */
+    const $ = (id) => document.getElementById(id);
+    let targetSel = null;
+
+    function selectedNode() { return nodes.find((n) => n.id === selectedId) || null; }
+
+    function deleteNode(id) {
+      const i = nodes.findIndex((n) => n.id === id);
+      if (i >= 0) nodes.splice(i, 1);
+      if (selectedId === id) selectedId = null;
+      markDirty();
+      updatePanel();
+    }
+
+    function setRateButtons() {
+      if (bg) return;
+      $("rate").textContent = (rateDir < 0 ? "−" : "") + RATES[rateIdx].toLocaleString("en-US") + "×";
+      $("pause").textContent = paused ? "▶" : "⏸";
+    }
+
+    function slower() {
+      if (rateDir > 0) { if (rateIdx > 0) rateIdx--; else rateDir = -1; }
+      else if (rateIdx < RATES.length - 1) rateIdx++;
+      setRateButtons();
+    }
+    function faster() {
+      if (rateDir < 0) { if (rateIdx > 0) rateIdx--; else rateDir = 1; }
+      else if (rateIdx < RATES.length - 1) rateIdx++;
+      setRateButtons();
+    }
+
+    function updatePanel() {
+      if (bg) return;
+      const nd = selectedNode();
+      $("nodeHint").style.display = nd ? "none" : "";
+      $("nodeEditor").style.display = nd ? "" : "none";
+      if (nd) {
+        const executed = nd.t <= tNow;
+        $("ndT").textContent = fmtClock(nd.t);
+        $("ndPro").textContent = fmtMps(nd.prograde);
+        $("ndRad").textContent = fmtMps(nd.radial);
+        $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial));
+        $("ndDone").style.display = executed ? "" : "none";
+      }
+      $("fpCount").textContent = String(nodes.length);
+      $("fpDv").textContent = fmtMps(nodes.reduce((s, n) => s + Math.hypot(n.prograde, n.radial), 0));
+      $("targetInfo").style.display = target ? "" : "none";
+    }
+
+    function updateReadouts() {
+      if (bg) return;
+      const seg = ship.seg;
+      const o = seg.orbit;
+      const B = BODIES[seg.body];
+      const impacted = seg.endType === "impact" && tNow >= seg.tEnd;
+      $("roStatus").textContent = impacted
+        ? `impacted ${B.name}`
+        : (o.elliptic ? `orbiting ${B.name}` : `escaping ${B.name}`);
+      if (impacted) $("roStatus").classList.add("mk-danger"); else $("roStatus").classList.remove("mk-danger");
+      $("roAlt").textContent = fmtKm(Math.max(ship.rel.r - B.radius, 0));
+      $("roVel").textContent = fmtMps(Math.hypot(ship.rel.vx, ship.rel.vy) * 1000);
+      $("roAp").textContent = o.elliptic ? fmtKm(o.ra - B.radius) : "—";
+      const peAlt = o.rp - B.radius;
+      $("roPe").textContent = fmtKm(peAlt);
+      $("roPe").classList.toggle("mk-danger", peAlt < 0);
+      $("roPeriod").textContent = o.elliptic ? fmtDur(o.period) : "—";
+      $("clock").textContent = fmtClock(tNow);
+
+      if (target) {
+        const encSeg = traj.segs.find((s) => s.endType === "soiEnter" && s.tEnd > tNow);
+        if (encSeg) {
+          $("roCa").textContent = "encounter";
+          $("roCaT").textContent = "in " + fmtDur(encSeg.tEnd - tNow);
+        } else if (ship.seg.body === "lume") {
+          $("roCa").textContent = fmtKm(ship.rel.r - LUME.radius);
+          $("roCaT").textContent = "inside SOI";
+        } else if (ca?.best && ca.best.t >= tNow) {
+          $("roCa").textContent = fmtKm(ca.best.d);
+          $("roCaT").textContent = "in " + fmtDur(ca.best.t - tNow);
+        } else {
+          $("roCa").textContent = "—";
+          $("roCaT").textContent = "—";
+        }
+      }
+    }
+
+    if (!bg) {
+      targetSel = $("targetSel");
+      targetSel.addEventListener("change", () => {
+        target = targetSel.value || null;
+        ca = null;
+        updatePanel();
+      });
+      $("slower").addEventListener("click", slower);
+      $("faster").addEventListener("click", faster);
+      $("pause").addEventListener("click", () => { paused = !paused; setRateButtons(); });
+      $("resetView").addEventListener("click", () => { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; });
+      $("jumpGo").addEventListener("click", () => {
+        const t = parseTimeInput($("jumpIn").value);
+        if (t != null) { tNow = Math.max(0, t); ca = null; }
+      });
+      $("jumpIn").addEventListener("keydown", (e) => { if (e.key === "Enter") $("jumpGo").click(); });
+      $("warpNode").addEventListener("click", () => {
+        const nd = selectedNode();
+        if (nd) { tNow = Math.max(0, nd.t - 5); paused = true; setRateButtons(); }
+      });
+      $("delNode").addEventListener("click", () => { if (selectedId != null) deleteNode(selectedId); });
+      $("clearNodes").addEventListener("click", () => {
+        nodes.length = 0;
+        selectedId = null;
+        markDirty();
+        updatePanel();
+      });
+      for (const btn of document.querySelectorAll(".mk-step")) {
+        btn.addEventListener("click", (e) => {
+          const nd = selectedNode();
+          if (!nd || nd.t <= tNow) return;
+          const step = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
+          nd[btn.dataset.ax] = clampN(nd[btn.dataset.ax] + step * (+btn.dataset.d), -20000, 20000);
+          markDirty();
+          updatePanel();
+        });
+      }
+      window.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+        if (e.key === " ") { e.preventDefault(); paused = !paused; setRateButtons(); }
+        else if (e.key === ",") slower();
+        else if (e.key === ".") faster();
+        else if (e.key === "r") { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; }
+        else if (e.key === "Escape") { selectedId = null; updatePanel(); }
+        else if (e.key === "Delete" || e.key === "Backspace") { if (selectedId != null) deleteNode(selectedId); }
+      });
+      setRateButtons();
+      updatePanel();
+    }
+
+    /* ============================ main loop ============================ */
+    window.addEventListener("resize", resize);
+    resize();
+
+    let lastWall = performance.now();
+    function tick(now) {
+      const dt = Math.min((now - lastWall) / 1000, 0.05);
+      lastWall = now;
+      recompileIfDirty();
+      if (!paused) {
+        const prevT = tNow;
+        tNow = Math.max(0, tNow + dt * RATES[rateIdx] * rateDir);
+        // stop the clock at an impact instead of sailing through the ground
+        const last = traj.segs[traj.segs.length - 1];
+        if (last.endType === "impact" && prevT < last.tEnd && tNow >= last.tEnd) {
+          tNow = last.tEnd;
+          paused = true;
+          setRateButtons();
+        }
+      }
+      ship = shipStateAt(traj, tNow);
+      updateCA();
+      draw();
+      updateReadouts();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
