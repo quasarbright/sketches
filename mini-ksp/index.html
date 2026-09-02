@@ -105,7 +105,7 @@
       </select>
     </div>
     <div class="control">
-      <div class="control-head"><span class="name" title="what the camera stays centered on — panning is relative to this">camera</span></div>
+      <div class="control-head"><span class="name" title="what the camera stays centered on — panning is relative to this">camera focus</span></div>
       <select id="focusSel" title="what the camera stays centered on — panning is relative to this">
         <option value="ship">Ship</option>
       </select>
@@ -139,8 +139,10 @@
     </div>
 
     <div class="section-label mk-sect">flight plan</div>
-    <div class="mk-row"><span class="mk-k" title="how many maneuvers are still ahead">maneuvers</span><span class="mk-v" id="fpCount">0</span></div>
-    <div class="mk-row"><span class="mk-k" title="total speed change the remaining plan costs">total Δv</span><span class="mk-v" id="fpDv">0 m/s</span></div>
+    <div id="fpList"></div>
+    <div class="mk-row"><span class="mk-k" title="Δv already burned by executed maneuvers">Δv spent</span><span class="mk-v" id="fpSpent">0 m/s</span></div>
+    <div class="mk-row"><span class="mk-k" title="Δv the remaining planned maneuvers will cost">Δv planned</span><span class="mk-v" id="fpDv">0 m/s</span></div>
+    <div class="mk-row"><span class="mk-k" title="what the whole trip will have cost once the plan is done">Δv after plan</span><span class="mk-v" id="fpTotal">0 m/s</span></div>
     <div class="mk-actions"><button class="btn" id="clearNodes" title="remove every planned maneuver (executed maneuvers are history)">clear all</button></div>
 
     <div class="section-label mk-sect">display</div>
@@ -163,6 +165,14 @@
     <div class="mk-actions">
       <button class="btn btn-primary" id="pmAdd" title="place a maneuver at this point on the path">add maneuver</button>
       <button class="btn" id="pmWarp" title="jump the clock to this point">warp here</button>
+    </div>
+  </div>
+
+  <div id="bodyMenu" class="panel mk-pathmenu" style="display:none">
+    <div class="mk-pm-time" id="bmName"></div>
+    <div class="mk-actions">
+      <button class="btn btn-primary" id="bmTarget" title="track this body — closest-approach markers and encounters">select as target</button>
+      <button class="btn" id="bmFocus" title="keep the camera centered on this body">select as camera focus</button>
     </div>
   </div>
 
@@ -497,6 +507,7 @@
     // labels are queued and drawn last, so text always sits above planets
     let labelQueue = [];
     let gizmoDraw = null; // maneuver handles render after the label flush
+    let nodeColors = new Map(); // node id -> its post-burn patch color
     function label(text, sx, sy, color, align = "left", alpha = 1) { labelQueue.push([text, sx, sy, color, align, alpha]); }
     function flushLabels() {
       ctx.font = MONO;
@@ -694,6 +705,13 @@
       // trajectory segments — only what the visibility walk says to draw
       visList = visibleSegments(traj, tNow, patchLimit);
       visSet = new Set(visList.map((v) => v.seg));
+      // each maneuver wears the color of the patch it creates (the segment
+      // starting at its burn) — the sidebar list uses the same colors
+      nodeColors = new Map();
+      for (const [i, v] of visList.entries()) {
+        const nd = nodes.find((n) => Math.abs(n.t - v.seg.tStart) < 1e-6);
+        if (nd) nodeColors.set(nd.id, patchColor(i));
+      }
       extMap = new Map();
       let prevSeg = null, prevOrg = null;
       for (const [idx, v] of visList.entries()) {
@@ -973,6 +991,23 @@
         ctx.fillStyle = "rgba(255,180,84,0.9)";
         ctx.fill();
       }
+      // the body popup rides its (moving) body; a hovered body gets a ring
+      if (bodyMenuPending) {
+        const bs = bodyStateAt(SYSTEM, bodyMenuPending, tNow);
+        const s = w2s(bs.x, bs.y);
+        bodyMenu.style.left = clampN(s.x + 14, 8, W - 230) + "px";
+        bodyMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
+      }
+      if (hoverBody) {
+        const b = SYSTEM.bodies[hoverBody];
+        const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
+        const s = w2s(bs.x, bs.y);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, Math.max(b.radius * cam.zoom, 10) + 4, 0, TAU);
+        ctx.strokeStyle = "rgba(230,235,245,0.75)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
 
       // snap highlight while dragging/placing
       if (snapFlash) {
@@ -999,7 +1034,9 @@
     let pinchDist = 0;
 
     const pathMenu = document.getElementById("pathMenu");
+    const bodyMenu = document.getElementById("bodyMenu");
     function openMenu(t, seg, origin = "ext") {
+      closeBodyMenu();
       menuPending = { t, seg, origin };
       document.getElementById("pmTime").textContent = fmtClock(t);
       pathMenu.style.display = "";
@@ -1011,6 +1048,29 @@
     function positionMenu(s) {
       pathMenu.style.left = clampN(s.x + 14, 8, W - 190) + "px";
       pathMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
+    }
+    let bodyMenuPending = null; // body id the body popup is about
+    let hoverBody = null;       // body id under the cursor (paths take precedence)
+    function openBodyMenu(id, s) {
+      closeMenu();
+      bodyMenuPending = id;
+      document.getElementById("bmName").textContent = SYSTEM.bodies[id].name;
+      bodyMenu.style.display = "";
+      bodyMenu.style.left = clampN(s.x + 14, 8, W - 230) + "px";
+      bodyMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
+    }
+    function closeBodyMenu() {
+      bodyMenuPending = null;
+      bodyMenu.style.display = "none";
+    }
+    function bodyAt(sx, sy) {
+      for (const b of Object.values(SYSTEM.bodies)) {
+        if (!b.parent) continue;
+        const bs = bodyStateAt(SYSTEM, b.id, tNow);
+        const sp = w2s(bs.x, bs.y);
+        if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * cam.zoom, 10) + 4) return b.id;
+      }
+      return null;
     }
 
     let toastTimer = 0;
@@ -1153,14 +1213,17 @@
         const hit = trajectoryHit(e.clientX, e.clientY, tNow + 1);
         if (hit) {
           hoverGhost = { t: applySnap(hit.t, hit.seg, hit.origin, e.clientX, e.clientY), seg: hit.seg, origin: hit.origin };
+          hoverBody = null; // a path under the cursor beats the body beneath it
         } else {
           hoverGhost = null;
           snapFlash = null;
+          hoverBody = bodyAt(e.clientX, e.clientY);
         }
-        cv.style.cursor = hoverGhost ? "pointer" : "";
+        cv.style.cursor = (hoverGhost || hoverBody) ? "pointer" : "";
         return;
       }
       hoverGhost = null;
+      hoverBody = null;
       if (drag.kind === "pinch" && pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -1213,24 +1276,15 @@
         // a path hit always beats the body disc beneath it (see resolveMapClick)
         const sx = e.clientX, sy = e.clientY;
         const pathHit = trajectoryHit(sx, sy, tNow + 1);
-        let clickedBody = null;
-        for (const b of Object.values(SYSTEM.bodies)) {
-          if (!b.parent) continue;
-          const bs = bodyStateAt(SYSTEM, b.id, tNow);
-          const sp = w2s(bs.x, bs.y);
-          if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * cam.zoom, 10) + 4) { clickedBody = b.id; break; }
-        }
-        const res = resolveMapClick(pathHit, clickedBody);
+        const res = resolveMapClick(pathHit, bodyAt(sx, sy));
         if (res.kind === "path") {
           openMenu(applySnap(pathHit.t, pathHit.seg, pathHit.origin, sx, sy), pathHit.seg, pathHit.origin);
           snapFlash = null;
         } else if (res.kind === "body") {
-          target = target === res.body ? null : res.body;
-          ca = null;
-          if (targetSel) targetSel.value = target || "";
-          updatePanel();
+          openBodyMenu(res.body, { x: sx, y: sy });
         } else {
           closeMenu();
+          closeBodyMenu();
           selectedId = null;
           updatePanel();
         }
@@ -1323,10 +1377,42 @@
       $("roPeriod").textContent = o.elliptic ? fmtDur(o.period) : "—";
       $("clock").textContent = fmtClock(tNow);
 
-      // the flight plan is what's still ahead; executed burns are history
-      const future = nodes.filter((n) => n.t > tNow);
-      $("fpCount").textContent = String(future.length);
-      $("fpDv").textContent = fmtMps(future.reduce((s, n) => s + Math.hypot(n.prograde, n.radial), 0));
+      // flight plan: every maneuver, colored like its patch; executed ones dim.
+      // Totals: Δv burned so far, Δv the plan still costs, and their sum.
+      const dvOf = (n) => Math.hypot(n.prograde, n.radial);
+      const spent = nodes.filter((n) => n.t <= tNow).reduce((s, n) => s + dvOf(n), 0);
+      const planned = nodes.filter((n) => n.t > tNow).reduce((s, n) => s + dvOf(n), 0);
+      $("fpSpent").textContent = fmtMps(spent);
+      $("fpDv").textContent = fmtMps(planned);
+      $("fpTotal").textContent = fmtMps(spent + planned);
+      const list = $("fpList");
+      const sorted = nodes.slice().sort((a, b) => a.t - b.t);
+      if (list.childElementCount !== sorted.length) {
+        list.textContent = "";
+        for (const n of sorted) {
+          const row = document.createElement("div");
+          row.className = "mk-row mk-fprow";
+          row.style.cursor = "pointer";
+          row.innerHTML = '<span class="mk-k"></span><span class="mk-v"></span>';
+          row.addEventListener("click", () => {
+            const nd = nodes.find((x) => x.id === +row.dataset.id);
+            if (nd && nd.t > tNow) { selectedId = nd.id; updatePanel(); }
+          });
+          list.appendChild(row);
+        }
+      }
+      sorted.forEach((n, i) => {
+        const row = list.children[i];
+        const done = n.t <= tNow;
+        row.dataset.id = String(n.id);
+        const k = row.children[0], v = row.children[1];
+        k.textContent = (done ? "✓ " : "") + "T+ " + fmtDur(n.t).replace(/ /g, "");
+        k.title = done ? "already executed" : "click to edit this maneuver";
+        k.style.color = done ? "rgba(154,163,178,0.6)" : (nodeColors.get(n.id) ?? "#e6e8ef");
+        v.textContent = fmtMps(dvOf(n));
+        v.style.opacity = done ? "0.55" : "1";
+        row.style.outline = n.id === selectedId ? "1px solid rgba(140,165,210,0.35)" : "none";
+      });
 
       if (target) {
         const tb = SYSTEM.bodies[target];
@@ -1417,6 +1503,21 @@
         closeMenu();
         doJump(t);
       });
+      $("bmTarget").addEventListener("click", () => {
+        if (!bodyMenuPending) return;
+        target = bodyMenuPending;
+        ca = null;
+        if (targetSel) targetSel.value = target;
+        closeBodyMenu();
+        updatePanel();
+      });
+      $("bmFocus").addEventListener("click", () => {
+        if (!bodyMenuPending) return;
+        focus = bodyMenuPending;
+        $("focusSel").value = focus;
+        cam.panX = 0; cam.panY = 0; // re-center on the new focus
+        closeBodyMenu();
+      });
       for (const [id, ax] of [["ndPro", "prograde"], ["ndRad", "radial"]]) {
         const el = $(id);
         el.addEventListener("input", () => {
@@ -1447,7 +1548,7 @@
         else if (e.key === ",") slower();
         else if (e.key === ".") faster();
         else if (e.key === "r") { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; }
-        else if (e.key === "Escape") { closeMenu(); selectedId = null; updatePanel(); }
+        else if (e.key === "Escape") { closeMenu(); closeBodyMenu(); selectedId = null; updatePanel(); }
         else if (e.key === "Delete" || e.key === "Backspace") { if (selectedId != null) deleteNode(selectedId); }
       });
       setRateButtons();
@@ -1498,6 +1599,7 @@
           draw();
           out.draw += performance.now() - t0;
         }
+        updateReadouts();
         for (const k in out) out[k] = +(out[k] / n).toFixed(2);
         return out;
       },
