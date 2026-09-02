@@ -44,15 +44,30 @@
     .mk-v { font-family: var(--font-mono); font-size: .8rem; color: var(--text); text-align: right; }
     .mk-v.mk-danger { color: var(--danger); }
     .mk-hint { color: var(--faint); font-size: .78rem; line-height: 1.4; margin: 2px 0 4px; }
-    .mk-dv { display: grid; grid-template-columns: 62px 30px 1fr 30px; gap: 6px; align-items: center; padding: 2px 0; }
+    .mk-dv { display: grid; grid-template-columns: 62px 1fr; gap: 8px; align-items: center; padding: 3px 0; }
     .mk-dv .mk-dvlab { font-size: .78rem; }
-    .mk-dv input {
-      width: 100%; min-width: 0; background: var(--panel-2); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-mono);
-      font-size: .78rem; padding: 3px 6px; text-align: right;
+    /* one fused stepper capsule per axis: [−][value][+] behind a single
+       border, with the axis color as a left edge (and as the focus tint) */
+    .mk-cap {
+      display: grid; grid-template-columns: 26px 1fr 26px; align-items: stretch;
+      height: 27px; overflow: hidden;
+      background: var(--panel-2); border: 1px solid var(--border);
+      border-left: 2px solid var(--ax, var(--border)); border-radius: var(--radius-sm);
+    }
+    .mk-cap:focus-within { border-color: var(--ax, var(--border)); }
+    .mk-cap .mk-step {
+      border: 0; background: transparent; color: var(--muted); cursor: pointer;
+      font-family: var(--font-mono); font-size: .9rem; line-height: 1; padding: 0;
+    }
+    .mk-cap .mk-step:hover { background: rgba(140, 165, 210, 0.09); color: var(--text); }
+    .mk-cap .mk-step:active { background: rgba(140, 165, 210, 0.16); }
+    .mk-cap input {
+      width: 100%; min-width: 0; border: 0; outline: none; background: transparent;
+      border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-mono); font-size: .78rem;
+      text-align: right; padding: 0 6px;
     }
     .control-bar .btn { white-space: nowrap; }
-    .mk-step { padding: 0 8px; line-height: 1.5; font-family: var(--font-mono); }
     .mk-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
     .mk-jump { display: flex; gap: 6px; margin-top: 4px; }
     .mk-jump input {
@@ -124,15 +139,19 @@
       <div class="mk-row"><span class="mk-k" title="when this maneuver fires — maneuvers execute automatically at their time">maneuver at</span><span class="mk-v" id="ndT">—</span></div>
       <div class="mk-dv">
         <span class="mk-dvlab" style="color:var(--pro)" title="speed change along your direction of motion, in m/s — positive raises the far side of the orbit, negative lowers it">prograde</span>
-        <button class="btn mk-step" data-ax="prograde" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
-        <input id="ndPro" inputmode="decimal" title="prograde Δv in m/s — type an exact value" />
-        <button class="btn mk-step" data-ax="prograde" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+        <div class="mk-cap" style="--ax: var(--pro)">
+          <button class="mk-step" data-ax="prograde" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
+          <input id="ndPro" inputmode="decimal" title="prograde Δv in m/s — type an exact value" />
+          <button class="mk-step" data-ax="prograde" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+        </div>
       </div>
       <div class="mk-dv">
         <span class="mk-dvlab" style="color:var(--rad)" title="sideways speed change in m/s, perpendicular to your path — positive pushes away from the body, rotating the orbit">radial</span>
-        <button class="btn mk-step" data-ax="radial" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
-        <input id="ndRad" inputmode="decimal" title="radial Δv in m/s — type an exact value" />
-        <button class="btn mk-step" data-ax="radial" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+        <div class="mk-cap" style="--ax: var(--rad)">
+          <button class="mk-step" data-ax="radial" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
+          <input id="ndRad" inputmode="decimal" title="radial Δv in m/s — type an exact value" />
+          <button class="mk-step" data-ax="radial" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+        </div>
       </div>
       <div class="mk-row"><span class="mk-k" title="total speed change this maneuver costs">maneuver Δv</span><span class="mk-v" id="ndDv">—</span></div>
       <div class="mk-actions">
@@ -1013,7 +1032,8 @@
         const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
         const s = w2s(bs.x, bs.y);
         ctx.beginPath();
-        ctx.arc(s.x, s.y, Math.max(b.radius * cam.zoom, 10) + 4, 0, TAU);
+        // floors at the same 5px a maneuver node's circle uses
+        ctx.arc(s.x, s.y, Math.max(b.radius * cam.zoom + 4, 5), 0, TAU);
         ctx.strokeStyle = "rgba(230,235,245,0.75)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -1445,6 +1465,9 @@
         v.style.opacity = done ? "0.55" : "1";
         row.style.outline = n.id === selectedId ? "1px solid rgba(140,165,210,0.35)" : "none";
       });
+      // the editor's timestamp wears the selected maneuver's patch color
+      const selNd = nodes.find((n) => n.id === selectedId);
+      if (selNd) $("ndT").style.color = nodeColors.get(selNd.id) ?? "";
 
       if (target) {
         const tb = SYSTEM.bodies[target];
@@ -1549,6 +1572,10 @@
         $("focusSel").value = focus;
         cam.panX = 0; cam.panY = 0; // re-center on the new focus
         closeBodyMenu();
+      });
+      // any sidebar click that isn't on a plan row dismisses the rewind popup
+      document.querySelector("control-panel").addEventListener("click", (e) => {
+        if (!e.target.closest(".mk-fprow")) closeFpMenu();
       });
       $("fpmRewind").addEventListener("click", () => {
         if (fpMenuPending == null) return;
