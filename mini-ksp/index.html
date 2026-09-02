@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>mini ksp</title>
+  <title>welcome to shmorbit</title>
   <link rel="stylesheet" href="../shared/cohesion.css" />
   <script type="module" src="../shared/cohesion.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -44,9 +44,13 @@
     .mk-v { font-family: var(--font-mono); font-size: .8rem; color: var(--text); text-align: right; }
     .mk-v.mk-danger { color: var(--danger); }
     .mk-hint { color: var(--faint); font-size: .78rem; line-height: 1.4; margin: 2px 0 4px; }
-    .mk-dv { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-    .mk-dv .mk-dvlab { font-size: .78rem; width: 62px; }
-    .mk-dv .mk-v { flex: 1; white-space: nowrap; }
+    .mk-dv { display: grid; grid-template-columns: 62px 30px 1fr 30px; gap: 6px; align-items: center; padding: 2px 0; }
+    .mk-dv .mk-dvlab { font-size: .78rem; }
+    .mk-dv input {
+      width: 100%; min-width: 0; background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-mono);
+      font-size: .78rem; padding: 3px 6px; text-align: right;
+    }
     .control-bar .btn { white-space: nowrap; }
     .mk-step { padding: 0 8px; line-height: 1.5; font-family: var(--font-mono); }
     .mk-actions { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
@@ -56,8 +60,19 @@
       border-radius: var(--radius-sm); color: var(--text); font-family: var(--font-mono);
       font-size: .78rem; padding: 4px 8px;
     }
+    .mk-pathmenu { position: fixed; z-index: 6; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .mk-pathmenu .mk-pm-time { font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
+    html[data-background] .mk-pathmenu { display: none !important; }
+    .mk-toast {
+      position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 7;
+      font-family: var(--font-mono); font-size: .85rem; color: var(--danger);
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 14px; opacity: 0; transition: opacity .3s; pointer-events: none;
+    }
+    .mk-toast.show { opacity: 1; }
+    html[data-background] .mk-toast { display: none !important; }
     .mk-sect { margin-top: 10px; }
-    select#targetSel {
+    select#targetSel, select#focusSel {
       width: 100%; background: var(--panel-2); border: 1px solid var(--border);
       border-radius: var(--radius-sm); color: var(--text); padding: 4px 6px; font-size: .82rem;
     }
@@ -70,7 +85,7 @@
   <canvas id="c"></canvas>
 
   <div class="mk-title">
-    <div class="mk-name">mini ksp</div>
+    <div class="mk-name">welcome to shmorbit</div>
     <div class="mk-sub">patched-conic sandbox</div>
   </div>
 
@@ -87,7 +102,12 @@
     <div class="control">
       <select id="targetSel" title="pick a body to track — shows where your path comes closest to it">
         <option value="">no target</option>
-        <option value="lume">Lume (moon)</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="what the camera stays centered on — panning is relative to this">camera</span></div>
+      <select id="focusSel" title="what the camera stays centered on — panning is relative to this">
+        <option value="ship">Ship</option>
       </select>
     </div>
     <div id="targetInfo" style="display:none">
@@ -96,33 +116,40 @@
     </div>
 
     <div class="section-label mk-sect">maneuver</div>
-    <div id="nodeHint" class="mk-hint">Click the orbit to place a burn. Drag its yellow handles for prograde/retrograde, cyan for radial. Drag the node itself to slide it in time (snaps to Ap/Pe).</div>
+    <div id="nodeHint" class="mk-hint">Click your path to add a maneuver or warp there. Drag a maneuver's yellow handles for prograde/retrograde, cyan for radial — hold further out to build Δv faster. Drag the maneuver itself to slide it in time (snaps to Ap/Pe).</div>
     <div id="nodeEditor" style="display:none">
-      <div class="mk-row"><span class="mk-k" title="when this burn fires — burns execute automatically at their time">burn at</span><span class="mk-v" id="ndT">—</span></div>
+      <div class="mk-row"><span class="mk-k" title="when this maneuver fires — maneuvers execute automatically at their time">maneuver at</span><span class="mk-v" id="ndT">—</span></div>
       <div class="mk-dv">
-        <span class="mk-dvlab" style="color:var(--pro)" title="speed change along your direction of motion — positive raises the far side of the orbit, negative lowers it">prograde</span>
+        <span class="mk-dvlab" style="color:var(--pro)" title="speed change along your direction of motion, in m/s — positive raises the far side of the orbit, negative lowers it">prograde</span>
         <button class="btn mk-step" data-ax="prograde" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
-        <span class="mk-v" id="ndPro">0.0</span>
+        <input id="ndPro" inputmode="decimal" title="prograde Δv in m/s — type an exact value" />
         <button class="btn mk-step" data-ax="prograde" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
       </div>
       <div class="mk-dv">
-        <span class="mk-dvlab" style="color:var(--rad)" title="speed change straight away from the body (positive) or toward it (negative) — rotates the orbit">radial</span>
+        <span class="mk-dvlab" style="color:var(--rad)" title="sideways speed change in m/s, perpendicular to your path — positive pushes away from the body, rotating the orbit">radial</span>
         <button class="btn mk-step" data-ax="radial" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
-        <span class="mk-v" id="ndRad">0.0</span>
+        <input id="ndRad" inputmode="decimal" title="radial Δv in m/s — type an exact value" />
         <button class="btn mk-step" data-ax="radial" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
       </div>
-      <div class="mk-row"><span class="mk-k" title="total speed change this burn costs">burn Δv</span><span class="mk-v" id="ndDv">—</span></div>
-      <div id="ndDone" class="mk-hint" style="display:none">This burn is in the past. Rewind to before it to edit it.</div>
+      <div class="mk-row"><span class="mk-k" title="total speed change this maneuver costs">maneuver Δv</span><span class="mk-v" id="ndDv">—</span></div>
       <div class="mk-actions">
-        <button class="btn" id="warpNode" title="jump time to just before this burn">go to burn</button>
-        <button class="btn" id="delNode" title="remove this burn from the flight plan">delete</button>
+        <button class="btn" id="warpNode" title="jump time to the moment this maneuver fires">warp to maneuver</button>
+        <button class="btn" id="delNode" title="remove this maneuver from the flight plan">delete</button>
       </div>
     </div>
 
     <div class="section-label mk-sect">flight plan</div>
-    <div class="mk-row"><span class="mk-k" title="how many burns are in the plan">burns</span><span class="mk-v" id="fpCount">0</span></div>
-    <div class="mk-row"><span class="mk-k" title="total speed change the whole plan costs">total Δv</span><span class="mk-v" id="fpDv">0 m/s</span></div>
-    <div class="mk-actions"><button class="btn" id="clearNodes" title="remove every burn">clear all</button></div>
+    <div class="mk-row"><span class="mk-k" title="how many maneuvers are still ahead">maneuvers</span><span class="mk-v" id="fpCount">0</span></div>
+    <div class="mk-row"><span class="mk-k" title="total speed change the remaining plan costs">total Δv</span><span class="mk-v" id="fpDv">0 m/s</span></div>
+    <div class="mk-actions"><button class="btn" id="clearNodes" title="remove every planned maneuver (executed maneuvers are history)">clear all</button></div>
+
+    <div class="section-label mk-sect">display</div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="how many orbit patches to draw past SOI changes — higher looks further into the future">patches</span><span class="value" id="plVal">2</span></div>
+      <input type="range" id="patchSlider" min="1" max="10" step="1" value="2" title="how many orbit patches to draw past SOI changes — higher looks further into the future" />
+    </div>
+    <label class="check"><input type="checkbox" id="snapChk" checked title="snap maneuvers to Ap/Pe when placing or dragging them" /> snap to Ap/Pe</label>
+    <label class="check"><input type="checkbox" id="soiChk" title="draw each body's sphere of influence" /> show SOI</label>
 
     <div class="section-label mk-sect">time</div>
     <div class="mk-jump">
@@ -130,6 +157,16 @@
       <button class="btn" id="jumpGo" title="jump to the entered time">go</button>
     </div>
   </control-panel>
+
+  <div id="pathMenu" class="panel mk-pathmenu" style="display:none">
+    <div class="mk-pm-time" id="pmTime"></div>
+    <div class="mk-actions">
+      <button class="btn btn-primary" id="pmAdd" title="place a maneuver at this point on the path">add maneuver</button>
+      <button class="btn" id="pmWarp" title="jump the clock to this point">warp here</button>
+    </div>
+  </div>
+
+  <div id="toast" class="mk-toast"></div>
 
   <div class="control-bar">
     <button class="btn" id="slower" title="slow down time — keeps going into reverse (rewind)">◀◀</button>
@@ -139,29 +176,36 @@
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
     <about-modal label="about">
-      <h2 class="title">mini ksp</h2>
-      <p>An orbital mechanics sandbox with no rocket — just a ship, a planet (Vesper), a moon (Lume),
-        and Kepler. Everything counterintuitive about orbits lives here: to catch up to something,
-        slow down; to go faster at the far side, burn at the near side.</p>
+      <h2 class="title">welcome to shmorbit</h2>
+      <p>An orbital mechanics sandbox with no rocket — just a ship, the real solar system, and
+        Kepler. Everything counterintuitive about orbits lives here: to catch up to something,
+        slow down; to go faster at the far side, burn at the near side. Sizes, masses, and orbits
+        are the real ones (flattened to a plane), so a Mars transfer really costs ~3.6 km/s and
+        really takes five months.</p>
       <div class="section-label">the model</div>
-      <p>Motion is one two-body problem at a time. Near Vesper you're on a conic (ellipse or
-        hyperbola) around Vesper; inside Lume's <em>sphere of influence</em> — the region where the
-        moon's gravity dominates, drawn as the dashed circle — you're on a conic around Lume. The
-        path is these conics patched together at the boundary. Each conic obeys vis-viva,
+      <p>Motion is one two-body problem at a time. Near Earth you're on a conic (ellipse or
+        hyperbola) around Earth; inside the Moon's <em>sphere of influence</em> — the region where
+        its gravity dominates — you're on a conic around the Moon, and past Earth's own sphere of
+        influence you're on an orbit around the Sun. The path is these conics patched together at
+        the boundaries. Each conic obeys vis-viva,
         $v^2 = \mu\left(\frac{2}{r} - \frac{1}{a}\right)$, and is solved in closed form: no
-        simulation steps, just Kepler's equation. Burns are instant velocity changes that fire
+        simulation steps, just Kepler's equation. Maneuvers are instant velocity changes that fire
         automatically at their planned time.</p>
       <div class="section-label">why time travel is free</div>
       <p>Because everything is closed-form, your position is a pure function of the clock and the
         flight plan. Warp, rewind, and jump don't fast-forward a simulation — they just move the
-        clock. Rewinding to before a burn un-executes it, and the future re-forms the moment you
-        edit the plan.</p>
+        clock. Rewinding to before a maneuver un-executes it, and the future re-forms the moment
+        you edit the plan.</p>
+      <p>The one thing that must be hunted for rather than solved for is where your path first dips
+        into the Moon's sphere of influence, so the future is only surveyed a few weeks ahead. A long
+        warp surveys as it goes — and if it turns up an encounter your map didn't show, the warp
+        stops just before it.</p>
       <div class="section-label">flying</div>
       <ul>
-        <li>Click your trajectory to place a burn; it snaps to Ap/Pe when close.</li>
+        <li>Click your trajectory to place a maneuver or warp to that point; maneuvers snap to Ap/Pe.</li>
         <li>Drag the <span style="color:var(--pro)">yellow</span> handles for prograde/retrograde,
             <span style="color:var(--rad)">cyan</span> for radial. Hold shift while dragging for fine control.</li>
-        <li>Select Lume as target to see your closest approach; raise your orbit until the paths kiss.</li>
+        <li>Select the Moon as target to see your closest approach; raise your orbit until the paths kiss.</li>
         <li>Scroll to zoom, drag to pan; the camera stays on the ship.</li>
       </ul>
     </about-modal>
@@ -171,318 +215,54 @@
 
   <script type="module">
     import { isBackground } from "../shared/cohesion.js";
+    // the ?v= busts the browser's heuristic module cache — bump it whenever
+    // orbits.mjs changes, or a stale module gets paired with a fresh page
+    // (which once made encounter labels float off their paths)
+    import {
+      TAU, makeSystem, bodyStateAt, posVelAt, tAtNu,
+      compileTrajectory, shipStateAt, tryJump, computeCA, paramTime, visibleSegments,
+      conicPoint, segParamRange, adaptiveCurve, MAX_SEGS, wrapForward, resolveMapClick,
+      relevantHorizon,
+    } from "./orbits.mjs?v=17";
 
-    /* ============================== bodies ============================== */
-    // units: km, s, km/s. mu in km^3/s^2. Kerbin/Mun-like numbers.
-    const VESPER = { name: "Vesper", mu: 3531.6, radius: 600 };
-    const LUME = (() => {
-      const mu = 65.14, orbitRadius = 12000, radius = 200, phase0 = 2.2;
-      const n = Math.sqrt(VESPER.mu / orbitRadius ** 3);
-      return {
-        name: "Lume", mu, radius, orbitRadius, phase0, n,
-        period: 2 * Math.PI / n,
-        soi: orbitRadius * (mu / VESPER.mu) ** 0.4,
-      };
-    })();
-    const BODIES = { vesper: VESPER, lume: LUME };
-
-    function moonState(t) {
-      const a = LUME.phase0 + LUME.n * t, c = Math.cos(a), s = Math.sin(a);
-      return {
-        x: LUME.orbitRadius * c, y: LUME.orbitRadius * s,
-        vx: -LUME.orbitRadius * LUME.n * s, vy: LUME.orbitRadius * LUME.n * c,
-      };
-    }
-
-    /* ============================== kepler ============================== */
-    const TAU = Math.PI * 2;
+    /* ============================== system ============================== */
+    // units: km, s, km/s (Δv shown in m/s). Toy scale: Kerbol-system numbers,
+    // so a year is ~107 days and trips take hours, not weeks. Earth's SOI
+    // (~84,000 km) falls out of the formula. fill/rim are display-only.
+    // the real solar system (J2000 mean elements, inclinations flattened to
+    // the ecliptic): real GM, radii, semi-major axes, eccentricities, and
+    // planet phasing from mean longitudes. km, km³/s², seconds.
+    const deg = (d) => (d * Math.PI) / 180;
+    // planets: [a, e, longitude of perihelion ϖ, mean longitude L] (deg)
+    const el = (a, e, w, L) => ({ a, e, longPeri: deg(w), M0: deg(L - w) });
+    const SYSTEM = makeSystem({
+      root: "sun",
+      bodies: {
+        sun: { name: "Sun", mu: 1.32712e11, radius: 695700, fill: "#e8a33d", rim: "#fff3c4" },
+        mercury: { name: "Mercury", mu: 22032, radius: 2440, parent: "sun", ...el(57.909e6, 0.2056, 77.457, 252.251), fill: "#5a5550", rim: "#a89f96" },
+        venus: { name: "Venus", mu: 324859, radius: 6052, parent: "sun", ...el(108.209e6, 0.0068, 131.532, 181.980), fill: "#8a7440", rim: "#e8d9a8" },
+        earth: { name: "Earth", mu: 398600, radius: 6371, parent: "sun", ...el(149.598e6, 0.0167, 102.937, 100.464), fill: "#1b4e8a", rim: "#6ba8e0" },
+        moon: { name: "Moon", mu: 4902.8, radius: 1737, parent: "earth", a: 384400, e: 0.0549, M0: 2.2, fill: "#565962", rim: "#a8aab0" },
+        mars: { name: "Mars", mu: 42828, radius: 3390, parent: "sun", ...el(227.939e6, 0.0934, 336.041, 355.453), fill: "#7a3520", rim: "#d97a52" },
+        jupiter: { name: "Jupiter", mu: 1.26687e8, radius: 69911, parent: "sun", ...el(778.57e6, 0.0489, 14.728, 34.397), fill: "#8a6134", rim: "#d9b285" },
+        io: { name: "Io", mu: 5959.9, radius: 1822, parent: "jupiter", a: 421800, e: 0.004, M0: 0.5, fill: "#8a7a2e", rim: "#e0d060" },
+        europa: { name: "Europa", mu: 3202.7, radius: 1561, parent: "jupiter", a: 671100, e: 0.009, M0: 2.0, fill: "#7a6f5c", rim: "#d9cfc0" },
+        ganymede: { name: "Ganymede", mu: 9887.8, radius: 2634, parent: "jupiter", a: 1070400, e: 0.001, M0: 4.1, fill: "#5c554c", rim: "#a89f90" },
+        callisto: { name: "Callisto", mu: 7179.3, radius: 2410, parent: "jupiter", a: 1882700, e: 0.007, M0: 5.3, fill: "#453f38", rim: "#8c8478" },
+        saturn: { name: "Saturn", mu: 3.7931e7, radius: 58232, parent: "sun", ...el(1433.53e6, 0.0565, 92.599, 49.954), fill: "#8a7443", rim: "#e0cf9a" },
+        titan: { name: "Titan", mu: 8978.1, radius: 2575, parent: "saturn", a: 1221870, e: 0.0288, M0: 1.2, fill: "#8a5c1e", rim: "#e0a44a" },
+        uranus: { name: "Uranus", mu: 5.794e6, radius: 25362, parent: "sun", ...el(2872.46e6, 0.0457, 170.954, 313.238), fill: "#3a7a85", rim: "#9fdde6" },
+        neptune: { name: "Neptune", mu: 6.8365e6, radius: 24622, parent: "sun", ...el(4495.06e6, 0.0113, 44.965, 304.880), fill: "#2a4d9e", rim: "#7aa3f0" },
+        triton: { name: "Triton", mu: 1428, radius: 1353, parent: "neptune", a: 354759, e: 0, M0: 3.3, retrograde: true, fill: "#6b5f5c", rim: "#c4b4ae" },
+        pluto: { name: "Pluto", mu: 871, radius: 1188, parent: "sun", ...el(5906.38e6, 0.2488, 224.07, 238.93), fill: "#7a6450", rim: "#d9bc9a" },
+      },
+    });
+    // circular orbit at twice Earth's radius
+    const EPOCH = { body: "earth", rx: 12742, ry: 0, vx: 0, vy: Math.sqrt(SYSTEM.bodies.earth.mu / 12742) };
+    // deepest bodies first: labels queue child-before-parent, so parents draw on top
+    const depthOf = (id) => { let d = 0; for (let b = SYSTEM.bodies[id]; b.parent; b = SYSTEM.bodies[b.parent]) d++; return d; };
+    const BODY_LABEL_ORDER = Object.values(SYSTEM.bodies).slice().sort((a, b) => depthOf(b.id) - depthOf(a.id));
     const clampN = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-    // 2D orbit from a state vector. Handles ellipse + hyperbola, both directions.
-    // Perifocal frame: p̂ toward periapsis, q̂ = ±90° so true anomaly always increases with time.
-    function stateToOrbit(mu, rx, ry, vx, vy, t) {
-      const r = Math.hypot(rx, ry);
-      const v2 = vx * vx + vy * vy;
-      const hz = rx * vy - ry * vx;
-      const rv = rx * vx + ry * vy;
-      let energy = v2 / 2 - mu / r;
-      if (Math.abs(energy) < 1e-9) energy = -1e-9; // dodge exact parabola
-      const a = -mu / (2 * energy);
-      let ex = ((v2 - mu / r) * rx - rv * vx) / mu;
-      let ey = ((v2 - mu / r) * ry - rv * vy) / mu;
-      let e = Math.hypot(ex, ey);
-      let px, py;
-      if (e < 1e-9) { e = 0; px = rx / r; py = ry / r; }
-      else { px = ex / e; py = ey / e; }
-      const s = hz >= 0 ? 1 : -1;
-      const qx = -s * py, qy = s * px;
-      const p = hz * hz / mu;
-      const elliptic = a > 0;
-      const n = Math.sqrt(mu / Math.abs(a * a * a));
-      const nu0 = Math.atan2(rx * qx + ry * qy, rx * px + ry * py);
-      let tp;
-      if (elliptic) {
-        const E0 = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu0 / 2), Math.sqrt(1 + e) * Math.cos(nu0 / 2));
-        tp = t - (E0 - e * Math.sin(E0)) / n;
-      } else {
-        const H0 = 2 * Math.atanh(clampN(Math.sqrt((e - 1) / (e + 1)) * Math.tan(nu0 / 2), -0.999999999, 0.999999999));
-        tp = t - (e * Math.sinh(H0) - H0) / n;
-      }
-      return {
-        mu, a, e, p, px, py, qx, qy, n, tp, elliptic,
-        period: elliptic ? TAU / n : Infinity,
-        rp: p / (1 + e),
-        ra: elliptic ? p / (1 - e) : Infinity,
-      };
-    }
-
-    function solveE(Mw, e) {
-      let E = e < 0.8 ? Mw : Math.PI * Math.sign(Mw || 1);
-      for (let i = 0; i < 40; i++) {
-        const d = (E - e * Math.sin(E) - Mw) / (1 - e * Math.cos(E));
-        E -= d;
-        if (Math.abs(d) < 1e-12) break;
-      }
-      return E;
-    }
-    function solveH(M, e) {
-      let H = Math.asinh(M / e);
-      for (let i = 0; i < 60; i++) {
-        const d = (e * Math.sinh(H) - H - M) / (e * Math.cosh(H) - 1);
-        H -= d;
-        if (Math.abs(d) < 1e-12) break;
-      }
-      return H;
-    }
-    // eccentric anomaly at mean anomaly M, unwrapped (keeps winding count)
-    function unwrapE(o, M) {
-      const k = Math.floor((M + Math.PI) / TAU);
-      return solveE(M - TAU * k, o.e) + TAU * k;
-    }
-
-    function posVelAt(o, t) {
-      const M = o.n * (t - o.tp);
-      let cx, cy, r, nu;
-      if (o.elliptic) {
-        const E = unwrapE(o, M);
-        const b = o.a * Math.sqrt(1 - o.e * o.e);
-        cx = o.a * (Math.cos(E) - o.e);
-        cy = b * Math.sin(E);
-        r = o.a * (1 - o.e * Math.cos(E));
-      } else {
-        const H = solveH(M, o.e);
-        const bh = -o.a * Math.sqrt(o.e * o.e - 1);
-        cx = o.a * (Math.cosh(H) - o.e);
-        cy = bh * Math.sinh(H);
-        r = o.a * (1 - o.e * Math.cosh(H));
-      }
-      nu = Math.atan2(cy, cx);
-      const x = cx * o.px + cy * o.qx, y = cx * o.py + cy * o.qy;
-      const sq = Math.sqrt(o.mu / o.p);
-      const vxp = -sq * Math.sin(nu), vyp = sq * (o.e + Math.cos(nu));
-      return {
-        x, y, r, nu,
-        vx: vxp * o.px + vyp * o.qx,
-        vy: vxp * o.py + vyp * o.qy,
-      };
-    }
-
-    // first time ≥ tAfter at which true anomaly = nu (null if never)
-    function tAtNu(o, nu, tAfter) {
-      if (o.elliptic) {
-        const E = 2 * Math.atan2(Math.sqrt(1 - o.e) * Math.sin(nu / 2), Math.sqrt(1 + o.e) * Math.cos(nu / 2));
-        let t0 = o.tp + (E - o.e * Math.sin(E)) / o.n;
-        t0 += Math.ceil((tAfter - t0) / o.period - 1e-9) * o.period;
-        return t0;
-      }
-      const arg = Math.sqrt((o.e - 1) / (o.e + 1)) * Math.tan(nu / 2);
-      if (Math.abs(arg) >= 1) return null;
-      const H = 2 * Math.atanh(arg);
-      const t0 = o.tp + (o.e * Math.sinh(H) - H) / o.n;
-      return t0 >= tAfter ? t0 : null;
-    }
-
-    // |true anomaly| at which radius = rr (null if orbit never reaches it)
-    function nuAtRadius(o, rr) {
-      if (o.e < 1e-9) return null;
-      const c = (o.p / rr - 1) / o.e;
-      if (c > 1 || c < -1) return null;
-      return Math.acos(c);
-    }
-
-    /* ======================= trajectory compiler ======================= */
-    const EPOCH = { rx: 800, ry: 0, vx: 0, vy: Math.sqrt(VESPER.mu / 800) }; // 200 km circular, CCW
-
-    function findSoiEntry(o, tStart, tLimit) {
-      const lo = LUME.orbitRadius - LUME.soi, hi = LUME.orbitRadius + LUME.soi;
-      if (o.ra < lo || o.rp > hi) return null;
-      let windowEnd;
-      if (o.elliptic) {
-        windowEnd = tStart + Math.min(Math.max(3 * o.period, 2 * LUME.period), 20 * LUME.period);
-      } else {
-        const nuH = nuAtRadius(o, hi);
-        const tHi = nuH != null ? tAtNu(o, nuH, tStart + 1e-6) : null;
-        windowEnd = tHi ?? tStart;
-      }
-      windowEnd = Math.min(windowEnd, tLimit);
-      if (windowEnd <= tStart) return null;
-      const step = Math.max(1, Math.min(o.elliptic ? o.period : Infinity, LUME.period) / 300);
-      const f = (t) => {
-        const s = posVelAt(o, t), m = moonState(t);
-        return Math.hypot(s.x - m.x, s.y - m.y) - LUME.soi;
-      };
-      let tPrev = tStart + 1e-3, fPrev = f(tPrev);
-      while (fPrev <= 0 && tPrev < windowEnd) { tPrev += step; fPrev = f(tPrev); } // skip if starting inside
-      for (let t = tPrev + step; ; t += step) {
-        const tc = Math.min(t, windowEnd);
-        const fc = f(tc);
-        if (fPrev > 0 && fc <= 0) {
-          let a = tPrev, b = tc;
-          for (let i = 0; i < 60; i++) { const mid = (a + b) / 2; if (f(mid) > 0) a = mid; else b = mid; }
-          return b; // just inside the SOI
-        }
-        tPrev = tc; fPrev = fc;
-        if (tc >= windowEnd) return null;
-      }
-    }
-
-    function findSegEnd(o, body, tStart, tLimit) {
-      const cands = [];
-      const B = BODIES[body];
-      if (o.rp < B.radius) {
-        const nuI = nuAtRadius(o, B.radius);
-        if (nuI != null) {
-          const ti = tAtNu(o, -nuI, tStart + 1e-3); // inbound crossing
-          if (ti != null) cands.push({ t: ti, type: "impact" });
-        }
-      }
-      if (body === "lume") {
-        if (!o.elliptic || o.ra > LUME.soi) {
-          const nuX = nuAtRadius(o, LUME.soi);
-          if (nuX != null) {
-            const tx = tAtNu(o, nuX, tStart + 1e-3); // outbound crossing
-            if (tx != null) cands.push({ t: tx, type: "soiExit" });
-          }
-        }
-      } else {
-        const te = findSoiEntry(o, tStart, tLimit);
-        if (te != null) cands.push({ t: te, type: "soiEnter" });
-      }
-      cands.sort((a, b) => a.t - b.t);
-      return cands[0] || null;
-    }
-
-    // sample a segment's conic for drawing + hit testing (world coords rel. to its body)
-    function sampleSeg(seg) {
-      const o = seg.orbit, pts = [];
-      const N = 240;
-      if (o.elliptic) {
-        const full = seg.tEnd === Infinity || (seg.tEnd - seg.tStart) >= o.period - 1e-6;
-        const E1 = unwrapE(o, o.n * (seg.tStart - o.tp));
-        const E2 = full ? E1 + TAU : unwrapE(o, o.n * (seg.tEnd - o.tp));
-        const b = o.a * Math.sqrt(1 - o.e * o.e);
-        for (let i = 0; i <= N; i++) {
-          const E = E1 + (E2 - E1) * i / N;
-          const cx = o.a * (Math.cos(E) - o.e), cy = b * Math.sin(E);
-          pts.push({
-            x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy,
-            t: o.tp + (E - o.e * Math.sin(E)) / o.n,
-          });
-        }
-      } else {
-        const H1 = solveH(o.n * (seg.tStart - o.tp), o.e);
-        let H2;
-        if (seg.tEnd === Infinity) {
-          H2 = Math.acosh(Math.max(1, (1 - 1.5e5 / o.a) / o.e)); // draw out to 150,000 km
-        } else {
-          H2 = solveH(o.n * (seg.tEnd - o.tp), o.e);
-        }
-        const bh = -o.a * Math.sqrt(o.e * o.e - 1);
-        for (let i = 0; i <= N; i++) {
-          const H = H1 + (H2 - H1) * i / N;
-          const cx = o.a * (Math.cosh(H) - o.e), cy = bh * Math.sinh(H);
-          pts.push({
-            x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy,
-            t: o.tp + (o.e * Math.sinh(H) - H) / o.n,
-          });
-        }
-      }
-      return pts;
-    }
-
-    function segApsides(seg) {
-      const o = seg.orbit, B = BODIES[seg.body], out = [];
-      const horizon = Math.min(seg.tEnd, seg.tStart + (o.elliptic ? o.period : Infinity));
-      const tPe = tAtNu(o, 0, seg.tStart + 1e-3);
-      if (tPe != null && tPe <= horizon) {
-        out.push({ kind: "Pe", nu: 0, x: o.rp * o.px, y: o.rp * o.py, alt: o.rp - B.radius });
-      }
-      if (o.elliptic) {
-        const tAp = tAtNu(o, Math.PI, seg.tStart + 1e-3);
-        if (tAp != null && tAp <= horizon) {
-          out.push({ kind: "Ap", nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py, alt: o.ra - B.radius });
-        }
-      }
-      return out;
-    }
-
-    function compileTrajectory(nodes) {
-      const sorted = [...nodes].sort((a, b) => a.t - b.t);
-      const segs = [], nodeInfo = new Map();
-      let body = "vesper";
-      let { rx, ry, vx, vy } = EPOCH;
-      let t = 0, stage = 0;
-      for (let guard = 0; guard < 24; guard++) {
-        const orbit = stateToOrbit(BODIES[body].mu, rx, ry, vx, vy, t);
-        const nextNode = sorted.find((nd) => nd.t > t + 1e-6);
-        const tLimit = nextNode ? nextNode.t : Infinity;
-        const ev = findSegEnd(orbit, body, t, tLimit);
-        let tEnd, endType;
-        if (ev && ev.t < tLimit) { tEnd = ev.t; endType = ev.type; }
-        else if (nextNode) { tEnd = nextNode.t; endType = "node"; }
-        else { tEnd = Infinity; endType = "none"; }
-        const seg = { orbit, body, tStart: t, tEnd, endType, stage };
-        seg.samples = sampleSeg(seg);
-        seg.apsides = segApsides(seg);
-        segs.push(seg);
-        if (endType === "none" || endType === "impact") break;
-        const st = posVelAt(orbit, tEnd);
-        if (endType === "node") {
-          const vm = Math.hypot(st.vx, st.vy) || 1;
-          const rm = Math.hypot(st.x, st.y) || 1;
-          const pgx = st.vx / vm, pgy = st.vy / vm;
-          const rox = st.x / rm, roy = st.y / rm;
-          nodeInfo.set(nextNode.id, { body, t: tEnd, relX: st.x, relY: st.y, pgx, pgy, rox, roy, seg });
-          rx = st.x; ry = st.y;
-          vx = st.vx + (nextNode.prograde / 1000) * pgx + (nextNode.radial / 1000) * rox;
-          vy = st.vy + (nextNode.prograde / 1000) * pgy + (nextNode.radial / 1000) * roy;
-          // keep angular momentum away from exactly zero (degenerate radial orbit)
-          if (Math.abs(rx * vy - ry * vx) < 0.5) { vx += -roy * 0.002; vy += rox * 0.002; }
-          stage++;
-        } else if (endType === "soiEnter") {
-          const m = moonState(tEnd);
-          rx = st.x - m.x; ry = st.y - m.y; vx = st.vx - m.vx; vy = st.vy - m.vy;
-          body = "lume";
-        } else {
-          const m = moonState(tEnd);
-          rx = st.x + m.x; ry = st.y + m.y; vx = st.vx + m.vx; vy = st.vy + m.vy;
-          body = "vesper";
-        }
-        t = tEnd;
-      }
-      return { segs, nodeInfo, sorted };
-    }
-
-    function shipStateAt(traj, t) {
-      const segs = traj.segs;
-      let seg = segs[segs.length - 1];
-      for (const s of segs) if (t < s.tEnd) { seg = s; break; }
-      const tc = seg.endType === "impact" ? Math.min(t, seg.tEnd) : t;
-      const st = posVelAt(seg.orbit, Math.max(tc, seg.tStart));
-      let ax = st.x, ay = st.y;
-      if (seg.body === "lume") { const m = moonState(t); ax += m.x; ay += m.y; }
-      return { seg, rel: st, x: ax, y: ay };
-    }
 
     /* ============================ sim state ============================ */
     const bg = isBackground();
@@ -490,65 +270,103 @@
     let nodeSeq = 1;
     let tNow = 0;
     let paused = false;
-    const RATES = [1, 5, 25, 100, 1000, 10000, 100000];
+    const RATES = [1, 5, 25, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000];
     let rateIdx = 0, rateDir = 1;
     let selectedId = null;
-    let target = null;       // null | "lume"
-    let traj = compileTrajectory(nodes);
+    let target = null;       // body id or null
+    let patchLimit = 2;      // how many patches past an SOI event to draw
+    let snapOn = true;       // maneuvers snap to Ap/Pe while placing/dragging
+    let soiOn = false;       // draw sphere-of-influence circles
+    // how far ahead the future is surveyed for encounters: two revolutions of
+    // the slowest mover the ship's final orbit can actually meet. A fixed
+    // system-wide horizon (2x Pluto's period) made every maneuver edit in a
+    // Jupiter orbit rescan 140 years of minute-step moon positions per frame.
+    // The needed horizon depends on the compiled result, so extend and retry.
+    const lastNodeT = () => nodes.reduce((m, n) => Math.max(m, n.t), 0);
+    function compileWithHorizon() {
+      let until = Math.max(tNow, lastNodeT()) + 2 * 86400;
+      let t = compileTrajectory(SYSTEM, EPOCH, nodes, until);
+      for (let i = 0; i < 3; i++) {
+        const need = Math.max(tNow, lastNodeT()) + relevantHorizon(SYSTEM, t);
+        if (need <= until) break;
+        until = need;
+        t = compileTrajectory(SYSTEM, EPOCH, nodes, until);
+      }
+      return t;
+    }
+    let traj = compileWithHorizon();
     let dirty = false;
-    let ca = null;           // { fromT, best: {t, d} | null }
+    let ca = null;           // { fromT, best: {t, d, seg} | null }
     let caWall = 0;
 
     function markDirty() { dirty = true; }
     function recompileIfDirty() {
       if (!dirty) return;
       dirty = false;
-      traj = compileTrajectory(nodes);
+      traj = compileWithHorizon();
       ca = null;
     }
-
-    function planHasEncounter() {
-      return traj.segs.some((s) => s.endType === "soiEnter" && s.tEnd > tNow);
-    }
-
-    function computeCA(fromT) {
-      let best = null;
-      for (const seg of traj.segs) {
-        if (seg.body !== "vesper" || seg.tEnd < fromT) continue;
-        const o = seg.orbit;
-        const t0 = Math.max(seg.tStart, fromT);
-        const win = o.elliptic
-          ? Math.min(Math.max(2 * o.period, 1.5 * LUME.period), 12 * LUME.period)
-          : 2 * LUME.period;
-        const wEnd = Math.min(seg.tEnd, t0 + win);
-        if (wEnd <= t0) continue;
-        const dist = (t) => {
-          const s = posVelAt(o, t), m = moonState(t);
-          return Math.hypot(s.x - m.x, s.y - m.y);
-        };
-        const N = 400, dt = (wEnd - t0) / N;
-        let bt = t0, bd = Infinity;
-        for (let i = 0; i <= N; i++) {
-          const t = t0 + i * dt, d = dist(t);
-          if (d < bd) { bd = d; bt = t; }
-        }
-        let a = Math.max(t0, bt - dt), b = Math.min(wEnd, bt + dt);
-        for (let i = 0; i < 50; i++) {
-          const m1 = a + (b - a) / 3, m2 = b - (b - a) / 3;
-          if (dist(m1) < dist(m2)) b = m2; else a = m1;
-        }
-        const t = (a + b) / 2, d = dist(t);
-        if (!best || d < best.d) best = { t, d };
+    // keep the encounter survey comfortably ahead of the clock (any event a
+    // shrink could hide is >1 revolution out — never displayed anyway)
+    function ensureHorizon() {
+      if (traj.scannedUntil < tNow + relevantHorizon(SYSTEM, traj) / 2) {
+        traj = compileWithHorizon();
+        ca = null;
       }
-      return { fromT, best };
+    }
+    // every long jump goes through the survey; a surprise encounter aborts it
+    function doJump(targetT) {
+      recompileIfDirty(); // jump decisions must see pending edits
+      const tOld = tNow, shipOld = ship;
+      const res = tryJump(SYSTEM, EPOCH, nodes, traj, Math.max(0, targetT), relevantHorizon(SYSTEM, traj));
+      traj = res.traj;
+      tNow = res.t;
+      ca = null;
+      if (focus === "ship" && shipOld) {
+        // ship-focused jumps hold the camera still: the world stays put and
+        // the ship simply appears at the clicked spot / maneuver. Only within
+        // one SOI frame and only if the ship lands on-screen — a jump into a
+        // new SOI (or out of view) recenters on the ship as usual. Body-focused
+        // cameras always keep their body pinned instead.
+        ship = shipStateAt(SYSTEM, traj, tNow);
+        if (ship.seg.body === shipOld.seg.body) {
+          const b = ship.seg.body;
+          const bOld = bodyStateAt(SYSTEM, b, tOld);
+          const bNew = bodyStateAt(SYSTEM, b, tNow);
+          const dx = (shipOld.x - bOld.x) - (ship.x - bNew.x);
+          const dy = (shipOld.y - bOld.y) - (ship.y - bNew.y);
+          // where the ship would land on screen under the held frame
+          const sx = W / 2 - (cam.panX + dx) * cam.zoom;
+          const sy = H / 2 + (cam.panY + dy) * cam.zoom;
+          if (sx > -40 && sx < W + 40 && sy > -40 && sy < H + 40) {
+            cam.panX += dx;
+            cam.panY += dy;
+          }
+        }
+        fp = { x: ship.x, y: ship.y };
+      }
+      if (res.aborted) toast("orbit changed — warp abandoned");
     }
 
     function updateCA() {
-      if (!target || planHasEncounter()) { ca = null; return; }
-      const stale = !ca || tNow < ca.fromT - 1 || (ca.best && tNow > ca.best.t + 1);
+      if (!target) { ca = null; return; }
+      // an encounter replaces the approach markers only when it happens on the
+      // pass they would describe; a later-revolution encounter (panel says
+      // "encounter in Nd") leaves this revolution's markers alone
+      const enc = traj.segs.some((s) => s.endType === "soiEnter" && s.enterBody === target && s.tEnd > tNow
+        && (!s.orbit.elliptic || s.tEnd - Math.max(s.tStart, tNow) <= s.orbit.period));
+      if (enc) { ca = null; return; }
+      if (!ca) {
+        // every recompile clears ca (its segment refs go stale) — recompute
+        // right away, or the markers flicker while a maneuver is being edited
+        caWall = performance.now();
+        ca = computeCA(SYSTEM, traj, target, tNow);
+        return;
+      }
+      const stale = tNow < ca.fromT - 1 || (ca.best && tNow > ca.best.t + 1);
       if (stale && performance.now() - caWall > 150) {
         caWall = performance.now();
-        ca = computeCA(tNow);
+        ca = computeCA(SYSTEM, traj, target, tNow);
       }
     }
 
@@ -556,7 +374,8 @@
     const cv = document.getElementById("c");
     const ctx = cv.getContext("2d");
     let W = 0, H = 0, dpr = 1;
-    const cam = { zoom: 0.3, panX: 0, panY: 0 }; // pan in km, relative to ship
+    const cam = { zoom: 0.3, panX: 0, panY: 0 }; // pan in km, relative to the focus
+    const MIN_ZOOM = 2e-8, MAX_ZOOM = 60;        // min fits Pluto's whole orbit
     let defaultZoom = 0.3;
     let userZoomed = false; // until the user zooms, resizes keep re-deriving the default
 
@@ -566,28 +385,40 @@
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      defaultZoom = 0.55 * Math.min(W, H) / 1600;
+      defaultZoom = 0.55 * Math.min(W, H) / (2 * Math.hypot(EPOCH.rx, EPOCH.ry));
+      if (!(defaultZoom > 0)) defaultZoom = 0.3; // the pane can report 0×0 at load
       if (!userZoomed || !(cam.zoom > 0)) cam.zoom = defaultZoom;
       makeStars();
     }
 
-    let ship = shipStateAt(traj, 0);
+    let ship = shipStateAt(SYSTEM, traj, 0);
+    // camera focus: the ship, or any body — pan is relative to whatever it is
+    let focus = "ship";
+    let fp = { x: 0, y: 0 }; // the focus point, refreshed every tick
+    function focusPos() {
+      if (focus === "ship") return { x: ship.x, y: ship.y };
+      const b = bodyStateAt(SYSTEM, focus, tNow);
+      return { x: b.x, y: b.y };
+    }
     function w2s(x, y) {
       return {
-        x: W / 2 + (x - ship.x - cam.panX) * cam.zoom,
-        y: H / 2 - (y - ship.y - cam.panY) * cam.zoom,
+        x: W / 2 + (x - fp.x - cam.panX) * cam.zoom,
+        y: H / 2 - (y - fp.y - cam.panY) * cam.zoom,
       };
     }
     function s2w(sx, sy) {
       return {
-        x: ship.x + cam.panX + (sx - W / 2) / cam.zoom,
-        y: ship.y + cam.panY - (sy - H / 2) / cam.zoom,
+        x: fp.x + cam.panX + (sx - W / 2) / cam.zoom,
+        y: fp.y + cam.panY - (sy - H / 2) / cam.zoom,
       };
     }
     function v2s(vx, vy) { // direction only
       const m = Math.hypot(vx, vy) || 1;
       return { x: vx / m, y: -vy / m };
     }
+    // every drawn segment sits around its own body's CURRENT position — around
+    // the Moon things render Moon-centric, with no special cases
+    function segOrg(seg) { return bodyStateAt(SYSTEM, seg.body, tNow); }
 
     /* ============================== stars ============================== */
     let stars = [];
@@ -597,7 +428,7 @@
       const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
       const count = Math.round((W * H) / 6000);
       for (let i = 0; i < count; i++) {
-        stars.push({ x: rnd() * W, y: rnd() * H, a: 0.08 + rnd() * 0.3, r: rnd() < 0.12 ? 1.3 : 0.8 });
+        stars.push({ x: rnd() * W, y: rnd() * H, a: 0.3 + rnd() * 0.55, r: rnd() < 0.12 ? 1.7 : 1 });
       }
     }
 
@@ -620,6 +451,7 @@
     function fmtDur(t) {
       t = Math.max(0, t);
       const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), s = Math.floor(t % 60);
+      if (d >= 730) return `${Math.floor(d / 365.25)}y ${Math.floor(d % 365.25)}d`;
       if (d > 0) return `${d}d ${h}h`;
       if (h > 0) return `${h}h ${m}m`;
       if (m > 0) return `${m}m ${s}s`;
@@ -648,30 +480,105 @@
     }
 
     /* ============================== render ============================== */
-    const STAGE_COLORS = ["#5fb2ff", "#ffb454", "#ff8a5c", "#c979ff", "#59e3e3", "#9ef0a0"];
-    const stageColor = (s) => STAGE_COLORS[s % STAGE_COLORS.length];
+    // consecutive patches cycle through these — every boundary, maneuver or
+    // SOI event, advances the color; the first patch is always accent blue,
+    // and neighbors are picked to be as unlike each other as possible
+    const PATCH_COLORS = ["#5fb2ff", "#ffe066", "#ff6bd6", "#6ee787", "#ff5c5c", "#b18cff", "#ff9f45", "#59e3e3"];
+    const patchColor = (i) => PATCH_COLORS[i % PATCH_COLORS.length];
     const MONO = '11px "IBM Plex Mono", monospace';
 
-    function segOrigin(seg) {
-      if (seg.body !== "lume") return { x: 0, y: 0 };
-      const tRef = tNow >= seg.tStart ? tNow : seg.tStart;
-      return moonState(tRef);
+    // labels are queued and drawn last, so text always sits above planets
+    let labelQueue = [];
+    let gizmoDraw = null; // maneuver handles render after the label flush
+    function label(text, sx, sy, color, align = "left", alpha = 1) { labelQueue.push([text, sx, sy, color, align, alpha]); }
+    function flushLabels() {
+      ctx.font = MONO;
+      ctx.textBaseline = "middle";
+      for (const [text, sx, sy, color, align, alpha] of labelQueue) {
+        ctx.textAlign = align;
+        ctx.globalAlpha = alpha;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "rgba(5,7,13,0.85)";
+        ctx.strokeText(text, sx, sy);
+        ctx.fillStyle = color;
+        ctx.fillText(text, sx, sy);
+      }
+      ctx.globalAlpha = 1;
+      labelQueue = [];
     }
 
-    function label(text, sx, sy, color, align = "left") {
-      ctx.font = MONO;
-      ctx.textAlign = align;
-      ctx.textBaseline = "middle";
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "rgba(5,7,13,0.85)";
-      ctx.strokeText(text, sx, sy);
-      ctx.fillStyle = color;
-      ctx.fillText(text, sx, sy);
+    // what the visibility walk says to draw this frame (display only —
+    // the compiled trajectory always simulates full-depth)
+    let visList = [];
+    let visSet = new Set();
+    // draw origin per visible segment: ghosts chain onto the incoming path so
+    // the whole future reads as one continuous line (KSP-style)
+    let extMap = new Map();
+    const dispOrg = (seg) => extMap.get(seg) ?? segOrg(seg);
+    function rangeFor(v) {
+      const seg = v.seg;
+      let vseg = v.mode === "ellipse" ? { orbit: seg.orbit, tStart: v.anchor, tEnd: Infinity } : seg;
+      // a ghost patch spanning many revolutions reads better as one loop
+      if (v.mode === "ghost" && seg.orbit.elliptic && Number.isFinite(seg.tEnd)
+          && seg.tEnd - seg.tStart >= seg.orbit.period) {
+        vseg = { orbit: seg.orbit, tStart: seg.tStart, tEnd: Infinity };
+      }
+      // unbounded hyperbolas go on forever — draw to just past what's visible,
+      // however far out the view (or the ship) is
+      let rMax = 1e6;
+      if (!seg.orbit.elliptic && vseg.tEnd === Infinity) {
+        const org = segOrg(seg);
+        const cx = fp.x + cam.panX - org.x, cy = fp.y + cam.panY - org.y;
+        rMax = Math.max(rMax, (Math.hypot(cx, cy) + Math.hypot(W, H) / cam.zoom) * 1.2);
+      }
+      return segParamRange(vseg, rMax);
+    }
+
+    // clip a chord to a padded viewport box (Liang-Barsky); rasterizing raw
+    // chords with million-pixel off-screen coordinates janks some renderers
+    function clipChord(x1, y1, x2, y2, lo, hiX, hiY) {
+      let t0 = 0, t1 = 1;
+      const dx = x2 - x1, dy = y2 - y1;
+      for (const [p, q] of [[-dx, x1 - lo], [dx, hiX - x1], [-dy, y1 - lo], [dy, hiY - y1]]) {
+        if (p === 0) { if (q < 0) return null; continue; }
+        const r = q / p;
+        if (p < 0) { if (r > t1) return null; if (r > t0) t0 = r; }
+        else { if (r < t0) return null; if (r < t1) t1 = r; }
+      }
+      return { x1: x1 + dx * t0, y1: y1 + dy * t0, x2: x1 + dx * t1, y2: y1 + dy * t1, entered: t0 > 0 };
+    }
+
+    function pathConic(o, u1, u2, org) {
+      const pts = adaptiveCurve((u) => {
+        const c = conicPoint(o, u);
+        return w2s(c.x + org.x, c.y + org.y);
+      }, u1, u2, 24, W, H);
+      const lo = -100, hiX = W + 100, hiY = H + 100;
+      ctx.beginPath();
+      let len = 0, open = false;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        // length of the REAL chord, so dash phase stays continuous across
+        // patches even where off-screen spans are skipped
+        len += Math.hypot(b.x - a.x, b.y - a.y);
+        const c = clipChord(a.x, a.y, b.x, b.y, lo, hiX, hiY);
+        if (!c) { open = false; continue; }
+        if (!open || c.entered) { ctx.moveTo(c.x1, c.y1); open = true; }
+        ctx.lineTo(c.x2, c.y2);
+      }
+      return len; // so dashes can flow continuously from patch to patch
     }
 
     function drawBody(bx, by, radius, fill, rim) {
       const s = w2s(bx, by);
       const r = Math.max(radius * cam.zoom, 2);
+      if (![s.x, s.y, r].every(Number.isFinite)) {
+        window.__nf = { bx, by, sx: s.x, sy: s.y, r, zoom: cam.zoom, panX: cam.panX, panY: cam.panY, fpx: fp.x, fpy: fp.y, tNow, W, H };
+        console.error("drawBody non-finite", window.__nf);
+        return;
+      }
+      // at solar scale a body can be millions of pixels off-screen — skip it
+      if (s.x + r < -80 || s.x - r > W + 80 || s.y + r < -80 || s.y - r > H + 80) return;
       const g = ctx.createRadialGradient(s.x - r * 0.35, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
       g.addColorStop(0, rim);
       g.addColorStop(1, fill);
@@ -681,106 +588,233 @@
       ctx.fill();
     }
 
+    // KSP navball glyphs, upright on screen:
+    //   prograde     yellow circle, center dot, ticks left/top/right
+    //   retrograde   yellow circle, X inside, ticks top/lower-left/lower-right
+    //   radial out   cyan circle, center dot, four outward diagonal ticks
+    //   radial in    cyan circle, center dot, four inward diagonal ticks
+    function handleGlyph(x, y, kind, dir, color, emph = false) {
+      const r = emph ? 7 : 5.5;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = emph ? 2.2 : 1.5;
+      if (emph) {
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 4, 0, TAU);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.stroke();
+      const tick = (a, from, to) => {
+        ctx.beginPath();
+        ctx.moveTo(x + Math.cos(a) * from, y + Math.sin(a) * from);
+        ctx.lineTo(x + Math.cos(a) * to, y + Math.sin(a) * to);
+        ctx.stroke();
+      };
+      const dot = () => {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.5, 0, TAU);
+        ctx.fillStyle = color;
+        ctx.fill();
+      };
+      if (kind === "prograde") {
+        if (dir > 0) { // prograde: dot + ticks left/top/right
+          dot();
+          for (const a of [Math.PI, -Math.PI / 2, 0]) tick(a, r, r + 4);
+        } else { // retrograde: X inside + ticks top/lower-left/lower-right
+          const k = r * 0.62;
+          ctx.beginPath();
+          ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k);
+          ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k);
+          ctx.stroke();
+          for (const a of [-Math.PI / 2, Math.PI * 0.75, Math.PI * 0.25]) tick(a, r, r + 4);
+        }
+      } else {
+        dot();
+        for (const a of [Math.PI / 4, 3 * Math.PI / 4, -Math.PI / 4, -3 * Math.PI / 4]) {
+          if (dir > 0) tick(a, r, r + 4);       // radial out: ticks point outward
+          else tick(a, r, r - 3.5);             // radial in: ticks point inward
+        }
+      }
+    }
+
+    // marker at the end of the drawn path where an encounter begins: two
+    // chevrons pointing along the direction of travel
+    function encounterChevrons(s, dir, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      const px = -dir.y, py = dir.x;
+      for (const k of [0, 5]) {
+        ctx.beginPath();
+        ctx.moveTo(s.x + dir.x * (k - 4) + px * 4, s.y + dir.y * (k - 4) + py * 4);
+        ctx.lineTo(s.x + dir.x * k, s.y + dir.y * k);
+        ctx.lineTo(s.x + dir.x * (k - 4) - px * 4, s.y + dir.y * (k - 4) - py * 4);
+        ctx.stroke();
+      }
+    }
+
     function draw() {
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = "#05070d";
       ctx.fillRect(0, 0, W, H);
+      // one dash clock for every animated pattern: wrap at the LCM of the
+      // pattern periods (6+5=11 and 3+4=7 → 77) so no pattern ever hiccups
+      const dashClock = (performance.now() / 1000 * 14) % 77;
+      let chainLen = 0; // pixels of path drawn so far — dashes flow across seams
 
-      // stars (screen space, faint parallax)
-      const par = 0.02 * cam.zoom;
+      // stars — fixed to the screen; any world-coupled parallax goes haywire
+      // once coordinates reach solar scale
       ctx.fillStyle = "#cdd6e8";
       for (const st of stars) {
-        const x = ((st.x - (ship.x + cam.panX) * par) % W + W) % W;
-        const y = ((st.y + (ship.y + cam.panY) * par) % H + H) % H;
         ctx.globalAlpha = st.a;
-        ctx.fillRect(x, y, st.r, st.r);
+        ctx.fillRect(st.x, st.y, st.r, st.r);
       }
       ctx.globalAlpha = 1;
 
-      const moon = moonState(tNow);
-
-      // moon's orbit
-      {
-        const c = w2s(0, 0);
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, LUME.orbitRadius * cam.zoom, 0, TAU);
+      // each body's own orbit ring around its parent — its real (eccentric)
+      // conic, not a circle, so bodies always sit on their lines
+      for (const b of Object.values(SYSTEM.bodies)) {
+        if (!b.parent) continue;
+        const pc = bodyStateAt(SYSTEM, b.parent, tNow);
+        pathConic(b.orbit, 0, TAU, pc);
         ctx.strokeStyle = "rgba(138,143,163,0.18)";
         ctx.lineWidth = 1;
         ctx.stroke();
       }
 
-      // trajectory segments (skip fully-past ones)
-      for (const seg of traj.segs) {
-        if (seg.tEnd < tNow) continue;
+      // trajectory segments — only what the visibility walk says to draw
+      visList = visibleSegments(traj, tNow, patchLimit);
+      visSet = new Set(visList.map((v) => v.seg));
+      extMap = new Map();
+      let prevSeg = null, prevOrg = null;
+      for (const [idx, v] of visList.entries()) {
+        const seg = v.seg;
         // solid = what the ship will do with no further burns; dashed = after a planned burn.
         // Executed burns are history, so only nodes still in the future count.
         const planStage = traj.sorted.reduce((c, n) => c + (n.t > tNow && n.t <= seg.tStart + 1e-6 ? 1 : 0), 0);
-        const org = segOrigin(seg);
-        ctx.beginPath();
-        let started = false;
-        for (const p of seg.samples) {
-          const s = w2s(p.x + org.x, p.y + org.y);
-          if (!started) { ctx.moveTo(s.x, s.y); started = true; }
-          else ctx.lineTo(s.x, s.y);
+        const color = patchColor(idx);
+        const dashed = planStage > 0;
+        const liveOrg = segOrg(seg);
+        // every patch chains onto wherever the previous one ended — through
+        // maneuvers too — so the extension rendering stays continuous; when
+        // the chain origin differs from the live body's, the patch is drawn
+        // in BOTH places as equivalent views of the same thing
+        let org = liveOrg;
+        if (prevSeg && Math.abs(prevSeg.tEnd - seg.tStart) < 1e-6) {
+          const a = posVelAt(prevSeg.orbit, seg.tStart);
+          const b = posVelAt(seg.orbit, seg.tStart);
+          org = { x: prevOrg.x + a.x - b.x, y: prevOrg.y + a.y - b.y };
         }
-        ctx.strokeStyle = stageColor(planStage);
-        ctx.globalAlpha = planStage === 0 ? 0.9 : 0.85;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash(planStage === 0 ? [] : [6, 5]);
+        extMap.set(seg, org);
+        prevSeg = seg; prevOrg = org;
+        const { u1, u2 } = rangeFor(v);
+        const segLen = pathConic(seg.orbit, u1, u2, org);
+        if (v.mode === "ghost") {
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.35;
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 4]);
+          ctx.lineDashOffset = chainLen - dashClock;
+        } else {
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = dashed ? 0.85 : 0.9;
+          ctx.lineWidth = 1.5;
+          if (dashed) { ctx.setLineDash([6, 5]); ctx.lineDashOffset = chainLen - dashClock; }
+        }
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.globalAlpha = 1;
-
-        // apsis markers
-        for (const ap of seg.apsides) {
-          const s = w2s(ap.x + org.x, ap.y + org.y);
-          if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
-          ctx.beginPath();
-          ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x + 4, s.y); ctx.lineTo(s.x, s.y + 4); ctx.lineTo(s.x - 4, s.y);
-          ctx.closePath();
-          ctx.fillStyle = stageColor(planStage);
-          ctx.fill();
-          label(`${ap.kind} ${fmtKm(ap.alt)}`, s.x + 8, s.y - 8, ap.alt < 0 ? "#e0556b" : "rgba(230,232,239,0.85)");
-        }
-
-        // encounter / exit / impact markers at segment ends
-        if (seg.endType === "soiEnter" && seg.tEnd > tNow) {
-          const st = posVelAt(seg.orbit, seg.tEnd);
-          const s = w2s(st.x + org.x, st.y + org.y);
-          label("Lume encounter ▸", s.x + 8, s.y, "#ffb454");
-          // ghost moon at encounter
-          const gm = moonState(seg.tEnd);
-          const g = w2s(gm.x, gm.y);
-          ctx.beginPath();
-          ctx.arc(g.x, g.y, Math.max(LUME.radius * cam.zoom, 2), 0, TAU);
-          ctx.strokeStyle = "rgba(154,163,178,0.5)";
+        ctx.lineDashOffset = 0;
+        // the same patch, fainter, around where its body is right now — and a
+        // ghost disc of the body where the extension patch has it
+        const liveCopy = Math.hypot(org.x - liveOrg.x, org.y - liveOrg.y) > 1;
+        if (liveCopy) {
+          pathConic(seg.orbit, u1, u2, liveOrg);
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = v.mode === "ghost" ? 0.18 : 0.3;
+          ctx.lineWidth = 1;
           ctx.setLineDash([3, 4]);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.arc(g.x, g.y, LUME.soi * cam.zoom, 0, TAU);
-          ctx.strokeStyle = "rgba(154,163,178,0.2)";
+          ctx.lineDashOffset = chainLen - dashClock;
           ctx.stroke();
           ctx.setLineDash([]);
+          ctx.lineDashOffset = 0;
+          ctx.globalAlpha = 1;
+          if (v.mode === "ghost") {
+            const gb = SYSTEM.bodies[seg.body];
+            const gs = w2s(org.x, org.y);
+            ctx.beginPath();
+            ctx.arc(gs.x, gs.y, Math.max(gb.radius * cam.zoom, 2), 0, TAU);
+            ctx.strokeStyle = color; // the ghost body wears its patch's color
+            ctx.globalAlpha = 0.55;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
         }
-        if (seg.endType === "impact") {
-          const st = posVelAt(seg.orbit, seg.tEnd);
-          const s = w2s(st.x + org.x, st.y + org.y);
-          ctx.strokeStyle = "#e0556b";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x + 4, s.y + 4);
-          ctx.moveTo(s.x + 4, s.y - 4); ctx.lineTo(s.x - 4, s.y + 4);
-          ctx.stroke();
-          label("impact", s.x + 8, s.y, "#e0556b");
-        }
+        ctx.globalAlpha = 1;
+        chainLen += segLen;
+
+        // apsides + event markers, in the patch's own color: on the primary
+        // copy, and dimmed on the live copy when there is one. Far events —
+        // many orbits inside the patch — stay hidden so a visible marker
+        // always means "on this pass", not "in thirty".
+        const farEvent = seg.orbit.elliptic && seg.tEnd - Math.max(seg.tStart, tNow) > seg.orbit.period;
+        const drawExtras = (o2, dim) => {
+          for (const ap of seg.apsides) {
+            const s = w2s(ap.x + o2.x, ap.y + o2.y);
+            if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+            ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x + 4, s.y); ctx.lineTo(s.x, s.y + 4); ctx.lineTo(s.x - 4, s.y);
+            ctx.closePath();
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            label(`${ap.kind} ${fmtKm(ap.alt)}`, s.x + 8, s.y - 8, ap.alt < 0 ? "#e0556b" : "rgba(230,232,239,0.85)", "left", dim);
+          }
+          if (!farEvent && v.mode !== "ellipse" && seg.endType === "soiEnter" && seg.tEnd > tNow) {
+            const eb = SYSTEM.bodies[seg.enterBody];
+            const st = posVelAt(seg.orbit, seg.tEnd);
+            const s = w2s(st.x + o2.x, st.y + o2.y);
+            ctx.globalAlpha = dim;
+            encounterChevrons(s, v2s(st.vx, st.vy), color);
+            ctx.globalAlpha = 1;
+            label(`${eb.name} encounter`, s.x + 10, s.y - 10, color, "left", dim);
+          }
+          if (!farEvent && v.mode !== "ellipse" && (seg.endType === "soiExit" || seg.endType === "escape") && seg.tEnd > tNow) {
+            const st = posVelAt(seg.orbit, seg.tEnd);
+            const s = w2s(st.x + o2.x, st.y + o2.y);
+            ctx.globalAlpha = dim;
+            encounterChevrons(s, v2s(st.vx, st.vy), color);
+            ctx.globalAlpha = 1;
+            label(`${SYSTEM.bodies[seg.body].name} escape`, s.x + 10, s.y - 10, color, "left", dim);
+          }
+          if (v.mode !== "ellipse" && seg.endType === "impact") {
+            const st = posVelAt(seg.orbit, seg.tEnd);
+            const s = w2s(st.x + o2.x, st.y + o2.y);
+            ctx.globalAlpha = dim;
+            ctx.strokeStyle = "#e0556b";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(s.x - 4, s.y - 4); ctx.lineTo(s.x + 4, s.y + 4);
+            ctx.moveTo(s.x + 4, s.y - 4); ctx.lineTo(s.x - 4, s.y + 4);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            label("impact", s.x + 8, s.y, "#e0556b", "left", dim);
+          }
+        };
+        drawExtras(org, 1);
+        if (liveCopy) drawExtras(liveOrg, 0.5);
       }
 
-      // closest approach markers
-      if (target && ca?.best && ca.best.t >= tNow) {
+      // closest approach markers (only on a drawn orbit)
+      if (target && ca?.best && ca.best.t >= tNow && visSet.has(ca.best.seg)) {
         const b = ca.best;
-        const sp = posVelAt(trajSegAt(b.t).orbit, b.t);
-        const mp = moonState(b.t);
-        const s1 = w2s(sp.x, sp.y), s2 = w2s(mp.x, mp.y);
+        const org = segOrg(b.seg);
+        const sp = posVelAt(b.seg.orbit, b.t);
+        const mp = bodyStateAt(SYSTEM, target, b.t);
+        const s1 = w2s(sp.x + org.x, sp.y + org.y), s2 = w2s(mp.x, mp.y);
         ctx.beginPath();
         ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y);
         ctx.strokeStyle = "rgba(154,163,178,0.35)";
@@ -798,49 +832,69 @@
         label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
       }
 
-      // bodies
-      drawBody(0, 0, VESPER.radius, "#1d2c47", "#3f5b8c");
-      drawBody(moon.x, moon.y, LUME.radius, "#4d5364", "#8f97a8");
-      {
-        const s = w2s(moon.x, moon.y);
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, LUME.soi * cam.zoom, 0, TAU);
-        ctx.strokeStyle = target === "lume" ? "rgba(140,200,255,0.4)" : "rgba(154,163,178,0.22)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 5]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        label("Lume", s.x, s.y - Math.max(LUME.radius * cam.zoom, 2) - 10, "rgba(154,163,178,0.9)", "center");
-        const pv = w2s(0, 0);
-        label("Vesper", pv.x, pv.y - Math.max(VESPER.radius * cam.zoom, 2) - 10, "rgba(154,163,178,0.9)", "center");
+      // bodies + labels (SOI circles only when toggled on; the target's name
+      // lights up). Deepest bodies first, so a parent's label always lands on top of
+      // its children's; a child whose whole orbit is tiny on screen loses its
+      // label entirely — it has visually merged with its parent.
+      for (const b of BODY_LABEL_ORDER) {
+        const bs = bodyStateAt(SYSTEM, b.id, tNow);
+        if (soiOn && b.soi) {
+          const s = w2s(bs.x, bs.y);
+          const r = b.soi * cam.zoom;
+          if (r > 4 && r < 40000 && s.x + r > -80 && s.x - r < W + 80 && s.y + r > -80 && s.y - r < H + 80) {
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, r, 0, TAU);
+            ctx.strokeStyle = "rgba(140,165,210,0.3)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+        drawBody(bs.x, bs.y, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
+        if (b.parent && b.orbitRadius * cam.zoom < 20) continue;
+        const s = w2s(bs.x, bs.y);
+        label(b.name, s.x, s.y - Math.max(b.radius * cam.zoom, 2) - 10,
+          target === b.id ? "#8cc8ff" : "rgba(154,163,178,0.9)", "center");
       }
 
-      // maneuver nodes
+      // maneuver nodes (executed burns are history — no marker, not clickable)
       hitNodes.length = 0;
       hitHandles.length = 0;
       for (const nd of nodes) {
+        if (nd.t <= tNow) continue;
         const info = traj.nodeInfo.get(nd.id);
         if (!info) continue;
-        const org = segOrigin(info.seg);
-        const s = w2s(info.relX + org.x, info.relY + org.y);
-        const executed = nd.t <= tNow;
+        if (!visSet.has(info.seg)) continue; // its lead-in path is hidden
+        // a maneuver on a dual-rendered patch appears on BOTH copies, and
+        // either copy can be clicked; the gizmo follows the last-clicked one
+        const liveO = segOrg(info.seg);
+        const extO = extMap.get(info.seg) ?? liveO;
+        const dual = Math.hypot(extO.x - liveO.x, extO.y - liveO.y) > 1;
+        const pin = nd.pin === "live" ? "live" : "ext";
+        const copies = dual
+          ? [{ o: extO, k: "ext" }, { o: liveO, k: "live" }]
+          : [{ o: pin === "live" ? liveO : extO, k: pin }];
         const sel = nd.id === selectedId;
-        ctx.globalAlpha = executed ? 0.35 : 1;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, sel ? 7 : 5, 0, TAU);
-        ctx.strokeStyle = "#ffb454";
-        ctx.lineWidth = sel ? 2 : 1.5;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 2, 0, TAU);
-        ctx.fillStyle = "#ffb454";
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        hitNodes.push({ id: nd.id, x: s.x, y: s.y });
+        let s = null; // the pinned copy's screen position, for the gizmo
+        for (const c of copies) {
+          const cs = w2s(info.relX + c.o.x, info.relY + c.o.y);
+          ctx.beginPath();
+          ctx.arc(cs.x, cs.y, sel ? 7 : 5, 0, TAU);
+          ctx.strokeStyle = "#ffb454";
+          ctx.lineWidth = sel ? 2 : 1.5;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(cs.x, cs.y, 2, 0, TAU);
+          ctx.fillStyle = "#ffb454";
+          ctx.fill();
+          hitNodes.push({ id: nd.id, x: cs.x, y: cs.y, copy: c.k });
+          if (c.k === pin || !dual) s = cs;
+        }
         const dvTot = Math.hypot(nd.prograde, nd.radial);
-        if (dvTot > 0.05 && !executed) label(fmtMps(dvTot), s.x + 10, s.y + 12, "#ffb454");
+        if (dvTot > 0.05) label(fmtMps(dvTot), s.x + 10, s.y + 12, "#ffb454");
 
-        if (sel && !executed) {
+        if (sel) {
           const pg = v2s(info.pgx, info.pgy);
           const ro = v2s(info.rox, info.roy);
           const handles = [
@@ -849,25 +903,26 @@
             { ax: "radial", dir: 1, ux: ro.x, uy: ro.y, color: "#59e3e3" },
             { ax: "radial", dir: -1, ux: -ro.x, uy: -ro.y, color: "#59e3e3" },
           ];
-          for (const h of handles) {
-            const x0 = s.x + h.ux * 10, y0 = s.y + h.uy * 10;
-            const x1 = s.x + h.ux * 28, y1 = s.y + h.uy * 28;
-            ctx.beginPath();
-            ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
-            ctx.strokeStyle = h.color;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            // arrowhead
-            const px = -h.uy, py = h.ux;
-            ctx.beginPath();
-            ctx.moveTo(x1 + h.ux * 7, y1 + h.uy * 7);
-            ctx.lineTo(x1 + px * 4, y1 + py * 4);
-            ctx.lineTo(x1 - px * 4, y1 - py * 4);
-            ctx.closePath();
-            ctx.fillStyle = h.color;
-            ctx.fill();
-            hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1 + h.ux * 3, y: y1 + h.uy * 3, pgS: pg, roS: ro });
-          }
+          // deferred past flushLabels: the editing gizmo must never hide
+          // under Ap/Pe/distance text
+          gizmoDraw = () => {
+            for (const h of handles) {
+              // an actively-held handle tugs outward with the drag and lights up
+              const active = drag?.kind === "handle" && drag.h.nodeId === nd.id
+                && drag.h.ax === h.ax && drag.h.dir === h.dir;
+              const tug = active ? clampN((drag.disp ?? 0) * 0.25, -6, 14) : 0;
+              const x0 = s.x + h.ux * 10, y0 = s.y + h.uy * 10;
+              const x1 = s.x + h.ux * (30 + tug), y1 = s.y + h.uy * (30 + tug);
+              ctx.beginPath();
+              ctx.moveTo(x0, y0);
+              ctx.lineTo(x1 - h.ux * 7, y1 - h.uy * 7);
+              ctx.strokeStyle = h.color;
+              ctx.lineWidth = active ? 2.2 : 1.5;
+              ctx.stroke();
+              handleGlyph(x1, y1, h.ax, h.dir, h.color, active);
+              hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1, y: y1, pgS: pg, roS: ro });
+            }
+          };
         }
       }
 
@@ -888,6 +943,30 @@
         ctx.stroke();
       }
 
+      // pending path-click menu anchor / hover ghost
+      if (menuPending) {
+        if (menuPending.t <= tNow) closeMenu();
+        else {
+          const st = posVelAt(menuPending.seg.orbit, menuPending.t);
+          const org = menuPending.origin === "live" ? segOrg(menuPending.seg) : dispOrg(menuPending.seg);
+          const s = w2s(st.x + org.x, st.y + org.y);
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 5, 0, TAU);
+          ctx.strokeStyle = "#ffb454";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          positionMenu(s);
+        }
+      } else if (hoverGhost && hoverGhost.t > tNow) {
+        const st = posVelAt(hoverGhost.seg.orbit, hoverGhost.t);
+        const org = hoverGhost.origin === "live" ? segOrg(hoverGhost.seg) : dispOrg(hoverGhost.seg);
+        const s = w2s(st.x + org.x, st.y + org.y);
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, 4, 0, TAU);
+        ctx.fillStyle = "rgba(255,180,84,0.9)";
+        ctx.fill();
+      }
+
       // snap highlight while dragging/placing
       if (snapFlash) {
         ctx.beginPath();
@@ -896,11 +975,10 @@
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
-    }
 
-    function trajSegAt(t) {
-      for (const s of traj.segs) if (t < s.tEnd) return s;
-      return traj.segs[traj.segs.length - 1];
+      flushLabels(); // text above markers…
+      gizmoDraw?.(); // …but the maneuver handles above the text
+      gizmoDraw = null;
     }
 
     /* ============================ interaction ============================ */
@@ -908,48 +986,97 @@
     const hitHandles = [];
     let snapFlash = null;
     let drag = null;       // {kind:'pan'|'node'|'handle', ...}
+    let hoverGhost = null; // {t, seg} — where a click on the path would land
+    let menuPending = null;// {t, seg} — anchor of the open add-burn/warp popup
     const pointers = new Map();
     let pinchDist = 0;
 
+    const pathMenu = document.getElementById("pathMenu");
+    function openMenu(t, seg, origin = "ext") {
+      menuPending = { t, seg, origin };
+      document.getElementById("pmTime").textContent = fmtClock(t);
+      pathMenu.style.display = "";
+    }
+    function closeMenu() {
+      menuPending = null;
+      pathMenu.style.display = "none";
+    }
+    function positionMenu(s) {
+      pathMenu.style.left = clampN(s.x + 14, 8, W - 190) + "px";
+      pathMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
+    }
+
+    let toastTimer = 0;
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+    }
+
+    // nearest point on one drawn curve, using the SAME adaptive geometry the
+    // renderer draws — fixed-count sample polylines cut corners by hundreds of
+    // pixels on big orbits, sending clicks far off the visible line
+    function nearestOnCurve(orbit, u1, u2, org, sx, sy) {
+      const pts = adaptiveCurve((u) => {
+        const c = conicPoint(orbit, u);
+        return w2s(c.x + org.x, c.y + org.y);
+      }, u1, u2, 24, W, H);
+      let best = null, prev = null;
+      for (const p of pts) {
+        if (prev) {
+          const dx = p.x - prev.x, dy = p.y - prev.y;
+          const len2 = dx * dx + dy * dy || 1;
+          const f = clampN(((sx - prev.x) * dx + (sy - prev.y) * dy) / len2, 0, 1);
+          const d = Math.hypot(sx - (prev.x + dx * f), sy - (prev.y + dy * f));
+          if (!best || d < best.d) best = { d, u: prev.u + (p.u - prev.u) * f };
+        }
+        prev = p;
+      }
+      return best; // {d, u} or null
+    }
+
     function trajectoryHit(sx, sy, minT) {
-      // nearest point on any drawn segment within 12 px; returns {t} or null
+      // nearest point on any DRAWN segment within 12 px; returns {t, seg} or null
       let best = null;
-      for (const seg of traj.segs) {
-        if (seg.tEnd < tNow) continue;
-        const org = segOrigin(seg);
-        let prev = null;
-        for (const p of seg.samples) {
-          const s = w2s(p.x + org.x, p.y + org.y);
-          if (prev) {
-            const dx = s.x - prev.x, dy = s.y - prev.y;
-            const len2 = dx * dx + dy * dy || 1;
-            let u = ((sx - prev.x) * dx + (sy - prev.y) * dy) / len2;
-            u = clampN(u, 0, 1);
-            const qx = prev.x + dx * u, qy = prev.y + dy * u;
-            const d = Math.hypot(sx - qx, sy - qy);
-            const t = prev.t + (p.t - prev.t) * u;
-            if (d < 12 && t > minT && (!best || d < best.d)) best = { d, t, seg };
-          }
-          prev = { ...s, t: p.t };
+      for (const v of visList) {
+        const seg = v.seg;
+        const live = segOrg(seg);
+        const ext = extMap.get(seg) ?? live;
+        const origins = Math.hypot(ext.x - live.x, ext.y - live.y) > 1
+          ? [{ org: ext, kind: "ext" }, { org: live, kind: "live" }]
+          : [{ org: ext, kind: "ext" }];
+        const { u1, u2 } = rangeFor(v);
+        for (const { org, kind } of origins) {
+          const n = nearestOnCurve(seg.orbit, u1, u2, org, sx, sy);
+          if (!n || n.d >= 12) continue;
+          // a curve covers one revolution; wrap forward to the next pass after minT
+          const t = wrapForward(paramTime(seg.orbit, n.u), minT, seg.orbit, seg.tEnd);
+          if (t > minT && (!best || n.d < best.d)) best = { d: n.d, t, seg, origin: kind };
         }
       }
       return best;
     }
 
-    // snap a candidate time to a nearby Ap/Pe of its segment's orbit (screen-space threshold)
-    function applySnap(t, seg) {
+    // snap a candidate time to a nearby Ap/Pe — strictly pixel-based: only
+    // when the CURSOR itself is within reach of the apsis marker, so a small
+    // on-screen orbit can't be swallowed whole by its own apsides
+    function applySnap(t, seg, origin, px, py) {
       snapFlash = null;
+      if (!snapOn || px == null) return t;
       const o = seg.orbit;
-      const org = segOrigin(seg);
-      const cur = posVelAt(o, t);
-      const sc = w2s(cur.x + org.x, cur.y + org.y);
+      const org = origin === "live" ? segOrg(seg) : dispOrg(seg);
       const cands = [{ nu: 0, x: o.rp * o.px, y: o.rp * o.py }];
       if (o.elliptic) cands.push({ nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py });
       for (const c of cands) {
         const s = w2s(c.x + org.x, c.y + org.y);
-        if (Math.hypot(sc.x - s.x, sc.y - s.y) < 16) {
+        if (Math.hypot(px - s.x, py - s.y) < 16) {
           const ts = tAtNu(o, c.nu, Math.max(tNow, seg.tStart) + 1e-3);
-          if (ts != null && Math.abs(ts - t) < (o.elliptic ? o.period : Infinity)) {
+          // an apsis pass the segment never reaches (it ends at an encounter
+          // first) must not capture the click — that warped players one orbit
+          // past the encounter they aimed just before
+          if (ts != null && ts < seg.tEnd && Math.abs(ts - t) < (o.elliptic ? o.period : Infinity)) {
             snapFlash = s;
             return ts;
           }
@@ -958,8 +1085,10 @@
       return t;
     }
 
+    // a canvas drag must never start selecting the panel's text
+    cv.addEventListener("mousedown", (e) => e.preventDefault());
     cv.addEventListener("pointerdown", (e) => {
-      cv.setPointerCapture(e.pointerId);
+      try { cv.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
@@ -971,7 +1100,7 @@
       // handles first
       for (const h of hitHandles) {
         if (Math.hypot(sx - h.x, sy - h.y) < 13) {
-          drag = { kind: "handle", h, lastX: sx, lastY: sy };
+          drag = { kind: "handle", h, anchorX: sx, anchorY: sy, curX: sx, curY: sy, shift: e.shiftKey };
           return;
         }
       }
@@ -980,10 +1109,15 @@
           const nd = nodes.find((x) => x.id === n.id);
           const info = traj.nodeInfo.get(n.id);
           selectedId = n.id;
+          if (nd && n.copy) nd.pin = n.copy; // gizmo follows the clicked copy
           if (nd && info && nd.t > tNow) {
             // pre-compute the pre-burn orbit's full path for time-dragging
             const full = { orbit: info.seg.orbit, body: info.seg.body, tStart: info.seg.tStart, tEnd: Infinity };
-            drag = { kind: "node", nd, seg: { ...full, samples: sampleSeg(full) }, moved: false, lastX: sx, lastY: sy };
+            const dOrg = dispOrg(info.seg), lOrg = segOrg(info.seg);
+            // project the drag against the copy the node is pinned to; when the
+            // copies coincide, track the (possibly moving) body live
+            const dragKind = (nd.pin === "live" || Math.hypot(dOrg.x - lOrg.x, dOrg.y - lOrg.y) < 1) ? "live" : "ext";
+            drag = { kind: "node", nd, seg: full, range: segParamRange(full), orgKind: dragKind, extOrg: dOrg, moved: false, lastX: sx, lastY: sy };
           }
           updatePanel();
           return;
@@ -994,13 +1128,35 @@
 
     cv.addEventListener("pointermove", (e) => {
       if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (!drag) return;
+      if (!drag) {
+        // hover: show where a click on the path would land
+        if (menuPending || e.pointerType !== "mouse") { hoverGhost = null; return; }
+        // …but not while over a maneuver's handles or marker
+        const hx = e.clientX, hy = e.clientY;
+        if (hitHandles.some((h) => Math.hypot(hx - h.x, hy - h.y) < 16)
+          || hitNodes.some((n) => Math.hypot(hx - n.x, hy - n.y) < 14)) {
+          hoverGhost = null;
+          snapFlash = null;
+          cv.style.cursor = "pointer";
+          return;
+        }
+        const hit = trajectoryHit(e.clientX, e.clientY, tNow + 1);
+        if (hit) {
+          hoverGhost = { t: applySnap(hit.t, hit.seg, hit.origin, e.clientX, e.clientY), seg: hit.seg, origin: hit.origin };
+        } else {
+          hoverGhost = null;
+          snapFlash = null;
+        }
+        cv.style.cursor = hoverGhost ? "pointer" : "";
+        return;
+      }
+      hoverGhost = null;
       if (drag.kind === "pinch" && pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinchDist > 0) {
           const f = d / pinchDist;
-          cam.zoom = clampN(cam.zoom * f, 0.004, 60);
+          cam.zoom = clampN(cam.zoom * f, MIN_ZOOM, MAX_ZOOM);
           userZoomed = true;
         }
         pinchDist = d;
@@ -1016,37 +1172,21 @@
         }
         drag.lastX = sx; drag.lastY = sy;
       } else if (drag.kind === "handle") {
-        const dx = sx - drag.lastX, dy = sy - drag.lastY;
-        drag.lastX = sx; drag.lastY = sy;
-        const gain = (e.shiftKey ? 0.06 : 1.2);
-        const h = drag.h;
-        const nd = nodes.find((x) => x.id === h.nodeId);
-        if (!nd) return;
-        const axis = h.ax === "prograde" ? h.pgS : h.roS;
-        const dv = (dx * axis.x + dy * axis.y) * gain;
-        nd[h.ax] = clampN(nd[h.ax] + dv, -20000, 20000);
-        markDirty();
-        updatePanel();
+        // just track the pointer — the Δv itself builds each tick, KSP-style
+        drag.curX = sx; drag.curY = sy;
+        drag.shift = e.shiftKey;
       } else if (drag.kind === "node") {
         drag.moved = true;
-        // nearest time on the node's pre-burn orbit
-        let best = null, prev = null;
-        const org = segOrigin(drag.seg);
-        for (const p of drag.seg.samples) {
-          const s = w2s(p.x + org.x, p.y + org.y);
-          if (prev) {
-            const dx = s.x - prev.x, dy = s.y - prev.y;
-            const len2 = dx * dx + dy * dy || 1;
-            let u = clampN(((sx - prev.x) * dx + (sy - prev.y) * dy) / len2, 0, 1);
-            const qx = prev.x + dx * u, qy = prev.y + dy * u;
-            const d = Math.hypot(sx - qx, sy - qy);
-            if (!best || d < best.d) best = { d, t: prev.t + (p.t - prev.t) * u };
-          }
-          prev = { ...s, t: p.t };
-        }
+        // nearest time on the node's pre-burn orbit (same adaptive geometry
+        // as the renderer — fixed samples cut corners at solar scales)
+        const org = drag.orgKind === "ext" ? drag.extOrg : segOrg(drag.seg);
+        const best = nearestOnCurve(drag.seg.orbit, drag.range.u1, drag.range.u2, org, sx, sy);
         if (best) {
-          let t = applySnap(best.t, drag.seg);
           const lo = Math.max(tNow, drag.seg.tStart) + 1;
+          // the curve covers one revolution — wrap to the next pass, or the
+          // node pins to the ship once the clock has lapped it
+          let t = wrapForward(paramTime(drag.seg.orbit, best.u), lo, drag.seg.orbit, drag.seg.tEnd);
+          t = applySnap(t, drag.seg, "live", sx, sy);
           t = Math.max(t, lo);
           drag.nd.t = t;
           markDirty();
@@ -1059,26 +1199,29 @@
       pointers.delete(e.pointerId);
       if (!drag) return;
       if (drag.kind === "pan" && !drag.moved) {
-        // click: select moon as target, place node, or deselect
+        // click: open the path menu, select a body as target, or deselect —
+        // a path hit always beats the body disc beneath it (see resolveMapClick)
         const sx = e.clientX, sy = e.clientY;
-        const m = moonState(tNow);
-        const ms = w2s(m.x, m.y);
-        if (Math.hypot(sx - ms.x, sy - ms.y) < Math.max(LUME.radius * cam.zoom, 10) + 4) {
-          target = target === "lume" ? null : "lume";
+        const pathHit = trajectoryHit(sx, sy, tNow + 1);
+        let clickedBody = null;
+        for (const b of Object.values(SYSTEM.bodies)) {
+          if (!b.parent) continue;
+          const bs = bodyStateAt(SYSTEM, b.id, tNow);
+          const sp = w2s(bs.x, bs.y);
+          if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * cam.zoom, 10) + 4) { clickedBody = b.id; break; }
+        }
+        const res = resolveMapClick(pathHit, clickedBody);
+        if (res.kind === "path") {
+          openMenu(applySnap(pathHit.t, pathHit.seg, pathHit.origin, sx, sy), pathHit.seg, pathHit.origin);
+          snapFlash = null;
+        } else if (res.kind === "body") {
+          target = target === res.body ? null : res.body;
           ca = null;
           if (targetSel) targetSel.value = target || "";
           updatePanel();
         } else {
-          const hit = trajectoryHit(sx, sy, tNow + 1);
-          if (hit) {
-            const t = applySnap(hit.t, hit.seg);
-            const nd = { id: nodeSeq++, t: Math.max(t, tNow + 1), prograde: 0, radial: 0 };
-            nodes.push(nd);
-            selectedId = nd.id;
-            markDirty();
-          } else {
-            selectedId = null;
-          }
+          closeMenu();
+          selectedId = null;
           updatePanel();
         }
       }
@@ -1093,7 +1236,7 @@
       e.preventDefault();
       const f = Math.pow(1.0015, -e.deltaY);
       const before = s2w(e.clientX, e.clientY);
-      cam.zoom = clampN(cam.zoom * f, 0.004, 60);
+      cam.zoom = clampN(cam.zoom * f, MIN_ZOOM, MAX_ZOOM);
       userZoomed = true;
       const after = s2w(e.clientX, e.clientY);
       cam.panX += before.x - after.x;
@@ -1116,7 +1259,9 @@
 
     function setRateButtons() {
       if (bg) return;
-      $("rate").textContent = (rateDir < 0 ? "−" : "") + RATES[rateIdx].toLocaleString("en-US") + "×";
+      const r = RATES[rateIdx];
+      const compact = r >= 1e9 ? r / 1e9 + "B" : r >= 1e6 ? r / 1e6 + "M" : r >= 1e3 ? r / 1e3 + "k" : String(r);
+      $("rate").textContent = (rateDir < 0 ? "−" : "") + compact + "×";
       $("pause").textContent = paused ? "▶" : "⏸";
     }
 
@@ -1137,15 +1282,12 @@
       $("nodeHint").style.display = nd ? "none" : "";
       $("nodeEditor").style.display = nd ? "" : "none";
       if (nd) {
-        const executed = nd.t <= tNow;
         $("ndT").textContent = fmtClock(nd.t);
-        $("ndPro").textContent = fmtMps(nd.prograde);
-        $("ndRad").textContent = fmtMps(nd.radial);
+        const pro = $("ndPro"), rad = $("ndRad");
+        if (document.activeElement !== pro) pro.value = nd.prograde.toFixed(1);
+        if (document.activeElement !== rad) rad.value = nd.radial.toFixed(1);
         $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial));
-        $("ndDone").style.display = executed ? "" : "none";
       }
-      $("fpCount").textContent = String(nodes.length);
-      $("fpDv").textContent = fmtMps(nodes.reduce((s, n) => s + Math.hypot(n.prograde, n.radial), 0));
       $("targetInfo").style.display = target ? "" : "none";
     }
 
@@ -1153,11 +1295,14 @@
       if (bg) return;
       const seg = ship.seg;
       const o = seg.orbit;
-      const B = BODIES[seg.body];
+      const B = SYSTEM.bodies[seg.body];
       const impacted = seg.endType === "impact" && tNow >= seg.tEnd;
+      const escaped = !!B.soi && ship.rel.r > B.soi;
       $("roStatus").textContent = impacted
         ? `impacted ${B.name}`
-        : (o.elliptic ? `orbiting ${B.name}` : `escaping ${B.name}`);
+        : escaped
+          ? `escaped ${B.name}`
+          : (o.elliptic ? `orbiting ${B.name}` : `escaping ${B.name}`);
       if (impacted) $("roStatus").classList.add("mk-danger"); else $("roStatus").classList.remove("mk-danger");
       $("roAlt").textContent = fmtKm(Math.max(ship.rel.r - B.radius, 0));
       $("roVel").textContent = fmtMps(Math.hypot(ship.rel.vx, ship.rel.vy) * 1000);
@@ -1168,13 +1313,19 @@
       $("roPeriod").textContent = o.elliptic ? fmtDur(o.period) : "—";
       $("clock").textContent = fmtClock(tNow);
 
+      // the flight plan is what's still ahead; executed burns are history
+      const future = nodes.filter((n) => n.t > tNow);
+      $("fpCount").textContent = String(future.length);
+      $("fpDv").textContent = fmtMps(future.reduce((s, n) => s + Math.hypot(n.prograde, n.radial), 0));
+
       if (target) {
-        const encSeg = traj.segs.find((s) => s.endType === "soiEnter" && s.tEnd > tNow);
+        const tb = SYSTEM.bodies[target];
+        const encSeg = traj.segs.find((s) => s.endType === "soiEnter" && s.enterBody === target && s.tEnd > tNow);
         if (encSeg) {
           $("roCa").textContent = "encounter";
           $("roCaT").textContent = "in " + fmtDur(encSeg.tEnd - tNow);
-        } else if (ship.seg.body === "lume") {
-          $("roCa").textContent = fmtKm(ship.rel.r - LUME.radius);
+        } else if (ship.seg.body === target) {
+          $("roCa").textContent = fmtKm(ship.rel.r - tb.radius);
           $("roCaT").textContent = "inside SOI";
         } else if (ca?.best && ca.best.t >= tNow) {
           $("roCa").textContent = fmtKm(ca.best.d);
@@ -1188,37 +1339,94 @@
 
     if (!bg) {
       targetSel = $("targetSel");
+      for (const b of Object.values(SYSTEM.bodies)) {
+        if (!b.parent) continue;
+        const o = document.createElement("option");
+        o.value = b.id;
+        o.textContent = b.name;
+        targetSel.appendChild(o);
+      }
       targetSel.addEventListener("change", () => {
         target = targetSel.value || null;
         ca = null;
         updatePanel();
       });
+      const focusSel = $("focusSel");
+      for (const b of Object.values(SYSTEM.bodies)) {
+        const o = document.createElement("option");
+        o.value = b.id;
+        o.textContent = b.name;
+        focusSel.appendChild(o);
+      }
+      focusSel.addEventListener("change", () => {
+        focus = focusSel.value;
+        cam.panX = 0; cam.panY = 0; // re-center on the new focus
+      });
+      const patchSlider = $("patchSlider");
+      patchSlider.max = String(Math.min(10, MAX_SEGS)); // beyond ~10 it's noise
+      patchSlider.addEventListener("input", () => {
+        patchLimit = +patchSlider.value;
+        $("plVal").textContent = patchSlider.value;
+      });
+      $("snapChk").addEventListener("change", () => { snapOn = $("snapChk").checked; });
+      $("soiChk").addEventListener("change", () => { soiOn = $("soiChk").checked; });
       $("slower").addEventListener("click", slower);
       $("faster").addEventListener("click", faster);
       $("pause").addEventListener("click", () => { paused = !paused; setRateButtons(); });
       $("resetView").addEventListener("click", () => { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; });
       $("jumpGo").addEventListener("click", () => {
         const t = parseTimeInput($("jumpIn").value);
-        if (t != null) { tNow = Math.max(0, t); ca = null; }
+        if (t != null) doJump(t);
       });
       $("jumpIn").addEventListener("keydown", (e) => { if (e.key === "Enter") $("jumpGo").click(); });
       $("warpNode").addEventListener("click", () => {
         const nd = selectedNode();
-        if (nd) { tNow = Math.max(0, nd.t - 5); paused = true; setRateButtons(); }
+        if (nd) doJump(nd.t + 1); // land just past the burn, already executed
       });
       $("delNode").addEventListener("click", () => { if (selectedId != null) deleteNode(selectedId); });
       $("clearNodes").addEventListener("click", () => {
-        nodes.length = 0;
+        for (let i = nodes.length - 1; i >= 0; i--) if (nodes[i].t > tNow) nodes.splice(i, 1);
         selectedId = null;
         markDirty();
         updatePanel();
       });
+      $("pmAdd").addEventListener("click", () => {
+        if (!menuPending) return;
+        // remember which copy of the path it was placed on, so the node
+        // renders where the user clicked (display-only hint)
+        const nd = { id: nodeSeq++, t: Math.max(menuPending.t, tNow + 1), prograde: 0, radial: 0, pin: menuPending.origin };
+        nodes.push(nd);
+        selectedId = nd.id;
+        markDirty();
+        closeMenu();
+        updatePanel();
+      });
+      $("pmWarp").addEventListener("click", () => {
+        if (!menuPending) return;
+        const t = menuPending.t;
+        closeMenu();
+        doJump(t);
+      });
+      for (const [id, ax] of [["ndPro", "prograde"], ["ndRad", "radial"]]) {
+        const el = $(id);
+        el.addEventListener("input", () => {
+          const v = parseFloat(el.value);
+          const nd = selectedNode();
+          if (Number.isFinite(v) && nd && nd.t > tNow) {
+            nd[ax] = v;
+            markDirty();
+            $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial));
+          }
+        });
+        el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
+        el.addEventListener("blur", updatePanel);
+      }
       for (const btn of document.querySelectorAll(".mk-step")) {
         btn.addEventListener("click", (e) => {
           const nd = selectedNode();
           if (!nd || nd.t <= tNow) return;
           const step = e.shiftKey ? 10 : e.altKey ? 0.1 : 1;
-          nd[btn.dataset.ax] = clampN(nd[btn.dataset.ax] + step * (+btn.dataset.d), -20000, 20000);
+          nd[btn.dataset.ax] += step * (+btn.dataset.d);
           markDirty();
           updatePanel();
         });
@@ -1229,12 +1437,61 @@
         else if (e.key === ",") slower();
         else if (e.key === ".") faster();
         else if (e.key === "r") { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; }
-        else if (e.key === "Escape") { selectedId = null; updatePanel(); }
+        else if (e.key === "Escape") { closeMenu(); selectedId = null; updatePanel(); }
         else if (e.key === "Delete" || e.key === "Backspace") { if (selectedId != null) deleteNode(selectedId); }
       });
       setRateButtons();
       updatePanel();
     }
+
+    // debug hook (harmless in production, invaluable when a click "does nothing")
+    window.__mk = {
+      hit: (x, y) => trajectoryHit(x, y, tNow + 1),
+      ca: () => ca,
+      hitDebug: (sx, sy) => {
+        const out = [];
+        for (const v of visList) {
+          const seg = v.seg;
+          const live = segOrg(seg);
+          const ext = extMap.get(seg) ?? live;
+          const { u1, u2 } = rangeFor(v);
+          for (const org of [ext, live]) {
+            const n = nearestOnCurve(seg.orbit, u1, u2, org, sx, sy);
+            const at = n ? paramTime(seg.orbit, n.u) : null;
+            out.push({
+              mode: v.mode, minD: n ? +n.d.toFixed(1) : null, at,
+              wrapped: n ? wrapForward(at, tNow + 1, seg.orbit, seg.tEnd) : null,
+              tNow, tEnd: seg.tEnd,
+            });
+          }
+        }
+        return out;
+      },
+      state: () => ({
+        tNow, zoom: cam.zoom, panX: cam.panX, panY: cam.panY, fp: { ...fp },
+        vis: visList.map((v) => ({ mode: v.mode, t0: v.seg.tStart, t1: v.seg.tEnd, end: v.seg.endType })),
+      }),
+      // synchronous frame benchmark (rAF freezes while the pane is hidden)
+      bench: (n = 30) => {
+        const out = { compile: 0, ca: 0, draw: 0 };
+        for (let i = 0; i < n; i++) {
+          markDirty();
+          let t0 = performance.now();
+          recompileIfDirty();
+          out.compile += performance.now() - t0;
+          ship = shipStateAt(SYSTEM, traj, tNow);
+          fp = focusPos();
+          t0 = performance.now();
+          ca = null; updateCA();
+          out.ca += performance.now() - t0;
+          t0 = performance.now();
+          draw();
+          out.draw += performance.now() - t0;
+        }
+        for (const k in out) out[k] = +(out[k] / n).toFixed(2);
+        return out;
+      },
+    };
 
     /* ============================ main loop ============================ */
     window.addEventListener("resize", resize);
@@ -1244,7 +1501,34 @@
     function tick(now) {
       const dt = Math.min((now - lastWall) / 1000, 0.05);
       lastWall = now;
+      // self-heal: a single NaN in the camera would otherwise poison every
+      // frame from then on (it has — via 0/0 in a zoom handler at 0×0 load)
+      if (!Number.isFinite(cam.zoom + cam.panX + cam.panY) || !(cam.zoom > 0)) {
+        cam.zoom = defaultZoom;
+        cam.panX = 0;
+        cam.panY = 0;
+      }
+      // KSP-style handle hold: Δv builds at a rate set by how far the handle
+      // is pulled, as a fraction of the screen — hold still and it keeps
+      // building; pull past the anchor to build the other way
+      if (drag?.kind === "handle") {
+        const nd = nodes.find((n) => n.id === drag.h.nodeId);
+        if (nd && nd.t > tNow) {
+          const axis = drag.h.ax === "prograde" ? drag.h.pgS : drag.h.roS;
+          const disp = (drag.curX - drag.anchorX) * axis.x + (drag.curY - drag.anchorY) * axis.y;
+          drag.disp = disp * drag.h.dir; // along the handle's own outward direction
+          const p = disp / Math.min(W, H);
+          const rate = Math.sign(p) * (Math.abs(p) * 2) ** 2 * 5000 * (drag.shift ? 0.05 : 1);
+          if (rate) {
+            nd[drag.h.ax] += rate * dt;
+            markDirty();
+            updatePanel();
+          }
+        }
+      }
+      const __t0 = performance.now();
       recompileIfDirty();
+      const __t1 = performance.now();
       if (!paused) {
         const prevT = tNow;
         tNow = Math.max(0, tNow + dt * RATES[rateIdx] * rateDir);
@@ -1256,10 +1540,21 @@
           setRateButtons();
         }
       }
-      ship = shipStateAt(traj, tNow);
+      ensureHorizon();
+      ship = shipStateAt(SYSTEM, traj, tNow);
+      fp = focusPos();
+      // a burn that just executed leaves the editor — it's history now
+      const selNd = nodes.find((n) => n.id === selectedId);
+      if (selNd && selNd.t <= tNow) { selectedId = null; updatePanel(); }
+      const __t2 = performance.now();
       updateCA();
+      const __t3 = performance.now();
       draw();
+      const __t4 = performance.now();
       updateReadouts();
+      // rolling per-phase timings for perf debugging (__mk.perf())
+      (window.__perf ??= []).push({ compile: __t1 - __t0, mid: __t2 - __t1, ca: __t3 - __t2, draw: __t4 - __t3 });
+      if (window.__perf.length > 240) window.__perf.shift();
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
