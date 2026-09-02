@@ -317,33 +317,40 @@
     // every long jump goes through the survey; a surprise encounter aborts it
     function doJump(targetT) {
       recompileIfDirty(); // jump decisions must see pending edits
-      const tOld = tNow, shipOld = ship;
+      // before jumping, find every pixel where the DESTINATION is currently
+      // drawn (a point on a dual-rendered patch appears on both the ghost and
+      // the live copy). If the ship-focused camera can pin the ship to one of
+      // those pixels, the warp won't look like a camera jump: the ship simply
+      // appears where the destination was shown. Non-ghost copies win; if no
+      // copy is on screen (or focus is a body), keep the normal recenter.
+      let destPix = null;
+      if (focus === "ship") {
+        const tt = Math.max(0, targetT);
+        const destSeg = traj.segs.find((s) => tt >= s.tStart && tt < s.tEnd) ?? traj.segs[traj.segs.length - 1];
+        if (visSet.has(destSeg)) {
+          const rel = posVelAt(destSeg.orbit, tt); // conic point — periodic, any revolution
+          const live = segOrg(destSeg);
+          const ext = extMap.get(destSeg) ?? live;
+          const onScreen = (p) => p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20;
+          for (const org of [live, ext]) { // live first: non-ghosts take precedence
+            const p = w2s(rel.x + org.x, rel.y + org.y);
+            if (onScreen(p)) { destPix = p; break; }
+          }
+        }
+      }
       const res = tryJump(SYSTEM, EPOCH, nodes, traj, Math.max(0, targetT), relevantHorizon(SYSTEM, traj));
       traj = res.traj;
       tNow = res.t;
       ca = null;
-      if (focus === "ship" && shipOld) {
-        // ship-focused jumps hold the camera still: the world stays put and
-        // the ship simply appears at the clicked spot / maneuver. Only within
-        // one SOI frame and only if the ship lands on-screen — a jump into a
-        // new SOI (or out of view) recenters on the ship as usual. Body-focused
-        // cameras always keep their body pinned instead.
+      if (focus === "ship") {
         ship = shipStateAt(SYSTEM, traj, tNow);
-        if (ship.seg.body === shipOld.seg.body) {
-          const b = ship.seg.body;
-          const bOld = bodyStateAt(SYSTEM, b, tOld);
-          const bNew = bodyStateAt(SYSTEM, b, tNow);
-          const dx = (shipOld.x - bOld.x) - (ship.x - bNew.x);
-          const dy = (shipOld.y - bOld.y) - (ship.y - bNew.y);
-          // where the ship would land on screen under the held frame
-          const sx = W / 2 - (cam.panX + dx) * cam.zoom;
-          const sy = H / 2 + (cam.panY + dy) * cam.zoom;
-          if (sx > -40 && sx < W + 40 && sy > -40 && sy < H + 40) {
-            cam.panX += dx;
-            cam.panY += dy;
-          }
-        }
         fp = { x: ship.x, y: ship.y };
+        if (destPix && !res.aborted) {
+          // with the camera anchored on the ship, the pan alone decides the
+          // ship's pixel — set it to the destination's pre-warp pixel
+          cam.panX = (W / 2 - destPix.x) / cam.zoom;
+          cam.panY = (destPix.y - H / 2) / cam.zoom;
+        }
       }
       if (res.aborted) toast("orbit changed — warp abandoned");
     }
