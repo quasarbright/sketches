@@ -61,6 +61,9 @@
       font-size: .78rem; padding: 4px 8px;
     }
     .mk-pathmenu { position: fixed; z-index: 6; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    /* popup actions stack: one column of equal-width, centered buttons */
+    .mk-pathmenu .mk-actions { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+    .mk-pathmenu .mk-actions .btn { width: 100%; text-align: center; justify-content: center; }
     .mk-pathmenu .mk-pm-time { font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
     html[data-background] .mk-pathmenu { display: none !important; }
     .mk-toast {
@@ -89,7 +92,7 @@
     <div class="mk-sub">patched-conic sandbox</div>
   </div>
 
-  <control-panel floating title="flight">
+  <control-panel floating title="mission">
     <div class="section-label">ship</div>
     <div class="mk-row"><span class="mk-k" title="what the ship is currently doing, and around which body">status</span><span class="mk-v" id="roStatus">—</span></div>
     <div class="mk-row"><span class="mk-k" title="height above the surface of the body you're orbiting">altitude</span><span class="mk-v" id="roAlt">—</span></div>
@@ -134,11 +137,11 @@
       <div class="mk-row"><span class="mk-k" title="total speed change this maneuver costs">maneuver Δv</span><span class="mk-v" id="ndDv">—</span></div>
       <div class="mk-actions">
         <button class="btn" id="warpNode" title="jump time to the moment this maneuver fires">warp to maneuver</button>
-        <button class="btn" id="delNode" title="remove this maneuver from the flight plan">delete</button>
+        <button class="btn" id="delNode" title="remove this maneuver from the mission plan">delete</button>
       </div>
     </div>
 
-    <div class="section-label mk-sect">flight plan</div>
+    <div class="section-label mk-sect">mission plan</div>
     <div id="fpList"></div>
     <div class="mk-row"><span class="mk-k" title="Δv already burned by executed maneuvers">Δv spent</span><span class="mk-v" id="fpSpent">0 m/s</span></div>
     <div class="mk-row"><span class="mk-k" title="Δv the remaining planned maneuvers will cost">Δv planned</span><span class="mk-v" id="fpDv">0 m/s</span></div>
@@ -176,6 +179,13 @@
     </div>
   </div>
 
+  <div id="fpMenu" class="panel mk-pathmenu" style="display:none">
+    <div class="mk-pm-time" id="fpmTime"></div>
+    <div class="mk-actions">
+      <button class="btn btn-primary" id="fpmRewind" title="rewind the clock to just before this maneuver — it becomes a planned maneuver again">rewind to maneuver</button>
+    </div>
+  </div>
+
   <div id="toast" class="mk-toast"></div>
 
   <div class="control-bar">
@@ -203,7 +213,7 @@
         automatically at their planned time.</p>
       <div class="section-label">why time travel is free</div>
       <p>Because everything is closed-form, your position is a pure function of the clock and the
-        flight plan. Warp, rewind, and jump don't fast-forward a simulation — they just move the
+        mission plan. Warp, rewind, and jump don't fast-forward a simulation — they just move the
         clock. Rewinding to before a maneuver un-executes it, and the future re-forms the moment
         you edit the plan.</p>
       <p>The one thing that must be hunted for rather than solved for is where your path first dips
@@ -1037,6 +1047,7 @@
     const bodyMenu = document.getElementById("bodyMenu");
     function openMenu(t, seg, origin = "ext") {
       closeBodyMenu();
+      closeFpMenu();
       menuPending = { t, seg, origin };
       document.getElementById("pmTime").textContent = fmtClock(t);
       pathMenu.style.display = "";
@@ -1053,6 +1064,7 @@
     let hoverBody = null;       // body id under the cursor (paths take precedence)
     function openBodyMenu(id, s) {
       closeMenu();
+      closeFpMenu();
       bodyMenuPending = id;
       document.getElementById("bmName").textContent = SYSTEM.bodies[id].name;
       bodyMenu.style.display = "";
@@ -1062,6 +1074,22 @@
     function closeBodyMenu() {
       bodyMenuPending = null;
       bodyMenu.style.display = "none";
+    }
+    let fpMenuPending = null; // executed-maneuver id the rewind popup is about
+    const fpMenu = document.getElementById("fpMenu");
+    function openFpMenu(id, x, y) {
+      closeMenu();
+      closeBodyMenu();
+      fpMenuPending = id;
+      const nd = nodes.find((n) => n.id === id);
+      document.getElementById("fpmTime").textContent = fmtClock(nd.t);
+      fpMenu.style.display = "";
+      fpMenu.style.left = clampN(x - 200, 8, window.innerWidth - 230) + "px";
+      fpMenu.style.top = clampN(y + 8, 8, window.innerHeight - 90) + "px";
+    }
+    function closeFpMenu() {
+      fpMenuPending = null;
+      fpMenu.style.display = "none";
     }
     function bodyAt(sx, sy) {
       for (const b of Object.values(SYSTEM.bodies)) {
@@ -1285,6 +1313,7 @@
         } else {
           closeMenu();
           closeBodyMenu();
+          closeFpMenu();
           selectedId = null;
           updatePanel();
         }
@@ -1377,7 +1406,7 @@
       $("roPeriod").textContent = o.elliptic ? fmtDur(o.period) : "—";
       $("clock").textContent = fmtClock(tNow);
 
-      // flight plan: every maneuver, colored like its patch; executed ones dim.
+      // mission plan: every maneuver, colored like its patch; executed ones dim.
       // Totals: Δv burned so far, Δv the plan still costs, and their sum.
       const dvOf = (n) => Math.hypot(n.prograde, n.radial);
       const spent = nodes.filter((n) => n.t <= tNow).reduce((s, n) => s + dvOf(n), 0);
@@ -1394,9 +1423,12 @@
           row.className = "mk-row mk-fprow";
           row.style.cursor = "pointer";
           row.innerHTML = '<span class="mk-k"></span><span class="mk-v"></span>';
-          row.addEventListener("click", () => {
+          row.addEventListener("click", (e) => {
             const nd = nodes.find((x) => x.id === +row.dataset.id);
-            if (nd && nd.t > tNow) { selectedId = nd.id; updatePanel(); }
+            if (!nd) return;
+            if (nd.t > tNow) { selectedId = nd.id; updatePanel(); }
+            else if (fpMenuPending === nd.id) closeFpMenu(); // toggle
+            else openFpMenu(nd.id, e.clientX, e.clientY);
           });
           list.appendChild(row);
         }
@@ -1407,7 +1439,7 @@
         row.dataset.id = String(n.id);
         const k = row.children[0], v = row.children[1];
         k.textContent = (done ? "✓ " : "") + "T+ " + fmtDur(n.t).replace(/ /g, "");
-        k.title = done ? "already executed" : "click to edit this maneuver";
+        k.title = done ? "already executed — click to rewind to it" : "click to edit this maneuver";
         k.style.color = done ? "rgba(154,163,178,0.6)" : (nodeColors.get(n.id) ?? "#e6e8ef");
         v.textContent = fmtMps(dvOf(n));
         v.style.opacity = done ? "0.55" : "1";
@@ -1518,6 +1550,15 @@
         cam.panX = 0; cam.panY = 0; // re-center on the new focus
         closeBodyMenu();
       });
+      $("fpmRewind").addEventListener("click", () => {
+        if (fpMenuPending == null) return;
+        const nd = nodes.find((n) => n.id === fpMenuPending);
+        closeFpMenu();
+        if (!nd) return;
+        doJump(Math.max(0, nd.t - 1)); // just before the burn: planned again
+        selectedId = nd.id;
+        updatePanel();
+      });
       for (const [id, ax] of [["ndPro", "prograde"], ["ndRad", "radial"]]) {
         const el = $(id);
         el.addEventListener("input", () => {
@@ -1548,7 +1589,7 @@
         else if (e.key === ",") slower();
         else if (e.key === ".") faster();
         else if (e.key === "r") { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; }
-        else if (e.key === "Escape") { closeMenu(); closeBodyMenu(); selectedId = null; updatePanel(); }
+        else if (e.key === "Escape") { closeMenu(); closeBodyMenu(); closeFpMenu(); selectedId = null; updatePanel(); }
         else if (e.key === "Delete" || e.key === "Backspace") { if (selectedId != null) deleteNode(selectedId); }
       });
       setRateButtons();
