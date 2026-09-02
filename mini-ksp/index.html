@@ -52,7 +52,9 @@
       display: grid; grid-template-columns: 26px 1fr 26px; align-items: stretch;
       height: 27px; overflow: hidden;
       background: var(--panel-2); border: 1px solid var(--border);
-      border-left: 2px solid var(--ax, var(--border)); border-radius: var(--radius-sm);
+      border-left: 2px solid var(--ax, var(--border));
+      border-right: 2px solid var(--ax, var(--border));
+      border-radius: var(--radius-sm);
     }
     .mk-cap:focus-within { border-color: var(--ax, var(--border)); }
     .mk-cap .mk-step {
@@ -930,17 +932,20 @@
           ? [{ o: extO, k: "ext" }, { o: liveO, k: "live" }]
           : [{ o: pin === "live" ? liveO : extO, k: pin }];
         const sel = nd.id === selectedId;
+        // the marker wears the color of the patch this maneuver creates,
+        // matching its sidebar row (handles keep their axis colors)
+        const ndColor = nodeColors.get(nd.id) ?? "#ffb454";
         let s = null; // the pinned copy's screen position, for the gizmo
         for (const c of copies) {
           const cs = w2s(info.relX + c.o.x, info.relY + c.o.y);
           ctx.beginPath();
           ctx.arc(cs.x, cs.y, sel ? 7 : 5, 0, TAU);
-          ctx.strokeStyle = "#ffb454";
+          ctx.strokeStyle = ndColor;
           ctx.lineWidth = sel ? 2 : 1.5;
           ctx.stroke();
           ctx.beginPath();
           ctx.arc(cs.x, cs.y, 2, 0, TAU);
-          ctx.fillStyle = "#ffb454";
+          ctx.fillStyle = ndColor;
           ctx.fill();
           hitNodes.push({ id: nd.id, x: cs.x, y: cs.y, copy: c.k });
           if (c.k === pin || !dual) s = cs;
