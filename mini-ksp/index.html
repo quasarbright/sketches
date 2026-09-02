@@ -1051,9 +1051,12 @@
         for (const { org, kind } of origins) {
           const n = nearestOnCurve(seg.orbit, u1, u2, org, sx, sy);
           if (!n || n.d >= 12) continue;
-          // a curve covers one revolution; wrap forward to the next pass after minT
-          const t = wrapForward(paramTime(seg.orbit, n.u), minT, seg.orbit, seg.tEnd);
-          if (t > minT && (!best || n.d < best.d)) best = { d: n.d, t, seg, origin: kind };
+          // a curve covers one revolution; wrap to the segment's first pass —
+          // floored at the SEGMENT start, not just the clock: a post-maneuver
+          // ellipse must never resolve to a time before its burn exists
+          const lo = Math.max(minT, seg.tStart);
+          const t = wrapForward(paramTime(seg.orbit, n.u), lo, seg.orbit, seg.tEnd);
+          if (t > lo && (!best || n.d < best.d)) best = { d: n.d, t, seg, origin: kind };
         }
       }
       return best;
@@ -1460,7 +1463,7 @@
             const at = n ? paramTime(seg.orbit, n.u) : null;
             out.push({
               mode: v.mode, minD: n ? +n.d.toFixed(1) : null, at,
-              wrapped: n ? wrapForward(at, tNow + 1, seg.orbit, seg.tEnd) : null,
+              wrapped: n ? wrapForward(at, Math.max(tNow + 1, seg.tStart), seg.orbit, seg.tEnd) : null,
               tNow, tEnd: seg.tEnd,
             });
           }
