@@ -437,13 +437,16 @@
       const b = bodyStateAt(SYSTEM, focus, tNow);
       return { x: b.x, y: b.y, z: b.z };
     }
-    // Orbit camera: an orthographic view of 3D space around the focus. Yaw
-    // spins around the ecliptic pole, pitch tilts from top-down (π/2, the
-    // classic map view — identical to the old 2D projection) toward the
-    // horizon. Pan lives in the view plane (right/up), in km.
+    // Orbit camera with real PERSPECTIVE: the eye sits camD behind the focus
+    // along the view axis, and the projection scale falls off with depth —
+    // so the Sun at 1 AU is a dot, not a wall (orthographic drew every body
+    // at full size regardless of distance). cam.zoom stays the pixel scale
+    // AT the focus plane, so zoom semantics and s2w are unchanged.
     let camR = { x: 1, y: 0, z: 0 }; // screen-right in world space
     let camU = { x: 0, y: 1, z: 0 }; // screen-up in world space
     let camF = { x: 0, y: 0, z: 1 }; // toward the viewer (depth axis)
+    let camFocal = 1370;             // pixels; set from H for a ~40° FOV
+    let camD = 1370 / 0.3;           // eye distance from the focus, in km
     let occluders = [];              // this frame's body discs, for path depth-hiding
     function updateCamBasis() {
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
@@ -455,12 +458,20 @@
         y: camR.z * camU.x - camR.x * camU.z,
         z: camR.x * camU.y - camR.y * camU.x,
       };
+      camFocal = (H / 2) / Math.tan(Math.PI / 9); // 40° vertical FOV
+      camD = camFocal / cam.zoom;
     }
+    // returns screen position plus `s`, the pixel-per-km scale at that depth
+    // (s <= 0 means the point is behind the camera)
     function w2s(x, y, z = 0) {
       const dx = x - fp.x, dy = y - fp.y, dz = z - fp.z;
+      const depth = camD - (dx * camF.x + dy * camF.y + dz * camF.z);
+      const s = depth > camD * 1e-9 ? camFocal / depth : -1;
+      const k = s > 0 ? s : camFocal / (camD * 1e-9); // behind: blow up, gets clipped
       return {
-        x: W / 2 + (dx * camR.x + dy * camR.y + dz * camR.z) * cam.zoom,
-        y: H / 2 - (dx * camU.x + dy * camU.y + dz * camU.z) * cam.zoom,
+        x: W / 2 + (dx * camR.x + dy * camR.y + dz * camR.z) * k,
+        y: H / 2 - (dx * camU.x + dy * camU.y + dz * camU.z) * k,
+        s,
       };
     }
     function s2w(sx, sy) { // inverse onto the view plane through the focus
@@ -644,8 +655,8 @@
             const ex = mx - q.sx, ey = my - q.sy;
             if (ex * ex + ey * ey < q.r2) {
               const wp = conicPoint(o, (a.u + b.u) / 2);
-              const tc = (wp.x + org.x) * camF.x + (wp.y + org.y) * camF.y + (wp.z + org.z) * camF.z;
-              if (tc < q.tc) { hidden = true; break; }
+              const ps = w2s(wp.x + org.x, wp.y + org.y, wp.z + org.z);
+              if (ps.s > 0 && ps.s < q.s) { hidden = true; break; }
             }
           }
           if (hidden) { open = false; continue; }
@@ -658,7 +669,8 @@
 
     function drawBody(bx, by, bz, radius, fill, rim) {
       const s = w2s(bx, by, bz);
-      const r = Math.max(radius * cam.zoom, 2);
+      if (s.s <= 0) return; // behind the camera
+      const r = Math.max(radius * s.s, 2);
       if (![s.x, s.y, r].every(Number.isFinite)) {
         window.__nf = { bx, by, sx: s.x, sy: s.y, r, zoom: cam.zoom, yaw: cam.yaw, pitch: cam.pitch, fpx: fp.x, fpy: fp.y, tNow, W, H };
         console.error("drawBody non-finite", window.__nf);
@@ -801,19 +813,15 @@
         const byDepth = Object.values(SYSTEM.bodies)
           .map((b) => ({ b, bs: bodyStateAt(SYSTEM, b.id, tNow) }))
           .sort((p, q) =>
-            (p.bs.x * camF.x + p.bs.y * camF.y + p.bs.z * camF.z) -
-            (q.bs.x * camF.x + q.bs.y * camF.y + q.bs.z * camF.z));
+            ((p.bs.x - fp.x) * camF.x + (p.bs.y - fp.y) * camF.y + (p.bs.z - fp.z) * camF.z) -
+            ((q.bs.x - fp.x) * camF.x + (q.bs.y - fp.y) * camF.y + (q.bs.z - fp.z) * camF.z));
         for (const { b, bs } of byDepth) {
           drawBody(bs.x, bs.y, bs.z, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
-          const rPix = b.radius * cam.zoom;
-          if (rPix > 3) {
-            const s = w2s(bs.x, bs.y, bs.z);
-            if (s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
-              occluders.push({
-                sx: s.x, sy: s.y, r2: rPix * rPix,
-                tc: bs.x * camF.x + bs.y * camF.y + bs.z * camF.z,
-              });
-            }
+          const s = w2s(bs.x, bs.y, bs.z);
+          if (s.s <= 0) continue;
+          const rPix = b.radius * s.s;
+          if (rPix > 3 && s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
+            occluders.push({ sx: s.x, sy: s.y, r2: rPix * rPix, s: s.s });
           }
         }
       }
@@ -1020,7 +1028,7 @@
         const bs = bodyStateAt(SYSTEM, b.id, tNow);
         if (soiOn && b.soi) {
           const s = w2s(bs.x, bs.y, bs.z);
-          const r = b.soi * cam.zoom;
+          const r = b.soi * (s.s > 0 ? s.s : 0);
           if (r > 4 && r < 40000 && s.x + r > -80 && s.x - r < W + 80 && s.y + r > -80 && s.y - r < H + 80) {
             ctx.beginPath();
             ctx.arc(s.x, s.y, r, 0, TAU);
@@ -1031,9 +1039,10 @@
             ctx.setLineDash([]);
           }
         }
-        if (b.parent && b.orbitRadius * cam.zoom < 20) continue;
         const s = w2s(bs.x, bs.y, bs.z);
-        label(b.name, s.x, s.y - Math.max(b.radius * cam.zoom, 2) - 10,
+        if (s.s <= 0) continue;
+        if (b.parent && b.orbitRadius * s.s < 20) continue;
+        label(b.name, s.x, s.y - Math.max(b.radius * s.s, 2) - 10,
           target === b.id ? "#8cc8ff" : "rgba(154,163,178,0.9)", "center");
       }
 
@@ -1178,7 +1187,7 @@
         const s = w2s(bs.x, bs.y, bs.z);
         ctx.beginPath();
         // floors at the same 5px a maneuver node's circle uses
-        ctx.arc(s.x, s.y, Math.max(b.radius * cam.zoom + 4, 5), 0, TAU);
+        ctx.arc(s.x, s.y, Math.max(b.radius * Math.max(s.s, 0) + 4, 5), 0, TAU);
         ctx.strokeStyle = "rgba(230,235,245,0.75)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -1261,7 +1270,8 @@
         if (!b.parent) continue;
         const bs = bodyStateAt(SYSTEM, b.id, tNow);
         const sp = w2s(bs.x, bs.y, bs.z);
-        if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * cam.zoom, 10) + 4) return b.id;
+        if (sp.s <= 0) continue;
+        if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * sp.s, 10) + 4) return b.id;
       }
       return null;
     }
