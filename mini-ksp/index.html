@@ -539,6 +539,7 @@
     let labelQueue = [];
     let gizmoDraw = null; // maneuver handles render after the label flush
     let nodeColors = new Map(); // node id -> its post-burn patch color
+    let segColors = new Map();  // drawn segment -> its patch color
     function label(text, sx, sy, color, align = "left", alpha = 1) { labelQueue.push([text, sx, sy, color, align, alpha]); }
     function flushLabels() {
       ctx.font = MONO;
@@ -739,7 +740,9 @@
       // each maneuver wears the color of the patch it creates (the segment
       // starting at its burn) — the sidebar list uses the same colors
       nodeColors = new Map();
+      segColors = new Map();
       for (const [i, v] of visList.entries()) {
+        segColors.set(v.seg.tStart, patchColor(i)); // keyed by start time: survives recompiles
         const nd = nodes.find((n) => Math.abs(n.t - v.seg.tStart) < 1e-6);
         if (nd) nodeColors.set(nd.id, patchColor(i));
       }
@@ -1011,7 +1014,7 @@
           const s = w2s(st.x + org.x, st.y + org.y);
           ctx.beginPath();
           ctx.arc(s.x, s.y, 5, 0, TAU);
-          ctx.strokeStyle = "#ffb454";
+          ctx.strokeStyle = segColors.get(menuPending.seg.tStart) ?? "#ffb454";
           ctx.lineWidth = 1.5;
           ctx.stroke();
           positionMenu(s);
@@ -1022,7 +1025,7 @@
         const s = w2s(st.x + org.x, st.y + org.y);
         ctx.beginPath();
         ctx.arc(s.x, s.y, 4, 0, TAU);
-        ctx.fillStyle = "rgba(255,180,84,0.9)";
+        ctx.fillStyle = segColors.get(hoverGhost.seg.tStart) ?? "rgba(255,180,84,0.9)";
         ctx.fill();
       }
       // the body popup rides its (moving) body; a hovered body gets a ring
