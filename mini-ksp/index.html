@@ -1057,23 +1057,26 @@
         }
 
         if (sel) {
-          const pg = v2s(info.pgx, info.pgy, info.pgz);
-          const ro = v2s(info.rox, info.roy, info.roz);
-          const no = v2s(info.nox, info.noy, info.noz);
-          const handles = [
-            { ax: "prograde", dir: 1, ux: pg.x, uy: pg.y, color: "#ffd45e" },
-            { ax: "prograde", dir: -1, ux: -pg.x, uy: -pg.y, color: "#ffd45e" },
-            { ax: "radial", dir: 1, ux: ro.x, uy: ro.y, color: "#59e3e3" },
-            { ax: "radial", dir: -1, ux: -ro.x, uy: -ro.y, color: "#59e3e3" },
-          ];
-          // the normal axis only exists on screen when the camera is tilted —
-          // top-down it projects to a point and the handles would be grabbable noise
-          const noRawX = info.nox * camR.x + info.noy * camR.y + info.noz * camR.z;
-          const noRawY = info.nox * camU.x + info.noy * camU.y + info.noz * camU.z;
-          if (Math.hypot(noRawX, noRawY) > 0.3) {
+          // Project each burn axis WITHOUT normalizing away foreshortening:
+          // the arm length shrinks as an axis turns edge-on to the camera
+          // (KSP-style), so the in-plane pair always reads tangent to the
+          // curve and a toward/away axis becomes a short stub near the hub.
+          const projAxis = (ax3, ay3, az3) => {
+            const rx = ax3 * camR.x + ay3 * camR.y + az3 * camR.z;
+            const ry = ax3 * camU.x + ay3 * camU.y + az3 * camU.z;
+            const len = Math.hypot(rx, ry);
+            return { x: len > 1e-6 ? rx / len : 0, y: len > 1e-6 ? -ry / len : 0, len };
+          };
+          const pg = projAxis(info.pgx, info.pgy, info.pgz);
+          const ro = projAxis(info.rox, info.roy, info.roz);
+          const no = projAxis(info.nox, info.noy, info.noz);
+          const armOf = (p) => 13 + 17 * Math.min(p.len, 1);
+          const handles = [];
+          for (const [ax, p, color] of [["prograde", pg, "#ffd45e"], ["radial", ro, "#59e3e3"], ["normal", no, "#c586ff"]]) {
+            if (p.len < 0.02) continue; // axis points straight at the camera
             handles.push(
-              { ax: "normal", dir: 1, ux: no.x, uy: no.y, color: "#c586ff" },
-              { ax: "normal", dir: -1, ux: -no.x, uy: -no.y, color: "#c586ff" },
+              { ax, dir: 1, ux: p.x, uy: p.y, color, arm: armOf(p) },
+              { ax, dir: -1, ux: -p.x, uy: -p.y, color, arm: armOf(p) },
             );
           }
           // deferred past flushLabels: the editing gizmo must never hide
@@ -1084,8 +1087,9 @@
               const active = drag?.kind === "handle" && drag.h.nodeId === nd.id
                 && drag.h.ax === h.ax && drag.h.dir === h.dir;
               const tug = active ? clampN((drag.disp ?? 0) * 0.25, -6, 14) : 0;
-              const x0 = s.x + h.ux * 10, y0 = s.y + h.uy * 10;
-              const x1 = s.x + h.ux * (30 + tug), y1 = s.y + h.uy * (30 + tug);
+              const inner = Math.min(10, h.arm - 6);
+              const x0 = s.x + h.ux * inner, y0 = s.y + h.uy * inner;
+              const x1 = s.x + h.ux * (h.arm + tug), y1 = s.y + h.uy * (h.arm + tug);
               ctx.beginPath();
               ctx.moveTo(x0, y0);
               ctx.lineTo(x1 - h.ux * 7, y1 - h.uy * 7);
