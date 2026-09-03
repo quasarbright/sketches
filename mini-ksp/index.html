@@ -778,14 +778,20 @@
       const dashClock = (performance.now() / 1000 * 14) % 77;
       let chainLen = 0; // pixels of path drawn so far — dashes flow across seams
 
-      // the sky: pure angle-based projection of star directions through the
-      // camera basis — turns with yaw/pitch, ignores zoom and position
+      // the sky: azimuthal-equidistant projection of star directions — screen
+      // offset is proportional to the ANGLE off the look axis (a raw dot
+      // product saturates at one radius and paints a disc with black corners).
+      // Turns with yaw/pitch, ignores zoom and position, covers every pixel.
       {
         const fx = -camF.x, fy = -camF.y, fz = -camF.z; // look direction
         for (const st of skyStars) {
-          if (st.x * fx + st.y * fy + st.z * fz < 0.15) continue;
-          const sx2 = W / 2 + (st.x * camR.x + st.y * camR.y + st.z * camR.z) * SKY_K;
-          const sy2 = H / 2 - (st.x * camU.x + st.y * camU.y + st.z * camU.z) * SKY_K;
+          const t = clampN(st.x * fx + st.y * fy + st.z * fz, -1, 1);
+          const pR = st.x * camR.x + st.y * camR.y + st.z * camR.z;
+          const pU = st.x * camU.x + st.y * camU.y + st.z * camU.z;
+          const m = Math.hypot(pR, pU); // = sin(angle off axis)
+          const k = m > 1e-6 ? Math.acos(t) * SKY_K / m : 0;
+          const sx2 = W / 2 + pR * k;
+          const sy2 = H / 2 - pU * k;
           if (sx2 < -2 || sx2 > W + 2 || sy2 < -2 || sy2 > H + 2) continue;
           ctx.globalAlpha = st.a;
           ctx.fillStyle = st.warm ? "#e8dcc4" : "#cdd6e8";
