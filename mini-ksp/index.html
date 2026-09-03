@@ -708,7 +708,7 @@
           ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k);
           ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k);
           ctx.stroke();
-          for (const a of [-Math.PI / 2, Math.PI * 0.75, Math.PI * 0.25]) tick(a, r, r + 4);
+          for (const a of [-Math.PI / 2, Math.PI / 6, Math.PI * 5 / 6]) tick(a, r, r + 4); // 120° apart
         }
       } else if (kind === "normal") {
         // KSP navball: an outlined equilateral triangle with a center dot —
@@ -724,17 +724,19 @@
         ctx.closePath();
         ctx.stroke();
         dot();
-        if (dir < 0) { // anti-normal wears the retrograde-style corner ticks
-          for (const [vx2, vy2] of verts) {
-            const m = Math.hypot(vx2, vy2);
+        if (dir < 0) { // anti-normal: notches out from the SIDES' midpoints
+          for (let i = 0; i < 3; i++) {
+            const [ax2, ay2] = verts[i], [bx2, by2] = verts[(i + 1) % 3];
+            const mx = (ax2 + bx2) / 2, my = (ay2 + by2) / 2;
+            const m = Math.hypot(mx, my);
             ctx.beginPath();
-            ctx.moveTo(x + vx2, y + vy2);
-            ctx.lineTo(x + vx2 * (1 + 3.5 / m), y + vy2 * (1 + 3.5 / m));
+            ctx.moveTo(x + mx, y + my);
+            ctx.lineTo(x + mx * (1 + 4.5 / m), y + my * (1 + 4.5 / m));
             ctx.stroke();
           }
         }
       } else {
-        dot();
+        if (dir > 0) dot(); // radial IN has no center dot
         for (const a of [Math.PI / 4, 3 * Math.PI / 4, -Math.PI / 4, -3 * Math.PI / 4]) {
           if (dir > 0) tick(a, r, r + 4);       // radial out: ticks point outward
           else tick(a, r, r - 3.5);             // radial in: ticks point inward
