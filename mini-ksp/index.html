@@ -483,20 +483,21 @@
     function segOrg(seg) { return bodyStateAt(SYSTEM, seg.body, tNow); }
 
     /* ============================== sky ============================== */
-    // Stars are unit DIRECTIONS on the celestial sphere, projected purely by
-    // angle through the camera basis — no zoom, no position, no distance.
-    // Rotating the camera slides the field exactly as an infinitely distant
-    // background should; nothing else is drawn out there.
+    // Background stars live on a big flat tile that wraps: yaw slides it
+    // horizontally, pitch vertically, both purely angle-based (zoom and
+    // position never move it). A flat wrap can never show curvature — under
+    // this no-roll camera it reads exactly like a distant skybox.
     let skyStars = [];
-    const SKY_K = 620; // pixels per radian of sky
+    const SKY_T = 4096;  // tile size in px (wraps)
+    const SKY_K = 620;   // pixels of slide per radian of camera turn
     function makeStars() {
-      if (skyStars.length) return; // directions don't depend on the viewport
+      if (skyStars.length) return;
       let s = 987654321;
       const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-      for (let i = 0; i < 2400; i++) {
-        const z = 2 * rnd() - 1, th = TAU * rnd(), rr = Math.sqrt(1 - z * z);
+      const count = Math.round((SKY_T * SKY_T) / 4200);
+      for (let i = 0; i < count; i++) {
         skyStars.push({
-          x: rr * Math.cos(th), y: rr * Math.sin(th), z,
+          x: rnd() * SKY_T, y: rnd() * SKY_T,
           a: 0.25 + rnd() * rnd() * 0.65, r: rnd() < 0.12 ? 1.7 : 1,
           warm: rnd() < 0.22,
         });
@@ -778,21 +779,14 @@
       const dashClock = (performance.now() / 1000 * 14) % 77;
       let chainLen = 0; // pixels of path drawn so far — dashes flow across seams
 
-      // the sky: azimuthal-equidistant projection of star directions — screen
-      // offset is proportional to the ANGLE off the look axis (a raw dot
-      // product saturates at one radius and paints a disc with black corners).
-      // Turns with yaw/pitch, ignores zoom and position, covers every pixel.
+      // the sky: slide the wrapped star tile by camera angles only
       {
-        const fx = -camF.x, fy = -camF.y, fz = -camF.z; // look direction
+        const ox = ((cam.yaw * SKY_K) % SKY_T + SKY_T) % SKY_T;
+        const oy = ((-cam.pitch * SKY_K) % SKY_T + SKY_T) % SKY_T;
         for (const st of skyStars) {
-          const t = clampN(st.x * fx + st.y * fy + st.z * fz, -1, 1);
-          const pR = st.x * camR.x + st.y * camR.y + st.z * camR.z;
-          const pU = st.x * camU.x + st.y * camU.y + st.z * camU.z;
-          const m = Math.hypot(pR, pU); // = sin(angle off axis)
-          const k = m > 1e-6 ? Math.acos(t) * SKY_K / m : 0;
-          const sx2 = W / 2 + pR * k;
-          const sy2 = H / 2 - pU * k;
-          if (sx2 < -2 || sx2 > W + 2 || sy2 < -2 || sy2 > H + 2) continue;
+          const sx2 = (st.x + ox) % SKY_T;
+          const sy2 = (st.y + oy) % SKY_T;
+          if (sx2 > W + 2 || sy2 > H + 2) continue;
           ctx.globalAlpha = st.a;
           ctx.fillStyle = st.warm ? "#e8dcc4" : "#cdd6e8";
           ctx.fillRect(sx2, sy2, st.r, st.r);
