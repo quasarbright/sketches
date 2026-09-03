@@ -671,13 +671,13 @@
     //   radial out   cyan circle, center dot, four outward diagonal ticks
     //   radial in    cyan circle, center dot, four inward diagonal ticks
     function handleGlyph(x, y, kind, dir, color, emph = false) {
-      const r = emph ? 7 : 5.5;
+      const r = emph ? 10.5 : 8.25;
       ctx.strokeStyle = color;
-      ctx.lineWidth = emph ? 2.2 : 1.5;
+      ctx.lineWidth = emph ? 2.4 : 1.7;
       if (emph) {
         ctx.globalAlpha = 0.3;
         ctx.beginPath();
-        ctx.arc(x, y, r + 4, 0, TAU);
+        ctx.arc(x, y, r + 6, 0, TAU);
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
@@ -694,21 +694,21 @@
       };
       const dot = () => {
         ctx.beginPath();
-        ctx.arc(x, y, 1.5, 0, TAU);
+        ctx.arc(x, y, 2.25, 0, TAU);
         ctx.fillStyle = color;
         ctx.fill();
       };
       if (kind === "prograde") {
         if (dir > 0) { // prograde: dot + ticks left/top/right
           dot();
-          for (const a of [Math.PI, -Math.PI / 2, 0]) tick(a, r, r + 4);
+          for (const a of [Math.PI, -Math.PI / 2, 0]) tick(a, r, r + 6);
         } else { // retrograde: X inside + ticks top/lower-left/lower-right
           const k = r * 0.62;
           ctx.beginPath();
           ctx.moveTo(x - k, y - k); ctx.lineTo(x + k, y + k);
           ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k);
           ctx.stroke();
-          for (const a of [-Math.PI / 2, Math.PI / 6, Math.PI * 5 / 6]) tick(a, r, r + 4); // 120° apart
+          for (const a of [-Math.PI / 2, Math.PI / 6, Math.PI * 5 / 6]) tick(a, r, r + 6); // 120° apart
         }
       } else if (kind === "normal") {
         // KSP navball: an outlined equilateral triangle with a center dot —
@@ -731,15 +731,15 @@
             const m = Math.hypot(mx, my);
             ctx.beginPath();
             ctx.moveTo(x + mx, y + my);
-            ctx.lineTo(x + mx * (1 + 4.5 / m), y + my * (1 + 4.5 / m));
+            ctx.lineTo(x + mx * (1 + 6.5 / m), y + my * (1 + 6.5 / m));
             ctx.stroke();
           }
         }
       } else {
         if (dir > 0) dot(); // radial IN has no center dot
         for (const a of [Math.PI / 4, 3 * Math.PI / 4, -Math.PI / 4, -3 * Math.PI / 4]) {
-          if (dir > 0) tick(a, r, r + 4);       // radial out: ticks point outward
-          else tick(a, r, r - 3.5);             // radial in: ticks point inward
+          if (dir > 0) tick(a, r, r + 6);       // radial out: ticks point outward
+          else tick(a, r, r - 5);               // radial in: ticks point inward
         }
       }
     }
@@ -1066,21 +1066,25 @@
           const projAxis = (ax3, ay3, az3) => {
             const rx = ax3 * camR.x + ay3 * camR.y + az3 * camR.z;
             const ry = ax3 * camU.x + ay3 * camU.y + az3 * camU.z;
+            const f = ax3 * camF.x + ay3 * camF.y + az3 * camF.z; // toward-camera
             const len = Math.hypot(rx, ry);
-            return { x: len > 1e-6 ? rx / len : 0, y: len > 1e-6 ? -ry / len : 0, len };
+            return { x: len > 1e-6 ? rx / len : 0, y: len > 1e-6 ? -ry / len : 0, len, f };
           };
           const pg = projAxis(info.pgx, info.pgy, info.pgz);
           const ro = projAxis(info.rox, info.roy, info.roz);
           const no = projAxis(info.nox, info.noy, info.noz);
-          const armOf = (p) => 13 + 17 * Math.min(p.len, 1);
+          const armOf = (p) => 20 + 25 * Math.min(p.len, 1);
           const handles = [];
           for (const [ax, p, color] of [["prograde", pg, "#ffd45e"], ["radial", ro, "#59e3e3"], ["normal", no, "#c586ff"]]) {
             if (p.len < 0.02) continue; // axis points straight at the camera
             handles.push(
-              { ax, dir: 1, ux: p.x, uy: p.y, color, arm: armOf(p) },
-              { ax, dir: -1, ux: -p.x, uy: -p.y, color, arm: armOf(p) },
+              { ax, dir: 1, ux: p.x, uy: p.y, color, arm: armOf(p), depth: p.f },
+              { ax, dir: -1, ux: -p.x, uy: -p.y, color, arm: armOf(p), depth: -p.f },
             );
           }
+          // draw far-side handles first so the near ones sit visibly on top,
+          // matching the click priority
+          handles.sort((a2, b2) => a2.depth - b2.depth);
           // deferred past flushLabels: the editing gizmo must never hide
           // under Ap/Pe/distance text
           gizmoDraw = () => {
@@ -1088,18 +1092,18 @@
               // an actively-held handle tugs outward with the drag and lights up
               const active = drag?.kind === "handle" && drag.h.nodeId === nd.id
                 && drag.h.ax === h.ax && drag.h.dir === h.dir;
-              const tug = active ? clampN((drag.disp ?? 0) * 0.25, -6, 14) : 0;
-              const inner = Math.min(10, h.arm - 6);
+              const tug = active ? clampN((drag.disp ?? 0) * 0.25, -9, 21) : 0;
+              const inner = Math.min(15, h.arm - 9);
               const x0 = s.x + h.ux * inner, y0 = s.y + h.uy * inner;
               const x1 = s.x + h.ux * (h.arm + tug), y1 = s.y + h.uy * (h.arm + tug);
               ctx.beginPath();
               ctx.moveTo(x0, y0);
-              ctx.lineTo(x1 - h.ux * 7, y1 - h.uy * 7);
+              ctx.lineTo(x1 - h.ux * 10, y1 - h.uy * 10);
               ctx.strokeStyle = h.color;
               ctx.lineWidth = active ? 2.2 : 1.5;
               ctx.stroke();
               handleGlyph(x1, y1, h.ax, h.dir, h.color, active);
-              hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1, y: y1, pgS: pg, roS: ro, noS: no });
+              hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1, y: y1, depth: h.depth, pgS: pg, roS: ro, noS: no });
             }
           };
         }
@@ -1371,10 +1375,19 @@
         return;
       }
       const sx = e.clientX, sy = e.clientY;
-      // handles first
-      for (const h of hitHandles) {
-        if (Math.hypot(sx - h.x, sy - h.y) < 13) {
-          drag = { kind: "handle", h, anchorX: sx, anchorY: sy, curX: sx, curY: sy, shift: e.shiftKey };
+      // handles first — where they overlap, the one nearest the camera
+      // (drawn on top) takes the click
+      {
+        let bestH = null, bestD = Infinity;
+        for (const h of hitHandles) {
+          const d = Math.hypot(sx - h.x, sy - h.y);
+          if (d < 19 && (!bestH || h.depth > bestH.depth + 1e-9
+            || (Math.abs(h.depth - bestH.depth) <= 1e-9 && d < bestD))) {
+            bestH = h; bestD = d;
+          }
+        }
+        if (bestH) {
+          drag = { kind: "handle", h: bestH, anchorX: sx, anchorY: sy, curX: sx, curY: sy, shift: e.shiftKey };
           return;
         }
       }
@@ -1407,7 +1420,7 @@
         if (menuPending || e.pointerType !== "mouse") { hoverGhost = null; return; }
         // …but not while over a maneuver's handles or marker
         const hx = e.clientX, hy = e.clientY;
-        if (hitHandles.some((h) => Math.hypot(hx - h.x, hy - h.y) < 16)
+        if (hitHandles.some((h) => Math.hypot(hx - h.x, hy - h.y) < 22)
           || hitNodes.some((n) => Math.hypot(hx - n.x, hy - n.y) < 14)) {
           hoverGhost = null;
           snapFlash = null;
@@ -1799,6 +1812,8 @@
     window.__mk = {
       hit: (x, y) => trajectoryHit(x, y, tNow + 1),
       ca: () => ca,
+      drag: () => drag && { kind: drag.kind, ax: drag.h?.ax, dir: drag.h?.dir },
+      handles: () => hitHandles.map((h) => ({ ax: h.ax, dir: h.dir, x: h.x, y: h.y, depth: +h.depth.toFixed(3) })),
       hitDebug: (sx, sy) => {
         const out = [];
         for (const v of visList) {
