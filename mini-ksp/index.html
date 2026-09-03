@@ -648,21 +648,45 @@
         len += Math.hypot(b.x - a.x, b.y - a.y);
         const c = clipChord(a.x, a.y, b.x, b.y, lo, hiX, hiY);
         if (!c) { open = false; continue; }
+        // clip the chord against every disc it passes BEHIND, keeping the
+        // visible portions outside the silhouette (dropping whole chords cut
+        // gaps far past the disc edge on long, nearly-straight chords)
+        let pieces = [[c.x1, c.y1, c.x2, c.y2]];
         if (occluders.length) {
-          const mx = (c.x1 + c.x2) / 2, my = (c.y1 + c.y2) / 2;
-          let hidden = false;
           for (const q of occluders) {
-            const ex = mx - q.sx, ey = my - q.sy;
-            if (ex * ex + ey * ey < q.r2) {
+            const next = [];
+            for (const p2 of pieces) {
+              const dcx = p2[2] - p2[0], dcy = p2[3] - p2[1];
+              const fcx = p2[0] - q.sx, fcy = p2[1] - q.sy;
+              const A = dcx * dcx + dcy * dcy;
+              const B = 2 * (fcx * dcx + fcy * dcy);
+              const C = fcx * fcx + fcy * fcy - q.r2;
+              const disc = B * B - 4 * A * C;
+              if (disc <= 0 || A === 0) { next.push(p2); continue; }
+              const sq = Math.sqrt(disc);
+              const t1 = (-B - sq) / (2 * A), t2 = (-B + sq) / (2 * A);
+              if (t2 <= 0 || t1 >= 1) { next.push(p2); continue; }
+              // behind the disc? (depth changes slowly along one chord)
               const wp = conicPoint(o, (a.u + b.u) / 2);
               const ps = w2s(wp.x + org.x, wp.y + org.y, wp.z + org.z);
-              if (ps.s > 0 && ps.s < q.s) { hidden = true; break; }
+              if (!(ps.s > 0 && ps.s < q.s)) { next.push(p2); continue; }
+              if (t1 > 0) next.push([p2[0], p2[1], p2[0] + dcx * t1, p2[1] + dcy * t1]);
+              if (t2 < 1) next.push([p2[0] + dcx * t2, p2[1] + dcy * t2, p2[2], p2[3]]);
             }
+            pieces = next;
+            if (!pieces.length) break;
           }
-          if (hidden) { open = false; continue; }
         }
-        if (!open || c.entered) { ctx.moveTo(c.x1, c.y1); open = true; }
-        ctx.lineTo(c.x2, c.y2);
+        if (!pieces.length) { open = false; continue; }
+        let lastX = null, lastY = null;
+        for (const p2 of pieces) {
+          const cont = open && lastX === null && !c.entered && p2[0] === c.x1 && p2[1] === c.y1;
+          const joined = lastX !== null && Math.abs(p2[0] - lastX) < 0.01 && Math.abs(p2[1] - lastY) < 0.01;
+          if (!cont && !joined) ctx.moveTo(p2[0], p2[1]);
+          ctx.lineTo(p2[2], p2[3]);
+          lastX = p2[2]; lastY = p2[3];
+        }
+        open = Math.abs(lastX - c.x2) < 0.01 && Math.abs(lastY - c.y2) < 0.01;
       }
       return len; // so dashes can flow continuously from patch to patch
     }
@@ -832,15 +856,23 @@
       // is a dot smearing the planet) and fades out before it spans so many
       // screens it reads as a stray hairline.
       {
-        const ringMax = 4 * Math.max(W, H);
+        const ringMax = 1.5 * Math.max(W, H);
         for (const b of Object.values(SYSTEM.bodies)) {
           if (!b.parent) continue;
           const pc = bodyStateAt(SYSTEM, b.parent, tNow);
-          const ps = w2s(pc.x, pc.y, pc.z);
-          if (ps.s <= 0) continue;
-          const r = b.orbitRadius * ps.s;
+          // judge apparent size where the ring passes CLOSEST to the focus —
+          // a ring measured at its faraway parent can pass the size band yet
+          // still sweep through the local view as a huge hairline
+          const dxf = fp.x - pc.x, dyf = fp.y - pc.y, dzf = fp.z - pc.z;
+          const dm = Math.hypot(dxf, dyf, dzf);
+          const ux2 = dm > 1e-6 ? dxf / dm : camR.x;
+          const uy2 = dm > 1e-6 ? dyf / dm : camR.y;
+          const uz2 = dm > 1e-6 ? dzf / dm : camR.z;
+          const ns = w2s(pc.x + b.orbitRadius * ux2, pc.y + b.orbitRadius * uy2, pc.z + b.orbitRadius * uz2);
+          if (ns.s <= 0) continue;
+          const r = b.orbitRadius * ns.s;
           const aIn = clampN((r - 20) / 30, 0, 1);
-          const aOut = clampN((ringMax - r) / (ringMax / 2), 0, 1);
+          const aOut = clampN((ringMax - r) / (ringMax * 0.4), 0, 1);
           const alpha = 0.18 * Math.min(aIn, aOut);
           if (alpha < 0.012) continue;
           pathConic(b.orbit, 0, TAU, pc);
