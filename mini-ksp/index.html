@@ -851,29 +851,24 @@
       }
 
       // each body's own orbit ring around its parent — its real (eccentric)
-      // conic, not a circle, so bodies always sit on their lines. A ring only
-      // draws while it reads as a curve: it fades in once resolvable (smaller
-      // is a dot smearing the planet) and fades out before it spans so many
-      // screens it reads as a stray hairline.
+      // conic, not a circle, so bodies always sit on their lines. Visibility
+      // depends only on focus position and zoom: the ring must be a readable
+      // fraction of the view span (fades in once resolvable, out before it
+      // spans multiple screens), and the focus must be near that ring's
+      // system — a foreign ring always has some distant stretch whose
+      // perspective size lands in the readable band, so distance from the
+      // focus to the ring's parent gates it out.
       {
         const ringMax = 1.5 * Math.max(W, H);
         for (const b of Object.values(SYSTEM.bodies)) {
           if (!b.parent) continue;
           const pc = bodyStateAt(SYSTEM, b.parent, tNow);
-          // judge apparent size where the ring passes CLOSEST to the focus —
-          // a ring measured at its faraway parent can pass the size band yet
-          // still sweep through the local view as a huge hairline
-          const dxf = fp.x - pc.x, dyf = fp.y - pc.y, dzf = fp.z - pc.z;
-          const dm = Math.hypot(dxf, dyf, dzf);
-          const ux2 = dm > 1e-6 ? dxf / dm : camR.x;
-          const uy2 = dm > 1e-6 ? dyf / dm : camR.y;
-          const uz2 = dm > 1e-6 ? dzf / dm : camR.z;
-          const ns = w2s(pc.x + b.orbitRadius * ux2, pc.y + b.orbitRadius * uy2, pc.z + b.orbitRadius * uz2);
-          if (ns.s <= 0) continue;
-          const r = b.orbitRadius * ns.s;
+          const r = b.orbitRadius * cam.zoom; // apparent radius at the focus plane
           const aIn = clampN((r - 20) / 30, 0, 1);
           const aOut = clampN((ringMax - r) / (ringMax * 0.4), 0, 1);
-          const alpha = 0.18 * Math.min(aIn, aOut);
+          const dm = Math.hypot(fp.x - pc.x, fp.y - pc.y, fp.z - pc.z);
+          const aLocal = clampN(3 - dm / b.orbitRadius, 0, 1); // fades D=2R..3R
+          const alpha = 0.18 * Math.min(aIn, aOut, aLocal);
           if (alpha < 0.012) continue;
           pathConic(b.orbit, 0, TAU, pc);
           ctx.strokeStyle = `rgba(138,143,163,${alpha.toFixed(3)})`;
