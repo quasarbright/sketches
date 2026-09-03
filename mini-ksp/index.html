@@ -827,14 +827,27 @@
       }
 
       // each body's own orbit ring around its parent — its real (eccentric)
-      // conic, not a circle, so bodies always sit on their lines
-      for (const b of Object.values(SYSTEM.bodies)) {
-        if (!b.parent) continue;
-        const pc = bodyStateAt(SYSTEM, b.parent, tNow);
-        pathConic(b.orbit, 0, TAU, pc);
-        ctx.strokeStyle = "rgba(138,143,163,0.18)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+      // conic, not a circle, so bodies always sit on their lines. A ring only
+      // draws while it reads as a curve: it fades in once resolvable (smaller
+      // is a dot smearing the planet) and fades out before it spans so many
+      // screens it reads as a stray hairline.
+      {
+        const ringMax = 4 * Math.max(W, H);
+        for (const b of Object.values(SYSTEM.bodies)) {
+          if (!b.parent) continue;
+          const pc = bodyStateAt(SYSTEM, b.parent, tNow);
+          const ps = w2s(pc.x, pc.y, pc.z);
+          if (ps.s <= 0) continue;
+          const r = b.orbitRadius * ps.s;
+          const aIn = clampN((r - 20) / 30, 0, 1);
+          const aOut = clampN((ringMax - r) / (ringMax / 2), 0, 1);
+          const alpha = 0.18 * Math.min(aIn, aOut);
+          if (alpha < 0.012) continue;
+          pathConic(b.orbit, 0, TAU, pc);
+          ctx.strokeStyle = `rgba(138,143,163,${alpha.toFixed(3)})`;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
 
       // trajectory segments — only what the visibility walk says to draw
