@@ -1,9 +1,11 @@
 /* orbits.mjs — mini-ksp physics core. Pure math, no DOM; unit-tested in node.
  *
  * Units: km, s, km/s (Δv on maneuver nodes is in m/s, converted where applied).
- * Model: 2D patched conics. One two-body problem at a time; bodies ride circular
- * rails around their parents; the ship's path is conic segments patched at
- * sphere-of-influence boundaries, maneuver nodes, and impacts.
+ * Model: 3D patched conics. One two-body problem at a time; bodies ride Kepler
+ * rails (any plane) around their parents; the ship's path is conic segments
+ * patched at sphere-of-influence boundaries, maneuver nodes, and impacts.
+ * Planar (z = 0) states are an exact special case — the 2D-era tests run
+ * unchanged against this module.
  *
  * Everything is a pure function of (epoch state, node list, time) — except that
  * SOI *entries* must be found by scanning, which is only certified up to
@@ -33,16 +35,25 @@ export function makeSystem(config) {
     p.children.push(b.id);
     const a = b.a ?? b.orbitRadius;
     const e = b.e ?? 0;
-    const lp = b.longPeri ?? 0;
     const M0 = b.M0 ?? b.phase0 ?? 0;
-    const s = b.retrograde ? -1 : 1;
+    // full 3D elements: inclination i, longitude of ascending node Omega,
+    // argument of periapsis argPeri. Legacy planar configs pass longPeri
+    // (== Omega + argPeri at i = 0) and/or retrograde (== i = 180°).
+    const inc = b.i ?? (b.retrograde ? Math.PI : 0);
+    const Om = b.Omega ?? 0;
+    const w = b.argPeri ?? b.longPeri ?? 0;
     b.n = Math.sqrt(p.mu / a ** 3);
     b.period = TAU / b.n;
     b.orbitRadius = a; // kept for display code sizing labels/orbit rings
+    const cO = Math.cos(Om), sO = Math.sin(Om);
+    const ci = Math.cos(inc), si = Math.sin(inc);
+    const cw = Math.cos(w), sw = Math.sin(w);
+    // perifocal basis = Rz(Omega)·Rx(i)·Rz(argPeri) applied to x̂, ŷ, ẑ
     b.orbit = {
       mu: p.mu, a, e, p: a * (1 - e * e),
-      px: Math.cos(lp), py: Math.sin(lp),
-      qx: -s * Math.sin(lp), qy: s * Math.cos(lp),
+      px: cO * cw - sO * sw * ci, py: sO * cw + cO * sw * ci, pz: sw * si,
+      qx: -cO * sw - sO * cw * ci, qy: -sO * sw + cO * cw * ci, qz: cw * si,
+      wx: sO * si, wy: -cO * si, wz: ci,
       n: b.n, tp: -M0 / b.n, elliptic: true,
       period: b.period, rp: a * (1 - e), ra: a * (1 + e),
     };
@@ -62,36 +73,47 @@ export function bodyRelStateAt(system, id, t) {
 
 // body state in the root frame
 export function bodyStateAt(system, id, t) {
-  if (id === system.root) return { x: 0, y: 0, vx: 0, vy: 0 };
+  if (id === system.root) return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
   const rel = bodyRelStateAt(system, id, t);
   const par = bodyStateAt(system, system.bodies[id].parent, t);
-  return { x: par.x + rel.x, y: par.y + rel.y, vx: par.vx + rel.vx, vy: par.vy + rel.vy };
+  return {
+    x: par.x + rel.x, y: par.y + rel.y, z: par.z + rel.z,
+    vx: par.vx + rel.vx, vy: par.vy + rel.vy, vz: par.vz + rel.vz,
+  };
 }
 
 /* ------------------------------- kepler -------------------------------- */
 
-// 2D orbit from a state vector. Handles ellipse + hyperbola, both directions.
-// Perifocal frame: p̂ toward periapsis, q̂ = ±90° so true anomaly always increases with time.
-export function stateToOrbit(mu, rx, ry, vx, vy, t) {
-  const r = Math.hypot(rx, ry);
-  const v2 = vx * vx + vy * vy;
-  const hz = rx * vy - ry * vx;
-  const rv = rx * vx + ry * vy;
+// 3D orbit from a state vector. Handles ellipse + hyperbola in any plane.
+// Perifocal basis: p̂ toward periapsis, q̂ = ĥ×p̂ so true anomaly always
+// increases with time; ŵ = ĥ is the orbit normal (the "normal" burn axis).
+// Call as (mu, rx, ry, rz, vx, vy, vz, t) — or the legacy planar form
+// (mu, rx, ry, vx, vy, t), detected by arity, which embeds at z = 0.
+export function stateToOrbit(mu, rx, ry, rz, vx, vy, vz, t) {
+  if (t === undefined) { t = vy; vy = vx; vx = rz; rz = 0; vz = 0; }
+  const r = Math.hypot(rx, ry, rz);
+  const v2 = vx * vx + vy * vy + vz * vz;
+  const rv = rx * vx + ry * vy + rz * vz;
+  // angular momentum vector defines the orbital plane
+  let hx = ry * vz - rz * vy, hy = rz * vx - rx * vz, hz = rx * vy - ry * vx;
+  let hm = Math.hypot(hx, hy, hz);
+  if (hm < 1e-12) { hx = 0; hy = 0; hz = 1e-12; hm = 1e-12; } // degenerate radial orbit
+  const wx = hx / hm, wy = hy / hm, wz = hz / hm;
   let energy = v2 / 2 - mu / r;
   if (Math.abs(energy) < 1e-9) energy = -1e-9; // dodge exact parabola
   const a = -mu / (2 * energy);
   let ex = ((v2 - mu / r) * rx - rv * vx) / mu;
   let ey = ((v2 - mu / r) * ry - rv * vy) / mu;
-  let e = Math.hypot(ex, ey);
-  let px, py;
-  if (e < 1e-9) { e = 0; px = rx / r; py = ry / r; }
-  else { px = ex / e; py = ey / e; }
-  const s = hz >= 0 ? 1 : -1;
-  const qx = -s * py, qy = s * px;
-  const p = hz * hz / mu;
+  let ez = ((v2 - mu / r) * rz - rv * vz) / mu;
+  let e = Math.hypot(ex, ey, ez);
+  let px, py, pz;
+  if (e < 1e-9) { e = 0; px = rx / r; py = ry / r; pz = rz / r; }
+  else { px = ex / e; py = ey / e; pz = ez / e; }
+  const qx = wy * pz - wz * py, qy = wz * px - wx * pz, qz = wx * py - wy * px;
+  const p = hm * hm / mu;
   const elliptic = a > 0;
   const n = Math.sqrt(mu / Math.abs(a * a * a));
-  const nu0 = Math.atan2(rx * qx + ry * qy, rx * px + ry * py);
+  const nu0 = Math.atan2(rx * qx + ry * qy + rz * qz, rx * px + ry * py + rz * pz);
   let tp;
   if (elliptic) {
     const E0 = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(nu0 / 2), Math.sqrt(1 + e) * Math.cos(nu0 / 2));
@@ -101,7 +123,7 @@ export function stateToOrbit(mu, rx, ry, vx, vy, t) {
     tp = t - (e * Math.sinh(H0) - H0) / n;
   }
   return {
-    mu, a, e, p, px, py, qx, qy, n, tp, elliptic,
+    mu, a, e, p, px, py, pz, qx, qy, qz, wx, wy, wz, n, tp, elliptic,
     period: elliptic ? TAU / n : Infinity,
     rp: p / (1 + e),
     ra: elliptic ? p / (1 - e) : Infinity,
@@ -149,10 +171,13 @@ export function posVelAt(o, t) {
     r = o.a * (1 - o.e * Math.cosh(H));
   }
   const nu = Math.atan2(cy, cx);
-  const x = cx * o.px + cy * o.qx, y = cx * o.py + cy * o.qy;
   const sq = Math.sqrt(o.mu / o.p);
   const vxp = -sq * Math.sin(nu), vyp = sq * (o.e + Math.cos(nu));
-  return { x, y, r, nu, vx: vxp * o.px + vyp * o.qx, vy: vxp * o.py + vyp * o.qy };
+  return {
+    x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy, z: cx * (o.pz ?? 0) + cy * (o.qz ?? 0),
+    r, nu,
+    vx: vxp * o.px + vyp * o.qx, vy: vxp * o.py + vyp * o.qy, vz: vxp * (o.pz ?? 0) + vyp * (o.qz ?? 0),
+  };
 }
 
 // first time ≥ tAfter at which true anomaly = nu (null if never)
@@ -224,7 +249,7 @@ function scanSoiEntry(system, orbit, childId, scanFrom, windowEnd) {
     child.soi / vMax));
   const f = (t) => {
     const s = posVelAt(orbit, t), m = bodyRelStateAt(system, childId, t);
-    return Math.hypot(s.x - m.x, s.y - m.y) - child.soi;
+    return Math.hypot(s.x - m.x, s.y - m.y, s.z - m.z) - child.soi;
   };
   const stepAfter = (gap) => Math.max(fine, 0.8 * gap / vMax);
   let tPrev = scanFrom + 1e-3, fPrev = f(tPrev);
@@ -255,7 +280,7 @@ function findSegEnd(system, orbit, bodyId, tStart, tLimit, scanUntil) {
   let inside = true;
   if (body.soi) {
     const st0 = posVelAt(orbit, tStart + 1e-3);
-    const rv0 = st0.x * st0.vx + st0.y * st0.vy;
+    const rv0 = st0.x * st0.vx + st0.y * st0.vy + st0.z * st0.vz;
     inside = st0.r < body.soi * (1 - 1e-9) || (st0.r < body.soi * (1 + 1e-9) && rv0 < 0);
   }
   if (inside && orbit.rp < body.radius) {
@@ -353,7 +378,11 @@ export function conicPoint(o, u) {
     cx = o.a * (Math.cosh(u) - o.e);
     cy = bh * Math.sinh(u);
   }
-  return { x: cx * o.px + cy * o.qx, y: cx * o.py + cy * o.qy };
+  return {
+    x: cx * o.px + cy * o.qx,
+    y: cx * o.py + cy * o.qy,
+    z: cx * (o.pz ?? 0) + cy * (o.qz ?? 0),
+  };
 }
 
 // time at parametric angle u (Kepler's equation, forward direction)
@@ -406,7 +435,7 @@ export function sampleSeg(seg) {
   for (let i = 0; i <= N; i++) {
     const u = u1 + (u2 - u1) * i / N;
     const p = conicPoint(o, u);
-    pts.push({ x: p.x, y: p.y, t: paramTime(o, u) });
+    pts.push({ x: p.x, y: p.y, z: p.z, t: paramTime(o, u) });
   }
   return pts;
 }
@@ -416,12 +445,12 @@ export function segApsides(system, seg) {
   const horizon = Math.min(seg.tEnd, seg.tStart + (o.elliptic ? o.period : Infinity));
   const tPe = tAtNu(o, 0, seg.tStart + 1e-3);
   if (tPe != null && tPe <= horizon) {
-    out.push({ kind: "Pe", nu: 0, x: o.rp * o.px, y: o.rp * o.py, alt: o.rp - B.radius });
+    out.push({ kind: "Pe", nu: 0, x: o.rp * o.px, y: o.rp * o.py, z: o.rp * (o.pz ?? 0), alt: o.rp - B.radius });
   }
   if (o.elliptic) {
     const tAp = tAtNu(o, Math.PI, seg.tStart + 1e-3);
     if (tAp != null && tAp <= horizon) {
-      out.push({ kind: "Ap", nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py, alt: o.ra - B.radius });
+      out.push({ kind: "Ap", nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py, z: -o.ra * (o.pz ?? 0), alt: o.ra - B.radius });
     }
   }
   return out;
@@ -429,7 +458,8 @@ export function segApsides(system, seg) {
 
 /* ----------------------------- the compiler ----------------------------- */
 
-// epoch: { body, rx, ry, vx, vy, t? }   nodes: [{id, t, prograde, radial}] (m/s)
+// epoch: { body, rx, ry, rz?, vx, vy, vz?, t? }
+// nodes: [{id, t, prograde, radial, normal?}] (m/s)
 // `until`: how far ahead to certify SOI-entry scanning. Deterministic below
 // `scannedUntil`: growing `until` never changes already-computed history.
 export function compileTrajectory(system, epoch, nodes, until) {
@@ -439,11 +469,12 @@ export function compileTrajectory(system, epoch, nodes, until) {
   const segs = [], nodeInfo = new Map();
   let body = epoch.body;
   let { rx, ry, vx, vy } = epoch;
+  let rz = epoch.rz ?? 0, vz = epoch.vz ?? 0;
   let t = epoch.t ?? 0, stage = 0;
   let scannedUntil = until;
   for (let guard = 0; ; guard++) {
     if (guard >= MAX_SEGS) { scannedUntil = Math.min(scannedUntil, t); break; }
-    const orbit = stateToOrbit(system.bodies[body].mu, rx, ry, vx, vy, t);
+    const orbit = stateToOrbit(system.bodies[body].mu, rx, ry, rz, vx, vy, vz, t);
     const nextNode = sorted.find((nd) => nd.t > t + 1e-6);
     const tLimit = nextNode ? nextNode.t : Infinity;
     const ev = findSegEnd(system, orbit, body, t, tLimit, until);
@@ -461,28 +492,39 @@ export function compileTrajectory(system, epoch, nodes, until) {
     if (endType === "escape" || (endType === "soiEnter" && enterBody === body)) {
       // crossing this body's own SOI boundary (out, or back in) — there is no
       // other frame to hand off to, the same conic simply continues
-      rx = st.x; ry = st.y; vx = st.vx; vy = st.vy;
+      rx = st.x; ry = st.y; rz = st.z; vx = st.vx; vy = st.vy; vz = st.vz;
     } else if (endType === "node") {
-      const vm = Math.hypot(st.vx, st.vy) || 1;
-      const rm = Math.hypot(st.x, st.y) || 1;
-      const pgx = st.vx / vm, pgy = st.vy / vm;
-      // radial is perpendicular to the path, in-plane, on the side away from the body
-      let rox = -pgy, roy = pgx;
-      if (rox * st.x + roy * st.y < 0) { rox = -rox; roy = -roy; }
-      nodeInfo.set(nextNode.id, { body, t: tEnd, relX: st.x, relY: st.y, pgx, pgy, rox, roy, seg });
-      rx = st.x; ry = st.y;
-      vx = st.vx + (nextNode.prograde / 1000) * pgx + (nextNode.radial / 1000) * rox;
-      vy = st.vy + (nextNode.prograde / 1000) * pgy + (nextNode.radial / 1000) * roy;
+      const vm = Math.hypot(st.vx, st.vy, st.vz) || 1;
+      // the KSP burn triple: prograde along the velocity, normal along the
+      // orbit plane's ĥ, radial = v̂×ĥ (in-plane, always away from the body:
+      // r·(v̂×ĥ) = (r×v̂)·ĥ = |h|/|v| > 0)
+      const pgx = st.vx / vm, pgy = st.vy / vm, pgz = st.vz / vm;
+      const nox = orbit.wx, noy = orbit.wy, noz = orbit.wz;
+      let rox = pgy * noz - pgz * noy, roy = pgz * nox - pgx * noz, roz = pgx * noy - pgy * nox;
+      const rom = Math.hypot(rox, roy, roz) || 1;
+      rox /= rom; roy /= rom; roz /= rom;
+      nodeInfo.set(nextNode.id, {
+        body, t: tEnd, relX: st.x, relY: st.y, relZ: st.z, seg,
+        pgx, pgy, pgz, rox, roy, roz, nox, noy, noz,
+      });
+      rx = st.x; ry = st.y; rz = st.z;
+      const dvP = nextNode.prograde / 1000, dvR = nextNode.radial / 1000, dvN = (nextNode.normal ?? 0) / 1000;
+      vx = st.vx + dvP * pgx + dvR * rox + dvN * nox;
+      vy = st.vy + dvP * pgy + dvR * roy + dvN * noy;
+      vz = st.vz + dvP * pgz + dvR * roz + dvN * noz;
       // keep angular momentum away from exactly zero (degenerate radial orbit)
-      if (Math.abs(rx * vy - ry * vx) < 0.5) { vx += (-st.y / rm) * 0.002; vy += (st.x / rm) * 0.002; }
+      const hx2 = ry * vz - rz * vy, hy2 = rz * vx - rx * vz, hz2 = rx * vy - ry * vx;
+      if (Math.hypot(hx2, hy2, hz2) < 0.5) { vx += rox * 0.002; vy += roy * 0.002; vz += roz * 0.002; }
       stage++;
     } else if (endType === "soiEnter") {
       const m = bodyRelStateAt(system, enterBody, tEnd);
-      rx = st.x - m.x; ry = st.y - m.y; vx = st.vx - m.vx; vy = st.vy - m.vy;
+      rx = st.x - m.x; ry = st.y - m.y; rz = st.z - m.z;
+      vx = st.vx - m.vx; vy = st.vy - m.vy; vz = st.vz - m.vz;
       body = enterBody;
     } else { // soiExit
       const m = bodyRelStateAt(system, body, tEnd);
-      rx = st.x + m.x; ry = st.y + m.y; vx = st.vx + m.vx; vy = st.vy + m.vy;
+      rx = st.x + m.x; ry = st.y + m.y; rz = st.z + m.z;
+      vx = st.vx + m.vx; vy = st.vy + m.vy; vz = st.vz + m.vz;
       body = system.bodies[body].parent;
     }
     t = tEnd;
@@ -496,12 +538,12 @@ export function shipStateAt(system, traj, t) {
   for (const s of segs) if (t < s.tEnd) { seg = s; break; }
   const tc = seg.endType === "impact" ? Math.min(t, seg.tEnd) : t;
   const st = posVelAt(seg.orbit, Math.max(tc, seg.tStart));
-  let x = st.x, y = st.y;
+  let x = st.x, y = st.y, z = st.z;
   if (seg.body !== system.root) {
     const b = bodyStateAt(system, seg.body, t);
-    x += b.x; y += b.y;
+    x += b.x; y += b.y; z += b.z;
   }
-  return { seg, rel: st, x, y };
+  return { seg, rel: st, x, y, z };
 }
 
 /* -------------------------------- warping -------------------------------- */
@@ -514,7 +556,7 @@ function trajMatchesNodes(traj, nodes) {
   const s = nodes.map((n) => ({ ...n })).sort((a, b) => a.t - b.t);
   return s.length === traj.sorted.length && s.every((n, i) => {
     const m = traj.sorted[i];
-    return n.t === m.t && n.prograde === m.prograde && n.radial === m.radial;
+    return n.t === m.t && n.prograde === m.prograde && n.radial === m.radial && (n.normal ?? 0) === (m.normal ?? 0);
   });
 }
 
@@ -637,7 +679,7 @@ export function computeCA(system, traj, targetId, fromT) {
     if (wEnd <= t0) continue;
     const dist = (t) => {
       const s = posVelAt(o, t), m = bodyRelStateAt(system, targetId, t);
-      return Math.hypot(s.x - m.x, s.y - m.y);
+      return Math.hypot(s.x - m.x, s.y - m.y, s.z - m.z);
     };
     const N = 800, dt = (wEnd - t0) / N;
     let dPrev2 = null, dPrev = dist(t0);

@@ -23,6 +23,7 @@
       /* burn-component + plan-stage colors (functional, not decorative) */
       --pro: #ffd45e;   /* prograde/retrograde */
       --rad: #59e3e3;   /* radial in/out */
+      --nrm: #c586ff;   /* normal/anti-normal (out of plane) */
       --plan: #ffb454;  /* planned trajectory, stage 1 */
     }
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
@@ -117,6 +118,7 @@
     <div class="mk-row"><span class="mk-k" title="apoapsis — the highest point of the current orbit, as altitude">Ap</span><span class="mk-v" id="roAp">—</span></div>
     <div class="mk-row"><span class="mk-k" title="periapsis — the lowest point of the current orbit, as altitude. Red means it dips below the surface">Pe</span><span class="mk-v" id="roPe">—</span></div>
     <div class="mk-row"><span class="mk-k" title="time for one full revolution of the current orbit">period</span><span class="mk-v" id="roPeriod">—</span></div>
+    <div class="mk-row"><span class="mk-k" title="tilt of your orbital plane against the ecliptic">inclination</span><span class="mk-v" id="roInc">—</span></div>
 
     <div class="section-label mk-sect">target</div>
     <div class="control">
@@ -133,6 +135,7 @@
     <div id="targetInfo" style="display:none">
       <div class="mk-row"><span class="mk-k" title="the nearest your planned path gets to the target">closest</span><span class="mk-v" id="roCa">—</span></div>
       <div class="mk-row"><span class="mk-k" title="when that closest pass happens">at</span><span class="mk-v" id="roCaT">—</span></div>
+      <div class="mk-row"><span class="mk-k" title="angle between your orbital plane and the target's — burn normal at AN/DN to zero it and match planes">rel. inclination</span><span class="mk-v" id="roRelInc">—</span></div>
     </div>
 
     <div class="section-label mk-sect">maneuver</div>
@@ -153,6 +156,14 @@
           <button class="mk-step" data-ax="radial" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
           <input id="ndRad" inputmode="decimal" title="radial Δv in m/s — type an exact value" />
           <button class="mk-step" data-ax="radial" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
+        </div>
+      </div>
+      <div class="mk-dv">
+        <span class="mk-dvlab" style="color:var(--nrm)" title="out-of-plane speed change in m/s, along the orbit normal — tilts the orbital plane">normal</span>
+        <div class="mk-cap" style="--ax: var(--nrm)">
+          <button class="mk-step" data-ax="normal" data-d="-1" title="subtract 1 m/s (shift: 10, alt: 0.1)">−</button>
+          <input id="ndNrm" inputmode="decimal" title="normal Δv in m/s — type an exact value" />
+          <button class="mk-step" data-ax="normal" data-d="1" title="add 1 m/s (shift: 10, alt: 0.1)">+</button>
         </div>
       </div>
       <div class="mk-row"><span class="mk-k" title="total speed change this maneuver costs">maneuver Δv</span><span class="mk-v" id="ndDv">—</span></div>
@@ -264,7 +275,7 @@
       compileTrajectory, shipStateAt, tryJump, computeCA, paramTime, visibleSegments,
       conicPoint, segParamRange, adaptiveCurve, MAX_SEGS, wrapForward, resolveMapClick,
       relevantHorizon,
-    } from "./orbits.mjs?v=17";
+    } from "./orbits.mjs?v=18";
 
     /* ============================== system ============================== */
     // units: km, s, km/s (Δv shown in m/s). Toy scale: Kerbol-system numbers,
@@ -274,28 +285,29 @@
     // the ecliptic): real GM, radii, semi-major axes, eccentricities, and
     // planet phasing from mean longitudes. km, km³/s², seconds.
     const deg = (d) => (d * Math.PI) / 180;
-    // planets: [a, e, longitude of perihelion ϖ, mean longitude L] (deg)
-    const el = (a, e, w, L) => ({ a, e, longPeri: deg(w), M0: deg(L - w) });
+    // planets: [a, e, inclination i, node Ω, longitude of perihelion ϖ,
+    // mean longitude L] (J2000, degrees) — argPeri = ϖ − Ω, M0 = L − ϖ
+    const el = (a, e, i, Om, w, L) => ({ a, e, i: deg(i), Omega: deg(Om), argPeri: deg(w - Om), M0: deg(L - w) });
     const SYSTEM = makeSystem({
       root: "sun",
       bodies: {
         sun: { name: "Sun", mu: 1.32712e11, radius: 695700, fill: "#e8a33d", rim: "#fff3c4" },
-        mercury: { name: "Mercury", mu: 22032, radius: 2440, parent: "sun", ...el(57.909e6, 0.2056, 77.457, 252.251), fill: "#5a5550", rim: "#a89f96" },
-        venus: { name: "Venus", mu: 324859, radius: 6052, parent: "sun", ...el(108.209e6, 0.0068, 131.532, 181.980), fill: "#8a7440", rim: "#e8d9a8" },
-        earth: { name: "Earth", mu: 398600, radius: 6371, parent: "sun", ...el(149.598e6, 0.0167, 102.937, 100.464), fill: "#1b4e8a", rim: "#6ba8e0" },
-        moon: { name: "Moon", mu: 4902.8, radius: 1737, parent: "earth", a: 384400, e: 0.0549, M0: 2.2, fill: "#565962", rim: "#a8aab0" },
-        mars: { name: "Mars", mu: 42828, radius: 3390, parent: "sun", ...el(227.939e6, 0.0934, 336.041, 355.453), fill: "#7a3520", rim: "#d97a52" },
-        jupiter: { name: "Jupiter", mu: 1.26687e8, radius: 69911, parent: "sun", ...el(778.57e6, 0.0489, 14.728, 34.397), fill: "#8a6134", rim: "#d9b285" },
-        io: { name: "Io", mu: 5959.9, radius: 1822, parent: "jupiter", a: 421800, e: 0.004, M0: 0.5, fill: "#8a7a2e", rim: "#e0d060" },
-        europa: { name: "Europa", mu: 3202.7, radius: 1561, parent: "jupiter", a: 671100, e: 0.009, M0: 2.0, fill: "#7a6f5c", rim: "#d9cfc0" },
-        ganymede: { name: "Ganymede", mu: 9887.8, radius: 2634, parent: "jupiter", a: 1070400, e: 0.001, M0: 4.1, fill: "#5c554c", rim: "#a89f90" },
-        callisto: { name: "Callisto", mu: 7179.3, radius: 2410, parent: "jupiter", a: 1882700, e: 0.007, M0: 5.3, fill: "#453f38", rim: "#8c8478" },
-        saturn: { name: "Saturn", mu: 3.7931e7, radius: 58232, parent: "sun", ...el(1433.53e6, 0.0565, 92.599, 49.954), fill: "#8a7443", rim: "#e0cf9a" },
-        titan: { name: "Titan", mu: 8978.1, radius: 2575, parent: "saturn", a: 1221870, e: 0.0288, M0: 1.2, fill: "#8a5c1e", rim: "#e0a44a" },
-        uranus: { name: "Uranus", mu: 5.794e6, radius: 25362, parent: "sun", ...el(2872.46e6, 0.0457, 170.954, 313.238), fill: "#3a7a85", rim: "#9fdde6" },
-        neptune: { name: "Neptune", mu: 6.8365e6, radius: 24622, parent: "sun", ...el(4495.06e6, 0.0113, 44.965, 304.880), fill: "#2a4d9e", rim: "#7aa3f0" },
-        triton: { name: "Triton", mu: 1428, radius: 1353, parent: "neptune", a: 354759, e: 0, M0: 3.3, retrograde: true, fill: "#6b5f5c", rim: "#c4b4ae" },
-        pluto: { name: "Pluto", mu: 871, radius: 1188, parent: "sun", ...el(5906.38e6, 0.2488, 224.07, 238.93), fill: "#7a6450", rim: "#d9bc9a" },
+        mercury: { name: "Mercury", mu: 22032, radius: 2440, parent: "sun", ...el(57.909e6, 0.2056, 7.005, 48.331, 77.457, 252.251), fill: "#5a5550", rim: "#a89f96" },
+        venus: { name: "Venus", mu: 324859, radius: 6052, parent: "sun", ...el(108.209e6, 0.0068, 3.395, 76.680, 131.532, 181.980), fill: "#8a7440", rim: "#e8d9a8" },
+        earth: { name: "Earth", mu: 398600, radius: 6371, parent: "sun", ...el(149.598e6, 0.0167, 0, 0, 102.937, 100.464), fill: "#1b4e8a", rim: "#6ba8e0" },
+        moon: { name: "Moon", mu: 4902.8, radius: 1737, parent: "earth", a: 384400, e: 0.0549, i: deg(5.145), M0: 2.2, fill: "#565962", rim: "#a8aab0" },
+        mars: { name: "Mars", mu: 42828, radius: 3390, parent: "sun", ...el(227.939e6, 0.0934, 1.850, 49.558, 336.041, 355.453), fill: "#7a3520", rim: "#d97a52" },
+        jupiter: { name: "Jupiter", mu: 1.26687e8, radius: 69911, parent: "sun", ...el(778.57e6, 0.0489, 1.303, 100.464, 14.728, 34.397), fill: "#8a6134", rim: "#d9b285" },
+        io: { name: "Io", mu: 5959.9, radius: 1822, parent: "jupiter", a: 421800, e: 0.004, i: deg(2.2), Omega: deg(100.5), M0: 0.5, fill: "#8a7a2e", rim: "#e0d060" },
+        europa: { name: "Europa", mu: 3202.7, radius: 1561, parent: "jupiter", a: 671100, e: 0.009, i: deg(2.3), Omega: deg(100.5), M0: 2.0, fill: "#7a6f5c", rim: "#d9cfc0" },
+        ganymede: { name: "Ganymede", mu: 9887.8, radius: 2634, parent: "jupiter", a: 1070400, e: 0.001, i: deg(2.1), Omega: deg(100.5), M0: 4.1, fill: "#5c554c", rim: "#a89f90" },
+        callisto: { name: "Callisto", mu: 7179.3, radius: 2410, parent: "jupiter", a: 1882700, e: 0.007, i: deg(2.0), Omega: deg(100.5), M0: 5.3, fill: "#453f38", rim: "#8c8478" },
+        saturn: { name: "Saturn", mu: 3.7931e7, radius: 58232, parent: "sun", ...el(1433.53e6, 0.0565, 2.489, 113.665, 92.599, 49.954), fill: "#8a7443", rim: "#e0cf9a" },
+        titan: { name: "Titan", mu: 8978.1, radius: 2575, parent: "saturn", a: 1221870, e: 0.0288, i: deg(27), Omega: deg(113.7), M0: 1.2, fill: "#8a5c1e", rim: "#e0a44a" },
+        uranus: { name: "Uranus", mu: 5.794e6, radius: 25362, parent: "sun", ...el(2872.46e6, 0.0457, 0.773, 74.006, 170.954, 313.238), fill: "#3a7a85", rim: "#9fdde6" },
+        neptune: { name: "Neptune", mu: 6.8365e6, radius: 24622, parent: "sun", ...el(4495.06e6, 0.0113, 1.770, 131.784, 44.965, 304.880), fill: "#2a4d9e", rim: "#7aa3f0" },
+        triton: { name: "Triton", mu: 1428, radius: 1353, parent: "neptune", a: 354759, e: 0, i: deg(157), Omega: deg(131.8), M0: 3.3, fill: "#6b5f5c", rim: "#c4b4ae" },
+        pluto: { name: "Pluto", mu: 871, radius: 1188, parent: "sun", ...el(5906.38e6, 0.2488, 17.140, 110.299, 224.07, 238.93), fill: "#7a6450", rim: "#d9bc9a" },
       },
     });
     // circular orbit at twice Earth's radius
@@ -358,40 +370,15 @@
     // every long jump goes through the survey; a surprise encounter aborts it
     function doJump(targetT) {
       recompileIfDirty(); // jump decisions must see pending edits
-      // before jumping, find every pixel where the DESTINATION is currently
-      // drawn (a point on a dual-rendered patch appears on both the ghost and
-      // the live copy). If the ship-focused camera can pin the ship to one of
-      // those pixels, the warp won't look like a camera jump: the ship simply
-      // appears where the destination was shown. Non-ghost copies win; if no
-      // copy is on screen (or focus is a body), keep the normal recenter.
-      let destPix = null;
-      if (focus === "ship") {
-        const tt = Math.max(0, targetT);
-        const destSeg = traj.segs.find((s) => tt >= s.tStart && tt < s.tEnd) ?? traj.segs[traj.segs.length - 1];
-        if (visSet.has(destSeg)) {
-          const rel = posVelAt(destSeg.orbit, tt); // conic point — periodic, any revolution
-          const live = segOrg(destSeg);
-          const ext = extMap.get(destSeg) ?? live;
-          const onScreen = (p) => p.x > -20 && p.x < W + 20 && p.y > -20 && p.y < H + 20;
-          for (const org of [live, ext]) { // live first: non-ghosts take precedence
-            const p = w2s(rel.x + org.x, rel.y + org.y);
-            if (onScreen(p)) { destPix = p; break; }
-          }
-        }
-      }
       const res = tryJump(SYSTEM, EPOCH, nodes, traj, Math.max(0, targetT), relevantHorizon(SYSTEM, traj));
       traj = res.traj;
       tNow = res.t;
       ca = null;
       if (focus === "ship") {
+        // the camera is locked to the focus, so a ship-focused warp keeps the
+        // ship centered by construction — no camera jump to compensate for
         ship = shipStateAt(SYSTEM, traj, tNow);
-        fp = { x: ship.x, y: ship.y };
-        if (destPix && !res.aborted) {
-          // with the camera anchored on the ship, the pan alone decides the
-          // ship's pixel — set it to the destination's pre-warp pixel
-          cam.panX = (W / 2 - destPix.x) / cam.zoom;
-          cam.panY = (destPix.y - H / 2) / cam.zoom;
-        }
+        fp = { x: ship.x, y: ship.y, z: ship.z };
       }
       if (res.aborted) toast("orbit changed — warp abandoned");
     }
@@ -422,7 +409,9 @@
     const cv = document.getElementById("c");
     const ctx = cv.getContext("2d");
     let W = 0, H = 0, dpr = 1;
-    const cam = { zoom: 0.3, panX: 0, panY: 0 }; // pan in km, relative to the focus
+    // the camera is always centered on the focus; yaw/pitch orbit around it
+    // (pitch π/2 = top-down), zoom is the only other degree of freedom
+    const cam = { zoom: 0.3, yaw: 0, pitch: Math.PI / 2 };
     const MIN_ZOOM = 2e-8, MAX_ZOOM = 60;        // min fits Pluto's whole orbit
     let defaultZoom = 0.3;
     let userZoomed = false; // until the user zooms, resizes keep re-deriving the default
@@ -442,27 +431,52 @@
     let ship = shipStateAt(SYSTEM, traj, 0);
     // camera focus: the ship, or any body — pan is relative to whatever it is
     let focus = "ship";
-    let fp = { x: 0, y: 0 }; // the focus point, refreshed every tick
+    let fp = { x: 0, y: 0, z: 0 }; // the focus point, refreshed every tick
     function focusPos() {
-      if (focus === "ship") return { x: ship.x, y: ship.y };
+      if (focus === "ship") return { x: ship.x, y: ship.y, z: ship.z ?? 0 };
       const b = bodyStateAt(SYSTEM, focus, tNow);
-      return { x: b.x, y: b.y };
+      return { x: b.x, y: b.y, z: b.z };
     }
-    function w2s(x, y) {
-      return {
-        x: W / 2 + (x - fp.x - cam.panX) * cam.zoom,
-        y: H / 2 - (y - fp.y - cam.panY) * cam.zoom,
+    // Orbit camera: an orthographic view of 3D space around the focus. Yaw
+    // spins around the ecliptic pole, pitch tilts from top-down (π/2, the
+    // classic map view — identical to the old 2D projection) toward the
+    // horizon. Pan lives in the view plane (right/up), in km.
+    let camR = { x: 1, y: 0, z: 0 }; // screen-right in world space
+    let camU = { x: 0, y: 1, z: 0 }; // screen-up in world space
+    let camF = { x: 0, y: 0, z: 1 }; // toward the viewer (depth axis)
+    let occluders = [];              // this frame's body discs, for path depth-hiding
+    function updateCamBasis() {
+      const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+      const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+      camR = { x: cy, y: sy, z: 0 };
+      camU = { x: -sy * sp, y: cy * sp, z: cp };
+      camF = { // camR × camU: points toward the viewer; bigger dot = closer
+        x: camR.y * camU.z - camR.z * camU.y,
+        y: camR.z * camU.x - camR.x * camU.z,
+        z: camR.x * camU.y - camR.y * camU.x,
       };
     }
-    function s2w(sx, sy) {
+    function w2s(x, y, z = 0) {
+      const dx = x - fp.x, dy = y - fp.y, dz = z - fp.z;
       return {
-        x: fp.x + cam.panX + (sx - W / 2) / cam.zoom,
-        y: fp.y + cam.panY - (sy - H / 2) / cam.zoom,
+        x: W / 2 + (dx * camR.x + dy * camR.y + dz * camR.z) * cam.zoom,
+        y: H / 2 - (dx * camU.x + dy * camU.y + dz * camU.z) * cam.zoom,
       };
     }
-    function v2s(vx, vy) { // direction only
-      const m = Math.hypot(vx, vy) || 1;
-      return { x: vx / m, y: -vy / m };
+    function s2w(sx, sy) { // inverse onto the view plane through the focus
+      const u = (sx - W / 2) / cam.zoom;
+      const v = -(sy - H / 2) / cam.zoom;
+      return {
+        x: fp.x + u * camR.x + v * camU.x,
+        y: fp.y + u * camR.y + v * camU.y,
+        z: fp.z + u * camR.z + v * camU.z,
+      };
+    }
+    function v2s(vx, vy, vz = 0) { // direction only
+      const px = vx * camR.x + vy * camR.y + vz * camR.z;
+      const py = vx * camU.x + vy * camU.y + vz * camU.z;
+      const m = Math.hypot(px, py) || 1;
+      return { x: px / m, y: -py / m };
     }
     // every drawn segment sits around its own body's CURRENT position — around
     // the Moon things render Moon-centric, with no special cases
@@ -578,7 +592,7 @@
       let rMax = 1e6;
       if (!seg.orbit.elliptic && vseg.tEnd === Infinity) {
         const org = segOrg(seg);
-        const cx = fp.x + cam.panX - org.x, cy = fp.y + cam.panY - org.y;
+        const cx = fp.x - org.x, cy = fp.y - org.y;
         rMax = Math.max(rMax, (Math.hypot(cx, cy) + Math.hypot(W, H) / cam.zoom) * 1.2);
       }
       return segParamRange(vseg, rMax);
@@ -601,7 +615,7 @@
     function pathConic(o, u1, u2, org) {
       const pts = adaptiveCurve((u) => {
         const c = conicPoint(o, u);
-        return w2s(c.x + org.x, c.y + org.y);
+        return w2s(c.x + org.x, c.y + org.y, c.z + org.z);
       }, u1, u2, 24, W, H);
       const lo = -100, hiX = W + 100, hiY = H + 100;
       ctx.beginPath();
@@ -613,17 +627,30 @@
         len += Math.hypot(b.x - a.x, b.y - a.y);
         const c = clipChord(a.x, a.y, b.x, b.y, lo, hiX, hiY);
         if (!c) { open = false; continue; }
+        if (occluders.length) {
+          const mx = (c.x1 + c.x2) / 2, my = (c.y1 + c.y2) / 2;
+          let hidden = false;
+          for (const q of occluders) {
+            const ex = mx - q.sx, ey = my - q.sy;
+            if (ex * ex + ey * ey < q.r2) {
+              const wp = conicPoint(o, (a.u + b.u) / 2);
+              const tc = (wp.x + org.x) * camF.x + (wp.y + org.y) * camF.y + (wp.z + org.z) * camF.z;
+              if (tc < q.tc) { hidden = true; break; }
+            }
+          }
+          if (hidden) { open = false; continue; }
+        }
         if (!open || c.entered) { ctx.moveTo(c.x1, c.y1); open = true; }
         ctx.lineTo(c.x2, c.y2);
       }
       return len; // so dashes can flow continuously from patch to patch
     }
 
-    function drawBody(bx, by, radius, fill, rim) {
-      const s = w2s(bx, by);
+    function drawBody(bx, by, bz, radius, fill, rim) {
+      const s = w2s(bx, by, bz);
       const r = Math.max(radius * cam.zoom, 2);
       if (![s.x, s.y, r].every(Number.isFinite)) {
-        window.__nf = { bx, by, sx: s.x, sy: s.y, r, zoom: cam.zoom, panX: cam.panX, panY: cam.panY, fpx: fp.x, fpy: fp.y, tNow, W, H };
+        window.__nf = { bx, by, sx: s.x, sy: s.y, r, zoom: cam.zoom, yaw: cam.yaw, pitch: cam.pitch, fpx: fp.x, fpy: fp.y, tNow, W, H };
         console.error("drawBody non-finite", window.__nf);
         return;
       }
@@ -654,9 +681,11 @@
         ctx.stroke();
         ctx.globalAlpha = 1;
       }
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, TAU);
-      ctx.stroke();
+      if (kind !== "normal") { // the normal glyphs are bare triangles, no ring
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, TAU);
+        ctx.stroke();
+      }
       const tick = (a, from, to) => {
         ctx.beginPath();
         ctx.moveTo(x + Math.cos(a) * from, y + Math.sin(a) * from);
@@ -680,6 +709,29 @@
           ctx.moveTo(x + k, y - k); ctx.lineTo(x - k, y + k);
           ctx.stroke();
           for (const a of [-Math.PI / 2, Math.PI * 0.75, Math.PI * 0.25]) tick(a, r, r + 4);
+        }
+      } else if (kind === "normal") {
+        // KSP navball: an outlined equilateral triangle with a center dot —
+        // point-up for normal; point-down with corner ticks for anti-normal
+        const k = r * 1.05;
+        const verts = dir > 0
+          ? [[0, -k], [k * 0.87, k * 0.5], [-k * 0.87, k * 0.5]]
+          : [[0, k], [k * 0.87, -k * 0.5], [-k * 0.87, -k * 0.5]];
+        ctx.beginPath();
+        ctx.moveTo(x + verts[0][0], y + verts[0][1]);
+        ctx.lineTo(x + verts[1][0], y + verts[1][1]);
+        ctx.lineTo(x + verts[2][0], y + verts[2][1]);
+        ctx.closePath();
+        ctx.stroke();
+        dot();
+        if (dir < 0) { // anti-normal wears the retrograde-style corner ticks
+          for (const [vx2, vy2] of verts) {
+            const m = Math.hypot(vx2, vy2);
+            ctx.beginPath();
+            ctx.moveTo(x + vx2, y + vy2);
+            ctx.lineTo(x + vx2 * (1 + 3.5 / m), y + vy2 * (1 + 3.5 / m));
+            ctx.stroke();
+          }
         }
       } else {
         dot();
@@ -706,6 +758,7 @@
     }
 
     function draw() {
+      updateCamBasis();
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = "#05070d";
       ctx.fillRect(0, 0, W, H);
@@ -722,6 +775,30 @@
         ctx.fillRect(st.x, st.y, st.r, st.r);
       }
       ctx.globalAlpha = 1;
+
+      // body discs first, far-to-near, and each registers as an occluder so
+      // paths drawn after can hide only the chords that pass BEHIND a body
+      occluders = [];
+      {
+        const byDepth = Object.values(SYSTEM.bodies)
+          .map((b) => ({ b, bs: bodyStateAt(SYSTEM, b.id, tNow) }))
+          .sort((p, q) =>
+            (p.bs.x * camF.x + p.bs.y * camF.y + p.bs.z * camF.z) -
+            (q.bs.x * camF.x + q.bs.y * camF.y + q.bs.z * camF.z));
+        for (const { b, bs } of byDepth) {
+          drawBody(bs.x, bs.y, bs.z, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
+          const rPix = b.radius * cam.zoom;
+          if (rPix > 3) {
+            const s = w2s(bs.x, bs.y, bs.z);
+            if (s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
+              occluders.push({
+                sx: s.x, sy: s.y, r2: rPix * rPix,
+                tc: bs.x * camF.x + bs.y * camF.y + bs.z * camF.z,
+              });
+            }
+          }
+        }
+      }
 
       // each body's own orbit ring around its parent — its real (eccentric)
       // conic, not a circle, so bodies always sit on their lines
@@ -764,7 +841,7 @@
         if (prevSeg && Math.abs(prevSeg.tEnd - seg.tStart) < 1e-6) {
           const a = posVelAt(prevSeg.orbit, seg.tStart);
           const b = posVelAt(seg.orbit, seg.tStart);
-          org = { x: prevOrg.x + a.x - b.x, y: prevOrg.y + a.y - b.y };
+          org = { x: prevOrg.x + a.x - b.x, y: prevOrg.y + a.y - b.y, z: prevOrg.z + a.z - b.z };
         }
         extMap.set(seg, org);
         prevSeg = seg; prevOrg = org;
@@ -801,7 +878,7 @@
           ctx.globalAlpha = 1;
           if (v.mode === "ghost") {
             const gb = SYSTEM.bodies[seg.body];
-            const gs = w2s(org.x, org.y);
+            const gs = w2s(org.x, org.y, org.z);
             ctx.beginPath();
             ctx.arc(gs.x, gs.y, Math.max(gb.radius * cam.zoom, 2), 0, TAU);
             ctx.strokeStyle = color; // the ghost body wears its patch's color
@@ -821,7 +898,7 @@
         const farEvent = seg.orbit.elliptic && seg.tEnd - Math.max(seg.tStart, tNow) > seg.orbit.period;
         const drawExtras = (o2, dim) => {
           for (const ap of seg.apsides) {
-            const s = w2s(ap.x + o2.x, ap.y + o2.y);
+            const s = w2s(ap.x + o2.x, ap.y + o2.y, (ap.z ?? 0) + o2.z);
             if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
             ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
             ctx.beginPath();
@@ -832,10 +909,36 @@
             ctx.globalAlpha = 1;
             label(`${ap.kind} ${fmtKm(ap.alt)}`, s.x + 8, s.y - 8, ap.alt < 0 ? "#e0556b" : "rgba(230,232,239,0.85)", "left", dim);
           }
+          // AN/DN against the target's plane, snap-able like Ap/Pe
+          const rn = relNodes(seg);
+          if (rn) {
+            const o3 = seg.orbit;
+            const lo = Math.max(seg.tStart, tNow) + 1e-3;
+            const hi = Math.min(seg.tEnd, o3.elliptic ? lo + o3.period : Infinity);
+            for (const [nu, kind] of [[rn.nuA, "AN"], [rn.nuD, "DN"]]) {
+              const tn = tAtNu(o3, nu, lo);
+              if (tn == null || tn > hi) continue;
+              const q = nuPoint(o3, nu);
+              if (q.r <= 0) continue;
+              const s = w2s(q.x + o2.x, q.y + o2.y, q.z + o2.z);
+              if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+              ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
+              ctx.beginPath();
+              if (kind === "AN") { ctx.moveTo(s.x, s.y - 4.5); ctx.lineTo(s.x + 4, s.y + 3); ctx.lineTo(s.x - 4, s.y + 3); }
+              else { ctx.moveTo(s.x, s.y + 4.5); ctx.lineTo(s.x + 4, s.y - 3); ctx.lineTo(s.x - 4, s.y - 3); }
+              ctx.closePath();
+              ctx.strokeStyle = "#cdd6e8";
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+              ctx.globalAlpha = 1;
+              const angle = (rn.relInc * 180 / Math.PI).toFixed(1);
+              label(`${kind} ${angle}°`, s.x + 8, s.y + 8, "rgba(205,214,232,0.85)", "left", dim);
+            }
+          }
           if (!farEvent && v.mode !== "ellipse" && seg.endType === "soiEnter" && seg.tEnd > tNow) {
             const eb = SYSTEM.bodies[seg.enterBody];
             const st = posVelAt(seg.orbit, seg.tEnd);
-            const s = w2s(st.x + o2.x, st.y + o2.y);
+            const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -843,7 +946,7 @@
           }
           if (!farEvent && v.mode !== "ellipse" && (seg.endType === "soiExit" || seg.endType === "escape") && seg.tEnd > tNow) {
             const st = posVelAt(seg.orbit, seg.tEnd);
-            const s = w2s(st.x + o2.x, st.y + o2.y);
+            const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -851,7 +954,7 @@
           }
           if (v.mode !== "ellipse" && seg.endType === "impact") {
             const st = posVelAt(seg.orbit, seg.tEnd);
-            const s = w2s(st.x + o2.x, st.y + o2.y);
+            const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
             ctx.globalAlpha = dim;
             ctx.strokeStyle = "#e0556b";
             ctx.lineWidth = 1.5;
@@ -873,7 +976,7 @@
         const org = segOrg(b.seg);
         const sp = posVelAt(b.seg.orbit, b.t);
         const mp = bodyStateAt(SYSTEM, target, b.t);
-        const s1 = w2s(sp.x + org.x, sp.y + org.y), s2 = w2s(mp.x, mp.y);
+        const s1 = w2s(sp.x + org.x, sp.y + org.y, sp.z + org.z), s2 = w2s(mp.x, mp.y, mp.z);
         ctx.beginPath();
         ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y);
         ctx.strokeStyle = "rgba(154,163,178,0.35)";
@@ -891,14 +994,14 @@
         label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
       }
 
-      // bodies + labels (SOI circles only when toggled on; the target's name
-      // lights up). Deepest bodies first, so a parent's label always lands on top of
-      // its children's; a child whose whole orbit is tiny on screen loses its
+      // labels + SOI circles (discs were painted before the paths). Deepest
+      // bodies first, so a parent's label always lands on top of its
+      // children's; a child whose whole orbit is tiny on screen loses its
       // label entirely — it has visually merged with its parent.
       for (const b of BODY_LABEL_ORDER) {
         const bs = bodyStateAt(SYSTEM, b.id, tNow);
         if (soiOn && b.soi) {
-          const s = w2s(bs.x, bs.y);
+          const s = w2s(bs.x, bs.y, bs.z);
           const r = b.soi * cam.zoom;
           if (r > 4 && r < 40000 && s.x + r > -80 && s.x - r < W + 80 && s.y + r > -80 && s.y - r < H + 80) {
             ctx.beginPath();
@@ -910,9 +1013,8 @@
             ctx.setLineDash([]);
           }
         }
-        drawBody(bs.x, bs.y, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
         if (b.parent && b.orbitRadius * cam.zoom < 20) continue;
-        const s = w2s(bs.x, bs.y);
+        const s = w2s(bs.x, bs.y, bs.z);
         label(b.name, s.x, s.y - Math.max(b.radius * cam.zoom, 2) - 10,
           target === b.id ? "#8cc8ff" : "rgba(154,163,178,0.9)", "center");
       }
@@ -940,7 +1042,7 @@
         const ndColor = nodeColors.get(nd.id) ?? "#ffb454";
         let s = null; // the pinned copy's screen position, for the gizmo
         for (const c of copies) {
-          const cs = w2s(info.relX + c.o.x, info.relY + c.o.y);
+          const cs = w2s(info.relX + c.o.x, info.relY + c.o.y, info.relZ + c.o.z);
           ctx.beginPath();
           ctx.arc(cs.x, cs.y, sel ? 7 : 5, 0, TAU);
           ctx.strokeStyle = ndColor;
@@ -953,18 +1055,27 @@
           hitNodes.push({ id: nd.id, x: cs.x, y: cs.y, copy: c.k });
           if (c.k === pin || !dual) s = cs;
         }
-        const dvTot = Math.hypot(nd.prograde, nd.radial);
-        if (dvTot > 0.05) label(fmtMps(dvTot), s.x + 10, s.y + 12, "#ffb454");
 
         if (sel) {
-          const pg = v2s(info.pgx, info.pgy);
-          const ro = v2s(info.rox, info.roy);
+          const pg = v2s(info.pgx, info.pgy, info.pgz);
+          const ro = v2s(info.rox, info.roy, info.roz);
+          const no = v2s(info.nox, info.noy, info.noz);
           const handles = [
             { ax: "prograde", dir: 1, ux: pg.x, uy: pg.y, color: "#ffd45e" },
             { ax: "prograde", dir: -1, ux: -pg.x, uy: -pg.y, color: "#ffd45e" },
             { ax: "radial", dir: 1, ux: ro.x, uy: ro.y, color: "#59e3e3" },
             { ax: "radial", dir: -1, ux: -ro.x, uy: -ro.y, color: "#59e3e3" },
           ];
+          // the normal axis only exists on screen when the camera is tilted —
+          // top-down it projects to a point and the handles would be grabbable noise
+          const noRawX = info.nox * camR.x + info.noy * camR.y + info.noz * camR.z;
+          const noRawY = info.nox * camU.x + info.noy * camU.y + info.noz * camU.z;
+          if (Math.hypot(noRawX, noRawY) > 0.3) {
+            handles.push(
+              { ax: "normal", dir: 1, ux: no.x, uy: no.y, color: "#c586ff" },
+              { ax: "normal", dir: -1, ux: -no.x, uy: -no.y, color: "#c586ff" },
+            );
+          }
           // deferred past flushLabels: the editing gizmo must never hide
           // under Ap/Pe/distance text
           gizmoDraw = () => {
@@ -982,7 +1093,7 @@
               ctx.lineWidth = active ? 2.2 : 1.5;
               ctx.stroke();
               handleGlyph(x1, y1, h.ax, h.dir, h.color, active);
-              hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1, y: y1, pgS: pg, roS: ro });
+              hitHandles.push({ nodeId: nd.id, ax: h.ax, dir: h.dir, x: x1, y: y1, pgS: pg, roS: ro, noS: no });
             }
           };
         }
@@ -990,8 +1101,8 @@
 
       // ship
       {
-        const s = w2s(ship.x, ship.y);
-        const dir = v2s(ship.rel.vx, ship.rel.vy);
+        const s = w2s(ship.x, ship.y, ship.z);
+        const dir = v2s(ship.rel.vx, ship.rel.vy, ship.rel.vz);
         const px = -dir.y, py = dir.x;
         ctx.beginPath();
         ctx.moveTo(s.x + dir.x * 7, s.y + dir.y * 7);
@@ -1011,7 +1122,7 @@
         else {
           const st = posVelAt(menuPending.seg.orbit, menuPending.t);
           const org = menuPending.origin === "live" ? segOrg(menuPending.seg) : dispOrg(menuPending.seg);
-          const s = w2s(st.x + org.x, st.y + org.y);
+          const s = w2s(st.x + org.x, st.y + org.y, st.z + org.z);
           ctx.beginPath();
           ctx.arc(s.x, s.y, 5, 0, TAU);
           ctx.strokeStyle = segColors.get(menuPending.seg.tStart) ?? "#ffb454";
@@ -1022,7 +1133,7 @@
       } else if (hoverGhost && hoverGhost.t > tNow) {
         const st = posVelAt(hoverGhost.seg.orbit, hoverGhost.t);
         const org = hoverGhost.origin === "live" ? segOrg(hoverGhost.seg) : dispOrg(hoverGhost.seg);
-        const s = w2s(st.x + org.x, st.y + org.y);
+        const s = w2s(st.x + org.x, st.y + org.y, st.z + org.z);
         ctx.beginPath();
         ctx.arc(s.x, s.y, 4, 0, TAU);
         ctx.fillStyle = segColors.get(hoverGhost.seg.tStart) ?? "rgba(255,180,84,0.9)";
@@ -1031,14 +1142,14 @@
       // the body popup rides its (moving) body; a hovered body gets a ring
       if (bodyMenuPending) {
         const bs = bodyStateAt(SYSTEM, bodyMenuPending, tNow);
-        const s = w2s(bs.x, bs.y);
+        const s = w2s(bs.x, bs.y, bs.z);
         bodyMenu.style.left = clampN(s.x + 14, 8, W - 230) + "px";
         bodyMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
       }
       if (hoverBody) {
         const b = SYSTEM.bodies[hoverBody];
         const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
-        const s = w2s(bs.x, bs.y);
+        const s = w2s(bs.x, bs.y, bs.z);
         ctx.beginPath();
         // floors at the same 5px a maneuver node's circle uses
         ctx.arc(s.x, s.y, Math.max(b.radius * cam.zoom + 4, 5), 0, TAU);
@@ -1123,7 +1234,7 @@
       for (const b of Object.values(SYSTEM.bodies)) {
         if (!b.parent) continue;
         const bs = bodyStateAt(SYSTEM, b.id, tNow);
-        const sp = w2s(bs.x, bs.y);
+        const sp = w2s(bs.x, bs.y, bs.z);
         if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * cam.zoom, 10) + 4) return b.id;
       }
       return null;
@@ -1144,7 +1255,7 @@
     function nearestOnCurve(orbit, u1, u2, org, sx, sy) {
       const pts = adaptiveCurve((u) => {
         const c = conicPoint(orbit, u);
-        return w2s(c.x + org.x, c.y + org.y);
+        return w2s(c.x + org.x, c.y + org.y, c.z + org.z);
       }, u1, u2, 24, W, H);
       let best = null, prev = null;
       for (const p of pts) {
@@ -1188,15 +1299,46 @@
     // snap a candidate time to a nearby Ap/Pe — strictly pixel-based: only
     // when the CURSOR itself is within reach of the apsis marker, so a small
     // on-screen orbit can't be swallowed whole by its own apsides
+    // ascending/descending nodes of a segment's plane against the TARGET's
+    // plane — only meaningful in the target's parent frame; null if coplanar
+    function relNodes(seg) {
+      if (!target) return null;
+      const tb = SYSTEM.bodies[target];
+      if (seg.body !== tb.parent) return null;
+      const o = seg.orbit, to = tb.orbit;
+      let dx = o.wy * to.wz - o.wz * to.wy;
+      let dy = o.wz * to.wx - o.wx * to.wz;
+      let dz = o.wx * to.wy - o.wy * to.wx;
+      const dm = Math.hypot(dx, dy, dz);
+      if (dm < 1e-6) return null;
+      dx /= dm; dy /= dm; dz /= dm;
+      const relInc = Math.acos(clampN(o.wx * to.wx + o.wy * to.wy + o.wz * to.wz, -1, 1));
+      const nuA = Math.atan2(dx * o.qx + dy * o.qy + dz * o.qz, dx * o.px + dy * o.py + dz * o.pz);
+      const norm = (nu) => Math.atan2(Math.sin(nu), Math.cos(nu));
+      return { nuA: norm(nuA), nuD: norm(nuA + Math.PI), relInc };
+    }
+    function nuPoint(o, nu) { // position on the conic at true anomaly nu
+      const r = o.p / (1 + o.e * Math.cos(nu));
+      const c = Math.cos(nu), s = Math.sin(nu);
+      return { x: r * (c * o.px + s * o.qx), y: r * (c * o.py + s * o.qy), z: r * (c * o.pz + s * o.qz), r };
+    }
+
     function applySnap(t, seg, origin, px, py) {
       snapFlash = null;
       if (!snapOn || px == null) return t;
       const o = seg.orbit;
       const org = origin === "live" ? segOrg(seg) : dispOrg(seg);
-      const cands = [{ nu: 0, x: o.rp * o.px, y: o.rp * o.py }];
-      if (o.elliptic) cands.push({ nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py });
+      const cands = [{ nu: 0, x: o.rp * o.px, y: o.rp * o.py, z: o.rp * o.pz }];
+      if (o.elliptic) cands.push({ nu: Math.PI, x: -o.ra * o.px, y: -o.ra * o.py, z: -o.ra * o.pz });
+      const rn = relNodes(seg);
+      if (rn) {
+        for (const nu of [rn.nuA, rn.nuD]) {
+          const q = nuPoint(o, nu);
+          if (q.r > 0) cands.push({ nu, x: q.x, y: q.y, z: q.z });
+        }
+      }
       for (const c of cands) {
-        const s = w2s(c.x + org.x, c.y + org.y);
+        const s = w2s(c.x + org.x, c.y + org.y, c.z + org.z);
         if (Math.hypot(px - s.x, py - s.y) < 16) {
           const ts = tAtNu(o, c.nu, Math.max(tNow, seg.tStart) + 1e-3);
           // an apsis pass the segment never reaches (it ends at an encounter
@@ -1249,7 +1391,7 @@
           return;
         }
       }
-      drag = { kind: "pan", lastX: sx, lastY: sy, moved: false, downX: sx, downY: sy };
+      drag = { kind: "look", lastX: sx, lastY: sy, moved: false, downX: sx, downY: sy };
     });
 
     cv.addEventListener("pointermove", (e) => {
@@ -1292,12 +1434,11 @@
         return;
       }
       const sx = e.clientX, sy = e.clientY;
-      if (drag.kind === "pan") {
-        const dx = sx - drag.lastX, dy = sy - drag.lastY;
+      if (drag.kind === "look") { // left-drag orbits the camera around the focus
         if (Math.hypot(sx - drag.downX, sy - drag.downY) > 4) drag.moved = true;
         if (drag.moved) {
-          cam.panX -= dx / cam.zoom;
-          cam.panY += dy / cam.zoom;
+          cam.yaw -= (sx - drag.lastX) * 0.006;
+          cam.pitch = clampN(cam.pitch + (sy - drag.lastY) * 0.006, -Math.PI / 2, Math.PI / 2);
         }
         drag.lastX = sx; drag.lastY = sy;
       } else if (drag.kind === "handle") {
@@ -1327,7 +1468,7 @@
     function endPointer(e) {
       pointers.delete(e.pointerId);
       if (!drag) return;
-      if (drag.kind === "pan" && !drag.moved) {
+      if (drag.kind === "look" && !drag.moved) {
         // click: open the path menu, select a body as target, or deselect —
         // a path hit always beats the body disc beneath it (see resolveMapClick)
         const sx = e.clientX, sy = e.clientY;
@@ -1356,12 +1497,9 @@
     cv.addEventListener("wheel", (e) => {
       e.preventDefault();
       const f = Math.pow(1.0015, -e.deltaY);
-      const before = s2w(e.clientX, e.clientY);
       cam.zoom = clampN(cam.zoom * f, MIN_ZOOM, MAX_ZOOM);
       userZoomed = true;
-      const after = s2w(e.clientX, e.clientY);
-      cam.panX += before.x - after.x;
-      cam.panY += before.y - after.y;
+
     }, { passive: false });
 
     /* ============================== UI ============================== */
@@ -1404,10 +1542,11 @@
       $("nodeEditor").style.display = nd ? "" : "none";
       if (nd) {
         $("ndT").textContent = fmtClock(nd.t);
-        const pro = $("ndPro"), rad = $("ndRad");
+        const pro = $("ndPro"), rad = $("ndRad"), nrm = $("ndNrm");
         if (document.activeElement !== pro) pro.value = nd.prograde.toFixed(1);
         if (document.activeElement !== rad) rad.value = nd.radial.toFixed(1);
-        $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial));
+        if (document.activeElement !== nrm) nrm.value = (nd.normal ?? 0).toFixed(1);
+        $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial, nd.normal ?? 0));
       }
       $("targetInfo").style.display = target ? "" : "none";
     }
@@ -1432,11 +1571,21 @@
       $("roPe").textContent = fmtKm(peAlt);
       $("roPe").classList.toggle("mk-danger", peAlt < 0);
       $("roPeriod").textContent = o.elliptic ? fmtDur(o.period) : "—";
+      // inclination readouts follow the selected maneuver's post-burn orbit
+      // (that's the number you're steering while dragging normal at AN/DN);
+      // planned values wear the maneuver's patch color
+      const selPlan = nodes.find((n) => n.id === selectedId && n.t > tNow);
+      const postSeg = selPlan ? traj.segs.find((s) => Math.abs(s.tStart - selPlan.t) < 1e-6) : null;
+      const incSeg = postSeg ?? seg;
+      const io = incSeg.orbit;
+      $("roInc").textContent = (Math.acos(clampN(Math.abs(io.wz), -1, 1)) * 180 / Math.PI).toFixed(2) + "°"
+        + (io.wz < 0 ? " (retro)" : "");
+      $("roInc").style.color = postSeg ? (nodeColors.get(selPlan.id) ?? "") : "";
       $("clock").textContent = fmtClock(tNow);
 
       // mission plan: every maneuver, colored like its patch; executed ones dim.
       // Totals: Δv burned so far, Δv the plan still costs, and their sum.
-      const dvOf = (n) => Math.hypot(n.prograde, n.radial);
+      const dvOf = (n) => Math.hypot(n.prograde, n.radial, n.normal ?? 0);
       const spent = nodes.filter((n) => n.t <= tNow).reduce((s, n) => s + dvOf(n), 0);
       const planned = nodes.filter((n) => n.t > tNow).reduce((s, n) => s + dvOf(n), 0);
       $("fpSpent").textContent = fmtMps(spent);
@@ -1493,6 +1642,15 @@
           $("roCa").textContent = "—";
           $("roCaT").textContent = "—";
         }
+        const tb2 = SYSTEM.bodies[target];
+        if (incSeg.body === tb2.parent) {
+          const to = tb2.orbit;
+          const rel = Math.acos(clampN(io.wx * to.wx + io.wy * to.wy + io.wz * to.wz, -1, 1));
+          $("roRelInc").textContent = (rel * 180 / Math.PI).toFixed(2) + "°";
+        } else {
+          $("roRelInc").textContent = "—";
+        }
+        $("roRelInc").style.color = postSeg ? (nodeColors.get(selPlan.id) ?? "") : "";
       }
     }
 
@@ -1519,7 +1677,7 @@
       }
       focusSel.addEventListener("change", () => {
         focus = focusSel.value;
-        cam.panX = 0; cam.panY = 0; // re-center on the new focus
+        // camera stays locked to the (new) focus
       });
       const patchSlider = $("patchSlider");
       patchSlider.max = String(Math.min(10, MAX_SEGS)); // beyond ~10 it's noise
@@ -1532,7 +1690,7 @@
       $("slower").addEventListener("click", slower);
       $("faster").addEventListener("click", faster);
       $("pause").addEventListener("click", () => { paused = !paused; setRateButtons(); });
-      $("resetView").addEventListener("click", () => { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; });
+      $("resetView").addEventListener("click", () => { cam.zoom = defaultZoom; cam.yaw = 0; cam.pitch = Math.PI / 2; });
       $("jumpGo").addEventListener("click", () => {
         const t = parseTimeInput($("jumpIn").value);
         if (t != null) doJump(t);
@@ -1553,7 +1711,7 @@
         if (!menuPending) return;
         // remember which copy of the path it was placed on, so the node
         // renders where the user clicked (display-only hint)
-        const nd = { id: nodeSeq++, t: Math.max(menuPending.t, tNow + 1), prograde: 0, radial: 0, pin: menuPending.origin };
+        const nd = { id: nodeSeq++, t: Math.max(menuPending.t, tNow + 1), prograde: 0, radial: 0, normal: 0, pin: menuPending.origin };
         nodes.push(nd);
         selectedId = nd.id;
         markDirty();
@@ -1578,7 +1736,7 @@
         if (!bodyMenuPending) return;
         focus = bodyMenuPending;
         $("focusSel").value = focus;
-        cam.panX = 0; cam.panY = 0; // re-center on the new focus
+        // camera stays locked to the (new) focus
         closeBodyMenu();
       });
       // any sidebar click that isn't on a plan row dismisses the rewind popup
@@ -1594,7 +1752,7 @@
         selectedId = nd.id;
         updatePanel();
       });
-      for (const [id, ax] of [["ndPro", "prograde"], ["ndRad", "radial"]]) {
+      for (const [id, ax] of [["ndPro", "prograde"], ["ndRad", "radial"], ["ndNrm", "normal"]]) {
         const el = $(id);
         el.addEventListener("input", () => {
           const v = parseFloat(el.value);
@@ -1602,7 +1760,7 @@
           if (Number.isFinite(v) && nd && nd.t > tNow) {
             nd[ax] = v;
             markDirty();
-            $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial));
+            $("ndDv").textContent = fmtMps(Math.hypot(nd.prograde, nd.radial, nd.normal ?? 0));
           }
         });
         el.addEventListener("keydown", (e) => { if (e.key === "Enter") el.blur(); });
@@ -1623,7 +1781,7 @@
         if (e.key === " ") { e.preventDefault(); paused = !paused; setRateButtons(); }
         else if (e.key === ",") slower();
         else if (e.key === ".") faster();
-        else if (e.key === "r") { cam.panX = 0; cam.panY = 0; cam.zoom = defaultZoom; }
+        else if (e.key === "r") { cam.zoom = defaultZoom; cam.yaw = 0; cam.pitch = Math.PI / 2; }
         else if (e.key === "Escape") { closeMenu(); closeBodyMenu(); closeFpMenu(); selectedId = null; updatePanel(); }
         else if (e.key === "Delete" || e.key === "Backspace") { if (selectedId != null) deleteNode(selectedId); }
       });
@@ -1655,7 +1813,7 @@
         return out;
       },
       state: () => ({
-        tNow, zoom: cam.zoom, panX: cam.panX, panY: cam.panY, fp: { ...fp },
+        tNow, zoom: cam.zoom, yaw: cam.yaw, pitch: cam.pitch, fp: { ...fp },
         vis: visList.map((v) => ({ mode: v.mode, t0: v.seg.tStart, t1: v.seg.tEnd, end: v.seg.endType })),
       }),
       // synchronous frame benchmark (rAF freezes while the pane is hidden)
@@ -1691,10 +1849,10 @@
       lastWall = now;
       // self-heal: a single NaN in the camera would otherwise poison every
       // frame from then on (it has — via 0/0 in a zoom handler at 0×0 load)
-      if (!Number.isFinite(cam.zoom + cam.panX + cam.panY) || !(cam.zoom > 0)) {
+      if (!Number.isFinite(cam.zoom + cam.yaw + cam.pitch) || !(cam.zoom > 0)) {
         cam.zoom = defaultZoom;
-        cam.panX = 0;
-        cam.panY = 0;
+        cam.yaw = 0;
+        cam.pitch = Math.PI / 2;
       }
       // KSP-style handle hold: Δv builds at a rate set by how far the handle
       // is pulled, as a fraction of the screen — hold still and it keeps
@@ -1702,7 +1860,7 @@
       if (drag?.kind === "handle") {
         const nd = nodes.find((n) => n.id === drag.h.nodeId);
         if (nd && nd.t > tNow) {
-          const axis = drag.h.ax === "prograde" ? drag.h.pgS : drag.h.roS;
+          const axis = drag.h.ax === "prograde" ? drag.h.pgS : drag.h.ax === "radial" ? drag.h.roS : drag.h.noS;
           const disp = (drag.curX - drag.anchorX) * axis.x + (drag.curY - drag.anchorY) * axis.y;
           drag.disp = disp * drag.h.dir; // along the handle's own outward direction
           const p = disp / Math.min(W, H);

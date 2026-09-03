@@ -984,3 +984,102 @@ test("closest approach: a 0 m/s maneuver does not move the markers", () => {
   approx(ca1.best.t, ca0.best.t, 2, "same moment");
   approx(ca1.best.d, ca0.best.d, 2, "same distance");
 });
+
+/* --------------------------------- 3D ---------------------------------- */
+
+test("3D: an inclined state vector round-trips through the orbit", () => {
+  // 45-degree inclined circular-ish orbit
+  const r = 800, v = vc(800);
+  const c = Math.SQRT1_2;
+  const cases = [
+    { name: "45deg circular", rx: r, ry: 0, rz: 0, vx: 0, vy: v * c, vz: v * c },
+    { name: "tilted elliptic", rx: 500, ry: 300, rz: 400, vx: -1.1, vy: 1.4, vz: 0.4 },
+    { name: "polar hyperbolic", rx: r, ry: 0, rz: 0, vx: 0.2, vy: 0, vz: v * 1.7 },
+  ];
+  for (const s of cases) {
+    const o = stateToOrbit(MU, s.rx, s.ry, s.rz, s.vx, s.vy, s.vz, 77);
+    const b = posVelAt(o, 77);
+    approx(b.x, s.rx, 1e-6, `${s.name} x`);
+    approx(b.y, s.ry, 1e-6, `${s.name} y`);
+    approx(b.z, s.rz, 1e-6, `${s.name} z`);
+    approx(b.vx, s.vx, 1e-6, `${s.name} vx`);
+    approx(b.vy, s.vy, 1e-6, `${s.name} vy`);
+    approx(b.vz, s.vz, 1e-6, `${s.name} vz`);
+    // energy + angular momentum vector conserved along the orbit
+    const t2 = 9000;
+    const b2 = posVelAt(o, t2);
+    const e1 = (s.vx ** 2 + s.vy ** 2 + s.vz ** 2) / 2 - MU / Math.hypot(s.rx, s.ry, s.rz);
+    const e2 = (b2.vx ** 2 + b2.vy ** 2 + b2.vz ** 2) / 2 - MU / Math.hypot(b2.x, b2.y, b2.z);
+    approx(e2, e1, Math.abs(e1) * 1e-9, `${s.name} energy`);
+    const h1 = [s.ry * s.vz - s.rz * s.vy, s.rz * s.vx - s.rx * s.vz, s.rx * s.vy - s.ry * s.vx];
+    const h2 = [b2.y * b2.vz - b2.z * b2.vy, b2.z * b2.vx - b2.x * b2.vz, b2.x * b2.vy - b2.y * b2.vx];
+    for (let k = 0; k < 3; k++) approx(h2[k], h1[k], Math.abs(h1[k]) * 1e-8 + 1e-9, `${s.name} h[${k}]`);
+  }
+});
+
+test("3D: body rails honor inclination and node", () => {
+  const sys = makeSystem({
+    root: "vesper",
+    bodies: {
+      vesper: { name: "Vesper", mu: MU, radius: 600 },
+      lume: { name: "Lume", mu: 65.14, radius: 200, parent: "vesper", a: 12000, e: 0, i: Math.PI / 4, Omega: Math.PI / 2, M0: 0 },
+    },
+  });
+  // Omega=90deg: ascending node along +y; at M0=0 (periapsis-less circle,
+  // measured from the node) the body sits ON the node line: (0, 12000, 0)
+  const s0 = bodyRelStateAt(sys, "lume", 0);
+  approx(s0.x, 0, 1, "on the node line (x)");
+  approx(s0.y, 12000, 1, "on the node line (y)");
+  approx(s0.z, 0, 1, "on the node line (z)");
+  // a quarter period later it is at max elevation: z = a*sin(i)
+  const q = sys.bodies.lume.period / 4;
+  const s1 = bodyRelStateAt(sys, "lume", q);
+  approx(s1.z, 12000 * Math.sin(Math.PI / 4), 5, "max z at quarter orbit");
+  approx(Math.hypot(s1.x, s1.y, s1.z), 12000, 1e-6, "still circular");
+});
+
+test("3D: a normal burn tilts the plane without changing the energy", () => {
+  const sys = gameSystem();
+  const epoch = { body: "vesper", rx: 800, ry: 0, vx: 0, vy: vc(800) };
+  const traj = compileTrajectory(sys, epoch, [{ id: 1, t: 500, prograde: 0, radial: 0, normal: 300 }], 50000);
+  const after = traj.segs[1].orbit;
+  const before = traj.segs[0].orbit;
+  approx(after.a, before.a * 1 + (after.a - before.a), 0, "sanity");
+  // plane tilted: the new angular momentum direction is no longer +z
+  assert.ok(Math.abs(after.wz) < 0.9999, `plane tilted (wz=${after.wz})`);
+  // speed change is perpendicular to velocity -> semi-major axis grows only
+  // by the tiny quadratic term, not the linear one a prograde burn gives
+  const dvFrac = Math.abs(after.a - before.a) / before.a;
+  assert.ok(dvFrac < 0.03, `energy nearly unchanged (da/a=${dvFrac})`);
+  // continuity of position across the burn
+  const a1 = posVelAt(before, 500), a2 = posVelAt(after, 500);
+  approx(a2.x, a1.x, 1e-6, "position continuous (x)");
+  approx(a2.z, a1.z, 1e-6, "position continuous (z)");
+});
+
+test("3D: an encounter with an inclined moon is found at the 3D boundary", () => {
+  const sys = makeSystem({
+    root: "vesper",
+    bodies: {
+      vesper: { name: "Vesper", mu: MU, radius: 600 },
+      lume: { name: "Lume", mu: 65.14, radius: 200, parent: "vesper", a: 12000, e: 0, i: 0.15, Omega: 0.4, M0: 2.2 },
+    },
+  });
+  const lume = sys.bodies.lume;
+  // co-planar-with-ecliptic transfer ellipse crossing the moon's radius; the
+  // moon's plane is only 0.15 rad off, so its SOI (2430 km) is still reachable
+  const rp = 800, ra = 13000, a = (rp + ra) / 2;
+  const epoch = { body: "vesper", rx: rp, ry: 0, vx: 0, vy: Math.sqrt(MU * (2 / rp - 1 / a)) };
+  const traj = compileTrajectory(sys, epoch, [], 40 * lume.period);
+  const enc = traj.segs.find((s) => s.endType === "soiEnter" && s.enterBody === "lume");
+  assert.ok(enc, "encounter found");
+  const st = posVelAt(enc.orbit, enc.tEnd);
+  const m = bodyRelStateAt(sys, "lume", enc.tEnd);
+  approx(Math.hypot(st.x - m.x, st.y - m.y, st.z - m.z), lume.soi, 5, "at the 3D SOI boundary");
+  // and the handoff is continuous in 3D
+  const dt = 0.5;
+  const before = shipStateAt(sys, traj, enc.tEnd - dt);
+  const after = shipStateAt(sys, traj, enc.tEnd + dt);
+  approx(after.x, before.x, 10, "x continuous");
+  approx(after.z ?? 0, before.z ?? 0, 10, "z continuous");
+});
