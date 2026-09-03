@@ -576,6 +576,16 @@
     let nodeColors = new Map(); // node id -> its post-burn patch color
     let segColors = new Map();  // drawn segment -> its patch color
     function label(text, sx, sy, color, align = "left", alpha = 1) { labelQueue.push([text, sx, sy, color, align, alpha]); }
+    // is this screen point behind a body's disc? (s = the point's w2s scale)
+    function hiddenByBody(sx, sy, s) {
+      if (s <= 0) return true;
+      for (const q of occluders) {
+        if (s >= q.s) continue; // at or in front of that disc
+        const dx = sx - q.sx, dy = sy - q.sy;
+        if (dx * dx + dy * dy < q.r2) return true;
+      }
+      return false;
+    }
     function flushLabels() {
       ctx.font = MONO;
       ctx.textBaseline = "middle";
@@ -966,6 +976,7 @@
           for (const ap of seg.apsides) {
             const s = w2s(ap.x + o2.x, ap.y + o2.y, (ap.z ?? 0) + o2.z);
             if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+            if (hiddenByBody(s.x, s.y, s.s)) continue;
             ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
             ctx.beginPath();
             ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x + 4, s.y); ctx.lineTo(s.x, s.y + 4); ctx.lineTo(s.x - 4, s.y);
@@ -988,6 +999,7 @@
               if (q.r <= 0) continue;
               const s = w2s(q.x + o2.x, q.y + o2.y, q.z + o2.z);
               if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
+              if (hiddenByBody(s.x, s.y, s.s)) continue;
               ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
               ctx.beginPath();
               if (kind === "AN") { ctx.moveTo(s.x, s.y - 4.5); ctx.lineTo(s.x + 4, s.y + 3); ctx.lineTo(s.x - 4, s.y + 3); }
@@ -1005,6 +1017,7 @@
             const eb = SYSTEM.bodies[seg.enterBody];
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
+            if (hiddenByBody(s.x, s.y, s.s)) return;
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -1013,6 +1026,7 @@
           if (!farEvent && v.mode !== "ellipse" && (seg.endType === "soiExit" || seg.endType === "escape") && seg.tEnd > tNow) {
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
+            if (hiddenByBody(s.x, s.y, s.s)) return;
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -1021,6 +1035,7 @@
           if (v.mode !== "ellipse" && seg.endType === "impact") {
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
+            if (hiddenByBody(s.x, s.y, s.s)) return;
             ctx.globalAlpha = dim;
             ctx.strokeStyle = "#e0556b";
             ctx.lineWidth = 1.5;
@@ -1051,13 +1066,15 @@
         ctx.stroke();
         ctx.setLineDash([]);
         for (const s of [s1, s2]) {
+          if (hiddenByBody(s.x, s.y, s.s)) continue;
           ctx.beginPath();
           ctx.arc(s.x, s.y, 3.5, 0, TAU);
           ctx.strokeStyle = "#9aa3b2";
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
-        label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
+        if (!hiddenByBody((s1.x + s2.x) / 2, (s1.y + s2.y) / 2, (s1.s + s2.s) / 2))
+          label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
       }
 
       // labels + SOI circles (discs were painted before the paths). Deepest
@@ -1082,6 +1099,7 @@
         const s = w2s(bs.x, bs.y, bs.z);
         if (s.s <= 0) continue;
         if (b.parent && b.orbitRadius * s.s < 20) continue;
+        if (hiddenByBody(s.x, s.y, s.s)) continue;
         label(b.name, s.x, s.y - Math.max(b.radius * s.s, 2) - 10,
           target === b.id ? "#8cc8ff" : "rgba(154,163,178,0.9)", "center");
       }
@@ -1281,6 +1299,8 @@
       closeFpMenu();
       bodyMenuPending = id;
       document.getElementById("bmName").textContent = SYSTEM.bodies[id].name;
+      document.getElementById("bmTarget").textContent =
+        target === id ? "unselect as target" : "select as target";
       bodyMenu.style.display = "";
       bodyMenu.style.left = clampN(s.x + 14, 8, W - 230) + "px";
       bodyMenu.style.top = clampN(s.y + 10, 8, H - 100) + "px";
@@ -1811,9 +1831,9 @@
       });
       $("bmTarget").addEventListener("click", () => {
         if (!bodyMenuPending) return;
-        target = bodyMenuPending;
+        target = target === bodyMenuPending ? null : bodyMenuPending;
         ca = null;
-        if (targetSel) targetSel.value = target;
+        if (targetSel) targetSel.value = target ?? "";
         closeBodyMenu();
         updatePanel();
       });
