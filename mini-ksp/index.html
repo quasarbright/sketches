@@ -721,6 +721,277 @@
       ctx.fill();
     }
 
+    // ---- low-poly planets ----------------------------------------------
+    // Big-on-screen bodies render as flat-shaded icospheres instead of
+    // gradient discs: per-face colors carry the identity (continents, bands,
+    // the Great Red Spot, Saturn's hexagon) and per-face sun lighting gives
+    // a real terminator. Small bodies keep the cheap disc — the mesh only
+    // exists while you can see it.
+    const lpNorm = (v) => { const m = Math.hypot(v[0], v[1], v[2]); return [v[0] / m, v[1] / m, v[2] / m]; };
+    const lpCross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const icoCache = new Map(); // subdiv level -> { verts, faces, cents }
+    function icosphere(level) {
+      if (icoCache.has(level)) return icoCache.get(level);
+      const t = (1 + Math.sqrt(5)) / 2;
+      const verts = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t],
+        [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(lpNorm);
+      let faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4],
+        [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+        [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+      for (let l = 0; l < level; l++) {
+        const mid = new Map(), nf = [];
+        const midpoint = (a, b) => {
+          const k = a < b ? a * 65536 + b : b * 65536 + a;
+          if (mid.has(k)) return mid.get(k);
+          const va = verts[a], vb = verts[b];
+          verts.push(lpNorm([(va[0] + vb[0]) / 2, (va[1] + vb[1]) / 2, (va[2] + vb[2]) / 2]));
+          mid.set(k, verts.length - 1);
+          return verts.length - 1;
+        };
+        for (const [a, b, c] of faces) {
+          const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+          nf.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+        }
+        faces = nf;
+      }
+      const cents = faces.map(([a, b, c]) => lpNorm([
+        verts[a][0] + verts[b][0] + verts[c][0],
+        verts[a][1] + verts[b][1] + verts[c][1],
+        verts[a][2] + verts[b][2] + verts[c][2]]));
+      const mesh = { verts, faces, cents };
+      icoCache.set(level, mesh);
+      return mesh;
+    }
+
+    // spin axes: real J2000 pole directions (RA/Dec, degrees) rotated into
+    // the ecliptic frame the sim lives in — Earth leans its 23.4°, Uranus
+    // lies on its side. Moons are tidally locked: pole = orbit normal.
+    const POLE_RADEC = {
+      mercury: [281.01, 61.42], venus: [272.76, 67.16], earth: [0, 90],
+      mars: [317.68, 52.89], jupiter: [268.06, 64.50], saturn: [40.59, 83.54],
+      uranus: [257.31, -15.18], neptune: [299.36, 43.46], pluto: [132.99, -6.16],
+    };
+    const axisCache = new Map(); // body id -> { p (pole), a1, a2 (equatorial) }
+    function bodyAxis(id) {
+      let ax = axisCache.get(id);
+      if (ax) return ax;
+      let p;
+      const rd = POLE_RADEC[id];
+      if (rd) {
+        const a = rd[0] * Math.PI / 180, d = rd[1] * Math.PI / 180, e = 23.4393 * Math.PI / 180;
+        const xq = Math.cos(d) * Math.cos(a), yq = Math.cos(d) * Math.sin(a), zq = Math.sin(d);
+        p = [xq, Math.cos(e) * yq + Math.sin(e) * zq, -Math.sin(e) * yq + Math.cos(e) * zq];
+      } else {
+        const o = SYSTEM.bodies[id].orbit;
+        p = o ? [o.wx, o.wy, o.wz] : [0, 0, 1];
+      }
+      let a1 = [-p[1], p[0], 0];
+      const m = Math.hypot(a1[0], a1[1]);
+      a1 = m > 1e-6 ? [a1[0] / m, a1[1] / m, 0] : [1, 0, 0];
+      ax = { p, a1, a2: lpCross(p, a1) };
+      axisCache.set(id, ax);
+      return ax;
+    }
+
+    // Earth land mask, 10° cells, rows lat 85°N..85°S, cols lon 180°W..180°E
+    const EARTH_LAND = [
+      "000000000000000000000000000000000000",
+      "000000111110011100011111111111111111",
+      "011111111111011000111111111111111111",
+      "000001111111000001111111111111110100",
+      "000001111111000001111111111111110000",
+      "000000111110000001000111111111101000",
+      "000000011000000011111111011101110000",
+      "000000001000000011111110010010000000",
+      "000000000011100011111100000111100000",
+      "000000000011111001110000000001111000",
+      "000000000011110001110000000000111000",
+      "000000000001110001100000000001111100",
+      "000000000011100000100000000000110000",
+      "000000000010000000000000000000000001",
+      "000000000010000000000000000000000000",
+      "000000000000000000000000000000000000",
+      "000000000000000000000000000000000000",
+      "000000000000000000000000000000000000",
+    ];
+    const lpHex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+    const lpSpot = (latD, lonD, sLat, sLon, r) => {
+      let dl = Math.abs(lonD - sLon) % 360; if (dl > 180) dl = 360 - dl;
+      return Math.hypot(latD - sLat, dl * Math.cos(sLat * Math.PI / 180)) < r;
+    };
+    function lpBands(latD, lonD, bounds, colors, wobble = 3) {
+      const l = latD + wobble * Math.sin(lonD * Math.PI / 60 + latD * 0.2);
+      for (let i = 0; i < bounds.length - 1; i++) if (l <= bounds[i] && l > bounds[i + 1]) return colors[i % colors.length];
+      return colors[0];
+    }
+    function surfaceColor(id, latD, lonD, base) {
+      switch (id) {
+        case "earth": {
+          if (latD > 66 || latD < -62) return "#dde6ee";
+          const row = clampN(Math.floor((90 - latD) / 10), 0, 17);
+          const col = ((Math.floor((lonD + 180) / 10) % 36) + 36) % 36;
+          return EARTH_LAND[row][col] === "1" ? "#4d7a3c" : "#1d5290";
+        }
+        case "moon":
+          for (const [a, o, r] of [[25, -32, 17], [10, 16, 13], [-6, -24, 9], [32, 22, 11]])
+            if (lpSpot(latD, lonD, a, o, r)) return "#42454d";
+          return base;
+        case "mars":
+          if (Math.abs(latD) > 74) return "#e8e2da";
+          if (lpSpot(latD, lonD, 12, 62, 15) || lpSpot(latD, lonD, -8, -95, 12)) return "#4c2113";
+          return base;
+        case "jupiter":
+          if (lpSpot(latD, lonD, -22, -55, 11)) return "#c1553b";
+          return lpBands(latD, lonD,
+            [90, 58, 42, 30, 18, 7, -4, -16, -28, -42, -58, -90],
+            ["#a87f52", "#d2b48c", "#9a6f45", "#e0c9a0", "#a87950", "#d8bd92", "#8f6640", "#cdb086", "#a37a4e", "#c9ab80", "#96703f"]);
+        case "saturn":
+          if (latD > 75 + 2.5 * Math.cos(6 * lonD * Math.PI / 180)) return "#6e6553";
+          return lpBands(latD, lonD, [90, 70, 50, 30, 10, -10, -30, -50, -70, -90],
+            ["#d9c391", "#c9b176", "#d2bc88", "#c2aa6e", "#d9c391", "#c9b176", "#d2bc88", "#c2aa6e", "#cdb57c"], 1.5);
+        case "neptune":
+          if (lpSpot(latD, lonD, -25, 30, 11)) return "#1c3470";
+          return lpBands(latD, lonD, [90, 40, 5, -35, -90], ["#2a4d9e", "#3458ad", "#2a4d9e", "#3156a8"], 2);
+        case "venus":
+          return lpBands(latD, lonD, [90, 55, 20, -15, -50, -90], ["#8a7440", "#9d874e", "#8f7944", "#9a8349", "#8a7440"], 5);
+        case "pluto":
+          if (lpSpot(latD, lonD, 10, 175, 18)) return "#d9c8ae";
+          return base;
+        case "triton":
+          if (latD < -35) return "#d8cfc8";
+          return base;
+        default:
+          return base;
+      }
+    }
+    const faceColorCache = new Map(); // `${id}:${level}` -> [[r,g,b], ...]
+    function faceColors(id, level) {
+      const key = id + ":" + level;
+      let cols = faceColorCache.get(key);
+      if (cols) return cols;
+      const mesh = icosphere(level);
+      const base = SYSTEM.bodies[id].fill ?? "#3a4152";
+      cols = mesh.cents.map((c, fi) => {
+        const latD = Math.asin(clampN(c[2], -1, 1)) * 180 / Math.PI;
+        const lonD = Math.atan2(c[1], c[0]) * 180 / Math.PI;
+        const rgb = lpHex(surfaceColor(id, latD, lonD, base));
+        const h = (fi * 2654435761 >>> 0) % 100; // stable per-face jitter
+        const j = 1 + (h / 100 - 0.5) * 0.11;
+        return [rgb[0] * j, rgb[1] * j, rgb[2] * j];
+      });
+      faceColorCache.set(key, cols);
+      return cols;
+    }
+
+    function drawBodyMesh(b, bs, rPix) {
+      const level = rPix < 90 ? 1 : rPix < 300 ? 2 : 3;
+      const mesh = icosphere(level);
+      const ax = bodyAxis(b.id);
+      const cols = faceColors(b.id, level);
+      const R = b.radius;
+      const nv = mesh.verts.length;
+      const sx = new Float64Array(nv), sy = new Float64Array(nv), ss = new Float64Array(nv);
+      for (let i = 0; i < nv; i++) {
+        const v = mesh.verts[i];
+        const pr = w2s(
+          bs.x + R * (v[0] * ax.a1[0] + v[1] * ax.a2[0] + v[2] * ax.p[0]),
+          bs.y + R * (v[0] * ax.a1[1] + v[1] * ax.a2[1] + v[2] * ax.p[1]),
+          bs.z + R * (v[0] * ax.a1[2] + v[1] * ax.a2[2] + v[2] * ax.p[2]));
+        sx[i] = pr.x; sy[i] = pr.y; ss[i] = pr.s;
+      }
+      const ex = fp.x + camF.x * camD, ey = fp.y + camF.y * camD, ez = fp.z + camF.z * camD;
+      const lm = Math.hypot(bs.x, bs.y, bs.z) || 1; // sunlight comes from the origin
+      const ldx = -bs.x / lm, ldy = -bs.y / lm, ldz = -bs.z / lm;
+      const order = [];
+      for (let f = 0; f < mesh.faces.length; f++) {
+        const [a, bq, c] = mesh.faces[f];
+        if (ss[a] <= 0 || ss[bq] <= 0 || ss[c] <= 0) continue;
+        const cn = mesh.cents[f];
+        const nx = cn[0] * ax.a1[0] + cn[1] * ax.a2[0] + cn[2] * ax.p[0];
+        const ny = cn[0] * ax.a1[1] + cn[1] * ax.a2[1] + cn[2] * ax.p[1];
+        const nz = cn[0] * ax.a1[2] + cn[1] * ax.a2[2] + cn[2] * ax.p[2];
+        const cx = bs.x + R * nx, cy = bs.y + R * ny, cz = bs.z + R * nz;
+        if (nx * (cx - ex) + ny * (cy - ey) + nz * (cz - ez) >= 0) continue; // faces away
+        const dv = (cx - fp.x) * camF.x + (cy - fp.y) * camF.y + (cz - fp.z) * camF.z;
+        const sh = 0.30 + 0.70 * Math.max(nx * ldx + ny * ldy + nz * ldz, 0);
+        order.push([dv, f, sh]);
+      }
+      order.sort((p, q) => p[0] - q[0]); // far to near
+      ctx.lineWidth = 1;
+      ctx.lineJoin = "round";
+      for (const [, f, sh] of order) {
+        const col = cols[f];
+        const st = `rgb(${(col[0] * sh) | 0},${(col[1] * sh) | 0},${(col[2] * sh) | 0})`;
+        const [a, bq, c] = mesh.faces[f];
+        ctx.beginPath();
+        ctx.moveTo(sx[a], sy[a]);
+        ctx.lineTo(sx[bq], sy[bq]);
+        ctx.lineTo(sx[c], sy[c]);
+        ctx.closePath();
+        ctx.fillStyle = st;
+        ctx.fill();
+        ctx.strokeStyle = st; // stroke in the fill color: hides AA seams
+        ctx.stroke();
+      }
+      ctx.lineJoin = "miter";
+    }
+
+    // planetary rings in the body's equatorial plane, split at the body's
+    // depth so the far half draws behind the globe and the near half over it
+    const RINGS = {
+      saturn: { r0: 1.24, r1: 2.27, bands: 6, color: "201,181,138", alpha: 0.55 },
+      uranus: { r0: 1.64, r1: 1.97, bands: 3, color: "159,184,200", alpha: 0.30 },
+      jupiter: { r0: 1.40, r1: 1.72, bands: 2, color: "170,140,110", alpha: 0.12 },
+      neptune: { r0: 2.20, r1: 2.55, bands: 2, color: "127,150,216", alpha: 0.14 },
+    };
+    function drawRings(b, bs, half, rPix) {
+      const rg = RINGS[b.id];
+      if (!rg || rPix < 5) return;
+      const bsc = w2s(bs.x, bs.y, bs.z);
+      const rOut = rPix * rg.r1;
+      if (bsc.s <= 0 || bsc.x + rOut < -80 || bsc.x - rOut > W + 80 || bsc.y + rOut < -80 || bsc.y - rOut > H + 80) return;
+      const ax = bodyAxis(b.id);
+      const cdepth = (bs.x - fp.x) * camF.x + (bs.y - fp.y) * camF.y + (bs.z - fp.z) * camF.z;
+      const bandW = Math.max(1, rPix * (rg.r1 - rg.r0) / rg.bands * 0.62);
+      const r2 = rPix * rPix;
+      for (let k = 0; k < rg.bands; k++) {
+        const rr = b.radius * (rg.r0 + (rg.r1 - rg.r0) * (k + 0.5) / rg.bands);
+        // classify each sample: does it sit in FRONT of the globe, inside its
+        // silhouette? Only that slice must draw over the mesh — everything
+        // else belongs to the far pass, so a face-on ring never splits.
+        const N = 96, px = new Float64Array(N), py = new Float64Array(N);
+        const ok = new Uint8Array(N), over = new Uint8Array(N);
+        for (let i = 0; i < N; i++) {
+          const th = i / N * TAU, co = Math.cos(th), si = Math.sin(th);
+          const x = bs.x + rr * (co * ax.a1[0] + si * ax.a2[0]);
+          const y = bs.y + rr * (co * ax.a1[1] + si * ax.a2[1]);
+          const z = bs.z + rr * (co * ax.a1[2] + si * ax.a2[2]);
+          const pr = w2s(x, y, z);
+          if (pr.s <= 0) continue;
+          ok[i] = 1;
+          px[i] = pr.x; py[i] = pr.y;
+          const dv = (x - fp.x) * camF.x + (y - fp.y) * camF.y + (z - fp.z) * camF.z;
+          const dx = pr.x - bsc.x, dy = pr.y - bsc.y;
+          over[i] = dv < cdepth && dx * dx + dy * dy < r2 * 1.1 ? 1 : 0;
+        }
+        ctx.beginPath();
+        let open = true, drew = false;
+        for (let i = 0; i <= N; i++) {
+          const j = i % N, jp = (i + N - 1) % N, jn = (i + 1) % N;
+          const want = half > 0
+            ? (over[j] || over[jp] || over[jn])   // near pass, 1-pt overlap
+            : (!over[j] || !over[jp] || !over[jn]); // far pass
+          if (!ok[j] || !want) { open = true; continue; }
+          if (open) { ctx.moveTo(px[j], py[j]); open = false; } else ctx.lineTo(px[j], py[j]);
+          drew = true;
+        }
+        if (!drew) continue;
+        ctx.strokeStyle = `rgba(${rg.color},${(rg.alpha * (k % 2 ? 0.65 : 1)).toFixed(3)})`;
+        ctx.lineWidth = bandW;
+        ctx.stroke();
+      }
+    }
+
     // KSP navball glyphs, upright on screen:
     //   prograde     yellow circle, center dot, ticks left/top/right
     //   retrograde   yellow circle, X inside, ticks top/lower-left/lower-right
@@ -850,10 +1121,14 @@
             ((p.bs.x - fp.x) * camF.x + (p.bs.y - fp.y) * camF.y + (p.bs.z - fp.z) * camF.z) -
             ((q.bs.x - fp.x) * camF.x + (q.bs.y - fp.y) * camF.y + (q.bs.z - fp.z) * camF.z));
         for (const { b, bs } of byDepth) {
-          drawBody(bs.x, bs.y, bs.z, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
           const s = w2s(bs.x, bs.y, bs.z);
+          const rPix = s.s > 0 ? b.radius * s.s : 0;
+          const onScreen = s.s > 0 && s.x + rPix > -80 && s.x - rPix < W + 80 && s.y + rPix > -80 && s.y - rPix < H + 80;
+          drawRings(b, bs, -1, rPix); // far half of any ring system
+          if (onScreen && rPix >= 25 && b.id !== "sun") drawBodyMesh(b, bs, rPix);
+          else drawBody(bs.x, bs.y, bs.z, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
+          drawRings(b, bs, +1, rPix); // near half draws over the globe
           if (s.s <= 0) continue;
-          const rPix = b.radius * s.s;
           if (rPix > 3 && s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
             occluders.push({ sx: s.x, sy: s.y, r2: rPix * rPix, s: s.s });
           }
