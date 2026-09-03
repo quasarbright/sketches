@@ -483,89 +483,23 @@
     function segOrg(seg) { return bodyStateAt(SYSTEM, seg.body, tNow); }
 
     /* ============================== sky ============================== */
-    // A celestial sphere: stars and Milky Way nebulosity are DIRECTIONS, so
-    // the sky rotates correctly with the camera. The galactic plane sits at
-    // its real ~60° tilt to the ecliptic, with the bright core toward
-    // Sagittarius; star density and glow concentrate along the band, and
-    // dark dust-lane blobs cut through its middle.
-    let skyStars = [], skyBlobs = [];
+    // Stars are unit DIRECTIONS on the celestial sphere, projected purely by
+    // angle through the camera basis — no zoom, no position, no distance.
+    // Rotating the camera slides the field exactly as an infinitely distant
+    // background should; nothing else is drawn out there.
+    let skyStars = [];
     const SKY_K = 620; // pixels per radian of sky
-    const skySprite = (r0, g0, b0) => {
-      const c = document.createElement("canvas");
-      c.width = 64; c.height = 64;
-      const g = c.getContext("2d");
-      const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      grad.addColorStop(0, `rgba(${r0},${g0},${b0},1)`);
-      grad.addColorStop(0.5, `rgba(${r0},${g0},${b0},0.35)`);
-      grad.addColorStop(1, `rgba(${r0},${g0},${b0},0)`);
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 64, 64);
-      return c;
-    };
-    const SKY_WARM = skySprite(255, 234, 205);
-    const SKY_COOL = skySprite(168, 190, 232);
-    const SKY_DARK = skySprite(5, 7, 13);
     function makeStars() {
       if (skyStars.length) return; // directions don't depend on the viewport
       let s = 987654321;
       const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
-      const gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) * 0.7;
-      // galactic basis from real ecliptic coordinates: north galactic pole at
-      // lon 180.0°, lat 29.8°; galactic center toward lon 266.4°, lat -5.5°
-      const dirOf = (lon, lat) => ({
-        x: Math.cos(lat) * Math.cos(lon), y: Math.cos(lat) * Math.sin(lon), z: Math.sin(lat) });
-      const g = dirOf(Math.PI, 29.81 * Math.PI / 180);
-      const c0 = dirOf(266.4 * Math.PI / 180, -5.5 * Math.PI / 180);
-      const cg = c0.x * g.x + c0.y * g.y + c0.z * g.z;
-      let u1 = { x: c0.x - cg * g.x, y: c0.y - cg * g.y, z: c0.z - cg * g.z };
-      const m1 = Math.hypot(u1.x, u1.y, u1.z);
-      u1 = { x: u1.x / m1, y: u1.y / m1, z: u1.z / m1 };
-      const u2 = { x: g.y * u1.z - g.z * u1.y, y: g.z * u1.x - g.x * u1.z, z: g.x * u1.y - g.y * u1.x };
-      const galDir = (l, b) => {
-        const cb = Math.cos(b);
-        return {
-          x: cb * (Math.cos(l) * u1.x + Math.sin(l) * u2.x) + Math.sin(b) * g.x,
-          y: cb * (Math.cos(l) * u1.y + Math.sin(l) * u2.y) + Math.sin(b) * g.y,
-          z: cb * (Math.cos(l) * u1.z + Math.sin(l) * u2.z) + Math.sin(b) * g.z,
-        };
-      };
-      // stars: a uniform sphere plus a band-concentrated population
-      for (let i = 0; i < 1700; i++) {
-        let d;
-        if (i % 5 < 3) { // uniform
-          const z = 2 * rnd() - 1, th = TAU * rnd(), rr = Math.sqrt(1 - z * z);
-          d = { x: rr * Math.cos(th), y: rr * Math.sin(th), z };
-        } else { // in the band
-          d = galDir(TAU * rnd(), gauss() * 0.22);
-        }
-        skyStars.push({ ...d, a: 0.25 + rnd() * rnd() * 0.65, r: rnd() < 0.12 ? 1.7 : 1,
-          warm: rnd() < 0.22 });
-      }
-      // nebulosity in two layers: a broad continuous underglow that stitches
-      // the band into one milky river, and brighter clumps riding on top —
-      // both denser and warmer toward the galactic core
-      for (let i = 0; i < 170; i++) { // underglow: big, faint, overlapping
-        const l = (i / 170) * TAU + gauss() * 0.05; // even coverage, no gaps
-        const b = gauss() * 0.1;
-        const boost = Math.exp(-Math.abs(Math.atan2(Math.sin(l), Math.cos(l))) * 0.45);
-        skyBlobs.push({ ...galDir(l, b), size: 130 + rnd() * 110,
-          alpha: 0.02 + boost * 0.025,
-          sprite: rnd() < 0.55 ? SKY_WARM : SKY_COOL });
-      }
-      for (let i = 0; i < 280; i++) { // clumps
-        const nearCore = rnd() < 0.45;
-        const l = nearCore ? gauss() * 1.0 : TAU * rnd();
-        const b = gauss() * (nearCore ? 0.045 : 0.075);
-        const boost = Math.exp(-Math.abs(l) * 0.5) * (nearCore ? 1 : 0.4);
-        skyBlobs.push({ ...galDir(l, b), size: 45 + rnd() * 95,
-          alpha: 0.03 + rnd() * 0.05 + boost * 0.04,
-          sprite: Math.abs(b) < 0.05 && rnd() < 0.7 ? SKY_WARM : SKY_COOL });
-      }
-      // dark dust lanes down the middle of the band
-      for (let i = 0; i < 150; i++) {
-        const l = (rnd() < 0.5 ? gauss() * 1.4 : TAU * rnd());
-        skyBlobs.push({ ...galDir(l, gauss() * 0.03), size: 22 + rnd() * 60,
-          alpha: 0.08 + rnd() * 0.12, sprite: SKY_DARK });
+      for (let i = 0; i < 2400; i++) {
+        const z = 2 * rnd() - 1, th = TAU * rnd(), rr = Math.sqrt(1 - z * z);
+        skyStars.push({
+          x: rr * Math.cos(th), y: rr * Math.sin(th), z,
+          a: 0.25 + rnd() * rnd() * 0.65, r: rnd() < 0.12 ? 1.7 : 1,
+          warm: rnd() < 0.22,
+        });
       }
     }
 
@@ -844,24 +778,12 @@
       const dashClock = (performance.now() / 1000 * 14) % 77;
       let chainLen = 0; // pixels of path drawn so far — dashes flow across seams
 
-      // the sky: project every direction through the camera basis. An
-      // orthographic view has one look direction, so this is a fixed-angular-
-      // scale window around it — it turns with yaw/pitch and ignores zoom.
+      // the sky: pure angle-based projection of star directions through the
+      // camera basis — turns with yaw/pitch, ignores zoom and position
       {
         const fx = -camF.x, fy = -camF.y, fz = -camF.z; // look direction
-        for (const bl of skyBlobs) {
-          const t = bl.x * fx + bl.y * fy + bl.z * fz;
-          if (t < 0.2) continue;
-          const sx2 = W / 2 + (bl.x * camR.x + bl.y * camR.y + bl.z * camR.z) * SKY_K;
-          const sy2 = H / 2 - (bl.x * camU.x + bl.y * camU.y + bl.z * camU.z) * SKY_K;
-          if (sx2 < -90 || sx2 > W + 90 || sy2 < -90 || sy2 > H + 90) continue;
-          ctx.globalAlpha = bl.alpha;
-          ctx.drawImage(bl.sprite, sx2 - bl.size / 2, sy2 - bl.size / 2, bl.size, bl.size);
-        }
-        ctx.globalAlpha = 1;
         for (const st of skyStars) {
-          const t = st.x * fx + st.y * fy + st.z * fz;
-          if (t < 0.2) continue;
+          if (st.x * fx + st.y * fy + st.z * fz < 0.15) continue;
           const sx2 = W / 2 + (st.x * camR.x + st.y * camR.y + st.z * camR.z) * SKY_K;
           const sy2 = H / 2 - (st.x * camU.x + st.y * camU.y + st.z * camU.z) * SKY_K;
           if (sx2 < -2 || sx2 > W + 2 || sy2 < -2 || sy2 > H + 2) continue;
