@@ -37,6 +37,8 @@
     }
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
     canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+    /* no double-tap-to-zoom on the UI chrome */
+    button, select, input, .control-bar, control-panel, .panel { touch-action: manipulation; }
     .mk-break { display: none; } /* line breaks for the mobile control bar */
     .panel-title, .title { font-family: var(--font-display); letter-spacing: .02em; }
 
@@ -2781,9 +2783,16 @@
     // iOS: re-rasterize if the visual viewport (zoom, URL bar) ever changes
     window.visualViewport?.addEventListener("resize", resize);
     resize();
-    // phones: the mission panel starts collapsed so it doesn't bury the sky
+    // phones: the mission panel starts collapsed so it doesn't bury the sky,
+    // and tapping anywhere outside it collapses it again (mobile only)
     if (window.matchMedia("(max-width: 640px)").matches)
       document.querySelector("control-panel").setAttribute("collapsed", "");
+    document.addEventListener("pointerdown", (e) => {
+      if (!window.matchMedia("(max-width: 640px)").matches) return;
+      const panel = document.querySelector("control-panel");
+      if (!panel.hasAttribute("collapsed") && !panel.contains(e.target))
+        panel.setAttribute("collapsed", "");
+    }, true);
 
     let lastWall = performance.now();
     function tick(now) {
