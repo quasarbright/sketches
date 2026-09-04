@@ -412,7 +412,7 @@
     // the camera is always centered on the focus; yaw/pitch orbit around it
     // (pitch π/2 = top-down), zoom is the only other degree of freedom
     const cam = { zoom: 0.3, yaw: 0, pitch: Math.PI / 2 };
-    const MIN_ZOOM = 2e-8, MAX_ZOOM = 60;        // min fits Pluto's whole orbit
+    const MIN_ZOOM = 2e-8, MAX_ZOOM = 20000;     // min fits Pluto's orbit; max resolves the 40 m ship
     let defaultZoom = 0.3;
     let userZoomed = false; // until the user zooms, resizes keep re-deriving the default
 
@@ -1061,30 +1061,166 @@
         ctx.clip();
       }
       const N = 96;
-      for (let k = 0; k < rg.bands; k++) {
+      const traceBand = (k) => {
         const w = (rg.r1 - rg.r0) / rg.bands;
         const rIn = b.radius * (rg.r0 + k * w);
         const rOu = b.radius * (rg.r0 + (k + 0.85) * w); // 15% gap between bands
         ctx.beginPath();
-        let bad = false;
         for (const [rr, rev] of [[rOu, false], [rIn, true]]) {
-          for (let i = 0; i <= N && !bad; i++) {
+          for (let i = 0; i <= N; i++) {
             const th = (rev ? N - i : i) / N * TAU;
             const co = Math.cos(th), si = Math.sin(th);
             const pr = w2s(
               bs.x + rr * (co * ax.a1[0] + si * ax.a2[0]),
               bs.y + rr * (co * ax.a1[1] + si * ax.a2[1]),
               bs.z + rr * (co * ax.a1[2] + si * ax.a2[2]));
-            if (pr.s <= 0) { bad = true; break; }
+            if (pr.s <= 0) return false;
             if (i === 0) ctx.moveTo(pr.x, pr.y); else ctx.lineTo(pr.x, pr.y);
           }
           ctx.closePath();
         }
-        if (bad) continue;
+        return true;
+      };
+      let anyBand = false;
+      for (let k = 0; k < rg.bands; k++) {
+        if (!traceBand(k)) continue;
+        anyBand = true;
         ctx.fillStyle = `rgba(${rg.color},${(rg.alpha * (k % 2 ? 0.65 : 1)).toFixed(3)})`;
         ctx.fill("evenodd");
       }
+      // the globe's shadow across the rings: the anti-sun strip, planet-wide,
+      // re-filled dark over whichever bands this pass drew
+      if (anyBand) {
+        const sm = Math.hypot(bs.x, bs.y, bs.z);
+        const sdn = sm > 1 ? (bs.x * ax.p[0] + bs.y * ax.p[1] + bs.z * ax.p[2]) / sm : 1;
+        let spx = bs.x / sm - sdn * ax.p[0], spy = bs.y / sm - sdn * ax.p[1], spz = bs.z / sm - sdn * ax.p[2];
+        const spm = Math.hypot(spx, spy, spz);
+        if (sm > 1 && spm > 1e-6) {
+          spx /= spm; spy /= spm; spz /= spm; // anti-sun, in the ring plane
+          const bqx = ax.p[1] * spz - ax.p[2] * spy;
+          const bqy = ax.p[2] * spx - ax.p[0] * spz;
+          const bqz = ax.p[0] * spy - ax.p[1] * spx;
+          const R = b.radius, L = b.radius * rg.r1 * 1.05;
+          const q = [
+            w2s(bs.x + R * bqx, bs.y + R * bqy, bs.z + R * bqz),
+            w2s(bs.x - R * bqx, bs.y - R * bqy, bs.z - R * bqz),
+            w2s(bs.x - R * bqx + L * spx, bs.y - R * bqy + L * spy, bs.z - R * bqz + L * spz),
+            w2s(bs.x + R * bqx + L * spx, bs.y + R * bqy + L * spy, bs.z + R * bqz + L * spz),
+          ];
+          if (q.every((p) => p.s > 0)) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(q[0].x, q[0].y);
+            for (let i = 1; i < 4; i++) ctx.lineTo(q[i].x, q[i].y);
+            ctx.closePath();
+            ctx.clip();
+            for (let k = 0; k < rg.bands; k++) {
+              if (!traceBand(k)) continue;
+              ctx.fillStyle = "rgba(5,7,13,0.55)";
+              ctx.fill("evenodd");
+            }
+            ctx.restore();
+          }
+        }
+      }
       ctx.restore();
+    }
+
+    // ---- the rocket ----------------------------------------------------
+    // a 40 m low-poly rocket (model units = ship heights, +z is prograde):
+    // red nose cone, white body with a porthole, four red fins, orange flame
+    const SHIP_H = 0.04; // km
+    const shipMesh = (() => {
+      const verts = [], faces = []; // face: [a, b, c, [r,g,b], doubleSided]
+      const V = (x, y, z) => verts.push([x, y, z]) - 1;
+      const S = 8;
+      const ring = (z, r) => {
+        const ids = [];
+        for (let i = 0; i < S; i++) {
+          const th = (i + 0.5) / S * TAU;
+          ids.push(V(r * Math.cos(th), r * Math.sin(th), z));
+        }
+        return ids;
+      };
+      const RED = [217, 79, 61], WHITE = [232, 233, 240], WIN = [110, 198, 232],
+        GRAY = [90, 95, 108], FLAME = [242, 165, 65], FLAME2 = [250, 214, 120];
+      const bot = ring(0.10, 0.20), top = ring(0.72, 0.20), eng = ring(0.10, 0.10);
+      const tip = V(0, 0, 1.0), ftip = V(0, 0, -0.30);
+      for (let i = 0; i < S; i++) {
+        const j = (i + 1) % S;
+        // body column (one column is the porthole)
+        const col = i === 0 ? WIN : WHITE;
+        faces.push([bot[i], bot[j], top[j], col], [bot[i], top[j], top[i], col]);
+        faces.push([top[i], top[j], tip, RED]);          // nose cone
+        faces.push([bot[i], eng[j], bot[j], GRAY], [bot[i], eng[i], eng[j], GRAY]); // engine skirt
+        faces.push([eng[i], eng[j], ftip, i % 2 ? FLAME : FLAME2]); // flame
+      }
+      // four fins, offset between body columns
+      for (let k = 0; k < 4; k++) {
+        const th = (k + 0.5) / 4 * TAU + TAU / 16;
+        const cx = Math.cos(th), cy = Math.sin(th);
+        const p1 = V(cx * 0.20, cy * 0.20, 0.42), p2 = V(cx * 0.20, cy * 0.20, 0.08);
+        const p3 = V(cx * 0.46, cy * 0.46, -0.04), p4 = V(cx * 0.46, cy * 0.46, 0.16);
+        faces.push([p1, p2, p3, RED, true], [p1, p3, p4, RED, true]);
+      }
+      return { verts, faces };
+    })();
+
+    function drawShip(sp) {
+      const st = sp.rel;
+      const vm = Math.hypot(st.vx, st.vy, st.vz) || 1;
+      const F = [st.vx / vm, st.vy / vm, st.vz / vm]; // prograde
+      let hx = st.y * st.vz - st.z * st.vy, hy = st.z * st.vx - st.x * st.vz, hz = st.x * st.vy - st.y * st.vx;
+      const hm = Math.hypot(hx, hy, hz);
+      const Nv = hm > 1e-9 ? [hx / hm, hy / hm, hz / hm] : [0, 0, 1]; // orbit normal
+      const X = lpCross(F, Nv); // side
+      const nverts = shipMesh.verts.length;
+      const sx = new Float64Array(nverts), sy = new Float64Array(nverts);
+      const wx = new Float64Array(nverts), wy = new Float64Array(nverts), wz = new Float64Array(nverts);
+      for (let i = 0; i < nverts; i++) {
+        const [mx, my, mz] = shipMesh.verts[i];
+        wx[i] = sp.x + SHIP_H * (mx * X[0] + my * Nv[0] + mz * F[0]);
+        wy[i] = sp.y + SHIP_H * (mx * X[1] + my * Nv[1] + mz * F[1]);
+        wz[i] = sp.z + SHIP_H * (mx * X[2] + my * Nv[2] + mz * F[2]);
+        const pr = w2s(wx[i], wy[i], wz[i]);
+        if (pr.s <= 0) return; // partially behind the camera: bail this frame
+        sx[i] = pr.x; sy[i] = pr.y;
+      }
+      const ex = fp.x + camF.x * camD, ey = fp.y + camF.y * camD, ez = fp.z + camF.z * camD;
+      const lm = Math.hypot(sp.x, sp.y, sp.z) || 1;
+      const ldx = -sp.x / lm, ldy = -sp.y / lm, ldz = -sp.z / lm;
+      const order = [];
+      for (let f = 0; f < shipMesh.faces.length; f++) {
+        const [a, b, c] = shipMesh.faces[f];
+        const cx = (wx[a] + wx[b] + wx[c]) / 3, cy = (wy[a] + wy[b] + wy[c]) / 3, cz = (wz[a] + wz[b] + wz[c]) / 3;
+        // face normal in world (small mesh — computed live, flipped camera-ward)
+        let nx = (wy[b] - wy[a]) * (wz[c] - wz[a]) - (wz[b] - wz[a]) * (wy[c] - wy[a]);
+        let ny = (wz[b] - wz[a]) * (wx[c] - wx[a]) - (wx[b] - wx[a]) * (wz[c] - wz[a]);
+        let nz = (wx[b] - wx[a]) * (wy[c] - wy[a]) - (wy[b] - wy[a]) * (wx[c] - wx[a]);
+        const nm = Math.hypot(nx, ny, nz) || 1;
+        nx /= nm; ny /= nm; nz /= nm;
+        if (nx * (cx - ex) + ny * (cy - ey) + nz * (cz - ez) > 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const dv = (cx - fp.x) * camF.x + (cy - fp.y) * camF.y + (cz - fp.z) * camF.z;
+        const sh = 0.45 + 0.55 * Math.max(nx * ldx + ny * ldy + nz * ldz, 0);
+        order.push([dv, f, sh]);
+      }
+      order.sort((p, q) => p[0] - q[0]);
+      ctx.lineWidth = 1;
+      ctx.lineJoin = "round";
+      for (const [, f, sh] of order) {
+        const [a, b, c, col] = shipMesh.faces[f];
+        const st2 = `rgb(${(col[0] * sh) | 0},${(col[1] * sh) | 0},${(col[2] * sh) | 0})`;
+        ctx.beginPath();
+        ctx.moveTo(sx[a], sy[a]);
+        ctx.lineTo(sx[b], sy[b]);
+        ctx.lineTo(sx[c], sy[c]);
+        ctx.closePath();
+        ctx.fillStyle = st2;
+        ctx.fill();
+        ctx.strokeStyle = st2;
+        ctx.stroke();
+      }
+      ctx.lineJoin = "miter";
     }
 
     // KSP navball glyphs, upright on screen:
@@ -1587,21 +1723,26 @@
         }
       }
 
-      // ship
+      // ship — the marker triangle resolves into the rocket once it's big
+      // enough on screen to read
       {
         const s = w2s(ship.x, ship.y, ship.z);
-        const dir = v2s(ship.rel.vx, ship.rel.vy, ship.rel.vz);
-        const px = -dir.y, py = dir.x;
-        ctx.beginPath();
-        ctx.moveTo(s.x + dir.x * 7, s.y + dir.y * 7);
-        ctx.lineTo(s.x - dir.x * 5 + px * 4.5, s.y - dir.y * 5 + py * 4.5);
-        ctx.lineTo(s.x - dir.x * 5 - px * 4.5, s.y - dir.y * 5 - py * 4.5);
-        ctx.closePath();
-        ctx.fillStyle = "#e6e8ef";
-        ctx.fill();
-        ctx.strokeStyle = "#5fb2ff";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        if (s.s > 0 && SHIP_H * s.s > 16) {
+          drawShip(ship);
+        } else {
+          const dir = v2s(ship.rel.vx, ship.rel.vy, ship.rel.vz);
+          const px = -dir.y, py = dir.x;
+          ctx.beginPath();
+          ctx.moveTo(s.x + dir.x * 7, s.y + dir.y * 7);
+          ctx.lineTo(s.x - dir.x * 5 + px * 4.5, s.y - dir.y * 5 + py * 4.5);
+          ctx.lineTo(s.x - dir.x * 5 - px * 4.5, s.y - dir.y * 5 - py * 4.5);
+          ctx.closePath();
+          ctx.fillStyle = "#e6e8ef";
+          ctx.fill();
+          ctx.strokeStyle = "#5fb2ff";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
 
       // pending path-click menu anchor / hover ghost
