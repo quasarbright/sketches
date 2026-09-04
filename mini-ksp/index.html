@@ -1025,15 +1025,15 @@
           px[i] = pr.x; py[i] = pr.y;
           const dv = (x - fp.x) * camF.x + (y - fp.y) * camF.y + (z - fp.z) * camF.z;
           const dx = pr.x - bsc.x, dy = pr.y - bsc.y;
-          over[i] = dv < cdepth && dx * dx + dy * dy < r2 * 1.1 ? 1 : 0;
+          over[i] = dv > cdepth && dx * dx + dy * dy < r2 * 1.1 ? 1 : 0; // larger dv = nearer the camera
         }
         ctx.beginPath();
         let open = true, drew = false;
         for (let i = 0; i <= N; i++) {
           const j = i % N, jp = (i + N - 1) % N, jn = (i + 1) % N;
-          const want = half > 0
-            ? (over[j] || over[jp] || over[jn])   // near pass, 1-pt overlap
-            : (!over[j] || !over[jp] || !over[jn]); // far pass
+          // near pass extends one point past each run so the seam segment is
+          // drawn exactly once; far pass stops at the shared boundary vertex
+          const want = half > 0 ? (over[j] || over[jp] || over[jn]) : !over[j];
           if (!ok[j] || !want) { open = true; continue; }
           if (open) { ctx.moveTo(px[j], py[j]); open = false; } else ctx.lineTo(px[j], py[j]);
           drew = true;
@@ -1176,6 +1176,11 @@
         for (const { b, bs } of byDepth) {
           const s = w2s(bs.x, bs.y, bs.z);
           const rPix = s.s > 0 ? b.radius * s.s : 0;
+          // a moon whose whole orbit fits inside its parent's disc has
+          // visually merged with it — its min-2px dot would paint over the
+          // parent from the near half of every orbit
+          if (b.parent && s.s > 0
+            && b.orbitRadius * s.s < SYSTEM.bodies[b.parent].radius * s.s + 3) continue;
           const onScreen = s.s > 0 && s.x + rPix > -80 && s.x - rPix < W + 80 && s.y + rPix > -80 && s.y - rPix < H + 80;
           drawRings(b, bs, -1, rPix); // far half of any ring system
           // mesh only while the camera is safely outside the surface — from
