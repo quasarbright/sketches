@@ -489,15 +489,14 @@
       // size from the canvas's REAL laid-out box (inset:0 = the viewport as
       // the compositor sees it) — iOS Chrome's window.inner* disagrees with
       // the fixed-position layer size, and the mismatch renders soft
-      cv.style.width = ""; cv.style.height = ""; // let inset:0 size it
-      const rect = cv.getBoundingClientRect();
-      // clamp to the largest sane viewport measure — if layout ever reports
-      // the canvas's intrinsic size instead, unclamped rect sizing feeds back
-      const capW = Math.max(window.innerWidth, window.visualViewport?.width || 0);
-      const capH = Math.max(window.innerHeight, window.visualViewport?.height || 0);
-      W = Math.round(Math.min(rect.width, capW)) || capW;
-      H = Math.round(Math.min(rect.height, capH)) || capH;
+      // size the canvas EXPLICITLY: on iOS Chrome, `inset: 0` does not
+      // constrain the canvas — its layout tracks the bitmap size, mapping
+      // backing pixels 1:1 onto CSS pixels (a third of device resolution).
+      // The visual viewport is the truest measure of what's on screen.
+      W = Math.round(Math.max(window.innerWidth, window.visualViewport?.width || 0));
+      H = Math.round(Math.max(window.innerHeight, window.visualViewport?.height || 0));
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       defaultZoom = 0.55 * Math.min(W, H) / (2 * Math.hypot(EPOCH.rx, EPOCH.ry));
       if (!(defaultZoom > 0)) defaultZoom = 0.3; // the pane can report 0×0 at load
