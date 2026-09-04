@@ -927,9 +927,7 @@
       }
       let best = b.fill ?? "#3a4152", bestN = 0;
       for (const [hex, n] of counts) if (n > bestN) { best = hex; bestN = n; }
-      const [r, g, bl] = lpHex(best);
-      const lift = (v) => clampN(Math.round(v * 1.45), 0, 255);
-      c = { fill: best, rim: `rgb(${lift(r)},${lift(g)},${lift(bl)})` };
+      c = { rgb: lpHex(best) };
       discColorCache.set(b.id, c);
       return c;
     }
@@ -1191,7 +1189,20 @@
             bs.z - (fp.z + camF.z * camD));
           if (onScreen && rPix >= 12 && b.id !== "sun" && eyeDist > b.radius * 1.05) drawBodyMesh(b, bs, rPix);
           else if (b.id === "sun") drawBody(bs.x, bs.y, bs.z, b.radius, b.fill, b.rim);
-          else { const dc = discColors(b); drawBody(bs.x, bs.y, bs.z, b.radius, dc.fill, dc.rim); }
+          else {
+            // dot color = dominant surface color, dimmed by phase the same
+            // way the mesh's sun shading would average out — so neither the
+            // switch to mesh nor a backlit geometry pops in brightness
+            const dc = discColors(b);
+            const lm = Math.hypot(bs.x, bs.y, bs.z) || 1;
+            const ed = eyeDist || 1;
+            const cosphi = (-bs.x / lm) * ((fp.x + camF.x * camD - bs.x) / ed)
+              + (-bs.y / lm) * ((fp.y + camF.y * camD - bs.y) / ed)
+              + (-bs.z / lm) * ((fp.z + camF.z * camD - bs.z) / ed);
+            const shade = 0.30 + 0.70 * (0.5 * (1 + cosphi));
+            const col = (k) => `rgb(${dc.rgb.map((v) => clampN(Math.round(v * k * shade), 0, 255)).join(",")})`;
+            drawBody(bs.x, bs.y, bs.z, b.radius, col(0.9), col(1.15));
+          }
           drawRings(b, bs, +1, rPix); // near half draws over the globe
           if (s.s <= 0) continue;
           if (rPix > 3 && s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
