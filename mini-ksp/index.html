@@ -932,12 +932,29 @@
       return c;
     }
 
+    // sidereal rotation periods in hours; moons are tidally locked, so they
+    // spin at their orbital period (computed from the orbit itself)
+    const ROT_HOURS = {
+      mercury: 1407.6, venus: 5832.5, earth: 23.93, mars: 24.62, jupiter: 9.93,
+      saturn: 10.66, uranus: 17.24, neptune: 16.11, pluto: 153.3,
+    };
     function drawBodyMesh(b, bs, rPix) {
       // Earth gets one extra subdivision — coastlines need the resolution
       let level = rPix < 50 ? 1 : rPix < 140 ? 2 : rPix < 260 ? 3 : 4;
       if (b.id === "earth") level = Math.min(4, level + 1);
       const mesh = icosphere(level);
-      const ax = bodyAxis(b.id);
+      const ax0 = bodyAxis(b.id);
+      // purely visual spin about the pole: rotate the equatorial basis
+      const P = ROT_HOURS[b.id] ? ROT_HOURS[b.id] * 3600 : (b.orbit ? TAU / b.orbit.n : 0);
+      let ax = ax0;
+      if (P > 0) {
+        const th = TAU * ((tNow / P) % 1), c = Math.cos(th), sN = Math.sin(th);
+        ax = {
+          p: ax0.p,
+          a1: [ax0.a1[0] * c + ax0.a2[0] * sN, ax0.a1[1] * c + ax0.a2[1] * sN, ax0.a1[2] * c + ax0.a2[2] * sN],
+          a2: [ax0.a2[0] * c - ax0.a1[0] * sN, ax0.a2[1] * c - ax0.a1[1] * sN, ax0.a2[2] * c - ax0.a1[2] * sN],
+        };
+      }
       const cols = faceColors(b.id, level);
       const R = b.radius;
       const nv = mesh.verts.length;
@@ -1002,45 +1019,72 @@
       const rOut = rPix * rg.r1;
       if (bsc.s <= 0 || bsc.x + rOut < -80 || bsc.x - rOut > W + 80 || bsc.y + rOut < -80 || bsc.y - rOut > H + 80) return;
       const ax = bodyAxis(b.id);
-      const cdepth = (bs.x - fp.x) * camF.x + (bs.y - fp.y) * camF.y + (bs.z - fp.z) * camF.z;
-      const bandW = Math.max(1, rPix * (rg.r1 - rg.r0) / rg.bands * 0.62);
-      const r2 = rPix * rPix;
-      for (let k = 0; k < rg.bands; k++) {
-        const rr = b.radius * (rg.r0 + (rg.r1 - rg.r0) * (k + 0.5) / rg.bands);
-        // classify each sample: does it sit in FRONT of the globe, inside its
-        // silhouette? Only that slice must draw over the mesh — everything
-        // else belongs to the far pass, so a face-on ring never splits.
-        const N = 96, px = new Float64Array(N), py = new Float64Array(N);
-        const ok = new Uint8Array(N), over = new Uint8Array(N);
-        for (let i = 0; i < N; i++) {
-          const th = i / N * TAU, co = Math.cos(th), si = Math.sin(th);
-          const x = bs.x + rr * (co * ax.a1[0] + si * ax.a2[0]);
-          const y = bs.y + rr * (co * ax.a1[1] + si * ax.a2[1]);
-          const z = bs.z + rr * (co * ax.a1[2] + si * ax.a2[2]);
-          const pr = w2s(x, y, z);
-          if (pr.s <= 0) continue;
-          ok[i] = 1;
-          px[i] = pr.x; py[i] = pr.y;
-          const dv = (x - fp.x) * camF.x + (y - fp.y) * camF.y + (z - fp.z) * camF.z;
-          const dx = pr.x - bsc.x, dy = pr.y - bsc.y;
-          over[i] = dv > cdepth && dx * dx + dy * dy < r2 * 1.1 ? 1 : 0; // larger dv = nearer the camera
-        }
+      // rings are filled flat annuli. The near/far split is a straight line:
+      // the ring plane's depth-constant direction through the center. Each
+      // pass clips to its half-plane in screen space, so the fill stays flat
+      // (no stroke caps or joins to read as tube segments or breaks).
+      const nd = camF.x * ax.p[0] + camF.y * ax.p[1] + camF.z * ax.p[2];
+      const gx = camF.x - nd * ax.p[0], gy = camF.y - nd * ax.p[1], gz = camF.z - nd * ax.p[2];
+      const gm = Math.hypot(gx, gy, gz);
+      const faceOn = gm < 1e-4; // no meaningful near half; draw once, far pass
+      if (faceOn && half > 0) return;
+      ctx.save();
+      if (!faceOn) {
+        // derive the split line from SMALL world offsets (a large probe can
+        // land behind the camera when zoomed close), then extend on screen
+        const K = b.radius * 0.25;
+        const bx = ax.p[1] * gz - ax.p[2] * gy, by = ax.p[2] * gx - ax.p[0] * gz, bz = ax.p[0] * gy - ax.p[1] * gx;
+        const bm = Math.hypot(bx, by, bz) || 1;
+        const A = w2s(bs.x + K * bx / bm, bs.y + K * by / bm, bs.z + K * bz / bm);
+        const B = w2s(bs.x - K * bx / bm, bs.y - K * by / bm, bs.z - K * bz / bm);
+        const Nn = w2s(bs.x + K * gx / gm, bs.y + K * gy / gm, bs.z + K * gz / gm);
+        if (A.s <= 0 || B.s <= 0 || Nn.s <= 0) { ctx.restore(); return; }
+        let lx = B.x - A.x, ly = B.y - A.y;
+        const ll = Math.hypot(lx, ly) || 1;
+        lx /= ll; ly /= ll;
+        // unit vector from the split line toward the near side
+        let ux = Nn.x - A.x, uy = Nn.y - A.y;
+        const t = ux * lx + uy * ly;
+        ux -= t * lx; uy -= t * ly;
+        const um = Math.hypot(ux, uy) || 1;
+        let nx = ux / um, ny = uy / um;
+        if (half < 0) { nx = -nx; ny = -ny; } // far pass clips to the other side
+        const E = 2 * (W + H);
+        const ax2 = bsc.x - lx * E, ay = bsc.y - ly * E;
+        const bx2 = bsc.x + lx * E, by2 = bsc.y + ly * E;
         ctx.beginPath();
-        let open = true, drew = false;
-        for (let i = 0; i <= N; i++) {
-          const j = i % N, jp = (i + N - 1) % N, jn = (i + 1) % N;
-          // near pass extends one point past each run so the seam segment is
-          // drawn exactly once; far pass stops at the shared boundary vertex
-          const want = half > 0 ? (over[j] || over[jp] || over[jn]) : !over[j];
-          if (!ok[j] || !want) { open = true; continue; }
-          if (open) { ctx.moveTo(px[j], py[j]); open = false; } else ctx.lineTo(px[j], py[j]);
-          drew = true;
-        }
-        if (!drew) continue;
-        ctx.strokeStyle = `rgba(${rg.color},${(rg.alpha * (k % 2 ? 0.65 : 1)).toFixed(3)})`;
-        ctx.lineWidth = bandW;
-        ctx.stroke();
+        ctx.moveTo(ax2, ay);
+        ctx.lineTo(bx2, by2);
+        ctx.lineTo(bx2 + nx * E, by2 + ny * E);
+        ctx.lineTo(ax2 + nx * E, ay + ny * E);
+        ctx.closePath();
+        ctx.clip();
       }
+      const N = 96;
+      for (let k = 0; k < rg.bands; k++) {
+        const w = (rg.r1 - rg.r0) / rg.bands;
+        const rIn = b.radius * (rg.r0 + k * w);
+        const rOu = b.radius * (rg.r0 + (k + 0.85) * w); // 15% gap between bands
+        ctx.beginPath();
+        let bad = false;
+        for (const [rr, rev] of [[rOu, false], [rIn, true]]) {
+          for (let i = 0; i <= N && !bad; i++) {
+            const th = (rev ? N - i : i) / N * TAU;
+            const co = Math.cos(th), si = Math.sin(th);
+            const pr = w2s(
+              bs.x + rr * (co * ax.a1[0] + si * ax.a2[0]),
+              bs.y + rr * (co * ax.a1[1] + si * ax.a2[1]),
+              bs.z + rr * (co * ax.a1[2] + si * ax.a2[2]));
+            if (pr.s <= 0) { bad = true; break; }
+            if (i === 0) ctx.moveTo(pr.x, pr.y); else ctx.lineTo(pr.x, pr.y);
+          }
+          ctx.closePath();
+        }
+        if (bad) continue;
+        ctx.fillStyle = `rgba(${rg.color},${(rg.alpha * (k % 2 ? 0.65 : 1)).toFixed(3)})`;
+        ctx.fill("evenodd");
+      }
+      ctx.restore();
     }
 
     // KSP navball glyphs, upright on screen:
