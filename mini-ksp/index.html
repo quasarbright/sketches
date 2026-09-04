@@ -1143,9 +1143,9 @@
         return ids;
       };
       const RED = [217, 79, 61], WHITE = [232, 233, 240], WIN = [110, 198, 232],
-        GRAY = [90, 95, 108], FLAME = [242, 165, 65], FLAME2 = [250, 214, 120];
-      const bot = ring(0.10, 0.20), top = ring(0.72, 0.20), eng = ring(0.10, 0.10);
-      const tip = V(0, 0, 1.0), ftip = V(0, 0, -0.30);
+        GRAY = [90, 95, 108], DARK = [55, 58, 66];
+      const bot = ring(0.10, 0.20), top = ring(0.72, 0.20), eng = ring(0.06, 0.10);
+      const tip = V(0, 0, 1.0), ebot = V(0, 0, 0.06);
       for (let i = 0; i < S; i++) {
         const j = (i + 1) % S;
         // body column (one column is the porthole)
@@ -1153,7 +1153,7 @@
         faces.push([bot[i], bot[j], top[j], col], [bot[i], top[j], top[i], col]);
         faces.push([top[i], top[j], tip, RED]);          // nose cone
         faces.push([bot[i], eng[j], bot[j], GRAY], [bot[i], eng[i], eng[j], GRAY]); // engine skirt
-        faces.push([eng[i], eng[j], ftip, i % 2 ? FLAME : FLAME2]); // flame
+        faces.push([eng[i], eng[j], ebot, DARK]);        // engine bell cap
       }
       // four fins, offset between body columns
       for (let k = 0; k < 4; k++) {
@@ -1163,6 +1163,8 @@
         const p3 = V(cx * 0.46, cy * 0.46, -0.04), p4 = V(cx * 0.46, cy * 0.46, 0.16);
         faces.push([p1, p2, p3, RED, true], [p1, p3, p4, RED, true]);
       }
+      // put the model's midpoint at the ship's world position
+      for (const v of verts) v[2] -= 0.5;
       return { verts, faces };
     })();
 
