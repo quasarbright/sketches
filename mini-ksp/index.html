@@ -35,6 +35,7 @@
     }
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
     canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+    .mk-break { display: none; } /* line breaks for the mobile control bar */
     .panel-title, .title { font-family: var(--font-display); letter-spacing: .02em; }
 
     .mk-title {
@@ -128,6 +129,8 @@
       /* keep the title clear of the floating mission panel */
       .mk-title .mk-name { font-size: .85rem; }
       .mk-title .mk-sub { display: none; }
+      /* fixed three-row bar: transport / rate+clock / reset+about */
+      .mk-break { display: block; flex-basis: 100%; height: 0; }
     }
   </style>
 </head>
@@ -258,8 +261,10 @@
     <button class="btn" id="pause" title="pause / resume time (space)">⏸</button>
     <button class="btn" id="faster" title="speed up time">▶▶</button>
     <button class="btn" id="evNext">⏭</button>
+    <span class="mk-break"></span>
     <span class="mk-rate" id="rate" title="current time-warp rate — negative means rewinding">1×</span>
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
+    <span class="mk-break"></span>
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
     <about-modal label="about">
       <h2 class="title">Welcome to Shmorbit</h2>
@@ -965,7 +970,10 @@
     function surfaceColor(id, latD, lonD, base) {
       switch (id) {
         case "earth": {
-          if (latD > 78 || latD < -64) return "#dde6ee";
+          // ragged cap edges — a clean latitude cutoff renders as a tidy
+          // 6-pointed star at coarse mesh levels
+          if (latD > 72 + 6 * Math.sin(lonD * Math.PI / 40 + 1)
+            || latD < -60 - 5 * Math.sin(lonD * Math.PI / 51)) return "#dde6ee";
           return earthLand(lonD, latD) ? "#4d7a3c" : "#1d5290";
         }
         case "moon":
