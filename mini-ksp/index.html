@@ -36,7 +36,9 @@
       --plan: #ffb454;  /* planned trajectory, stage 1 */
     }
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
-    canvas { position: fixed; inset: 0; display: block; touch-action: none; }
+    /* translateZ: own compositor layer — iOS otherwise sometimes rasters the
+       canvas at reduced internal resolution until a pinch forces a redraw */
+    canvas { position: fixed; inset: 0; display: block; touch-action: none; transform: translateZ(0); }
     /* no double-tap-to-zoom on the UI chrome */
     button, select, input, .control-bar, control-panel, .panel { touch-action: manipulation; }
     .mk-break { display: none; } /* line breaks for the mobile control bar */
@@ -473,11 +475,29 @@
       // fold page zoom into the backing density: iOS restores a site's old
       // pinch-zoom scale across visits, which otherwise leaves every canvas
       // pixel fractional (blurry) until the user pinches back to 1
+      // iOS Chrome loads the page subtly zoomed out and folds that into
+      // devicePixelRatio (2.x instead of 3) while claiming vv.scale=1 — a
+      // canvas rastered at that density is soft until a pinch restores it.
+      // Media queries report the HARDWARE ratio independent of zoom, so
+      // never raster below that.
+      let hwDpr = 1;
+      for (const r of [4, 3, 2.5, 2, 1.5]) {
+        if (window.matchMedia(`(-webkit-min-device-pixel-ratio: ${r})`).matches) { hwDpr = r; break; }
+      }
       const vvScale = window.visualViewport?.scale || 1;
-      dpr = Math.min((window.devicePixelRatio || 1) * vvScale, 4);
-      W = window.innerWidth; H = window.innerHeight;
+      dpr = Math.min(Math.max(window.devicePixelRatio || 1, hwDpr) * vvScale, 4);
+      // size from the canvas's REAL laid-out box (inset:0 = the viewport as
+      // the compositor sees it) — iOS Chrome's window.inner* disagrees with
+      // the fixed-position layer size, and the mismatch renders soft
+      cv.style.width = ""; cv.style.height = ""; // let inset:0 size it
+      const rect = cv.getBoundingClientRect();
+      // clamp to the largest sane viewport measure — if layout ever reports
+      // the canvas's intrinsic size instead, unclamped rect sizing feeds back
+      const capW = Math.max(window.innerWidth, window.visualViewport?.width || 0);
+      const capH = Math.max(window.innerHeight, window.visualViewport?.height || 0);
+      W = Math.round(Math.min(rect.width, capW)) || capW;
+      H = Math.round(Math.min(rect.height, capH)) || capH;
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-      cv.style.width = W + "px"; cv.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       defaultZoom = 0.55 * Math.min(W, H) / (2 * Math.hypot(EPOCH.rx, EPOCH.ry));
       if (!(defaultZoom > 0)) defaultZoom = 0.3; // the pane can report 0×0 at load
@@ -2787,6 +2807,33 @@
     // iOS: re-rasterize if the visual viewport (zoom, URL bar) ever changes
     window.visualViewport?.addEventListener("resize", resize);
     resize();
+    // ...and iOS restores a site's zoom asynchronously WITHOUT firing events:
+    // watch the scale for a while after load and re-rasterize on change
+    {
+      // iOS Chrome also settles innerWidth/innerHeight AFTER load without
+      // firing resize — watch the actual numbers, not just the scale
+      let sig = "";
+      const watch = setInterval(() => {
+        const s = `${window.innerWidth},${window.innerHeight},${window.visualViewport?.scale || 1},${window.devicePixelRatio}`;
+        if (s !== sig) { sig = s; resize(); }
+      }, 400);
+      setTimeout(() => clearInterval(watch), 15000);
+    }
+    // load with ?debug for an on-page readout of the scaling numbers
+    if (new URLSearchParams(location.search).has("debug")) {
+      const d = document.createElement("div");
+      d.style.cssText = "position:fixed;left:8px;bottom:170px;z-index:99;background:#000c;color:#0f0;font:11px monospace;padding:6px;white-space:pre;pointer-events:none";
+      document.body.appendChild(d);
+      setInterval(() => {
+        d.textContent = `inner ${window.innerWidth}x${window.innerHeight}\n`
+          + `dpr ${window.devicePixelRatio}\n`
+          + `vv.scale ${window.visualViewport?.scale?.toFixed(3)}\n`
+          + `vv.size ${window.visualViewport?.width?.toFixed(0)}x${window.visualViewport?.height?.toFixed(0)}\n`
+          + `cv ${cv.width}x${cv.height}\n`
+          + `rect ${cv.getBoundingClientRect().width.toFixed(1)}x${cv.getBoundingClientRect().height.toFixed(1)}\n`
+          + `docW ${document.documentElement.clientWidth}`;
+      }, 500);
+    }
     // phones: the mission panel starts collapsed so it doesn't bury the sky,
     // and tapping anywhere outside it collapses it again (mobile only)
     if (window.matchMedia("(max-width: 640px)").matches)
