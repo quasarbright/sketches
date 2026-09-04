@@ -576,6 +576,26 @@
     let nodeColors = new Map(); // node id -> its post-burn patch color
     let segColors = new Map();  // drawn segment -> its patch color
     function label(text, sx, sy, color, align = "left", alpha = 1) { labelQueue.push([text, sx, sy, color, align, alpha]); }
+    // the body's TRUE projected silhouette: the limb circle (where sight
+    // lines graze the sphere), projected to screen. radius*scale is too small
+    // up close; eye-distance inflation overshoots for off-axis bodies.
+    function limbCircle(b, bs) {
+      const ex = fp.x + camF.x * camD, ey = fp.y + camF.y * camD, ez = fp.z + camF.z * camD;
+      const Lx = bs.x - ex, Ly = bs.y - ey, Lz = bs.z - ez;
+      const lm = Math.hypot(Lx, Ly, Lz);
+      if (lm <= b.radius * 1.001) return null; // camera at/inside the surface
+      const k = 1 - (b.radius / lm) ** 2; // limb plane fraction along the sight line
+      const cx = ex + Lx * k, cy = ey + Ly * k, cz = ez + Lz * k;
+      const rl = b.radius * Math.sqrt(k);
+      let ux = Ly * camU.z - Lz * camU.y, uy = Lz * camU.x - Lx * camU.z, uz = Lx * camU.y - Ly * camU.x;
+      let um = Math.hypot(ux, uy, uz);
+      if (um < 1e-9) { ux = camR.x; uy = camR.y; uz = camR.z; um = 1; }
+      const pc = w2s(cx, cy, cz);
+      const pl = w2s(cx + rl * ux / um, cy + rl * uy / um, cz + rl * uz / um);
+      if (pc.s <= 0 || pl.s <= 0) return null;
+      return { x: pc.x, y: pc.y, r: Math.hypot(pl.x - pc.x, pl.y - pc.y), s: pc.s };
+    }
+
     // is this screen point behind a body's disc? (s = the point's w2s scale)
     function hiddenByBody(sx, sy, s) {
       if (s <= 0) return true;
@@ -1004,6 +1024,35 @@
       ctx.lineJoin = "miter";
     }
 
+    // one body, drawn however its apparent size warrants: mesh when big and
+    // the camera is outside it, phase-dimmed palette disc otherwise. Used by
+    // the main painter pass and (semitransparent) by encounter ghosts.
+    function drawBodyAuto(b, bs, s, rPix) {
+      const onScreen = s.s > 0 && s.x + rPix > -80 && s.x - rPix < W + 80 && s.y + rPix > -80 && s.y - rPix < H + 80;
+      // mesh only while the camera is safely outside the surface — from
+      // inside, every outward face culls away and the planet vanishes
+      const eyeDist = Math.hypot(
+        bs.x - (fp.x + camF.x * camD),
+        bs.y - (fp.y + camF.y * camD),
+        bs.z - (fp.z + camF.z * camD));
+      if (onScreen && rPix >= 12 && b.id !== "sun" && eyeDist > b.radius * 1.05) drawBodyMesh(b, bs, rPix);
+      else if (b.id === "sun") drawBody(bs.x, bs.y, bs.z, b.radius, b.fill, b.rim);
+      else {
+        // dot color = dominant surface color, dimmed by phase the same
+        // way the mesh's sun shading would average out — so neither the
+        // switch to mesh nor a backlit geometry pops in brightness
+        const dc = discColors(b);
+        const lm = Math.hypot(bs.x, bs.y, bs.z) || 1;
+        const ed = eyeDist || 1;
+        const cosphi = (-bs.x / lm) * ((fp.x + camF.x * camD - bs.x) / ed)
+          + (-bs.y / lm) * ((fp.y + camF.y * camD - bs.y) / ed)
+          + (-bs.z / lm) * ((fp.z + camF.z * camD - bs.z) / ed);
+        const shade = 0.30 + 0.70 * (0.5 * (1 + cosphi));
+        const col = (k) => `rgb(${dc.rgb.map((v) => clampN(Math.round(v * k * shade), 0, 255)).join(",")})`;
+        drawBody(bs.x, bs.y, bs.z, b.radius, col(0.9), col(1.15));
+      }
+    }
+
     // planetary rings in the body's equatorial plane, split at the body's
     // depth so the far half draws behind the globe and the near half over it
     const RINGS = {
@@ -1170,9 +1219,10 @@
 
     function drawShip(sp) {
       const st = sp.rel;
-      const vm = Math.hypot(st.vx, st.vy, st.vz) || 1;
-      let F = [st.vx / vm, st.vy / vm, st.vz / vm]; // prograde, until we've burned
-      // the ship holds the attitude of its LAST executed burn
+      // attitude is inertial: the direction of the LAST executed burn, or —
+      // before any burn — the launch attitude (prograde at t=0, then frozen).
+      // It never keeps re-aligning to the current velocity.
+      let F = null;
       let last = null;
       for (const nd of nodes) {
         if (nd.t <= tNow && (!last || nd.t > last.t)
@@ -1185,6 +1235,11 @@
         const dz = last.prograde * info.pgz + last.radial * info.roz + last.normal * info.noz;
         const dm = Math.hypot(dx, dy, dz);
         if (dm > 1e-9) F = [dx / dm, dy / dm, dz / dm];
+      }
+      if (!F) {
+        const st0 = shipStateAt(SYSTEM, traj, 0).rel;
+        const m0 = Math.hypot(st0.vx, st0.vy, st0.vz) || 1;
+        F = [st0.vx / m0, st0.vy / m0, st0.vz / m0];
       }
       let hx = st.y * st.vz - st.z * st.vy, hy = st.z * st.vx - st.x * st.vz, hz = st.x * st.vy - st.y * st.vx;
       let hm = Math.hypot(hx, hy, hz);
@@ -1364,9 +1419,11 @@
       }
 
       // close enough to see the rocket itself? then the map furniture —
-      // trajectory paths and body orbit rings — stays out of the frame
+      // trajectory paths, body orbit rings, the marker triangle — fades out
+      // (mapA 1 = fully shown, 0 = gone) instead of popping
       const shipS0 = w2s(ship.x, ship.y, ship.z);
-      const shipCloseUp = shipS0.s > 0 && SHIP_H * shipS0.s > 16;
+      const shipPx0 = shipS0.s > 0 ? SHIP_H * shipS0.s : 0;
+      const mapA = 1 - clampN((shipPx0 - 12) / 10, 0, 1);
 
       // body discs first, far-to-near, and each registers as an occluder so
       // paths drawn after can hide only the chords that pass BEHIND a body
@@ -1385,34 +1442,13 @@
           // parent from the near half of every orbit
           if (b.parent && s.s > 0
             && b.orbitRadius * s.s < SYSTEM.bodies[b.parent].radius * s.s + 3) continue;
-          const onScreen = s.s > 0 && s.x + rPix > -80 && s.x - rPix < W + 80 && s.y + rPix > -80 && s.y - rPix < H + 80;
           drawRings(b, bs, -1, rPix); // far half of any ring system
-          // mesh only while the camera is safely outside the surface — from
-          // inside, every outward face culls away and the planet vanishes
-          const eyeDist = Math.hypot(
-            bs.x - (fp.x + camF.x * camD),
-            bs.y - (fp.y + camF.y * camD),
-            bs.z - (fp.z + camF.z * camD));
-          if (onScreen && rPix >= 12 && b.id !== "sun" && eyeDist > b.radius * 1.05) drawBodyMesh(b, bs, rPix);
-          else if (b.id === "sun") drawBody(bs.x, bs.y, bs.z, b.radius, b.fill, b.rim);
-          else {
-            // dot color = dominant surface color, dimmed by phase the same
-            // way the mesh's sun shading would average out — so neither the
-            // switch to mesh nor a backlit geometry pops in brightness
-            const dc = discColors(b);
-            const lm = Math.hypot(bs.x, bs.y, bs.z) || 1;
-            const ed = eyeDist || 1;
-            const cosphi = (-bs.x / lm) * ((fp.x + camF.x * camD - bs.x) / ed)
-              + (-bs.y / lm) * ((fp.y + camF.y * camD - bs.y) / ed)
-              + (-bs.z / lm) * ((fp.z + camF.z * camD - bs.z) / ed);
-            const shade = 0.30 + 0.70 * (0.5 * (1 + cosphi));
-            const col = (k) => `rgb(${dc.rgb.map((v) => clampN(Math.round(v * k * shade), 0, 255)).join(",")})`;
-            drawBody(bs.x, bs.y, bs.z, b.radius, col(0.9), col(1.15));
-          }
+          drawBodyAuto(b, bs, s, rPix);
           drawRings(b, bs, +1, rPix); // near half draws over the globe
           if (s.s <= 0) continue;
-          if (rPix > 3 && s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
-            occluders.push({ sx: s.x, sy: s.y, r2: rPix * rPix, s: s.s });
+          const lc = limbCircle(b, bs);
+          if (lc && lc.r > 3 && lc.x + lc.r > -40 && lc.x - lc.r < W + 40 && lc.y + lc.r > -40 && lc.y - lc.r < H + 40) {
+            occluders.push({ sx: lc.x, sy: lc.y, r2: lc.r * lc.r, s: lc.s });
           }
         }
       }
@@ -1425,7 +1461,7 @@
       // system — a foreign ring always has some distant stretch whose
       // perspective size lands in the readable band, so distance from the
       // focus to the ring's parent gates it out.
-      if (!shipCloseUp) {
+      if (mapA > 0) {
         const ringMax = 1.5 * Math.max(W, H);
         for (const b of Object.values(SYSTEM.bodies)) {
           if (!b.parent) continue;
@@ -1435,7 +1471,7 @@
           const aOut = clampN((ringMax - r) / (ringMax * 0.4), 0, 1);
           const dm = Math.hypot(fp.x - pc.x, fp.y - pc.y, fp.z - pc.z);
           const aLocal = clampN(3 - dm / b.orbitRadius, 0, 1); // fades D=2R..3R
-          const alpha = 0.18 * Math.min(aIn, aOut, aLocal);
+          const alpha = 0.18 * Math.min(aIn, aOut, aLocal) * mapA;
           if (alpha < 0.012) continue;
           pathConic(b.orbit, 0, TAU, pc);
           ctx.strokeStyle = `rgba(138,143,163,${alpha.toFixed(3)})`;
@@ -1445,7 +1481,7 @@
       }
 
       // trajectory segments — only what the visibility walk says to draw
-      visList = shipCloseUp ? [] : visibleSegments(traj, tNow, patchLimit);
+      visList = mapA <= 0 ? [] : visibleSegments(traj, tNow, patchLimit);
       visSet = new Set(visList.map((v) => v.seg));
       // each maneuver wears the color of the patch it creates (the segment
       // starting at its burn) — the sidebar list uses the same colors
@@ -1482,13 +1518,13 @@
         const segLen = pathConic(seg.orbit, u1, u2, org);
         if (v.mode === "ghost") {
           ctx.strokeStyle = color;
-          ctx.globalAlpha = 0.35;
+          ctx.globalAlpha = 0.35 * mapA;
           ctx.lineWidth = 1.2;
           ctx.setLineDash([3, 4]);
           ctx.lineDashOffset = chainLen - dashClock;
         } else {
           ctx.strokeStyle = color;
-          ctx.globalAlpha = dashed ? 0.85 : 0.9;
+          ctx.globalAlpha = (dashed ? 0.85 : 0.9) * mapA;
           ctx.lineWidth = 1.5;
           if (dashed) { ctx.setLineDash([6, 5]); ctx.lineDashOffset = chainLen - dashClock; }
         }
@@ -1501,7 +1537,7 @@
         if (liveCopy) {
           pathConic(seg.orbit, u1, u2, liveOrg);
           ctx.strokeStyle = color;
-          ctx.globalAlpha = v.mode === "ghost" ? 0.18 : 0.3;
+          ctx.globalAlpha = (v.mode === "ghost" ? 0.18 : 0.3) * mapA;
           ctx.lineWidth = 1;
           ctx.setLineDash([3, 4]);
           ctx.lineDashOffset = chainLen - dashClock;
@@ -1510,15 +1546,17 @@
           ctx.lineDashOffset = 0;
           ctx.globalAlpha = 1;
           if (v.mode === "ghost") {
+            // the ghost body is the body itself, translucent — same mesh/disc
+            // pop-in, sized by its own perspective depth (cam.zoom is the
+            // focus-plane scale and was wildly wrong up close)
             const gb = SYSTEM.bodies[seg.body];
-            const gs = w2s(org.x, org.y, org.z);
-            ctx.beginPath();
-            ctx.arc(gs.x, gs.y, Math.max(gb.radius * cam.zoom, 2), 0, TAU);
-            ctx.strokeStyle = color; // the ghost body wears its patch's color
-            ctx.globalAlpha = 0.55;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-            ctx.globalAlpha = 1;
+            const gbs = { x: org.x, y: org.y, z: org.z };
+            const gs = w2s(gbs.x, gbs.y, gbs.z);
+            if (gs.s > 0) {
+              ctx.globalAlpha = 0.4 * mapA;
+              drawBodyAuto(gb, gbs, gs, gb.radius * gs.s);
+              ctx.globalAlpha = 1;
+            }
           }
         }
         ctx.globalAlpha = 1;
@@ -1604,12 +1642,13 @@
             label("impact", s.x + 8, s.y, "#e0556b", "left", dim);
           }
         };
-        drawExtras(org, 1);
-        if (liveCopy) drawExtras(liveOrg, 0.5);
+        drawExtras(org, mapA);
+        if (liveCopy) drawExtras(liveOrg, 0.5 * mapA);
       }
 
       // closest approach markers (only on a drawn orbit)
-      if (target && ca?.best && ca.best.t >= tNow && visSet.has(ca.best.seg)) {
+      if (target && ca?.best && ca.best.t >= tNow && visSet.has(ca.best.seg) && mapA > 0) {
+        ctx.globalAlpha = mapA;
         const b = ca.best;
         const org = segOrg(b.seg);
         const sp = posVelAt(b.seg.orbit, b.t);
@@ -1630,8 +1669,9 @@
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
+        ctx.globalAlpha = 1;
         if (!hiddenByBody((s1.x + s2.x) / 2, (s1.y + s2.y) / 2, (s1.s + s2.s) / 2))
-          label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8");
+          label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8", "left", mapA);
       }
 
       // labels + SOI circles (discs were painted before the paths). Deepest
@@ -1753,11 +1793,13 @@
       // enough on screen to read
       {
         const s = w2s(ship.x, ship.y, ship.z);
-        if (s.s > 0 && SHIP_H * s.s > 16) {
-          drawShip(ship);
-        } else {
+        // crossfade: the rocket appears as the marker triangle fades with the
+        // rest of the map furniture
+        if (s.s > 0 && SHIP_H * s.s > 12) drawShip(ship);
+        if (mapA > 0) {
           const dir = v2s(ship.rel.vx, ship.rel.vy, ship.rel.vz);
           const px = -dir.y, py = dir.x;
+          ctx.globalAlpha = mapA;
           ctx.beginPath();
           ctx.moveTo(s.x + dir.x * 7, s.y + dir.y * 7);
           ctx.lineTo(s.x - dir.x * 5 + px * 4.5, s.y - dir.y * 5 + py * 4.5);
@@ -1768,6 +1810,7 @@
           ctx.strokeStyle = "#5fb2ff";
           ctx.lineWidth = 1;
           ctx.stroke();
+          ctx.globalAlpha = 1;
         }
       }
 
@@ -1805,19 +1848,12 @@
         const b = SYSTEM.bodies[hoverBody];
         const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
         const s = w2s(bs.x, bs.y, bs.z);
-        // perspective makes the visible silhouette LARGER than radius*s up
-        // close — ring the true limb, and skip entirely once the planet
-        // dominates the view (a locator ring around the whole screen is noise)
-        const ed = Math.hypot(
-          bs.x - (fp.x + camF.x * camD),
-          bs.y - (fp.y + camF.y * camD),
-          bs.z - (fp.z + camF.z * camD));
-        const under = Math.sqrt(Math.max(1 - (b.radius / Math.max(ed, b.radius * 1.001)) ** 2, 1e-6));
-        const rr = b.radius * Math.max(s.s, 0) / under;
-        if (rr < 0.35 * Math.min(W, H)) {
+        // ring the body's true projected silhouette
+        const lc = limbCircle(b, bs);
+        if (lc) {
           ctx.beginPath();
           // floors at the same 5px a maneuver node's circle uses
-          ctx.arc(s.x, s.y, Math.max(rr + 4, 5), 0, TAU);
+          ctx.arc(lc.x, lc.y, Math.max(lc.r + 4, 5), 0, TAU);
           ctx.strokeStyle = "rgba(230,235,245,0.75)";
           ctx.lineWidth = 1.5;
           ctx.stroke();
@@ -1954,6 +1990,11 @@
         for (const { org, kind } of origins) {
           const n = nearestOnCurve(seg.orbit, u1, u2, org, sx, sy);
           if (!n || n.d >= 12) continue;
+          // a path point hidden behind a planet isn't clickable — otherwise a
+          // maneuver could be placed "through" the planet in front of it
+          const cp = conicPoint(seg.orbit, n.u);
+          const ps = w2s(cp.x + org.x, cp.y + org.y, (cp.z ?? 0) + org.z);
+          if (hiddenByBody(ps.x, ps.y, ps.s)) continue;
           // a curve covers one revolution; wrap to the segment's first pass —
           // floored at the SEGMENT start, not just the clock: a post-maneuver
           // ellipse must never resolve to a time before its burn exists
