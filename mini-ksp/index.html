@@ -3,7 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>welcome to shmorbit</title>
+  <title>Welcome to Shmorbit</title>
+  <meta property="og:title" content="Welcome to Shmorbit" />
+  <meta property="og:description" content="Fly a rocket around the real solar system on true Keplerian orbits — plan maneuvers, chase encounters, warp and rewind time freely." />
+  <meta property="og:image" content="https://quasarbright.github.io/portfolio/screenshots/mini-ksp.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <!-- favicon: the maneuver gizmo (yellow prograde/retrograde, purple normal
+       triangles, cyan radial markers) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke-width='4'%3E%3Cg stroke='%23c586ff'%3E%3Cline x1='32' y1='26' x2='32' y2='18'/%3E%3Cline x1='32' y1='38' x2='32' y2='46'/%3E%3Cpath d='M32 4 L39 15 L25 15 Z'/%3E%3Cpath d='M32 60 L39 49 L25 49 Z'/%3E%3C/g%3E%3Cg stroke='%23ffd45e'%3E%3Ccircle cx='32' cy='32' r='6'/%3E%3Cline x1='26' y1='32' x2='16' y2='32'/%3E%3Cline x1='38' y1='32' x2='48' y2='32'/%3E%3Ccircle cx='10' cy='32' r='6'/%3E%3Ccircle cx='54' cy='32' r='6'/%3E%3Ccircle cx='54' cy='32' r='1.8' fill='%23ffd45e'/%3E%3Cline x1='7' y1='29' x2='13' y2='35'/%3E%3Cline x1='13' y1='29' x2='7' y2='35'/%3E%3C/g%3E%3Cg stroke='%2359e3e3' stroke-width='3.4'%3E%3Ccircle cx='49' cy='15' r='5'/%3E%3Ccircle cx='49' cy='15' r='1.5' fill='%2359e3e3'/%3E%3Ccircle cx='15' cy='49' r='5'/%3E%3Cline x1='12.5' y1='46.5' x2='17.5' y2='51.5'/%3E%3Cline x1='17.5' y1='46.5' x2='12.5' y2='51.5'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="../shared/cohesion.css" />
   <script type="module" src="../shared/cohesion.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -115,7 +122,7 @@
   <canvas id="c"></canvas>
 
   <div class="mk-title">
-    <div class="mk-name">welcome to shmorbit</div>
+    <div class="mk-name">Welcome to Shmorbit</div>
     <div class="mk-sub">patched-conic sandbox</div>
   </div>
 
@@ -242,7 +249,7 @@
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
     <about-modal label="about">
-      <h2 class="title">welcome to shmorbit</h2>
+      <h2 class="title">Welcome to Shmorbit</h2>
       <p>An orbital mechanics sandbox: a 40-meter rocket, the real solar system in 3D, and
         Kepler. Everything counterintuitive about orbits lives here: to catch up to something,
         slow down; to go faster at the far side, burn at the near side; to reach Pluto, first
