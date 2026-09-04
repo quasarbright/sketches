@@ -1269,20 +1269,22 @@
         faces.push([bot[i], eng[j], bot[j], GRAY], [bot[i], eng[i], eng[j], GRAY]); // engine skirt
         faces.push([eng[j], eng[i], ebot, DARK]);        // engine bell cap (faces aft)
       }
-      // four fins, offset between body columns, each quad as a 4-triangle fan
-      // (one big quad's centroid depth misorders against the hull)
+      // four fins, offset between body columns. Fins are tagged with their
+      // index: their planes pass through the ship axis, so an EXACT draw
+      // order exists (away-fins, then the convex hull, then toward-fins) —
+      // no depth sorting can be trusted for them
+      const finDirs = [];
       for (let k = 0; k < 4; k++) {
         const th = (k + 0.5) / 4 * TAU + TAU / 16;
         const cx = Math.cos(th), cy = Math.sin(th);
+        finDirs.push([cx, cy]);
         const p1 = V(cx * 0.20, cy * 0.20, 0.42), p2 = V(cx * 0.20, cy * 0.20, 0.08);
         const p3 = V(cx * 0.46, cy * 0.46, -0.04), p4 = V(cx * 0.46, cy * 0.46, 0.16);
-        const pc = V(cx * 0.33, cy * 0.33, 0.155);
-        faces.push([p1, p2, pc, RED, true], [p2, p3, pc, RED, true],
-          [p3, p4, pc, RED, true], [p4, p1, pc, RED, true]);
+        faces.push([p1, p2, p3, RED, true, k], [p1, p3, p4, RED, true, k]);
       }
       // put the model's midpoint at the ship's world position
       for (const v of verts) v[2] -= 0.5;
-      return { verts, faces };
+      return { verts, faces, finDirs };
     })();
 
     function drawShip(sp) {
@@ -1333,12 +1335,16 @@
       const ex = fp.x + camF.x * camD, ey = fp.y + camF.y * camD, ez = fp.z + camF.z * camD;
       const lm = Math.hypot(sp.x, sp.y, sp.z) || 1;
       const ldx = -sp.x / lm, ldy = -sp.y / lm, ldz = -sp.z / lm;
-      const order = [];
+      // EXACT ordering, no depth sort: the hull (cone+body+skirt+cap) is
+      // CONVEX, so backface culling alone renders it perfectly. Fin planes
+      // pass through the ship axis, so fins pointing away from the camera lie
+      // wholly behind the hull surface and fins pointing toward it wholly in
+      // front: draw away-fins, hull, toward-fins — fins ordered among
+      // themselves by how much they face the camera.
+      const hull = [], fins = [[], [], [], []];
       for (let f = 0; f < shipMesh.faces.length; f++) {
-        const [a, b, c, , dbl] = shipMesh.faces[f];
+        const [a, b, c, , dbl, finK] = shipMesh.faces[f];
         const cx = (wx[a] + wx[b] + wx[c]) / 3, cy = (wy[a] + wy[b] + wy[c]) / 3, cz = (wz[a] + wz[b] + wz[c]) / 3;
-        // face normal in world; hull faces wind outward, so away-facing ones
-        // CULL — painter sorting alone misorders the big cone faces
         let nx = (wy[b] - wy[a]) * (wz[c] - wz[a]) - (wz[b] - wz[a]) * (wy[c] - wy[a]);
         let ny = (wz[b] - wz[a]) * (wx[c] - wx[a]) - (wx[b] - wx[a]) * (wz[c] - wz[a]);
         let nz = (wx[b] - wx[a]) * (wy[c] - wy[a]) - (wy[b] - wy[a]) * (wx[c] - wx[a]);
@@ -1346,17 +1352,25 @@
         nx /= nm; ny /= nm; nz /= nm;
         const facingAway = nx * (cx - ex) + ny * (cy - ey) + nz * (cz - ez) > 0;
         if (facingAway) {
-          if (!dbl) continue;
+          if (!dbl) continue; // convex hull: culling is exact
           nx = -nx; ny = -ny; nz = -nz; // double-sided fins shade camera-side
         }
-        const dv = (cx - fp.x) * camF.x + (cy - fp.y) * camF.y + (cz - fp.z) * camF.z;
         const sh = 0.45 + 0.55 * Math.max(nx * ldx + ny * ldy + nz * ldz, 0);
-        order.push([dv, f, sh]);
+        if (finK === undefined) hull.push([f, sh]);
+        else fins[finK].push([f, sh]);
       }
-      order.sort((p, q) => p[0] - q[0]);
+      // how much each fin's outward direction points at the camera
+      const finFacing = shipMesh.finDirs.map(([dx2, dy2], k) => {
+        const wxd = dx2 * X[0] + dy2 * Nv[0], wyd = dx2 * X[1] + dy2 * Nv[1], wzd = dx2 * X[2] + dy2 * Nv[2];
+        return [k, wxd * (ex - sp.x) + wyd * (ey - sp.y) + wzd * (ez - sp.z)];
+      }).sort((p, q) => p[1] - q[1]);
+      const passes = [];
+      for (const [k, fc] of finFacing) if (fc < 0) passes.push(...fins[k]);
+      passes.push(...hull);
+      for (const [k, fc] of finFacing) if (fc >= 0) passes.push(...fins[k]);
       ctx.lineWidth = 1;
       ctx.lineJoin = "round";
-      for (const [, f, sh] of order) {
+      for (const [f, sh] of passes) {
         const [a, b, c, col] = shipMesh.faces[f];
         const st2 = `rgb(${(col[0] * sh) | 0},${(col[1] * sh) | 0},${(col[2] * sh) | 0})`;
         ctx.beginPath();
