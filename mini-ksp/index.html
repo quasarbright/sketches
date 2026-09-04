@@ -1171,10 +1171,29 @@
     function drawShip(sp) {
       const st = sp.rel;
       const vm = Math.hypot(st.vx, st.vy, st.vz) || 1;
-      const F = [st.vx / vm, st.vy / vm, st.vz / vm]; // prograde
+      let F = [st.vx / vm, st.vy / vm, st.vz / vm]; // prograde, until we've burned
+      // the ship holds the attitude of its LAST executed burn
+      let last = null;
+      for (const nd of nodes) {
+        if (nd.t <= tNow && (!last || nd.t > last.t)
+          && Math.hypot(nd.prograde, nd.radial, nd.normal) > 1e-9) last = nd;
+      }
+      const info = last && traj.nodeInfo.get(last.id);
+      if (info) {
+        const dx = last.prograde * info.pgx + last.radial * info.rox + last.normal * info.nox;
+        const dy = last.prograde * info.pgy + last.radial * info.roy + last.normal * info.noy;
+        const dz = last.prograde * info.pgz + last.radial * info.roz + last.normal * info.noz;
+        const dm = Math.hypot(dx, dy, dz);
+        if (dm > 1e-9) F = [dx / dm, dy / dm, dz / dm];
+      }
       let hx = st.y * st.vz - st.z * st.vy, hy = st.z * st.vx - st.x * st.vz, hz = st.x * st.vy - st.y * st.vx;
-      const hm = Math.hypot(hx, hy, hz);
-      const Nv = hm > 1e-9 ? [hx / hm, hy / hm, hz / hm] : [0, 0, 1]; // orbit normal
+      let hm = Math.hypot(hx, hy, hz);
+      let Nv = hm > 1e-9 ? [hx / hm, hy / hm, hz / hm] : [0, 0, 1]; // orbit normal-ish up
+      // re-orthogonalize up against the facing direction
+      const fdot = Nv[0] * F[0] + Nv[1] * F[1] + Nv[2] * F[2];
+      Nv = [Nv[0] - fdot * F[0], Nv[1] - fdot * F[1], Nv[2] - fdot * F[2]];
+      hm = Math.hypot(Nv[0], Nv[1], Nv[2]);
+      Nv = hm > 1e-6 ? [Nv[0] / hm, Nv[1] / hm, Nv[2] / hm] : lpNorm(Math.abs(F[2]) < 0.9 ? [-F[1], F[0], 0] : [0, -F[2], F[1]]);
       const X = lpCross(F, Nv); // side
       const nverts = shipMesh.verts.length;
       const sx = new Float64Array(nverts), sy = new Float64Array(nverts);
@@ -1344,6 +1363,11 @@
         ctx.globalAlpha = 1;
       }
 
+      // close enough to see the rocket itself? then the map furniture —
+      // trajectory paths and body orbit rings — stays out of the frame
+      const shipS0 = w2s(ship.x, ship.y, ship.z);
+      const shipCloseUp = shipS0.s > 0 && SHIP_H * shipS0.s > 16;
+
       // body discs first, far-to-near, and each registers as an occluder so
       // paths drawn after can hide only the chords that pass BEHIND a body
       occluders = [];
@@ -1401,7 +1425,7 @@
       // system — a foreign ring always has some distant stretch whose
       // perspective size lands in the readable band, so distance from the
       // focus to the ring's parent gates it out.
-      {
+      if (!shipCloseUp) {
         const ringMax = 1.5 * Math.max(W, H);
         for (const b of Object.values(SYSTEM.bodies)) {
           if (!b.parent) continue;
@@ -1421,7 +1445,7 @@
       }
 
       // trajectory segments — only what the visibility walk says to draw
-      visList = visibleSegments(traj, tNow, patchLimit);
+      visList = shipCloseUp ? [] : visibleSegments(traj, tNow, patchLimit);
       visSet = new Set(visList.map((v) => v.seg));
       // each maneuver wears the color of the patch it creates (the segment
       // starting at its burn) — the sidebar list uses the same colors
@@ -1781,12 +1805,23 @@
         const b = SYSTEM.bodies[hoverBody];
         const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
         const s = w2s(bs.x, bs.y, bs.z);
-        ctx.beginPath();
-        // floors at the same 5px a maneuver node's circle uses
-        ctx.arc(s.x, s.y, Math.max(b.radius * Math.max(s.s, 0) + 4, 5), 0, TAU);
-        ctx.strokeStyle = "rgba(230,235,245,0.75)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        // perspective makes the visible silhouette LARGER than radius*s up
+        // close — ring the true limb, and skip entirely once the planet
+        // dominates the view (a locator ring around the whole screen is noise)
+        const ed = Math.hypot(
+          bs.x - (fp.x + camF.x * camD),
+          bs.y - (fp.y + camF.y * camD),
+          bs.z - (fp.z + camF.z * camD));
+        const under = Math.sqrt(Math.max(1 - (b.radius / Math.max(ed, b.radius * 1.001)) ** 2, 1e-6));
+        const rr = b.radius * Math.max(s.s, 0) / under;
+        if (rr < 0.35 * Math.min(W, H)) {
+          ctx.beginPath();
+          // floors at the same 5px a maneuver node's circle uses
+          ctx.arc(s.x, s.y, Math.max(rr + 4, 5), 0, TAU);
+          ctx.strokeStyle = "rgba(230,235,245,0.75)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
       }
 
       // snap highlight while dragging/placing
