@@ -97,7 +97,16 @@
       width: 100%; background: var(--panel-2); border: 1px solid var(--border);
       border-radius: var(--radius-sm); color: var(--text); padding: 4px 6px; font-size: .82rem;
     }
-    .control-bar { font-family: var(--font-mono); }
+    .control-bar { font-family: var(--font-mono); position: relative; }
+    .control-bar .btn:disabled { opacity: 0.35; cursor: default; pointer-events: auto; }
+    /* instant event-jump preview — a vanilla title waits, this doesn't */
+    .mk-evtip {
+      display: none; position: absolute; bottom: calc(100% + 8px); left: 0;
+      background: var(--panel, #10141f); border: 1px solid var(--border, #2a3040);
+      border-radius: 6px; padding: 5px 9px; font-size: .78rem; color: var(--text, #e6e8ef);
+      white-space: nowrap; pointer-events: none; z-index: 30;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    }
     .control-bar .mk-clock { font-size: .8rem; color: var(--text); min-width: 118px; text-align: center; }
     .control-bar .mk-rate { font-size: .8rem; color: var(--accent); min-width: 64px; text-align: center; }
   </style>
@@ -221,9 +230,12 @@
   <div id="toast" class="mk-toast"></div>
 
   <div class="control-bar">
+    <button class="btn" id="evPrev">⏮</button>
     <button class="btn" id="slower" title="slow down time — keeps going into reverse (rewind)">◀◀</button>
     <button class="btn" id="pause" title="pause / resume time (space)">⏸</button>
     <button class="btn" id="faster" title="speed up time">▶▶</button>
+    <button class="btn" id="evNext">⏭</button>
+    <div id="evTip" class="mk-evtip"></div>
     <span class="mk-rate" id="rate" title="current time-warp rate — negative means rewinding">1×</span>
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
@@ -448,6 +460,7 @@
     let camFocal = 1370;             // pixels; set from H for a ~40° FOV
     let camD = 1370 / 0.3;           // eye distance from the focus, in km
     let occluders = [];              // this frame's body discs, for path depth-hiding
+    let updateEventButtons = () => {}; // bound once the ⏮/⏭ buttons are wired
     function updateCamBasis() {
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
       const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
@@ -1250,7 +1263,7 @@
         faces.push([bot[i], bot[j], top[j], col], [bot[i], top[j], top[i], col]);
         faces.push([top[i], top[j], tip, RED]);          // nose cone
         faces.push([bot[i], eng[j], bot[j], GRAY], [bot[i], eng[i], eng[j], GRAY]); // engine skirt
-        faces.push([eng[i], eng[j], ebot, DARK]);        // engine bell cap
+        faces.push([eng[j], eng[i], ebot, DARK]);        // engine bell cap (faces aft)
       }
       // four fins, offset between body columns
       for (let k = 0; k < 4; k++) {
@@ -1315,16 +1328,24 @@
       const ldx = -sp.x / lm, ldy = -sp.y / lm, ldz = -sp.z / lm;
       const order = [];
       for (let f = 0; f < shipMesh.faces.length; f++) {
-        const [a, b, c] = shipMesh.faces[f];
+        const [a, b, c, , dbl] = shipMesh.faces[f];
         const cx = (wx[a] + wx[b] + wx[c]) / 3, cy = (wy[a] + wy[b] + wy[c]) / 3, cz = (wz[a] + wz[b] + wz[c]) / 3;
-        // face normal in world (small mesh — computed live, flipped camera-ward)
+        // face normal in world; hull faces wind outward, so away-facing ones
+        // CULL — painter sorting alone misorders the big cone faces
         let nx = (wy[b] - wy[a]) * (wz[c] - wz[a]) - (wz[b] - wz[a]) * (wy[c] - wy[a]);
         let ny = (wz[b] - wz[a]) * (wx[c] - wx[a]) - (wx[b] - wx[a]) * (wz[c] - wz[a]);
         let nz = (wx[b] - wx[a]) * (wy[c] - wy[a]) - (wy[b] - wy[a]) * (wx[c] - wx[a]);
         const nm = Math.hypot(nx, ny, nz) || 1;
         nx /= nm; ny /= nm; nz /= nm;
-        if (nx * (cx - ex) + ny * (cy - ey) + nz * (cz - ez) > 0) { nx = -nx; ny = -ny; nz = -nz; }
-        const dv = (cx - fp.x) * camF.x + (cy - fp.y) * camF.y + (cz - fp.z) * camF.z;
+        const facingAway = nx * (cx - ex) + ny * (cy - ey) + nz * (cz - ez) > 0;
+        if (facingAway) {
+          if (!dbl) continue;
+          nx = -nx; ny = -ny; nz = -nz; // double-sided fins shade camera-side
+        }
+        let dv = (cx - fp.x) * camF.x + (cy - fp.y) * camF.y + (cz - fp.z) * camF.z;
+        // far-side fins sort behind the hull so their roots can't sliver
+        // through faces whose centroids happen to sit deeper
+        if (dbl && facingAway) dv -= SHIP_H * 0.3;
         const sh = 0.45 + 0.55 * Math.max(nx * ldx + ny * ldy + nz * ldz, 0);
         order.push([dv, f, sh]);
       }
@@ -2493,6 +2514,57 @@
         if (t != null) doJump(t);
       });
       $("jumpIn").addEventListener("keydown", (e) => { if (e.key === "Enter") $("jumpGo").click(); });
+      // ---- event skipping: ⏮ / ⏭ jump between trip start, maneuvers,
+      // encounters, escapes, and impacts ------------------------------------
+      const EV_EPS = 1; // seconds — so repeated presses walk the list
+      function eventList() {
+        const evs = [{ t: 0, label: "trip start" }];
+        for (const nd of nodes) {
+          if (traj.nodeInfo.has(nd.id)) evs.push({ t: nd.t, label: "maneuver" });
+        }
+        for (const seg of traj.segs) {
+          if (!Number.isFinite(seg.tEnd)) continue;
+          if (seg.endType === "soiEnter") evs.push({ t: seg.tEnd, label: `${SYSTEM.bodies[seg.enterBody].name} encounter` });
+          else if (seg.endType === "soiExit" || seg.endType === "escape") evs.push({ t: seg.tEnd, label: `${SYSTEM.bodies[seg.body].name} escape` });
+          else if (seg.endType === "impact") evs.push({ t: seg.tEnd, label: `${SYSTEM.bodies[seg.body].name} impact` });
+        }
+        evs.sort((a, b) => a.t - b.t);
+        return evs;
+      }
+      const prevEvent = () => { const e = eventList().filter((ev) => ev.t < tNow - EV_EPS); return e[e.length - 1] ?? null; };
+      const nextEvent = () => eventList().find((ev) => ev.t > tNow + EV_EPS) ?? null;
+      const evTip = $("evTip");
+      updateEventButtons = () => {
+        $("evPrev").disabled = !prevEvent();
+        $("evNext").disabled = !nextEvent();
+      };
+      function wireEventBtn(id, pick, arrow) {
+        const btn = $(id);
+        const showTip = () => {
+          const ev = pick();
+          if (!ev) { evTip.style.display = "none"; return; }
+          evTip.textContent = `${arrow} ${ev.label} (${fmtClock(ev.t)})`;
+          evTip.style.display = "block";
+          const br = btn.getBoundingClientRect(), pr = btn.parentElement.getBoundingClientRect();
+          evTip.style.left = clampN(br.left - pr.left + br.width / 2 - evTip.offsetWidth / 2, 0, pr.width - evTip.offsetWidth) + "px";
+        };
+        btn.addEventListener("mouseenter", showTip);
+        btn.addEventListener("mouseleave", () => { evTip.style.display = "none"; });
+        btn.addEventListener("click", () => {
+          const ev = pick();
+          if (!ev) return;
+          const before = tNow;
+          doJump(ev.t);
+          // a rewind across an executed burn can abort in place once while
+          // the trajectory resettles — retry so one press means one jump
+          if (Math.abs(tNow - before) < 0.5 && Math.abs(ev.t - before) > 0.5) doJump(ev.t);
+          updateEventButtons();
+          showTip(); // preview the following event right away
+        });
+      }
+      wireEventBtn("evPrev", prevEvent, "⏮");
+      wireEventBtn("evNext", nextEvent, "⏭");
+
       $("warpNode").addEventListener("click", () => {
         const nd = selectedNode();
         if (nd) doJump(nd.t + 1); // land just past the burn, already executed
@@ -2697,6 +2769,7 @@
       draw();
       const __t4 = performance.now();
       updateReadouts();
+      updateEventButtons();
       // rolling per-phase timings for perf debugging (__mk.perf())
       (window.__perf ??= []).push({ compile: __t1 - __t0, mid: __t2 - __t1, ca: __t3 - __t2, draw: __t4 - __t3 });
       if (window.__perf.length > 240) window.__perf.shift();
