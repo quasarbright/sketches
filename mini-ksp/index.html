@@ -1319,7 +1319,8 @@
       Nv = [Nv[0] - fdot * F[0], Nv[1] - fdot * F[1], Nv[2] - fdot * F[2]];
       hm = Math.hypot(Nv[0], Nv[1], Nv[2]);
       Nv = hm > 1e-6 ? [Nv[0] / hm, Nv[1] / hm, Nv[2] / hm] : lpNorm(Math.abs(F[2]) < 0.9 ? [-F[1], F[0], 0] : [0, -F[2], F[1]]);
-      const X = lpCross(F, Nv); // side
+      const X = lpCross(Nv, F); // side — X×Nv=F keeps the basis right-handed
+      // (cross(F,Nv) mirrored the model, so camera orbits spun it backwards)
       const nverts = shipMesh.verts.length;
       const sx = new Float64Array(nverts), sy = new Float64Array(nverts);
       const wx = new Float64Array(nverts), wy = new Float64Array(nverts), wz = new Float64Array(nverts);
