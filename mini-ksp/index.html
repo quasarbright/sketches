@@ -34,7 +34,7 @@
       --plan: #ffb454;  /* planned trajectory, stage 1 */
     }
     html, body { height: 100%; overflow: hidden; background: var(--bg); }
-    canvas { position: fixed; inset: 0; display: block; }
+    canvas { position: fixed; inset: 0; display: block; touch-action: none; }
     .panel-title, .title { font-family: var(--font-display); letter-spacing: .02em; }
 
     .mk-title {
@@ -116,6 +116,19 @@
     }
     .control-bar .mk-clock { font-size: .8rem; color: var(--text); min-width: 118px; text-align: center; }
     .control-bar .mk-rate { font-size: .8rem; color: var(--accent); min-width: 64px; text-align: center; }
+    /* phones: compact the chrome so the sky stays visible (kept LAST so it
+       wins the source-order tie against the base rules above) */
+    @media (max-width: 640px) {
+      control-panel.floating { width: min(248px, calc(100vw - 16px)); max-height: calc(100vh - 150px); top: 8px; right: 8px; }
+      control-panel.floating[collapsed] { width: auto; } /* just the header — leaves the title room */
+      .control-bar { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 8px); gap: 4px; }
+      .control-bar .mk-clock { min-width: 0; }
+      .control-bar .mk-rate { min-width: 44px; }
+      .control-bar .btn { padding: 4px 8px; font-size: .72rem; }
+      /* keep the title clear of the floating mission panel */
+      .mk-title .mk-name { font-size: .85rem; }
+      .mk-title .mk-sub { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -475,6 +488,8 @@
     let camD = 1370 / 0.3;           // eye distance from the focus, in km
     let occluders = [];              // this frame's body discs, for path depth-hiding
     let updateEventButtons = () => {}; // bound once the ⏮/⏭ buttons are wired
+    // touch screens get finger-sized hit targets
+    const HIT = window.matchMedia("(pointer: coarse)").matches ? 2 : 1;
     function updateCamBasis() {
       const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
       const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
@@ -2075,7 +2090,7 @@
         const bs = bodyStateAt(SYSTEM, b.id, tNow);
         const sp = w2s(bs.x, bs.y, bs.z);
         if (sp.s <= 0) continue;
-        if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * sp.s, 10) + 4) return b.id;
+        if (Math.hypot(sx - sp.x, sy - sp.y) < Math.max(b.radius * sp.s, 10 * HIT) + 4) return b.id;
       }
       return null;
     }
@@ -2124,7 +2139,7 @@
         const { u1, u2 } = rangeFor(v);
         for (const { org, kind } of origins) {
           const n = nearestOnCurve(seg.orbit, u1, u2, org, sx, sy);
-          if (!n || n.d >= 12) continue;
+          if (!n || n.d >= 12 * HIT) continue;
           // a path point hidden behind a planet isn't clickable — otherwise a
           // maneuver could be placed "through" the planet in front of it
           const cp = conicPoint(seg.orbit, n.u);
@@ -2215,7 +2230,7 @@
         let bestH = null, bestD = Infinity;
         for (const h of hitHandles) {
           const d = Math.hypot(sx - h.x, sy - h.y);
-          if (d < 16 && (!bestH || h.depth > bestH.depth + 1e-9
+          if (d < 16 * HIT && (!bestH || h.depth > bestH.depth + 1e-9
             || (Math.abs(h.depth - bestH.depth) <= 1e-9 && d < bestD))) {
             bestH = h; bestD = d;
           }
@@ -2226,7 +2241,7 @@
         }
       }
       for (const n of hitNodes) {
-        if (Math.hypot(sx - n.x, sy - n.y) < 12) {
+        if (Math.hypot(sx - n.x, sy - n.y) < 12 * HIT) {
           const nd = nodes.find((x) => x.id === n.id);
           const info = traj.nodeInfo.get(n.id);
           selectedId = n.id;
@@ -2749,6 +2764,9 @@
     /* ============================ main loop ============================ */
     window.addEventListener("resize", resize);
     resize();
+    // phones: the mission panel starts collapsed so it doesn't bury the sky
+    if (window.matchMedia("(max-width: 640px)").matches)
+      document.querySelector("control-panel").setAttribute("collapsed", "");
 
     let lastWall = performance.now();
     function tick(now) {
