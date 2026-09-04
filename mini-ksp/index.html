@@ -596,13 +596,27 @@
       return { x: pc.x, y: pc.y, r: Math.hypot(pl.x - pc.x, pl.y - pc.y), s: pc.s };
     }
 
-    // is this screen point behind a body's disc? (s = the point's w2s scale)
-    function hiddenByBody(sx, sy, s) {
-      if (s <= 0) return true;
+    // is this WORLD point hidden behind a body? Exact ray-vs-sphere from the
+    // eye — a sphere's projected silhouette is an off-center ellipse, so any
+    // screen-circle approximation clips one side wrong. Screen circles from
+    // limbCircle() survive only as a broad-phase reject.
+    let eyeX = 0, eyeY = 0, eyeZ = 0; // this frame's camera position
+    function raySphereHides(wx, wy, wz, cx, cy, cz, R) {
+      const dx = wx - eyeX, dy = wy - eyeY, dz = wz - eyeZ;
+      const mx = cx - eyeX, my = cy - eyeY, mz = cz - eyeZ;
+      const dd = dx * dx + dy * dy + dz * dz;
+      if (dd < 1e-12) return false;
+      const dm = dx * mx + dy * my + dz * mz;
+      const Rr = R * 0.9995; // points ON the surface (Pe at ground) stay visible
+      const disc = dm * dm - dd * (mx * mx + my * my + mz * mz - Rr * Rr);
+      if (disc <= 0) return false;
+      const sq = Math.sqrt(disc);
+      const s1 = (dm - sq) / dd, s2 = (dm + sq) / dd;
+      return s1 < 1 && s2 > 0; // the sphere blocks the ray before the point
+    }
+    function hiddenByBody(wx, wy, wz) {
       for (const q of occluders) {
-        if (s >= q.s) continue; // at or in front of that disc
-        const dx = sx - q.sx, dy = sy - q.sy;
-        if (dx * dx + dy * dy < q.r2) return true;
+        if (raySphereHides(wx, wy, wz, q.cx, q.cy, q.cz, q.R)) return true;
       }
       return false;
     }
@@ -669,56 +683,90 @@
         return w2s(c.x + org.x, c.y + org.y, c.z + org.z);
       }, u1, u2, 24, W, H);
       const lo = -100, hiX = W + 100, hiY = H + 100;
+      // occlusion is EXACT: ray-vs-sphere in world space per sample (the
+      // projected silhouette is an off-center ellipse — screen circles clip
+      // one side wrong). Screen circles are only a broad-phase gate.
+      const hidAtU = (u) => {
+        const c = conicPoint(o, u);
+        return hiddenByBody(c.x + org.x, c.y + org.y, (c.z ?? 0) + org.z);
+      };
+      const nearOcc = (x, y) => {
+        for (const q of occluders) {
+          const dx = x - q.sx, dy = y - q.sy;
+          if (dx * dx + dy * dy < q.rb2) return true;
+        }
+        return false;
+      };
+      const hid = new Int8Array(pts.length).fill(-1); // -1 unknown
+      const hidAt = (i) => {
+        if (hid[i] < 0) hid[i] = occluders.length && nearOcc(pts[i].x, pts[i].y) && hidAtU(pts[i].u) ? 1 : 0;
+        return hid[i];
+      };
+      // limb crossing between a visible and a hidden param, by bisection
+      const crossU = (uVis, uHid) => {
+        for (let k = 0; k < 10; k++) {
+          const um = (uVis + uHid) / 2;
+          if (hidAtU(um)) uHid = um; else uVis = um;
+        }
+        return (uVis + uHid) / 2;
+      };
+      const proj = (u) => {
+        const c = conicPoint(o, u);
+        return w2s(c.x + org.x, c.y + org.y, (c.z ?? 0) + org.z);
+      };
       ctx.beginPath();
-      let len = 0, open = false;
+      let open = false;
       for (let i = 1; i < pts.length; i++) {
         const a = pts[i - 1], b = pts[i];
-        // length of the REAL chord, so dash phase stays continuous across
-        // patches even where off-screen spans are skipped
-        len += Math.hypot(b.x - a.x, b.y - a.y);
         const c = clipChord(a.x, a.y, b.x, b.y, lo, hiX, hiY);
         if (!c) { open = false; continue; }
-        // clip the chord against every disc it passes BEHIND, keeping the
-        // visible portions outside the silhouette (dropping whole chords cut
-        // gaps far past the disc edge on long, nearly-straight chords)
-        let pieces = [[c.x1, c.y1, c.x2, c.y2]];
-        if (occluders.length) {
-          for (const q of occluders) {
-            const next = [];
-            for (const p2 of pieces) {
-              const dcx = p2[2] - p2[0], dcy = p2[3] - p2[1];
-              const fcx = p2[0] - q.sx, fcy = p2[1] - q.sy;
-              const A = dcx * dcx + dcy * dcy;
-              const B = 2 * (fcx * dcx + fcy * dcy);
-              const C = fcx * fcx + fcy * fcy - q.r2;
-              const disc = B * B - 4 * A * C;
-              if (disc <= 0 || A === 0) { next.push(p2); continue; }
-              const sq = Math.sqrt(disc);
-              const t1 = (-B - sq) / (2 * A), t2 = (-B + sq) / (2 * A);
-              if (t2 <= 0 || t1 >= 1) { next.push(p2); continue; }
-              // behind the disc? (depth changes slowly along one chord)
-              const wp = conicPoint(o, (a.u + b.u) / 2);
-              const ps = w2s(wp.x + org.x, wp.y + org.y, wp.z + org.z);
-              if (!(ps.s > 0 && ps.s < q.s)) { next.push(p2); continue; }
-              if (t1 > 0) next.push([p2[0], p2[1], p2[0] + dcx * t1, p2[1] + dcy * t1]);
-              if (t2 < 1) next.push([p2[0] + dcx * t2, p2[1] + dcy * t2, p2[2], p2[3]]);
-            }
-            pieces = next;
-            if (!pieces.length) break;
+        // visible sub-intervals of [a.u, b.u]
+        let spans;
+        if (!occluders.length || (!nearOcc(a.x, a.y) && !nearOcc(b.x, b.y) && !chordNearOcc(c))) {
+          spans = [[null, null]]; // whole chord, use pre-clipped endpoints
+        } else {
+          const Ha = hidAt(i - 1), Hb = hidAt(i);
+          if (Ha && Hb) { open = false; continue; }
+          if (!Ha && !Hb) {
+            // both ends visible — the middle may still dip behind
+            const um = (a.u + b.u) / 2;
+            if (hidAtU(um)) spans = [[a.u, crossU(a.u, um)], [crossU(b.u, um), b.u]];
+            else spans = [[null, null]];
+          } else if (Ha) spans = [[crossU(b.u, a.u), b.u]];
+          else spans = [[a.u, crossU(a.u, b.u)]];
+        }
+        let lastX = null, lastY = null, drewToEnd = false;
+        for (const [us, ue] of spans) {
+          let x1, y1, x2, y2;
+          if (us === null) { x1 = c.x1; y1 = c.y1; x2 = c.x2; y2 = c.y2; }
+          else {
+            const p1 = us === a.u ? a : proj(us);
+            const p2 = ue === b.u ? b : proj(ue);
+            const cc = clipChord(p1.x, p1.y, p2.x, p2.y, lo, hiX, hiY);
+            if (!cc) continue;
+            x1 = cc.x1; y1 = cc.y1; x2 = cc.x2; y2 = cc.y2;
           }
+          const cont = open && lastX === null && !c.entered && Math.abs(x1 - c.x1) < 0.01 && Math.abs(y1 - c.y1) < 0.01;
+          const joined = lastX !== null && Math.abs(x1 - lastX) < 0.01 && Math.abs(y1 - lastY) < 0.01;
+          if (!cont && !joined) ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          lastX = x2; lastY = y2;
+          drewToEnd = Math.abs(x2 - c.x2) < 0.01 && Math.abs(y2 - c.y2) < 0.01;
         }
-        if (!pieces.length) { open = false; continue; }
-        let lastX = null, lastY = null;
-        for (const p2 of pieces) {
-          const cont = open && lastX === null && !c.entered && p2[0] === c.x1 && p2[1] === c.y1;
-          const joined = lastX !== null && Math.abs(p2[0] - lastX) < 0.01 && Math.abs(p2[1] - lastY) < 0.01;
-          if (!cont && !joined) ctx.moveTo(p2[0], p2[1]);
-          ctx.lineTo(p2[2], p2[3]);
-          lastX = p2[2]; lastY = p2[3];
-        }
-        open = Math.abs(lastX - c.x2) < 0.01 && Math.abs(lastY - c.y2) < 0.01;
+        open = lastX !== null && drewToEnd;
       }
-      return len; // so dashes can flow continuously from patch to patch
+    }
+    // does the (viewport-clipped) chord's bounding box touch any occluder's
+    // broad screen circle?
+    function chordNearOcc(c) {
+      const minX = Math.min(c.x1, c.x2), maxX = Math.max(c.x1, c.x2);
+      const minY = Math.min(c.y1, c.y2), maxY = Math.max(c.y1, c.y2);
+      for (const q of occluders) {
+        const rb = Math.sqrt(q.rb2);
+        if (maxX < q.sx - rb || minX > q.sx + rb || maxY < q.sy - rb || minY > q.sy + rb) continue;
+        return true;
+      }
+      return false;
     }
 
     function drawBody(bx, by, bz, radius, fill, rim) {
@@ -1401,7 +1449,8 @@
       // one dash clock for every animated pattern: wrap at the LCM of the
       // pattern periods (6+5=11 and 3+4=7 → 77) so no pattern ever hiccups
       const dashClock = (performance.now() / 1000 * 14) % 77;
-      let chainLen = 0; // pixels of path drawn so far — dashes flow across seams
+      // dash phase is purely pixel-based and zoom-invariant: every dashed
+      // stroke shares one clock, never the (zoom-dependent) drawn length
 
       // the sky: slide the wrapped star tile by camera angles only
       {
@@ -1428,6 +1477,7 @@
       // body discs first, far-to-near, and each registers as an occluder so
       // paths drawn after can hide only the chords that pass BEHIND a body
       occluders = [];
+      eyeX = fp.x + camF.x * camD; eyeY = fp.y + camF.y * camD; eyeZ = fp.z + camF.z * camD;
       {
         const byDepth = Object.values(SYSTEM.bodies)
           .map((b) => ({ b, bs: bodyStateAt(SYSTEM, b.id, tNow) }))
@@ -1448,7 +1498,10 @@
           if (s.s <= 0) continue;
           const lc = limbCircle(b, bs);
           if (lc && lc.r > 3 && lc.x + lc.r > -40 && lc.x - lc.r < W + 40 && lc.y + lc.r > -40 && lc.y - lc.r < H + 40) {
-            occluders.push({ sx: lc.x, sy: lc.y, r2: lc.r * lc.r, s: lc.s });
+            // world sphere for the exact test; generous screen circle as a
+            // broad-phase reject only
+            const rb = lc.r * 1.25 + 8;
+            occluders.push({ cx: bs.x, cy: bs.y, cz: bs.z, R: b.radius, sx: lc.x, sy: lc.y, rb2: rb * rb });
           }
         }
       }
@@ -1515,18 +1568,18 @@
         extMap.set(seg, org);
         prevSeg = seg; prevOrg = org;
         const { u1, u2 } = rangeFor(v);
-        const segLen = pathConic(seg.orbit, u1, u2, org);
+        pathConic(seg.orbit, u1, u2, org);
         if (v.mode === "ghost") {
           ctx.strokeStyle = color;
           ctx.globalAlpha = 0.35 * mapA;
           ctx.lineWidth = 1.2;
           ctx.setLineDash([3, 4]);
-          ctx.lineDashOffset = chainLen - dashClock;
+          ctx.lineDashOffset = -dashClock;
         } else {
           ctx.strokeStyle = color;
           ctx.globalAlpha = (dashed ? 0.85 : 0.9) * mapA;
           ctx.lineWidth = 1.5;
-          if (dashed) { ctx.setLineDash([6, 5]); ctx.lineDashOffset = chainLen - dashClock; }
+          if (dashed) { ctx.setLineDash([6, 5]); ctx.lineDashOffset = -dashClock; }
         }
         ctx.stroke();
         ctx.setLineDash([]);
@@ -1540,7 +1593,7 @@
           ctx.globalAlpha = (v.mode === "ghost" ? 0.18 : 0.3) * mapA;
           ctx.lineWidth = 1;
           ctx.setLineDash([3, 4]);
-          ctx.lineDashOffset = chainLen - dashClock;
+          ctx.lineDashOffset = -dashClock;
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.lineDashOffset = 0;
@@ -1560,7 +1613,6 @@
           }
         }
         ctx.globalAlpha = 1;
-        chainLen += segLen;
 
         // apsides + event markers, in the patch's own color: on the primary
         // copy, and dimmed on the live copy when there is one. Far events —
@@ -1571,7 +1623,7 @@
           for (const ap of seg.apsides) {
             const s = w2s(ap.x + o2.x, ap.y + o2.y, (ap.z ?? 0) + o2.z);
             if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
-            if (hiddenByBody(s.x, s.y, s.s)) continue;
+            if (hiddenByBody(ap.x + o2.x, ap.y + o2.y, (ap.z ?? 0) + o2.z)) continue;
             ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
             ctx.beginPath();
             ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x + 4, s.y); ctx.lineTo(s.x, s.y + 4); ctx.lineTo(s.x - 4, s.y);
@@ -1594,7 +1646,7 @@
               if (q.r <= 0) continue;
               const s = w2s(q.x + o2.x, q.y + o2.y, q.z + o2.z);
               if (s.x < -40 || s.x > W + 40 || s.y < -40 || s.y > H + 40) continue;
-              if (hiddenByBody(s.x, s.y, s.s)) continue;
+              if (hiddenByBody(q.x + o2.x, q.y + o2.y, q.z + o2.z)) continue;
               ctx.globalAlpha = dim * (v.mode === "ghost" ? 0.6 : 1);
               ctx.beginPath();
               if (kind === "AN") { ctx.moveTo(s.x, s.y - 4.5); ctx.lineTo(s.x + 4, s.y + 3); ctx.lineTo(s.x - 4, s.y + 3); }
@@ -1612,7 +1664,7 @@
             const eb = SYSTEM.bodies[seg.enterBody];
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
-            if (hiddenByBody(s.x, s.y, s.s)) return;
+            if (hiddenByBody(st.x + o2.x, st.y + o2.y, st.z + o2.z)) return;
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -1621,7 +1673,7 @@
           if (!farEvent && v.mode !== "ellipse" && (seg.endType === "soiExit" || seg.endType === "escape") && seg.tEnd > tNow) {
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
-            if (hiddenByBody(s.x, s.y, s.s)) return;
+            if (hiddenByBody(st.x + o2.x, st.y + o2.y, st.z + o2.z)) return;
             ctx.globalAlpha = dim;
             encounterChevrons(s, v2s(st.vx, st.vy), color);
             ctx.globalAlpha = 1;
@@ -1630,7 +1682,7 @@
           if (v.mode !== "ellipse" && seg.endType === "impact") {
             const st = posVelAt(seg.orbit, seg.tEnd);
             const s = w2s(st.x + o2.x, st.y + o2.y, st.z + o2.z);
-            if (hiddenByBody(s.x, s.y, s.s)) return;
+            if (hiddenByBody(st.x + o2.x, st.y + o2.y, st.z + o2.z)) return;
             ctx.globalAlpha = dim;
             ctx.strokeStyle = "#e0556b";
             ctx.lineWidth = 1.5;
@@ -1661,8 +1713,9 @@
         ctx.setLineDash([2, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
-        for (const s of [s1, s2]) {
-          if (hiddenByBody(s.x, s.y, s.s)) continue;
+        const w1 = [sp.x + org.x, sp.y + org.y, sp.z + org.z], wm = [mp.x, mp.y, mp.z];
+        for (const [s, w] of [[s1, w1], [s2, wm]]) {
+          if (hiddenByBody(w[0], w[1], w[2])) continue;
           ctx.beginPath();
           ctx.arc(s.x, s.y, 3.5, 0, TAU);
           ctx.strokeStyle = "#9aa3b2";
@@ -1670,7 +1723,7 @@
           ctx.stroke();
         }
         ctx.globalAlpha = 1;
-        if (!hiddenByBody((s1.x + s2.x) / 2, (s1.y + s2.y) / 2, (s1.s + s2.s) / 2))
+        if (!hiddenByBody((w1[0] + wm[0]) / 2, (w1[1] + wm[1]) / 2, (w1[2] + wm[2]) / 2))
           label(`closest ${fmtKm(b.d)}`, (s1.x + s2.x) / 2 + 8, (s1.y + s2.y) / 2, "#cdd6e8", "left", mapA);
       }
 
@@ -1696,7 +1749,11 @@
         const s = w2s(bs.x, bs.y, bs.z);
         if (s.s <= 0) continue;
         if (b.parent && b.orbitRadius * s.s < 20) continue;
-        if (hiddenByBody(s.x, s.y, s.s)) continue;
+        // occlusion-test the point of the body NEAREST the camera, so a body
+        // never hides its own label but one behind another stays hidden
+        const dEye = Math.hypot(bs.x - eyeX, bs.y - eyeY, bs.z - eyeZ) || 1;
+        const k = b.radius * 1.02 / dEye; // just above the near surface
+        if (hiddenByBody(bs.x + (eyeX - bs.x) * k, bs.y + (eyeY - bs.y) * k, bs.z + (eyeZ - bs.z) * k)) continue;
         label(b.name, s.x, s.y - Math.max(b.radius * s.s, 2) - 10,
           target === b.id ? "#8cc8ff" : "rgba(154,163,178,0.9)", "center");
       }
@@ -1848,12 +1905,34 @@
         const b = SYSTEM.bodies[hoverBody];
         const bs = bodyStateAt(SYSTEM, hoverBody, tNow);
         const s = w2s(bs.x, bs.y, bs.z);
-        // ring the body's true projected silhouette
+        // trace the body's true projected silhouette — sample the world limb
+        // circle and project each point (the projection is an off-center
+        // ellipse, so no screen circle matches both sides)
         const lc = limbCircle(b, bs);
         if (lc) {
           ctx.beginPath();
-          // floors at the same 5px a maneuver node's circle uses
-          ctx.arc(lc.x, lc.y, Math.max(lc.r + 4, 5), 0, TAU);
+          if (lc.r < 12) {
+            // tiny body: plain locator ring, floored like a node circle
+            ctx.arc(lc.x, lc.y, Math.max(lc.r + 4, 5), 0, TAU);
+          } else {
+            const Lx = bs.x - eyeX, Ly = bs.y - eyeY, Lz = bs.z - eyeZ;
+            const lm2 = Math.hypot(Lx, Ly, Lz);
+            const k = 1 - (b.radius / lm2) ** 2;
+            const ccx = eyeX + Lx * k, ccy = eyeY + Ly * k, ccz = eyeZ + Lz * k;
+            const rl = b.radius * Math.sqrt(k) * 1.01; // hair outside the limb
+            let ax2 = Ly * camU.z - Lz * camU.y, ay2 = Lz * camU.x - Lx * camU.z, az2 = Lx * camU.y - Ly * camU.x;
+            const am = Math.hypot(ax2, ay2, az2) || 1;
+            ax2 /= am; ay2 /= am; az2 /= am;
+            const bx2 = (Ly * az2 - Lz * ay2) / lm2, by2 = (Lz * ax2 - Lx * az2) / lm2, bz2 = (Lx * ay2 - Ly * ax2) / lm2;
+            for (let i = 0; i <= 48; i++) {
+              const th = i / 48 * TAU, co = Math.cos(th), si = Math.sin(th);
+              const p = w2s(
+                ccx + rl * (co * ax2 + si * bx2),
+                ccy + rl * (co * ay2 + si * by2),
+                ccz + rl * (co * az2 + si * bz2));
+              if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+            }
+          }
           ctx.strokeStyle = "rgba(230,235,245,0.75)";
           ctx.lineWidth = 1.5;
           ctx.stroke();
@@ -1993,8 +2072,7 @@
           // a path point hidden behind a planet isn't clickable — otherwise a
           // maneuver could be placed "through" the planet in front of it
           const cp = conicPoint(seg.orbit, n.u);
-          const ps = w2s(cp.x + org.x, cp.y + org.y, (cp.z ?? 0) + org.z);
-          if (hiddenByBody(ps.x, ps.y, ps.s)) continue;
+          if (hiddenByBody(cp.x + org.x, cp.y + org.y, (cp.z ?? 0) + org.z)) continue;
           // a curve covers one revolution; wrap to the segment's first pass —
           // floored at the SEGMENT start, not just the clock: a post-maneuver
           // ellipse must never resolve to a time before its burn exists
