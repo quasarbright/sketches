@@ -228,6 +228,9 @@
   </div>
 
   <div id="toast" class="mk-toast"></div>
+  <!-- body-level: inside .control-bar its translateX(-50%) transform would
+       hijack position:fixed and strand the tip off-screen -->
+  <div id="evTip" class="mk-evtip"></div>
 
   <div class="control-bar">
     <button class="btn" id="evPrev">⏮</button>
@@ -235,7 +238,6 @@
     <button class="btn" id="pause" title="pause / resume time (space)">⏸</button>
     <button class="btn" id="faster" title="speed up time">▶▶</button>
     <button class="btn" id="evNext">⏭</button>
-    <div id="evTip" class="mk-evtip"></div>
     <span class="mk-rate" id="rate" title="current time-warp rate — negative means rewinding">1×</span>
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
