@@ -800,12 +800,12 @@
       // North America (with Alaska + Central America)
       [[-168, 66], [-140, 70], [-125, 72], [-110, 72], [-90, 70], [-80, 73], [-70, 66], [-60, 60],
        [-65, 50], [-70, 44], [-75, 38], [-80, 32], [-81, 25], [-90, 29], [-97, 26], [-105, 20],
-       [-97, 16], [-92, 15], [-83, 10], [-78, 8], [-85, 12], [-95, 17], [-105, 23], [-112, 31],
+       [-97, 16], [-92, 14], [-83, 7], [-73, 3], [-80, 13], [-91, 19], [-105, 23], [-112, 31],
        [-120, 35], [-124, 42], [-128, 50], [-135, 58], [-152, 60], [-165, 60]],
       // Greenland
       [[-58, 76], [-30, 83], [-20, 80], [-25, 70], [-42, 60], [-52, 65]],
       // South America
-      [[-77, 8], [-70, 12], [-62, 10], [-52, 4], [-42, -3], [-35, -8], [-39, -15], [-48, -25],
+      [[-82, 12], [-70, 12], [-62, 10], [-52, 4], [-42, -3], [-35, -8], [-39, -15], [-48, -25],
        [-53, -34], [-58, -39], [-65, -41], [-71, -45], [-72, -52], [-69, -55], [-74, -50],
        [-75, -40], [-73, -30], [-70, -18], [-76, -14], [-81, -6], [-80, 0]],
       // Eurasia (Iberia → Scandinavia → Siberia → China → India → Arabia → Med)
@@ -909,6 +909,29 @@
       });
       faceColorCache.set(key, cols);
       return cols;
+    }
+
+    // disc-mode colors derived from the surface palette: the most common
+    // face color (Earth's ocean, Jupiter's dominant band) so the switch from
+    // dot to mesh doesn't read as a color pop
+    const discColorCache = new Map();
+    function discColors(b) {
+      let c = discColorCache.get(b.id);
+      if (c) return c;
+      const counts = new Map();
+      for (const cn of icosphere(2).cents) {
+        const latD = Math.asin(clampN(cn[2], -1, 1)) * 180 / Math.PI;
+        const lonD = Math.atan2(cn[1], cn[0]) * 180 / Math.PI;
+        const hex = surfaceColor(b.id, latD, lonD, b.fill ?? "#3a4152");
+        counts.set(hex, (counts.get(hex) ?? 0) + 1);
+      }
+      let best = b.fill ?? "#3a4152", bestN = 0;
+      for (const [hex, n] of counts) if (n > bestN) { best = hex; bestN = n; }
+      const [r, g, bl] = lpHex(best);
+      const lift = (v) => clampN(Math.round(v * 1.45), 0, 255);
+      c = { fill: best, rim: `rgb(${lift(r)},${lift(g)},${lift(bl)})` };
+      discColorCache.set(b.id, c);
+      return c;
     }
 
     function drawBodyMesh(b, bs, rPix) {
@@ -1162,7 +1185,8 @@
             bs.y - (fp.y + camF.y * camD),
             bs.z - (fp.z + camF.z * camD));
           if (onScreen && rPix >= 12 && b.id !== "sun" && eyeDist > b.radius * 1.05) drawBodyMesh(b, bs, rPix);
-          else drawBody(bs.x, bs.y, bs.z, b.radius, b.fill ?? "#3a4152", b.rim ?? "#7d8698");
+          else if (b.id === "sun") drawBody(bs.x, bs.y, bs.z, b.radius, b.fill, b.rim);
+          else { const dc = discColors(b); drawBody(bs.x, bs.y, bs.z, b.radius, dc.fill, dc.rim); }
           drawRings(b, bs, +1, rPix); // near half draws over the globe
           if (s.s <= 0) continue;
           if (rPix > 3 && s.x + rPix > -40 && s.x - rPix < W + 40 && s.y + rPix > -40 && s.y - rPix < H + 40) {
