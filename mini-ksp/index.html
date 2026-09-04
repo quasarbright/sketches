@@ -243,36 +243,41 @@
     <button class="btn" id="resetView" title="re-center on the ship at default zoom (r)">reset view</button>
     <about-modal label="about">
       <h2 class="title">welcome to shmorbit</h2>
-      <p>An orbital mechanics sandbox with no rocket — just a ship, the real solar system, and
+      <p>An orbital mechanics sandbox: a 40-meter rocket, the real solar system in 3D, and
         Kepler. Everything counterintuitive about orbits lives here: to catch up to something,
-        slow down; to go faster at the far side, burn at the near side. Sizes, masses, and orbits
-        are the real ones (flattened to a plane), so a Mars transfer really costs ~3.6 km/s and
-        really takes five months.</p>
+        slow down; to go faster at the far side, burn at the near side; to reach Pluto, first
+        tilt your whole orbital plane 17°. Sizes, masses, orbits, and inclinations are the real
+        ones, so a Mars transfer really costs ~3.6 km/s and really takes five months.</p>
       <div class="section-label">the model</div>
-      <p>Motion is one two-body problem at a time. Near Earth you're on a conic (ellipse or
-        hyperbola) around Earth; inside the Moon's <em>sphere of influence</em> — the region where
-        its gravity dominates — you're on a conic around the Moon, and past Earth's own sphere of
-        influence you're on an orbit around the Sun. The path is these conics patched together at
-        the boundaries. Each conic obeys vis-viva,
+      <p>Motion is one two-body problem at a time. You're always on a conic (ellipse or
+        hyperbola) around whichever body dominates: inside a moon's <em>sphere of influence</em> —
+        the region where its gravity outweighs its planet's — you orbit the moon; leave a planet's
+        sphere and you orbit the Sun. The path is these conics patched together at the boundaries.
+        Each conic obeys vis-viva,
         $v^2 = \mu\left(\frac{2}{r} - \frac{1}{a}\right)$, and is solved in closed form: no
-        simulation steps, just Kepler's equation. Maneuvers are instant velocity changes that fire
-        automatically at their planned time.</p>
+        simulation steps, just Kepler's equation. Maneuvers are instant velocity changes —
+        prograde, radial, or out-of-plane — that fire automatically at their planned time.</p>
       <div class="section-label">why time travel is free</div>
       <p>Because everything is closed-form, your position is a pure function of the clock and the
         mission plan. Warp, rewind, and jump don't fast-forward a simulation — they just move the
         clock. Rewinding to before a maneuver un-executes it, and the future re-forms the moment
         you edit the plan.</p>
       <p>The one thing that must be hunted for rather than solved for is where your path first dips
-        into the Moon's sphere of influence, so the future is only surveyed a few weeks ahead. A long
+        into a body's sphere of influence, so the future is only surveyed a few weeks ahead. A long
         warp surveys as it goes — and if it turns up an encounter your map didn't show, the warp
         stops just before it.</p>
       <div class="section-label">flying</div>
       <ul>
-        <li>Click your trajectory to place a maneuver or warp to that point; maneuvers snap to Ap/Pe.</li>
+        <li>Click your trajectory to place a maneuver or warp to that point; maneuvers snap to
+            Ap/Pe and, with a target set, to the AN/DN plane-crossing nodes.</li>
         <li>Drag the <span style="color:var(--pro)">yellow</span> handles for prograde/retrograde,
-            <span style="color:var(--rad)">cyan</span> for radial. Hold shift while dragging for fine control.</li>
-        <li>Select the Moon as target to see your closest approach; raise your orbit until the paths kiss.</li>
-        <li>Scroll to zoom, drag to pan; the camera stays on the ship.</li>
+            <span style="color:var(--rad)">cyan</span> for radial,
+            <span style="color:var(--nrm)">purple</span> for out-of-plane. Hold shift for fine control.</li>
+        <li>Click any body to make it the target or the camera focus; the target panel shows your
+            closest approach and relative inclination.</li>
+        <li>⏮ and ⏭ skip straight between events — maneuvers, encounters, escapes, impacts.</li>
+        <li>Scroll to zoom, drag to orbit the camera. Zoom all the way in and the map fades away,
+            leaving just your ship pointed the way it last burned.</li>
       </ul>
     </about-modal>
   </div>
