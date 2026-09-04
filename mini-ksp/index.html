@@ -470,7 +470,11 @@
     let userZoomed = false; // until the user zooms, resizes keep re-deriving the default
 
     function resize() {
-      dpr = window.devicePixelRatio || 1;
+      // fold page zoom into the backing density: iOS restores a site's old
+      // pinch-zoom scale across visits, which otherwise leaves every canvas
+      // pixel fractional (blurry) until the user pinches back to 1
+      const vvScale = window.visualViewport?.scale || 1;
+      dpr = Math.min((window.devicePixelRatio || 1) * vvScale, 4);
       W = window.innerWidth; H = window.innerHeight;
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
       cv.style.width = W + "px"; cv.style.height = H + "px";
