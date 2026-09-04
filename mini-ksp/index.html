@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- fixed scale: page pinch-zoom on iOS leaves everything CSS-scaled and
+       renders the whole canvas blurry; the app has its own pinch zoom -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Welcome to Shmorbit</title>
   <meta property="og:title" content="Welcome to Shmorbit" />
   <meta property="og:description" content="Fly a rocket around the real solar system on true Keplerian orbits — plan maneuvers, chase encounters, warp and rewind time freely." />
@@ -120,12 +122,17 @@
     /* phones: compact the chrome so the sky stays visible (kept LAST so it
        wins the source-order tie against the base rules above) */
     @media (max-width: 640px) {
-      control-panel.floating { width: min(248px, calc(100vw - 16px)); max-height: calc(100vh - 150px); top: 8px; right: 8px; }
+      control-panel.floating.floating {
+        width: min(248px, calc(100vw - 16px)); top: 8px; right: 8px;
+        max-height: calc(100vh - 290px); max-height: calc(100dvh - 290px);
+        z-index: 30; /* above the control bar (z 5), never under it — the
+                        double .floating out-specifies cohesion's rule */
+      }
       control-panel.floating[collapsed] { width: auto; } /* just the header — leaves the title room */
-      .control-bar { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 8px); gap: 4px; }
+      .control-bar { flex-wrap: wrap; justify-content: center; width: calc(100vw - 8px); gap: 5px; }
       .control-bar .mk-clock { min-width: 0; }
       .control-bar .mk-rate { min-width: 44px; }
-      .control-bar .btn { padding: 4px 8px; font-size: .72rem; }
+      .control-bar .btn { padding: 8px 10px; font-size: .85rem; min-height: 42px; min-width: 46px; }
       /* keep the title clear of the floating mission panel */
       .mk-title .mk-name { font-size: .85rem; }
       .mk-title .mk-sub { display: none; }
@@ -256,11 +263,11 @@
   <div id="evTip" class="mk-evtip"></div>
 
   <div class="control-bar">
-    <button class="btn" id="evPrev">⏮</button>
+    <button class="btn" id="evPrev">⏮&#xFE0E;</button>
     <button class="btn" id="slower" title="slow down time — keeps going into reverse (rewind)">◀◀</button>
-    <button class="btn" id="pause" title="pause / resume time (space)">⏸</button>
+    <button class="btn" id="pause" title="pause / resume time (space)">⏸&#xFE0E;</button>
     <button class="btn" id="faster" title="speed up time">▶▶</button>
-    <button class="btn" id="evNext">⏭</button>
+    <button class="btn" id="evNext">⏭&#xFE0E;</button>
     <span class="mk-break"></span>
     <span class="mk-rate" id="rate" title="current time-warp rate — negative means rewinding">1×</span>
     <span class="mk-clock" id="clock" title="mission clock — time since the start">T+ 0d 00:00:00</span>
@@ -2397,7 +2404,7 @@
       const r = RATES[rateIdx];
       const compact = r >= 1e9 ? r / 1e9 + "B" : r >= 1e6 ? r / 1e6 + "M" : r >= 1e3 ? r / 1e3 + "k" : String(r);
       $("rate").textContent = (rateDir < 0 ? "−" : "") + compact + "×";
-      $("pause").textContent = paused ? "▶" : "⏸";
+      $("pause").textContent = paused ? "▶︎" : "⏸︎"; // text glyphs, not emoji (iOS)
     }
 
     function slower() {
@@ -2771,6 +2778,8 @@
 
     /* ============================ main loop ============================ */
     window.addEventListener("resize", resize);
+    // iOS: re-rasterize if the visual viewport (zoom, URL bar) ever changes
+    window.visualViewport?.addEventListener("resize", resize);
     resize();
     // phones: the mission panel starts collapsed so it doesn't bury the sky
     if (window.matchMedia("(max-width: 640px)").matches)
