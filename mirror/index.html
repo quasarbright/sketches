@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mirror</title>
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;112,700&family=Hanken+Grotesk:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      /* cool graphite — glass, not void */
+      --bg:        #131619;
+      --panel:     #1c2026;
+      --panel-2:   #262b33;
+      --border:    #333a44;
+      --text:      #e8ecf0;
+      --muted:     #8d97a3;
+      --faint:     #5c6672;
+      /* mercury — the silver behind a mirror */
+      --accent:    #a8bdd0;
+      --accent-hi: #cfe0ee;
+      --on-accent: #131619;
+
+      --font-ui:      "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+      --font-mono:    "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+      --font-display: "Archivo", var(--font-ui);
+
+      /* held back for exactly one thing */
+      --tally: #ff3b30;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+
+    /* cohesion.css's `button.btn` (0,1,1) outspecifies `.btn-primary` (0,1,0),
+     * so a <button class="btn btn-primary"> loses its accent fill. Restore it here. */
+    button.btn.btn-primary { background: var(--accent); color: var(--on-accent); }
+    button.btn.btn-primary:hover { background: var(--accent-hi); }
+
+    /* the mirror itself: cover-fit is what object-fit:cover does natively,
+     * so the camera's native rect gets cropped to the viewport rather than letterboxed. */
+    #cam {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+    #cam.flipped { transform: scaleX(-1); }
+
+    /* ---- tally block (signature): lamp + live readings, top-left ---- */
+    .tally {
+      position: fixed; top: 14px; left: 16px; z-index: 5;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.7);
+    }
+    .tally-head { display: flex; align-items: center; gap: 8px; }
+    .tally-lamp {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #3a3f46;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.6);
+      transition: background .18s, box-shadow .18s;
+    }
+    .tally.is-live .tally-lamp {
+      background: var(--tally);
+      box-shadow: 0 0 10px rgba(255,59,48,.75), inset 0 0 0 1px rgba(0,0,0,.4);
+    }
+    .tally-word {
+      font-family: var(--font-display);
+      font-weight: 700; font-size: .72rem;
+      letter-spacing: .22em; text-transform: uppercase;
+      color: var(--faint);
+      transition: color .18s;
+    }
+    .tally.is-live .tally-word { color: var(--text); }
+    .tally-lines {
+      margin: 6px 0 0 18px;
+      font-family: var(--font-mono); font-size: .78rem; line-height: 1.55;
+      color: var(--muted); white-space: pre;
+    }
+
+    /* ---- status / permission states ---- */
+    #status {
+      position: fixed; inset: 0; z-index: 6;
+      display: flex; align-items: center; justify-content: center;
+      padding: 2rem; text-align: center;
+    }
+    #status .box { max-width: 42ch; }
+    #status h1 {
+      font-family: var(--font-display);
+      font-weight: 700; font-size: clamp(2.2rem, 9vw, 4rem);
+      letter-spacing: .06em; text-transform: uppercase;
+      margin: 0 0 .35em;
+    }
+    #status p { color: var(--muted); margin: 0 0 1.25rem; }
+    #status .why { font-size: .85rem; color: var(--faint); }
+
+    /* ---- flash on snapshot ---- */
+    #flash {
+      position: fixed; inset: 0; z-index: 7;
+      background: #fff; opacity: 0; pointer-events: none;
+    }
+    #flash.fire { animation: flash .32s ease-out; }
+    @keyframes flash { from { opacity: .85 } to { opacity: 0 } }
+    @media (prefers-reduced-motion: reduce) {
+      #flash.fire { animation: none; }
+      .tally-lamp, .tally-word { transition: none; }
+    }
+
+  </style>
+</head>
+<body>
+  <video id="cam" class="flipped" autoplay muted playsinline style="display:none"></video>
+  <div id="flash"></div>
+
+  <div class="tally" id="tally" style="display:none">
+    <div class="tally-head">
+      <span class="tally-lamp"></span>
+      <span class="tally-word" id="tallyWord">off air</span>
+    </div>
+    <div class="tally-lines" id="tallyLines"></div>
+  </div>
+
+  <div id="status">
+    <div class="box">
+      <h1>Mirror</h1>
+      <p id="statusMsg">Asking for your camera.</p>
+      <button class="btn btn-primary" id="statusBtn" style="display:none"></button>
+      <p class="why">The video stays in this tab. Nothing is recorded or uploaded.</p>
+    </div>
+  </div>
+
+  <control-panel floating title="Camera" id="panel" style="display:none">
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="Which camera to show, if you have more than one">camera</span>
+      </div>
+      <select id="device" title="Which camera to show, if you have more than one"></select>
+    </div>
+    <label class="check" title="Flip the picture left-to-right so it behaves like a real mirror">
+      <input type="checkbox" id="mirror" checked />
+      mirror the picture
+    </label>
+  </control-panel>
+
+  <div class="control-bar" id="bar" style="display:none">
+    <button class="btn" id="snap" title="Save what you see right now as a PNG">snapshot</button>
+    <button class="btn" id="full" title="Fill the whole screen">fullscreen</button>
+    <about-modal label="about">
+      <h2 class="title">Mirror</h2>
+      <p>Your camera, cropped to fill the window and flipped left-to-right so it behaves the way a
+      mirror does. Nothing is done to the picture.</p>
+
+      <div class="section-label">the red lamp</div>
+      <p>A <em>tally light</em> is the lamp on a broadcast camera that tells the person in front of it
+      the camera is live. The one in the corner here works the same way: it's lit while frames are
+      actually arriving from your camera, and it goes dark the moment they stop — camera unplugged,
+      another app grabbing it, a browser tab throttled in the background. The numbers under it are
+      the real ones the camera reports: the size of the picture it's sending, how many frames per
+      second are arriving, and the device's own name for itself.</p>
+
+      <div class="section-label">where the video goes</div>
+      <p>Nowhere. The stream is read straight into this page and drawn on screen. There's no server
+      involved, no recording, and snapshots are saved by your browser to your own downloads.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { isBackground } from "../shared/cohesion.js";
+
+    const $ = (id) => document.getElementById(id);
+    const video = $("cam");
+    const tally = $("tally");
+
+    let stream = null;
+    let currentDeviceId = null;
+    let lastFrameAt = 0;
+    let fps = 0;
+
+    /* ---- status ---- */
+    function showStatus(msg, btnLabel, onBtn) {
+      $("statusMsg").textContent = msg;
+      const btn = $("statusBtn");
+      if (btnLabel) {
+        btn.textContent = btnLabel;
+        btn.style.display = "";
+        btn.onclick = onBtn;
+      } else {
+        btn.style.display = "none";
+      }
+      $("status").style.display = "flex";
+      video.style.display = "none";
+      tally.style.display = "none";
+      $("bar").style.display = "none";
+      // <control-panel> removes itself from the DOM under ?background
+      if ($("panel")) $("panel").style.display = "none";
+    }
+
+    function showMirror() {
+      $("status").style.display = "none";
+      video.style.display = "";
+      tally.style.display = "";
+      if (!isBackground()) {
+        $("bar").style.display = "";
+        $("panel").style.display = "";
+      }
+    }
+
+    /* ---- camera ---- */
+    async function start(deviceId) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        showStatus("This browser can't open a camera from a web page.");
+        return;
+      }
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+
+      const constraints = {
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" },
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err) {
+        if (err.name === "NotAllowedError") {
+          showStatus(
+            "Camera access is blocked. Allow the camera for this page in your browser's site settings, then try again.",
+            "try again", () => start(deviceId));
+        } else if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
+          showStatus("No camera found. Plug one in, then try again.", "try again", () => start(null));
+        } else if (err.name === "NotReadableError") {
+          showStatus("Another app is using the camera. Close it, then try again.",
+            "try again", () => start(deviceId));
+        } else {
+          showStatus(`The camera didn't open: ${err.message}`, "try again", () => start(deviceId));
+        }
+        return;
+      }
+
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+      currentDeviceId = stream.getVideoTracks()[0]?.getSettings().deviceId || deviceId || null;
+
+      showMirror();
+      listDevices();
+      watchFrames();
+    }
+
+    /* Device labels are empty until permission is granted, so this runs after start(). */
+    async function listDevices() {
+      if (isBackground()) return;
+      const sel = $("device");
+      if (!sel) return;
+      let devices = [];
+      try {
+        devices = (await navigator.mediaDevices.enumerateDevices())
+          .filter((d) => d.kind === "videoinput");
+      } catch { return; }
+
+      sel.innerHTML = "";
+      devices.forEach((d, i) => {
+        const opt = document.createElement("option");
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Camera ${i + 1}`;
+        sel.appendChild(opt);
+      });
+      if (currentDeviceId) sel.value = currentDeviceId;
+      // one camera is not a choice
+      sel.closest(".control").style.display = devices.length > 1 ? "" : "none";
+    }
+
+    /* ---- tally: lit while frames are actually arriving ---- */
+    function watchFrames() {
+      const times = [];
+      const onFrame = (now) => {
+        lastFrameAt = now;
+        times.push(now);
+        while (times.length > 1 && now - times[0] > 1000) times.shift();
+        if (times.length > 1) {
+          fps = (times.length - 1) / ((now - times[0]) / 1000);
+        }
+        if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(onFrame);
+      };
+
+      if (video.requestVideoFrameCallback) {
+        video.requestVideoFrameCallback(onFrame);
+      } else {
+        // Firefox: no per-frame callback, so estimate from currentTime advancing.
+        let lastTime = -1;
+        setInterval(() => {
+          if (video.currentTime !== lastTime) {
+            lastTime = video.currentTime;
+            onFrame(performance.now());
+          }
+        }, 1000 / 60);
+      }
+
+      const tick = () => {
+        const live = performance.now() - lastFrameAt < 500 && !video.paused;
+        tally.classList.toggle("is-live", live);
+        $("tallyWord").textContent = live ? "live" : "no signal";
+
+        const track = stream?.getVideoTracks()[0];
+        const w = video.videoWidth, h = video.videoHeight;
+        $("tallyLines").textContent = [
+          w && h ? `${w} × ${h}` : "—",
+          live ? `${fps.toFixed(0)} fps` : "0 fps",
+          track?.label || "camera",
+        ].join("\n");
+
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+
+    /* ---- snapshot: same crop and flip you're looking at ---- */
+    function snapshot() {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) return;
+
+      // match the box actually on screen, not innerWidth/innerHeight — those
+      // diverge from the laid-out viewport on mobile Safari
+      const rect = video.getBoundingClientRect();
+      const targetAR = rect.width / rect.height;
+      const camAR = vw / vh;
+      let sx = 0, sy = 0, sw = vw, sh = vh;
+      if (camAR > targetAR) { sw = vh * targetAR; sx = (vw - sw) / 2; }
+      else { sh = vw / targetAR; sy = (vh - sh) / 2; }
+
+      const c = document.createElement("canvas");
+      c.width = Math.round(sw); c.height = Math.round(sh);
+      const ctx = c.getContext("2d");
+      if (video.classList.contains("flipped")) {
+        ctx.translate(c.width, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+
+      c.toBlob((blob) => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `mirror-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      }, "image/png");
+
+      const flash = $("flash");
+      flash.classList.remove("fire");
+      void flash.offsetWidth;
+      flash.classList.add("fire");
+    }
+
+    /* ---- controls (absent under ?background) ---- */
+    if (!isBackground()) {
+      $("mirror").addEventListener("change", (e) => {
+        video.classList.toggle("flipped", e.target.checked);
+      });
+      $("device").addEventListener("change", (e) => start(e.target.value));
+      $("snap").addEventListener("click", snapshot);
+      $("full").addEventListener("click", () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen?.();
+      });
+      document.addEventListener("fullscreenchange", () => {
+        $("full").textContent = document.fullscreenElement ? "exit fullscreen" : "fullscreen";
+      });
+      navigator.mediaDevices?.addEventListener?.("devicechange", listDevices);
+    }
+
+    start(null);
+  </script>
+</body>
+</html>
