@@ -228,18 +228,26 @@
       <p>The route can't cross itself, and a drawing can be any shape, so the route can't just
         follow your strokes. Instead it's built in three steps:</p>
       <ol>
-        <li>Chop the grid into 2×2 blocks and keep every block your drawing touches, plus the fewest
-          extra blocks needed to connect separate marks to each other and to the edge.</li>
-        <li>Link the kept blocks with a random tree: the same no-loops idea, between blocks
-          instead of cells.</li>
-        <li>Walk around the outside of that tree, keeping it on one side, like tracing around your
-          hand with a pencil. The walk passes through all four cells of every block, once each.</li>
+        <li>Chop the grid into 2×2 blocks and mark every block your drawing touches.</li>
+        <li>Plan a route through the blocks, from the left wall to the right wall, never visiting a
+          block twice. It heads for the nearest mark, takes the longest run it can find through it,
+          then heads for the next, with short wandering corridors in between.</li>
+        <li>Walk the route cell by cell, zigzagging through all four cells of each block. Whichever
+          side the route comes into a block from and leaves by, there's always a way to visit all
+          four cells and leave on the right side. Now every drawn cell is on the path.</li>
+        <li>Shuffle the path's shape. A zigzag that regular would stand out in the finished maze,
+          so the path gets thousands of small edits, each of which keeps both ends where they are
+          and never drops a drawn cell: where the path passes the same way along two neighboring
+          cells, reconnect them crosswise and walk the stretch between backwards; push a step out
+          sideways into two free cells beside the drawing; or pull such a bump back in.</li>
       </ol>
       <canvas class="dm-viz" data-viz="cover"></canvas>
       <p class="dm-viz-caption" id="coverCaption">&nbsp;</p>
-      <p>A thick scribble becomes a route that snakes back and forth through it. A thin line becomes
-        a route that goes out along it and comes back beside itself. The walk ends next to where it
-        started, which is why the entrance and exit sit side by side.</p>
+      <p>The path doesn't trace your strokes in order; it just passes through every cell you drew
+        on, plus a few beside them, and winds like any other corridor, so you can't spot it before
+        you solve it. Where a letter forks, like the crossbar of an A, the route in step 2 can't take
+        both branches, so the leftover branch gets its own visit if a short corridor reaches it, and
+        the shuffle picks up any drawn cells that are still missing right next to the path.</p>
 
       <div class="section-label">sharing</div>
       <p>A link carries only the grid size, a random seed and your strokes. Opening it runs all of
@@ -395,19 +403,62 @@
     function straightPath() {
       const rng = mulberry32(seed);
       const a = Math.floor(rng() * H) * W, b = Math.floor(rng() * H) * W + W - 1;
-      const path = [a];
-      let c = a;
-      while (c % W < W - 1) path.push(++c);
-      while (c !== b) path.push(c += c < b ? W : -W);
+      const { from } = routeField([b], new Uint8Array(W * H), cellWeights());
+      const path = [];
+      for (let c = a; c >= 0; c = from[c]) path.push(c);
       return { path, flag: path.map(() => 0) };
     }
 
-    // The solution path through the drawing, built the way a robot mower plans to cover a lawn:
-    // chop the grid into 2×2 blocks, keep every block with any drawing in it, join those blocks with
-    // a random spanning tree, and walk around the outside of that tree. The walk passes through every
-    // cell of every kept block exactly once, so a scribbled area becomes one snake that fills it and a
-    // thin line becomes a two-wide out-and-back. Separate marks are joined by the shortest bridge of
-    // blocks, and one more bridge runs to the edge, where the loop is cut open into entrance and exit.
+    // a random cost for stepping into each cell, so the cheapest routes between two places wander
+    // instead of running dead straight
+    function cellWeights() {
+      const rng = mulberry32(seed ^ 0x51ed27);
+      return Float64Array.from({ length: W * H }, () => 1 + 2 * rng());
+    }
+
+    // cheapest-route costs from a set of source cells, through cells that aren't blocked. from[c] is
+    // the next cell back toward the nearest source (-1 at a source), so following it walks there.
+    // Works on any grid given its neighbor function (cells by default, or the 2×2 blocks).
+    function routeField(sources, blocked, weight, next = nbrs) {
+      const N = blocked.length, dist = new Float64Array(N).fill(Infinity), from = new Int32Array(N).fill(-1);
+      const hk = [], hv = []; // binary min-heap: keys, values
+      const push = (v, k) => {
+        let i = hk.length; hk.push(k); hv.push(v);
+        while (i > 0) { const p = (i - 1) >> 1; if (hk[p] <= k) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; }
+        hk[i] = k; hv[i] = v;
+      };
+      const pop = () => {
+        const top = hv[0], lk = hk.pop(), lv = hv.pop(), n = hk.length;
+        if (n) {
+          let i = 0;
+          for (;;) {
+            let c = 2 * i + 1; if (c >= n) break;
+            if (c + 1 < n && hk[c + 1] < hk[c]) c++;
+            if (hk[c] >= lk) break;
+            hk[i] = hk[c]; hv[i] = hv[c]; i = c;
+          }
+          hk[i] = lk; hv[i] = lv;
+        }
+        return top;
+      };
+      for (const s of sources) if (!blocked[s]) { dist[s] = weight[s]; push(s, dist[s]); }
+      while (hk.length) {
+        const k = hk[0], c = pop();
+        if (k > dist[c]) continue;
+        for (const j of next(c)) {
+          if (blocked[j]) continue;
+          const d = dist[c] + weight[j];
+          if (d < dist[j]) { dist[j] = d; from[j] = c; push(j, d); }
+        }
+      }
+      return { dist, from };
+    }
+
+    // The solution path through the drawing. The grid is chopped into 2×2 blocks, and the path is
+    // first planned as a route through blocks: from a block on the left wall, through the drawn
+    // blocks (the longest run it can find through each separate mark, nearest mark next), to a
+    // block on the right wall, never visiting a block twice. Then it zigzags through all four cells
+    // of each block on that route, so a mark comes out as one thick line walked once, not a loop.
     function coverPath(drawn) {
       const rng = mulberry32(seed);
       const BW = W >> 1, BH = H >> 1, NB = BW * BH;
@@ -420,93 +471,185 @@
         if (y < BH - 1) out.push(b + BW);
         return out;
       };
-      // which outer wall a block touches, in the same priority order outward() uses
-      const side = (b) => {
-        const x = b % BW, y = (b / BW) | 0;
-        return x === 0 ? "L" : 2 * x + 2 === W ? "R" : y === 0 ? "T" : 2 * y + 2 === H ? "B" : null;
-      };
 
       const inked = new Uint8Array(NB); // blocks with drawing in them
       for (let b = 0; b < NB; b++) {
         const c = cellOf(b);
         inked[b] = drawn[c] | drawn[c + 1] | drawn[c + W] | drawn[c + W + 1];
       }
-      const kept = inked.slice();       // plus the bridge blocks
-      const inTree = new Uint8Array(NB);
-      const from = new Int32Array(NB);
+      const used = new Uint8Array(NB), skip = new Uint8Array(NB);
+      const bweight = Float64Array.from({ length: NB }, () => 1 + 2 * rng());
+      const atLeft = (b) => b % BW === 0, atRight = (b) => b % BW === BW - 1;
+      const open = (b) => inked[b] && !used[b] && !skip[b]; // drawn blocks not visited or given up on
+      const route = [];  // the blocks, in order
+      let cur = -1;      // the last block on the route (-1: not started, so start from the left wall)
+      const sources = () => cur >= 0 ? [cur] : [...Array(BH)].map((_, y) => y * BW);
 
-      // grow one connected set: flood the first marked region, then keep bridging to the nearest other one
-      const flood = (start) => {
-        const stack = [start]; inTree[start] = 1;
-        while (stack.length) for (const j of bnbrs(stack.pop())) if (kept[j] && !inTree[j]) { inTree[j] = 1; stack.push(j); }
-      };
-      const bfsFromTree = (goal) => {
-        const seen = inTree.slice(), queue = [];
-        for (let b = 0; b < NB; b++) if (inTree[b]) queue.push(b);
-        for (let qi = 0; qi < queue.length; qi++) for (const j of bnbrs(queue[qi])) {
-          if (seen[j]) continue;
-          seen[j] = 1; from[j] = queue[qi];
-          if (goal(j)) return j;
-          queue.push(j);
+      // cheapest block route from where we are to the first block where isTarget holds, through
+      // blocks that are neither on the route nor drawn (it can end on a drawn block, not cross one).
+      // Includes the starting block.
+      function routeTo(isTarget) {
+        const blocked = new Uint8Array(NB);
+        for (let b = 0; b < NB; b++) blocked[b] = used[b] || (inked[b] && !isTarget(b)) ? 1 : 0;
+        if (cur >= 0) blocked[cur] = 0;
+        const { dist, from } = routeField(sources(), blocked, bweight, bnbrs);
+        let t = -1;
+        for (let b = 0; b < NB; b++) if (b !== cur && isTarget(b) && dist[b] < Infinity && (t < 0 || dist[b] < dist[t])) t = b;
+        if (t < 0) return null;
+        const out = [];
+        for (let b = t; b >= 0; b = from[b]) out.push(b);
+        return out.reverse();
+      }
+      // the drawn blocks connected to b that are still open: one separate mark, or what's left of it
+      function mark(b) {
+        const seen = new Uint8Array(NB), out = [b];
+        seen[b] = 1;
+        for (let i = 0; i < out.length; i++) for (const j of bnbrs(out[i])) if (!seen[j] && open(j)) { seen[j] = 1; out.push(j); }
+        return out;
+      }
+      // the longest run through a mark's blocks that never visits one twice: a depth-first search,
+      // trying the neighbor with the fewest onward options first, with a budget on how long it looks
+      function longestRun(blocks, starts) {
+        const inMark = new Uint8Array(NB), on = new Uint8Array(NB), run = [];
+        for (const b of blocks) inMark[b] = 1;
+        const free = (j) => inMark[j] && !on[j];
+        let best = [], budget = 4000 + 40 * blocks.length;
+        const dfs = (b) => {
+          on[b] = 1; run.push(b);
+          if (run.length > best.length) best = run.slice();
+          if (best.length === blocks.length) budget = 0;
+          const next = bnbrs(b).filter(free).map((j) => [j, bnbrs(j).filter(free).length, rng()])
+            .sort((p, q) => p[1] - q[1] || p[2] - q[2]);
+          for (const [j] of next) { if (--budget <= 0) break; if (free(j)) dfs(j); }
+          on[b] = 0; run.pop();
+        };
+        for (const s of starts) { if (budget <= 0) break; dfs(s); }
+        return best;
+      }
+      // can the route still get out to the right wall from its current end?
+      function canFinish() {
+        if (cur >= 0 && atRight(cur)) return true;
+        const seen = used.slice(), stack = sources().filter((b) => b === cur || !used[b]);
+        while (stack.length) {
+          const b = stack.pop();
+          if (atRight(b) && !used[b]) return true;
+          for (const j of bnbrs(b)) if (!seen[j]) { seen[j] = 1; stack.push(j); }
         }
-        return -1;
-      };
-      const bridgeTo = (end) => { for (let b = end; !inTree[b]; b = from[b]) { kept[b] = 1; inTree[b] = 1; } };
-      let first = -1;
-      for (let b = 0; b < NB && first < 0; b++) if (inked[b]) first = b;
-      if (first < 0) return straightPath(); // drawing only in the odd last row/column
-      flood(first);
-      for (let t; (t = bfsFromTree((j) => kept[j] && !inTree[j])) >= 0;) { bridgeTo(from[t]); flood(t); }
-
-      // the root block sits on the outer wall; the loop gets cut open there
-      let root = -1;
-      for (let b = 0; b < NB; b++) if (inTree[b] && side(b) && (root < 0 || side(b) === "L")) root = b;
-      if (root < 0) { root = bfsFromTree((j) => side(j) !== null); bridgeTo(root); }
-
-      // random spanning tree over the kept blocks: depth-first, usually carrying straight on,
-      // which fills an area with long parallel runs instead of a tangle
-      const treeEdges = [];
-      const seen = new Uint8Array(NB), dirOf = new Int32Array(NB);
-      const stack = [root]; seen[root] = 1;
-      while (stack.length) {
-        const b = stack[stack.length - 1];
-        const opts = bnbrs(b).filter((j) => kept[j] && !seen[j]);
-        if (!opts.length) { stack.pop(); continue; }
-        const straight = opts.find((j) => j - b === dirOf[b]);
-        const j = straight !== undefined && rng() < 0.7 ? straight : opts[Math.floor(rng() * opts.length)];
-        seen[j] = 1; dirOf[j] = j - b; treeEdges.push([b, j]); stack.push(j);
+        return false;
       }
+      const extend = (bs) => { for (const b of bs) { used[b] = 1; route.push(b); } cur = route[route.length - 1]; };
 
-      // every cell of a kept block gets exactly two links: around its own block, except where a tree
-      // edge crosses to a neighbor block, in which case the links jump across instead
-      const N = W * H, adj = new Int32Array(2 * N).fill(-1);
-      const link = (a, b) => { adj[2 * a + (adj[2 * a] < 0 ? 0 : 1)] = b; adj[2 * b + (adj[2 * b] < 0 ? 0 : 1)] = a; };
-      const unlinkOne = (a, b) => { if (adj[2 * a] === b) adj[2 * a] = adj[2 * a + 1]; adj[2 * a + 1] = -1; };
-      const unlink = (a, b) => { unlinkOne(a, b); unlinkOne(b, a); };
-      for (let b = 0; b < NB; b++) if (kept[b]) {
-        const tl = cellOf(b), tr = tl + 1, bl = tl + W, br = tl + W + 1;
-        link(tl, tr); link(tr, br); link(br, bl); link(bl, tl);
+      for (;;) {
+        // head for the nearest drawn block, and take the longest run through its mark
+        const lead = routeTo(open);
+        if (!lead) break;
+        const t = lead[lead.length - 1], blocks = mark(t);
+        const ends = blocks.filter((b) => bnbrs(b).filter(open).length <= 1).slice(0, 5);
+        let run = longestRun(blocks, [t, ...ends]);
+        // enter the run from whichever end is cheaper to reach
+        const toStart = routeTo((b) => b === run[0]), toEnd = routeTo((b) => b === run[run.length - 1]);
+        let approach = toStart;
+        if (!toStart || (toEnd && toEnd.length < toStart.length)) { approach = toEnd; run = run.slice().reverse(); }
+        if (!approach) { run = longestRun(blocks, [t]); approach = lead; }
+        const connector = approach.slice(cur >= 0 ? 1 : 0, -1);
+        // a long detour to a small leftover piece isn't worth the corridor it costs
+        if (cur >= 0 && connector.length > Math.max(6, 2 * run.length)) { for (const b of blocks) skip[b] = 1; continue; }
+        // if the whole run would leave the route shut in with no way to the right wall (ending inside
+        // the loop of a 6, say), keep the longest start of it that still has a way out
+        const before = route.length, prevCur = cur;
+        let kept = false;
+        for (let len = run.length; len >= 1 && !kept; len--) {
+          extend([...connector, ...run.slice(0, len)]);
+          if (canFinish()) kept = true;
+          else { for (const b of route.splice(before)) used[b] = 0; cur = prevCur; }
+        }
+        if (!kept) for (const b of blocks) skip[b] = 1;
+        // any of the mark's blocks the run missed (a fork's other branch) stay open for a later pass
       }
-      for (let [a, b] of treeEdges) {
-        if (a > b) [a, b] = [b, a];
-        const A = cellOf(a), B = cellOf(b);
-        if (b === a + 1) { unlink(A + 1, A + W + 1); unlink(B, B + W); link(A + 1, B); link(A + W + 1, B + W); }
-        else { unlink(A + W, A + W + 1); unlink(B, B + 1); link(A + W, B); link(A + W + 1, B + 1); }
-      }
+      if (!route.length) return straightPath();
+      if (!atRight(cur)) extend(routeTo((b) => atRight(b) && !used[b]).slice(1));
 
-      // cut the loop on the root's outer side: one of those two cells is the entrance, the other the exit
-      const R = cellOf(root);
-      const [g1, g2] = { L: [R, R + W], R: [R + 1, R + W + 1], T: [R, R + 1], B: [R + W, R + W + 1] }[side(root)];
-      unlink(g1, g2);
-      const path = [g1];
-      for (let prev = -1, c = g1; ;) {
-        const next = adj[2 * c] !== prev ? adj[2 * c] : adj[2 * c + 1];
-        if (next < 0) break;
-        path.push(next); prev = c; c = next;
+      // Now the cells. Each block's four cells form a ring; the path enters at one of them and walks
+      // the long way round the ring to the neighbor of that cell that sits on the side it leaves by.
+      // That neighbor is always on the right side for any turn, so every block is covered whole.
+      const ring = (b) => { const c = cellOf(b); return [c, c + 1, c + W + 1, c + W]; }; // TL TR BR BL
+      const sideOf = { L: [0, 3], R: [1, 2], T: [0, 1], B: [3, 2] };
+      const exitSide = (a, b) => b === a + 1 ? "R" : b === a - 1 ? "L" : b === a + BW ? "B" : "T";
+      const across = { R: 1, L: -1, B: W, T: -W };
+      const path = [];
+      let entry = rng() < 0.5 ? 0 : 3; // top-left or bottom-left cell, on the left wall
+      for (let k = 0; k < route.length; k++) {
+        const r = ring(route[k]);
+        const side = k < route.length - 1 ? exitSide(route[k], route[k + 1]) : "R";
+        const step = sideOf[side].includes((entry + 3) % 4) ? 1 : -1;
+        for (let i = 0; i < 4; i++) path.push(r[(entry + step * i + 8) % 4]);
+        if (k < route.length - 1) entry = ring(route[k + 1]).indexOf(path[path.length - 1] + across[side]);
       }
       const blockOf = (c) => ((((c / W) | 0) >> 1) * BW + ((c % W) >> 1));
-      // (blocks, tree edges and root come back too, for the about-modal diagram)
-      return { path, flag: path.map((c) => inked[blockOf(c)]), cover: { BW, BH, inked, kept, treeEdges, root } };
+      // (the block route comes back too, for the about-modal diagram)
+      return { path, flag: path.map((c) => inked[blockOf(c)]), cover: { BW, BH, inked, route } };
+    }
+
+
+    // Shuffle a route's shape without moving its ends or dropping a drawn cell, by repeating three
+    // small local edits many times over (rounds × the route's length):
+    //  - flip: where the route steps a→b and later steps c→d the same way, with c beside a and d
+    //    beside b, reconnect as a→c and b→d and walk the stretch between backwards. Same cells,
+    //    different shape.
+    //  - bump: push one step a→b sideways into two free cells beside it, a→a'→b'→b.
+    //  - trim: undo a bump, if the two cells it cuts out aren't drawn.
+    // Bumps that pick up a drawn cell the route missed are always taken. Other bumps only go into
+    // cells touching the drawing, and only while the route is shorter than it started, so the
+    // shuffling stays on the drawing and doesn't bloat the route.
+    function wiggle(start, required, rounds, rng) {
+      const near = new Uint8Array(W * H);
+      for (let c = 0; c < W * H; c++) if (required[c]) {
+        const x = c % W, y = (c / W) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx >= 0 && ny >= 0 && nx < W && ny < H) near[ny * W + nx] = 1;
+        }
+      }
+      const N = W * H, pos = new Int32Array(N).fill(-1);
+      let P = start.slice();
+      const reindex = (from) => { for (let i = from; i < P.length; i++) pos[P[i]] = i; };
+      reindex(0);
+      const limit = start.length;
+      const step = (c, o) => {
+        if (o === 1 || o === -1) { const x = c % W + o; return x >= 0 && x < W ? c + o : -1; }
+        return c + o >= 0 && c + o < N ? c + o : -1;
+      };
+      const sideways = (a, b) => (Math.abs(b - a) === 1 ? [W, -W] : [1, -1]).sort(() => rng() - 0.5);
+      for (let it = Math.min(rounds * start.length, 150000); it > 0; it--) {
+        const r = rng(), k = Math.floor(rng() * (P.length - 1));
+        const a = P[k], b = P[k + 1];
+        if (r < 0.6) {
+          for (const o of sideways(a, b)) {
+            const c = step(a, o), d = step(b, o);
+            if (c < 0 || d < 0 || pos[c] <= k + 1 || pos[d] !== pos[c] + 1) continue;
+            const seg = P.slice(k + 1, pos[c] + 1).reverse();
+            for (let i = 0; i < seg.length; i++) P[k + 1 + i] = seg[i];
+            reindex(k + 1);
+            break;
+          }
+        } else if (r < 0.8) {
+          for (const o of sideways(a, b)) {
+            const qa = step(a, o), qb = step(b, o);
+            if (qa < 0 || qb < 0 || pos[qa] >= 0 || pos[qb] >= 0) continue;
+            if (!(required[qa] || required[qb]) && !(near[qa] && near[qb] && P.length < limit && rng() < 0.5)) continue;
+            P.splice(k + 1, 0, qa, qb);
+            reindex(k + 1);
+            break;
+          }
+        } else if (k + 3 < P.length) {
+          const x = P[k + 1], y = P[k + 2], c = P[k + 3];
+          if (!required[x] && !required[y] && adjacent(a, c)) {
+            P.splice(k + 1, 2); pos[x] = -1; pos[y] = -1;
+            reindex(k + 1);
+          }
+        }
+      }
+      return P;
     }
 
     function build() {
@@ -518,7 +661,14 @@
       let wantedCount = 0;
       for (let i = 0; i < N; i++) wantedCount += drawn[i];
 
-      const { path, flag, cover } = wantedCount ? coverPath(drawn) : straightPath();
+      const planned = wantedCount ? coverPath(drawn) : straightPath(), cover = planned.cover;
+      // shuffle the route's shape; skipped while the pen is down so drawing stays responsive
+      const live = gesture && gesture.kind !== "solve";
+      const path = live ? planned.path : wiggle(planned.path, drawn, 150, mulberry32(seed ^ 0x2545f491));
+      // the parts of the route inside the drawing's 2×2 blocks get highlighted in the reveal
+      const flag = cover
+        ? path.map((c) => cover.inked[((((c / W) | 0) >> 1) * cover.BW + ((c % W) >> 1))])
+        : path.map(() => 0);
       const used = new Uint8Array(N);
       for (const c of path) used[c] = 1;
       const entrance = path[0], exit = path[path.length - 1];
@@ -547,7 +697,7 @@
 
       const pathIndex = new Int32Array(N).fill(-1);
       path.forEach((c, k) => { pathIndex[c] = k; });
-      return { W, H, open, path, flag, pathIndex, entrance, exit, traced, wantedCount, drawn, cover, growth };
+      return { W, H, open, path, flag, pathIndex, entrance, exit, traced, wantedCount, drawn, cover, growth, planned: planned.path };
     }
 
     const isOpen = (a, b) => {
@@ -822,7 +972,7 @@
       // redo. (Solving undoes one cell at a time instead; solveStep clears its redo as it goes.)
       if (gesture.kind !== "solve") {
         const changed = gesture.kind === "pen" || gesture.erased;
-        if (changed) { drawRedo.length = 0; writeURL(); } else drawUndo.pop();
+        if (changed) { drawRedo.length = 0; writeURL(); needsBuild = true; } else drawUndo.pop();
       }
       gesture = null;
       syncUI();
@@ -1093,10 +1243,12 @@
 
       // drawing → blocks it touches → a tree through the blocks → the walk around that tree
       cover(st, t, caption) {
-        const m = st.m, cv = m.cover, sec = ((t - st.t0) / 1000) % 11.5;
-        const stage = sec < 1.8 ? 0 : sec < 3.8 ? 1 : sec < 5.8 ? 2 : 3;
-        const text = ["your drawing", "step 1: every 2×2 block it touches, plus a bridge to the edge",
-          "step 2: a random tree linking those blocks", "step 3: the walk around the tree"][stage];
+        const m = st.m, cv = m.cover, sec = ((t - st.t0) / 1000) % 14;
+        const stage = sec < 1.8 ? 0 : sec < 3.8 ? 1 : sec < 5.8 ? 2 : sec < 9.8 ? 3 : 4;
+        const text = ["your drawing", "step 1: every 2×2 block it touches",
+          "step 2: one route through the blocks, left wall to right wall",
+          "step 3: zigzag through each block's four cells",
+          "step 4: shuffled, still through every drawn cell"][stage];
         if (caption && caption.textContent !== text) caption.textContent = text;
         const v = vizFrame(st.cv, m); if (!v) return;
         const { g, s, x0, y0 } = v;
@@ -1114,30 +1266,37 @@
         for (let i = 0; i < m.W * m.H; i++) if (m.drawn[i]) vizFill(v, i, C.ink, 0.75, 1);
         const blockXY = (b) => [x0 + (2 * (b % cv.BW) + 1) * s, y0 + (2 * ((b / cv.BW) | 0) + 1) * s];
         if (stage >= 1) {
-          for (let b = 0; b < cv.BW * cv.BH; b++) if (cv.kept[b]) {
+          for (let b = 0; b < cv.BW * cv.BH; b++) if (cv.inked[b]) {
             const [bx, by] = blockXY(b);
-            g.fillStyle = cv.inked[b] ? C.ink : C.muted; g.globalAlpha = 0.18;
+            g.fillStyle = C.ink; g.globalAlpha = 0.18;
             g.fillRect(bx - s, by - s, 2 * s, 2 * s);
-            g.strokeStyle = cv.inked[b] ? C.ink : C.muted; g.globalAlpha = 0.9; g.lineWidth = 1.5;
+            g.strokeStyle = C.ink; g.globalAlpha = 0.9; g.lineWidth = 1.5;
             g.strokeRect(bx - s + 1, by - s + 1, 2 * s - 2, 2 * s - 2);
           }
           g.globalAlpha = 1;
         }
         if (stage >= 2) {
-          g.strokeStyle = C.wall; g.lineWidth = Math.max(2, s * 0.22); g.lineCap = "round";
-          g.globalAlpha = stage === 3 ? 0.35 : 0.9;
+          // the block route, drawn in from the left wall; the stretches between drawn blocks are dimmer
+          const r = cv.route, f = stage === 2 ? Math.min(1, (sec - 3.8) / 1.6) : 1;
+          const n = 1 + f * (r.length - 1), k = Math.floor(n);
+          g.strokeStyle = C.wall; g.lineWidth = Math.max(2, s * 0.22); g.lineCap = "round"; g.lineJoin = "round";
+          g.globalAlpha = stage >= 3 ? 0.3 : 0.9;
           g.beginPath();
-          for (const [a, b] of cv.treeEdges) { const [ax, ay] = blockXY(a), [bx, by] = blockXY(b); g.moveTo(ax, ay); g.lineTo(bx, by); }
-          g.stroke();
-          g.fillStyle = C.wall;
-          for (let b = 0; b < cv.BW * cv.BH; b++) if (cv.kept[b]) {
-            const [bx, by] = blockXY(b); g.beginPath(); g.arc(bx, by, Math.max(2, s * 0.18), 0, 2 * Math.PI); g.fill();
-          }
-          g.globalAlpha = 1;
+          const [sx, sy] = blockXY(r[0]); g.moveTo(sx - s, sy);
+          for (let i = 0; i < k; i++) { const [x, y] = blockXY(r[i]); g.lineTo(x, y); }
+          if (k < r.length) {
+            const [ax, ay] = blockXY(r[k - 1]), [bx, by] = blockXY(r[k]);
+            g.lineTo(lerp(ax, bx, n - k), lerp(ay, by, n - k));
+          } else { const [ex, ey] = blockXY(r[r.length - 1]); g.lineTo(ex + s, ey); }
+          g.stroke(); g.globalAlpha = 1;
         }
         if (stage === 3) {
-          const f = Math.min(1, (sec - 5.8) / 4);
-          vizPath(v, m.path, 1 + f * (m.path.length - 1), v.s * 0.3);
+          const f = Math.min(1, (sec - 5.8) / 3.2);
+          vizPath(v, m.planned, 1 + f * (m.planned.length - 1), v.s * 0.3);
+          vizDot(v, m.planned[0], v.s * 0.28);
+        }
+        if (stage === 4) {
+          vizPath(v, m.path, m.path.length, v.s * 0.3);
           vizDot(v, m.path[0], v.s * 0.28);
         }
       },
