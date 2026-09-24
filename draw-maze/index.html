@@ -286,7 +286,8 @@
     let reveal = 0;         // 0 → 1 as the solved maze fades its walls
     let solveAnim = null;   // { t0, dur }
     let dirty = true, needsBuild = true;
-    const drawUndo = [], solveUndo = [], drawRedo = [], solveRedo = [];
+    const drawUndo = [], drawRedo = [];
+    const solveUndo = [], solveRedo = []; // snapshots of your path, one per change to it
     let authored = true;    // false when the page was opened from someone else's shared link
 
     // ---------------------------------------------------------------- url
@@ -724,7 +725,7 @@
     }
     function resetSolve() {
       userPath = maze ? [maze.entrance] : [];
-      solveUndo.length = 0; solveAnim = null; reveal = 0;
+      solveUndo.length = 0; solveRedo.length = 0; solveAnim = null; reveal = 0;
     }
     function setMode(m) {
       if (m === mode) return;
@@ -775,10 +776,9 @@
         }
       } else {
         solveAnim = null;
-        solveUndo.push(userPath.slice());
         const c = cellAt(p);
         const k = c >= 0 ? userPath.indexOf(c) : -1;
-        gesture = { kind: "solve", head: k, last: c, lastPt: p, before: userPath.length + ":" + userPath[userPath.length - 1] };
+        gesture = { kind: "solve", head: k, last: c, lastPt: p };
         // pressing straight ahead of the path's end, with a clear line to it, extends the path there
         if (k < 0 && c >= 0) {
           gesture.head = userPath.length - 1;
@@ -818,13 +818,12 @@
     });
     const endGesture = () => {
       if (!gesture) return;
-      // keep the undo snapshot only if the gesture changed something; a real change clears redo
-      const changed = gesture.kind === "pen" ? true
-        : gesture.kind === "erase" ? gesture.erased
-        : gesture.before !== userPath.length + ":" + userPath[userPath.length - 1];
-      const [undoStack, redoStack] = gesture.kind === "solve" ? [solveUndo, solveRedo] : [drawUndo, drawRedo];
-      if (changed) redoStack.length = 0; else undoStack.pop();
-      if (changed && gesture.kind !== "solve") writeURL();
+      // drawing: keep the undo snapshot only if the gesture changed something; a real change clears
+      // redo. (Solving undoes one cell at a time instead; solveStep clears its redo as it goes.)
+      if (gesture.kind !== "solve") {
+        const changed = gesture.kind === "pen" || gesture.erased;
+        if (changed) { drawRedo.length = 0; writeURL(); } else drawUndo.pop();
+      }
       gesture = null;
       syncUI();
     };
@@ -871,11 +870,14 @@
       return run;
     }
 
+    // every change to your path is its own undo step
+    function remember() { solveUndo.push(userPath.slice()); solveRedo.length = 0; }
+
     function solveStep(c) {
       if (c < 0) return;
       const k = userPath.indexOf(c);
       if (k >= 0) {
-        if (gesture.head >= 0 && k < gesture.head) { userPath.length = k + 1; dirty = true; syncUI(); }
+        if (gesture.head >= 0 && k < gesture.head) { remember(); userPath.length = k + 1; dirty = true; syncUI(); }
         gesture.head = k;
         return;
       }
@@ -883,6 +885,7 @@
       if (h < 0 || h == null) return;
       const run = straightRun(userPath[h], c, h);
       if (!run) return;
+      remember();
       userPath.length = h + 1;
       userPath.push(...run);
       gesture.head = userPath.length - 1;
@@ -890,7 +893,8 @@
       syncUI();
     }
 
-    // undo/redo swap whole snapshots: the strokes while making, your path while playing
+    // undo/redo swap whole snapshots: of the strokes while making (one per stroke or erase), of
+    // your path while playing (one per change to it)
     function timeTravel(back) {
       const [from, to] = mode === "draw"
         ? (back ? [drawUndo, drawRedo] : [drawRedo, drawUndo])
@@ -908,7 +912,7 @@
 
     function animateSolve() {
       if (!maze) return;
-      solveUndo.push(userPath.slice()); solveRedo.length = 0;
+      remember();
       userPath = [maze.entrance]; reveal = 0;
       const dur = Math.min(9000, Math.max(1500, maze.path.length * 22));
       solveAnim = { t0: performance.now(), dur };
@@ -1163,7 +1167,7 @@
       const p = new URLSearchParams(location.search);
       const g = /^(\d+)x(\d+)$/.exec(p.get("g") || "");
       if (g) { W = even(Math.max(2, Math.min(200, +g[1]))); H = even(Math.max(2, Math.min(200, +g[2]))); }
-      else { W = even(Math.max(14, Math.min(60, Math.round(availRect().w / 22)))); H = rowsFor(W); }
+      else { W = 38; H = 20; }
       if (p.has("s")) seed = parseInt(p.get("s"), 36) >>> 0;
       strokes = decodeStrokes(p.get("d"));
       // a link with a drawing and no m= is someone else's maze: open it ready to play
