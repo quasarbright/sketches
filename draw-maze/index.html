@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Draw Maze</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- identity: ink-navy board, pale walls, an amber thread for the path, teal for your drawing -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik+Maze&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #101522;   /* ink-navy */
+      --panel:     #1a2030;
+      --panel-2:   #232a3d;
+      --border:    #30364a;
+      --text:      #e8eaf0;
+      --muted:     #8a91a6;
+      --faint:     #5a6178;
+      --accent:    #f0b429;   /* the thread */
+      --accent-hi: #ffc94d;
+      --on-accent: #101522;
+      --ink:       #4fb3bf;   /* your drawing */
+      --wall:      #d8dce8;
+      --font-ui:      "Instrument Sans", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Rubik Maze", "Instrument Sans", sans-serif;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+
+    #board {
+      /* explicit px size set in JS; position:absolute rather than fixed (iOS renders fixed canvases blurry) */
+      position: absolute; top: 0; left: 0; display: block;
+      touch-action: none; cursor: crosshair;
+    }
+
+    .dm-head {
+      position: fixed; top: 16px; left: 22px; z-index: 3; pointer-events: none;
+    }
+    .dm-title {
+      font-family: var(--font-display); font-weight: 400; font-size: 2rem; line-height: 1;
+      color: var(--text); margin: 0;
+    }
+    .dm-hint {
+      font-size: .9rem; color: var(--muted); margin-top: 6px;
+    }
+
+    /* ---- left tool rail ---- */
+    .dm-tools {
+      position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 4;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .dm-toolgroup {
+      display: flex; flex-direction: column; gap: 2px; padding: 5px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    .dm-tool {
+      width: 40px; height: 40px; display: grid; place-items: center;
+      border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer;
+    }
+    .dm-tool:hover { background: var(--panel-2); }
+    .dm-tool.is-active { background: var(--ink); color: var(--bg); }
+    .dm-tool:disabled { color: var(--faint); background: transparent; cursor: default; }
+    .dm-tool svg, .dm-btn svg {
+      width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .dm-btn svg { width: 17px; height: 17px; }
+
+    /* ---- bottom bars: one for making, one for playing ---- */
+    .dm-bar {
+      position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 4;
+      display: flex; align-items: center; gap: 8px; padding: 6px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); white-space: nowrap;
+    }
+    .dm-btn {
+      display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px;
+      font: 500 .92rem var(--font-ui); color: var(--text);
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+    }
+    .dm-btn:hover { border-color: var(--muted); }
+    .dm-primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
+    .dm-primary:hover { background: var(--accent-hi); border-color: transparent; }
+    .dm-primary svg path { fill: currentColor; }
+    .dm-share svg path { fill: none; }
+    .dm-size { display: flex; align-items: center; gap: 8px; padding: 0 8px; color: var(--muted); font-size: .9rem; }
+    .dm-size input { width: 110px; }
+    .dm-num { font-family: var(--font-mono); font-size: .8rem; color: var(--text); min-width: 4.5ch; }
+
+    .dm-corner { position: fixed; top: 16px; right: 16px; z-index: 4; }
+
+    /* ---- guidance over the board (positioned in JS) ---- */
+    .dm-empty {
+      position: fixed; z-index: 2; pointer-events: none;
+      display: flex; align-items: center; justify-content: center; text-align: center;
+      padding: 0 8%; box-sizing: border-box;
+      font: 600 clamp(1.4rem, 4.2vw, 3.2rem)/1.15 var(--font-ui); letter-spacing: -.01em;
+      color: color-mix(in srgb, var(--text) 60%, transparent); text-wrap: balance;
+      /* a halo in the board's own color knocks the walls out from behind the letters */
+      text-shadow: 0 0 3px var(--bg), 0 0 8px var(--bg), 0 0 16px var(--bg), 0 0 24px var(--bg);
+    }
+    .dm-start {
+      position: fixed; z-index: 3; pointer-events: none; white-space: nowrap;
+      padding: 6px 12px; border-radius: 999px;
+      background: var(--panel); border: 1px solid var(--accent); color: var(--text);
+      font: 500 .9rem var(--font-ui); box-shadow: 0 6px 18px rgba(0,0,0,.4);
+    }
+    .dm-empty[hidden], .dm-start[hidden] { display: none; }
+
+    /* ---- about-modal diagrams ---- */
+    .dm-viz { display: block; width: 100%; max-width: 440px; margin: 14px auto 4px; }
+    .dm-viz-caption { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 2px; }
+    .cohesion-about ol { padding-left: 1.3em; }
+    .cohesion-about li { margin: .35em 0; }
+
+    @media (max-width: 700px) {
+      .dm-tools { left: 8px; }
+      .dm-tool { width: 36px; height: 36px; }
+      .dm-bar { bottom: 36px; gap: 5px; }
+      .dm-btn { padding: 0 10px; font-size: .85rem; }
+      .dm-size > span:first-child, #makeBar .dm-share span { display: none; }
+      .dm-size input { width: 70px; }
+      #reseed { font-size: 0; gap: 0; }
+      #reseed svg { width: 19px; height: 19px; }
+    }
+
+    mike-footer[overlay] { opacity: 1 !important; }
+  </style>
+</head>
+<body>
+  <canvas id="board"></canvas>
+  <div class="dm-empty" id="emptyHint" hidden>draw something and it will become part of the maze's solution</div>
+  <div class="dm-start" id="startHint" hidden>draw the solution starting here</div>
+
+  <div class="dm-head">
+    <h1 class="dm-title">Draw Maze</h1>
+    <div class="dm-hint" id="hint"></div>
+  </div>
+
+  <div class="dm-tools">
+    <div class="dm-toolgroup" id="drawTools">
+      <button class="dm-tool" id="penBtn" title="Pen: draw on the grid. Scribble over an area to fill it; separate marks get joined up for you.">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button>
+      <button class="dm-tool" id="eraseBtn" title="Eraser: drag over a stroke to delete it">
+        <svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+      </button>
+      <button class="dm-tool" id="clearBtn" title="Clear: delete the whole drawing">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+    <div class="dm-toolgroup">
+      <button class="dm-tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
+        <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button class="dm-tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
+        <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- making the maze -->
+  <div class="dm-bar" id="makeBar">
+    <label class="dm-size" title="How many cells across the maze is. Your drawing scales with it.">
+      <span>grid</span>
+      <input type="range" id="cols" min="10" max="100" step="2" />
+      <span class="dm-num" id="vCols"></span>
+    </label>
+    <button class="dm-btn" id="reseed" title="Keep your drawing, reroll every other wall">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2"/><circle cx="16" cy="16" r="1.2"/><circle cx="12" cy="12" r="1.2"/></svg>
+      randomize walls
+    </button>
+    <button class="dm-btn dm-share" title="Copy a link that opens this maze ready to play, with your drawing hidden">
+      <svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+      <span>copy link</span>
+    </button>
+    <button class="dm-btn dm-primary" id="playBtn" title="Hide your drawing and play the maze">
+      play
+      <svg viewBox="0 0 24 24"><path d="M7 4l12 8-12 8z"/></svg>
+    </button>
+  </div>
+
+  <!-- playing it -->
+  <div class="dm-bar" id="playBar">
+    <button class="dm-btn" id="editBtn">
+      <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span id="editLabel"></span>
+    </button>
+    <button class="dm-btn" id="solveBtn" title="Watch the solution draw itself">show solution</button>
+    <button class="dm-btn dm-primary dm-share" title="Copy a link that opens this maze ready to play, with your drawing hidden">
+      <svg viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
+      <span>copy link</span>
+    </button>
+  </div>
+
+  <div class="dm-corner">
+    <about-modal label="about">
+      <h2 class="title">Draw Maze</h2>
+      <p class="intro">Draw something, and you get a maze whose one route from entrance to exit traces
+        your drawing. It works by choosing the route first and building the rest of the maze around it.</p>
+
+      <div class="section-label">one way through</div>
+      <p>These mazes have no loops. Every cell can be reached, and between any two cells there's
+        exactly one route that never doubles back. A network like that, where corridors branch but
+        never join back up, is called a <b>tree</b>. Here's a small maze made by the same code, with
+        the route between two random cells lighting up. Whichever two cells you pick, there's only
+        one way between them.</p>
+      <canvas class="dm-viz" data-viz="routes"></canvas>
+
+      <div class="section-label">picking the route first</div>
+      <p>So the route from entrance to exit can be decided before anything else. Carve that route,
+        then let corridors grow off it into the empty cells, one cell at a time, never into a cell
+        that's already connected. Nothing joins back up, so the result is still a tree, and the
+        route you started with is still the only way through.</p>
+      <canvas class="dm-viz" data-viz="grow"></canvas>
+      <p class="dm-viz-caption"><span style="color:var(--accent)">amber</span> is the route; dark
+        squares are cells no corridor has reached yet</p>
+
+      <div class="section-label">from a drawing to a route</div>
+      <p>The route can't cross itself, and a drawing can be any shape, so the route can't just
+        follow your strokes. Instead it's built in three steps:</p>
+      <ol>
+        <li>Chop the grid into 2×2 blocks and keep every block your drawing touches, plus the fewest
+          extra blocks needed to connect separate marks to each other and to the edge.</li>
+        <li>Link the kept blocks with a random tree: the same no-loops idea, between blocks
+          instead of cells.</li>
+        <li>Walk around the outside of that tree, keeping it on one side, like tracing around your
+          hand with a pencil. The walk passes through all four cells of every block, once each.</li>
+      </ol>
+      <canvas class="dm-viz" data-viz="cover"></canvas>
+      <p class="dm-viz-caption" id="coverCaption">&nbsp;</p>
+      <p>A thick scribble becomes a route that snakes back and forth through it. A thin line becomes
+        a route that goes out along it and comes back beside itself. The walk ends next to where it
+        started, which is why the entrance and exit sit side by side.</p>
+
+      <div class="section-label">sharing</div>
+      <p>A link carries only the grid size, a random seed and your strokes. Opening it runs all of
+        the above again and gets the same maze.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script>
+
+    const $ = (id) => document.getElementById(id);
+    const canvas = $("board");
+    const ctx = canvas.getContext("2d");
+    const css = getComputedStyle(document.documentElement);
+    const C = {
+      bg: css.getPropertyValue("--bg").trim(),
+      wall: css.getPropertyValue("--wall").trim(),
+      thread: css.getPropertyValue("--accent").trim(),
+      ink: css.getPropertyValue("--ink").trim(),
+      muted: css.getPropertyValue("--muted").trim(),
+      panel2: css.getPropertyValue("--panel-2").trim(),
+    };
+
+    // ---------------------------------------------------------------- rng
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    const randomSeed = () => (Math.random() * 4294967296) >>> 0;
+
+    // ---------------------------------------------------------------- state
+    let W = 40, H = 25;     // columns, rows
+    let seed = randomSeed();
+    let strokes = [];       // each stroke: array of [x, y] in 0..1 board coordinates
+    let mode = "draw";      // "draw" | "solve"
+    let tool = "pen";       // "pen" | "erase"
+    let maze = null;
+    let userPath = [];
+    let reveal = 0;         // 0 → 1 as the solved maze fades its walls
+    let solveAnim = null;   // { t0, dur }
+    let dirty = true, needsBuild = true;
+    const drawUndo = [], solveUndo = [], drawRedo = [], solveRedo = [];
+    let authored = true;    // false when the page was opened from someone else's shared link
+
+    // ---------------------------------------------------------------- url
+    const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const q12 = (v) => Math.max(0, Math.min(4095, Math.round(v * 4095)));
+    const enc12 = (v) => B64[v >> 6] + B64[v & 63];
+    const dec12 = (s, i) => (B64.indexOf(s[i]) << 6) | B64.indexOf(s[i + 1]);
+
+    function encodeStrokes() {
+      return strokes.map((s) => s.map(([x, y]) => enc12(q12(x)) + enc12(q12(y))).join("")).join(".");
+    }
+    function decodeStrokes(str) {
+      if (!str) return [];
+      return str.split(".").map((chunk) => {
+        const pts = [];
+        for (let i = 0; i + 3 < chunk.length; i += 4) pts.push([dec12(chunk, i) / 4095, dec12(chunk, i + 2) / 4095]);
+        return pts;
+      }).filter((s) => s.length);
+    }
+    function buildURL(forShare) {
+      const p = new URLSearchParams();
+      p.set("g", `${W}x${H}`);
+      p.set("s", seed.toString(36));
+      if (strokes.length) p.set("d", encodeStrokes());
+      if (!forShare && authored) p.set("m", mode === "draw" ? "draw" : "play");
+      return `${location.origin}${location.pathname}?${p}`;
+    }
+    function writeURL() { history.replaceState(null, "", buildURL(false)); }
+
+    // ---------------------------------------------------------------- layout
+    let dpr = 1, cs = 20, ox = 0, oy = 0;
+    // viewport size from the root element, not innerWidth: on mobile an over-wide canvas widens the
+    // layout viewport, innerWidth follows it, and the canvas never shrinks back
+    const vw = () => document.documentElement.clientWidth, vh = () => document.documentElement.clientHeight;
+    function availRect() {
+      const wide = vw() > 700;
+      const left = wide ? 84 : 56, right = wide ? 84 : 12; // clear of the tool rail
+      const top = wide ? 92 : 84, bottom = 112;
+      return { x: left, y: top, w: Math.max(100, vw() - left - right), h: Math.max(100, vh() - top - bottom) };
+    }
+    function rowsFor(cols) {
+      const a = availRect();
+      return even(Math.max(6, Math.round(cols * a.h / a.w)));
+    }
+    // the solution is built from 2×2 blocks, so an odd size would leave the last row or column out of it
+    const even = (n) => n + (n % 2);
+    function layout() {
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.round(vw() * dpr);
+      canvas.height = Math.round(vh() * dpr);
+      canvas.style.width = vw() + "px";
+      canvas.style.height = vh() + "px";
+      const a = availRect();
+      cs = Math.min(a.w / W, a.h / H);
+      ox = a.x + (a.w - cs * W) / 2;
+      oy = a.y + (a.h - cs * H) / 2;
+      dirty = true;
+    }
+
+    // ---------------------------------------------------------------- maze generation
+    const nbrs = (i) => {
+      const x = i % W, y = (i / W) | 0, out = [];
+      if (x > 0) out.push(i - 1);
+      if (x < W - 1) out.push(i + 1);
+      if (y > 0) out.push(i - W);
+      if (y < H - 1) out.push(i + W);
+      return out;
+    };
+    const adjacent = (a, b) => {
+      const d = Math.abs(a - b);
+      return (d === W) || (d === 1 && ((a / W) | 0) === ((b / W) | 0));
+    };
+
+    // a stroke → the 4-connected sequence of grid cells it passes over
+    function strokeCells(s) {
+      const cells = [];
+      let px = -1, py = -1;
+      const push = (cx, cy) => {
+        const i = cy * W + cx;
+        if (cells[cells.length - 1] !== i) cells.push(i);
+      };
+      const visit = (gx, gy) => {
+        const cx = Math.min(W - 1, Math.max(0, Math.floor(gx)));
+        const cy = Math.min(H - 1, Math.max(0, Math.floor(gy)));
+        if (px >= 0 && cx !== px && cy !== py) push(cx, py); // diagonal step → go around the corner
+        push(cx, cy); px = cx; py = cy;
+      };
+      for (let k = 0; k < s.length; k++) {
+        const gx = s[k][0] * W, gy = s[k][1] * H;
+        if (k === 0) { visit(gx, gy); continue; }
+        const lx = s[k - 1][0] * W, ly = s[k - 1][1] * H;
+        const n = Math.max(1, Math.ceil(Math.hypot(gx - lx, gy - ly) / 0.2));
+        for (let j = 1; j <= n; j++) visit(lx + (gx - lx) * j / n, ly + (gy - ly) * j / n);
+      }
+      return cells;
+    }
+
+    // which way a gate in the outer wall faces, as a unit step [dx, dy] out of the maze
+    const outward = (c, w = W) => {
+      const x = c % w, y = (c / w) | 0;
+      return x === 0 ? [-1, 0] : x === w - 1 ? [1, 0] : y === 0 ? [0, -1] : [0, 1];
+    };
+
+    // nothing drawn: a plain route from a random spot on the left to a random spot on the right
+    function straightPath() {
+      const rng = mulberry32(seed);
+      const a = Math.floor(rng() * H) * W, b = Math.floor(rng() * H) * W + W - 1;
+      const path = [a];
+      let c = a;
+      while (c % W < W - 1) path.push(++c);
+      while (c !== b) path.push(c += c < b ? W : -W);
+      return { path, flag: path.map(() => 0) };
+    }
+
+    // The solution path through the drawing, built the way a robot mower plans to cover a lawn:
+    // chop the grid into 2×2 blocks, keep every block with any drawing in it, join those blocks with
+    // a random spanning tree, and walk around the outside of that tree. The walk passes through every
+    // cell of every kept block exactly once, so a scribbled area becomes one snake that fills it and a
+    // thin line becomes a two-wide out-and-back. Separate marks are joined by the shortest bridge of
+    // blocks, and one more bridge runs to the edge, where the loop is cut open into entrance and exit.
+    function coverPath(drawn) {
+      const rng = mulberry32(seed);
+      const BW = W >> 1, BH = H >> 1, NB = BW * BH;
+      const cellOf = (b) => 2 * ((b / BW) | 0) * W + 2 * (b % BW); // top-left cell of block b
+      const bnbrs = (b) => {
+        const x = b % BW, y = (b / BW) | 0, out = [];
+        if (x > 0) out.push(b - 1);
+        if (x < BW - 1) out.push(b + 1);
+        if (y > 0) out.push(b - BW);
+        if (y < BH - 1) out.push(b + BW);
+        return out;
+      };
+      // which outer wall a block touches, in the same priority order outward() uses
+      const side = (b) => {
+        const x = b % BW, y = (b / BW) | 0;
+        return x === 0 ? "L" : 2 * x + 2 === W ? "R" : y === 0 ? "T" : 2 * y + 2 === H ? "B" : null;
+      };
+
+      const inked = new Uint8Array(NB); // blocks with drawing in them
+      for (let b = 0; b < NB; b++) {
+        const c = cellOf(b);
+        inked[b] = drawn[c] | drawn[c + 1] | drawn[c + W] | drawn[c + W + 1];
+      }
+      const kept = inked.slice();       // plus the bridge blocks
+      const inTree = new Uint8Array(NB);
+      const from = new Int32Array(NB);
+
+      // grow one connected set: flood the first marked region, then keep bridging to the nearest other one
+      const flood = (start) => {
+        const stack = [start]; inTree[start] = 1;
+        while (stack.length) for (const j of bnbrs(stack.pop())) if (kept[j] && !inTree[j]) { inTree[j] = 1; stack.push(j); }
+      };
+      const bfsFromTree = (goal) => {
+        const seen = inTree.slice(), queue = [];
+        for (let b = 0; b < NB; b++) if (inTree[b]) queue.push(b);
+        for (let qi = 0; qi < queue.length; qi++) for (const j of bnbrs(queue[qi])) {
+          if (seen[j]) continue;
+          seen[j] = 1; from[j] = queue[qi];
+          if (goal(j)) return j;
+          queue.push(j);
+        }
+        return -1;
+      };
+      const bridgeTo = (end) => { for (let b = end; !inTree[b]; b = from[b]) { kept[b] = 1; inTree[b] = 1; } };
+      let first = -1;
+      for (let b = 0; b < NB && first < 0; b++) if (inked[b]) first = b;
+      if (first < 0) return straightPath(); // drawing only in the odd last row/column
+      flood(first);
+      for (let t; (t = bfsFromTree((j) => kept[j] && !inTree[j])) >= 0;) { bridgeTo(from[t]); flood(t); }
+
+      // the root block sits on the outer wall; the loop gets cut open there
+      let root = -1;
+      for (let b = 0; b < NB; b++) if (inTree[b] && side(b) && (root < 0 || side(b) === "L")) root = b;
+      if (root < 0) { root = bfsFromTree((j) => side(j) !== null); bridgeTo(root); }
+
+      // random spanning tree over the kept blocks: depth-first, usually carrying straight on,
+      // which fills an area with long parallel runs instead of a tangle
+      const treeEdges = [];
+      const seen = new Uint8Array(NB), dirOf = new Int32Array(NB);
+      const stack = [root]; seen[root] = 1;
+      while (stack.length) {
+        const b = stack[stack.length - 1];
+        const opts = bnbrs(b).filter((j) => kept[j] && !seen[j]);
+        if (!opts.length) { stack.pop(); continue; }
+        const straight = opts.find((j) => j - b === dirOf[b]);
+        const j = straight !== undefined && rng() < 0.7 ? straight : opts[Math.floor(rng() * opts.length)];
+        seen[j] = 1; dirOf[j] = j - b; treeEdges.push([b, j]); stack.push(j);
+      }
+
+      // every cell of a kept block gets exactly two links: around its own block, except where a tree
+      // edge crosses to a neighbor block, in which case the links jump across instead
+      const N = W * H, adj = new Int32Array(2 * N).fill(-1);
+      const link = (a, b) => { adj[2 * a + (adj[2 * a] < 0 ? 0 : 1)] = b; adj[2 * b + (adj[2 * b] < 0 ? 0 : 1)] = a; };
+      const unlinkOne = (a, b) => { if (adj[2 * a] === b) adj[2 * a] = adj[2 * a + 1]; adj[2 * a + 1] = -1; };
+      const unlink = (a, b) => { unlinkOne(a, b); unlinkOne(b, a); };
+      for (let b = 0; b < NB; b++) if (kept[b]) {
+        const tl = cellOf(b), tr = tl + 1, bl = tl + W, br = tl + W + 1;
+        link(tl, tr); link(tr, br); link(br, bl); link(bl, tl);
+      }
+      for (let [a, b] of treeEdges) {
+        if (a > b) [a, b] = [b, a];
+        const A = cellOf(a), B = cellOf(b);
+        if (b === a + 1) { unlink(A + 1, A + W + 1); unlink(B, B + W); link(A + 1, B); link(A + W + 1, B + W); }
+        else { unlink(A + W, A + W + 1); unlink(B, B + 1); link(A + W, B); link(A + W + 1, B + 1); }
+      }
+
+      // cut the loop on the root's outer side: one of those two cells is the entrance, the other the exit
+      const R = cellOf(root);
+      const [g1, g2] = { L: [R, R + W], R: [R + 1, R + W + 1], T: [R, R + 1], B: [R + W, R + W + 1] }[side(root)];
+      unlink(g1, g2);
+      const path = [g1];
+      for (let prev = -1, c = g1; ;) {
+        const next = adj[2 * c] !== prev ? adj[2 * c] : adj[2 * c + 1];
+        if (next < 0) break;
+        path.push(next); prev = c; c = next;
+      }
+      const blockOf = (c) => ((((c / W) | 0) >> 1) * BW + ((c % W) >> 1));
+      // (blocks, tree edges and root come back too, for the about-modal diagram)
+      return { path, flag: path.map((c) => inked[blockOf(c)]), cover: { BW, BH, inked, kept, treeEdges, root } };
+    }
+
+    function build() {
+      const N = W * H;
+
+      // what matters is which cells are drawn on, not the strokes or their order
+      const drawn = new Uint8Array(N);
+      for (const s of strokes) for (const c of strokeCells(s)) drawn[c] = 1;
+      let wantedCount = 0;
+      for (let i = 0; i < N; i++) wantedCount += drawn[i];
+
+      const { path, flag, cover } = wantedCount ? coverPath(drawn) : straightPath();
+      const used = new Uint8Array(N);
+      for (const c of path) used[c] = 1;
+      const entrance = path[0], exit = path[path.length - 1];
+      let traced = 0;
+      for (let i = 0; i < N; i++) if (drawn[i] && used[i]) traced++;
+
+      // carve the path, then grow a random spanning tree out from it into every other cell
+      const open = new Uint8Array(N); // bit 1: open to the east, bit 2: open to the south
+      const carve = (a, b) => {
+        if (b === a + 1) open[a] |= 1; else if (b === a - 1) open[b] |= 1;
+        else if (b === a + W) open[a] |= 2; else open[b] |= 2;
+      };
+      for (let k = 1; k < path.length; k++) carve(path[k - 1], path[k]);
+      const trng = mulberry32(seed ^ 0x9e3779b9);
+      const visited = used.slice();
+      const active = path.slice();
+      const growth = []; // every corridor carved off the path, in order
+      while (active.length) {
+        const idx = trng() < 0.5 ? active.length - 1 : Math.floor(trng() * active.length);
+        const c = active[idx];
+        const free = nbrs(c).filter((j) => !visited[j]);
+        if (!free.length) { active[idx] = active[active.length - 1]; active.pop(); continue; }
+        const j = free[Math.floor(trng() * free.length)];
+        carve(c, j); visited[j] = 1; active.push(j); growth.push([c, j]);
+      }
+
+      const pathIndex = new Int32Array(N).fill(-1);
+      path.forEach((c, k) => { pathIndex[c] = k; });
+      return { W, H, open, path, flag, pathIndex, entrance, exit, traced, wantedCount, drawn, cover, growth };
+    }
+
+    const isOpen = (a, b) => {
+      if (!adjacent(a, b)) return false;
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      return hi === lo + 1 ? !!(maze.open[lo] & 1) : !!(maze.open[lo] & 2);
+    };
+
+    // ---------------------------------------------------------------- rendering
+    const cx = (i) => ox + ((i % W) + 0.5) * cs;
+    const cy = (i) => oy + (((i / W) | 0) + 0.5) * cs;
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const ease = (t) => t * t * (3 - 2 * t);
+
+    // a point just outside a gate: t = 1 is where its arrow sits, smaller is closer to the wall
+    function gatePoint(c, t) {
+      const [dx, dy] = outward(c), d = cs * 0.5 + Math.max(10, cs * 0.7) * t;
+      return [cx(c) + dx * d, cy(c) + dy * d];
+    }
+
+    // dim: how far the automatic connectors fade back (0..1); thicken: how much the parts that trace
+    // the drawing widen (0..1). Drawing shows dim only; the solved reveal ramps both.
+    function drawThread(cells, flagOf, dim, thicken) {
+      if (!cells.length) return;
+      const thin = Math.max(2, cs * 0.3);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      ctx.strokeStyle = C.thread;
+      // whole path, coming in through the entrance and, once it gets there, going out the exit
+      const pts = cells.map((c) => [cx(c), cy(c)]);
+      if (cells[0] === maze.entrance) pts.unshift(gatePoint(maze.entrance, 0.3));
+      if (cells[cells.length - 1] === maze.exit) pts.push(gatePoint(maze.exit, 0.3));
+      ctx.globalAlpha = lerp(1, 0.35, dim);
+      ctx.lineWidth = thin;
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+      ctx.stroke();
+      // the parts that trace the drawing, at full strength and possibly thickened
+      if (dim > 0 || thicken > 0) {
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = lerp(thin, Math.max(3, cs * 0.62), thicken);
+        ctx.beginPath();
+        let open = false;
+        for (let k = 1; k < cells.length; k++) {
+          if (flagOf(k - 1) && flagOf(k)) {
+            if (!open) { ctx.moveTo(cx(cells[k - 1]), cy(cells[k - 1])); open = true; }
+            ctx.lineTo(cx(cells[k]), cy(cells[k]));
+          } else open = false;
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function draw() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = C.bg;
+      ctx.fillRect(0, 0, vw(), vh());
+      if (!maze) return;
+      const e = ease(reveal);
+
+      // walls
+      ctx.strokeStyle = C.wall;
+      ctx.lineCap = "square";
+      ctx.lineWidth = Math.max(1.25, cs * 0.1);
+      ctx.globalAlpha = mode === "draw" ? 0.45 : lerp(1, 0.12, e);
+      ctx.beginPath();
+      const seg = (x0, y0, x1, y1) => { ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); };
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x, px = ox + x * cs, py = oy + y * cs;
+          if (x < W - 1 && !(maze.open[i] & 1)) seg(px + cs, py, px + cs, py + cs);
+          if (y < H - 1 && !(maze.open[i] & 2)) seg(px, py + cs, px + cs, py + cs);
+        }
+      }
+      // outer wall, with a gap where the entrance and exit face out
+      const gap = (i, dx, dy) => [maze.entrance, maze.exit].some((g) => {
+        const [gx, gy] = outward(g);
+        return g === i && gx === dx && gy === dy;
+      });
+      for (let x = 0; x < W; x++) {
+        const px = ox + x * cs;
+        if (!gap(x, 0, -1)) seg(px, oy, px + cs, oy);
+        if (!gap((H - 1) * W + x, 0, 1)) seg(px, oy + H * cs, px + cs, oy + H * cs);
+      }
+      for (let y = 0; y < H; y++) {
+        const py = oy + y * cs;
+        if (!gap(y * W, -1, 0)) seg(ox, py, ox, py + cs);
+        if (!gap(y * W + W - 1, 1, 0)) seg(ox + W * cs, py, ox + W * cs, py + cs);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // entrance arrow points in, exit arrow points out
+      ctx.fillStyle = C.thread;
+      const arrow = (c, sign) => {
+        const [dx, dy] = outward(c), [x, y] = gatePoint(c, 1);
+        const s = Math.max(5, cs * 0.35), tx = dx * sign, ty = dy * sign;
+        ctx.beginPath();
+        ctx.moveTo(x + tx * s * 0.7, y + ty * s * 0.7);
+        ctx.lineTo(x - tx * s * 0.7 - ty * s, y - ty * s * 0.7 + tx * s);
+        ctx.lineTo(x - tx * s * 0.7 + ty * s, y - ty * s * 0.7 - tx * s);
+        ctx.closePath(); ctx.fill();
+      };
+      arrow(maze.entrance, -1);
+      arrow(maze.exit, 1);
+
+      if (mode === "draw") {
+        ctx.strokeStyle = C.ink; ctx.globalAlpha = 0.35;
+        ctx.lineWidth = Math.max(4, cs * 0.9); ctx.lineCap = "round"; ctx.lineJoin = "round";
+        for (const s of strokes) {
+          ctx.beginPath();
+          s.forEach(([x, y], k) => { const px = ox + x * W * cs, py = oy + y * H * cs; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+          if (s.length === 1) ctx.lineTo(ox + s[0][0] * W * cs + 0.01, oy + s[0][1] * H * cs);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        drawThread(maze.path, (k) => maze.flag[k], 1, 0);
+      } else {
+        drawThread(userPath, (k) => maze.flag[maze.pathIndex[userPath[k]]] === 1, e, e);
+        if (atStart()) {
+          // a ring pulsing out from the head, once a second
+          const f = (performance.now() / 1000) % 1, x = cx(userPath[0]), y = cy(userPath[0]);
+          ctx.strokeStyle = C.thread; ctx.lineWidth = Math.max(1.5, cs * 0.12);
+          ctx.globalAlpha = 1 - f;
+          ctx.beginPath(); ctx.arc(x, y, lerp(cs * 0.3, Math.max(cs * 1.2, 20), ease(f)), 0, 2 * Math.PI); ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = C.thread;
+          ctx.beginPath(); ctx.arc(x, y, Math.max(3, cs * 0.28), 0, 2 * Math.PI); ctx.fill();
+        }
+      }
+      placeOverlays();
+    }
+
+    const atStart = () => mode === "solve" && maze && !solveAnim && userPath.length === 1;
+
+    // the empty-board message sits over the maze; the start label sits just inside the entrance
+    function placeOverlays() {
+      const empty = $("emptyHint");
+      Object.assign(empty.style, { left: ox + "px", top: oy + "px", width: W * cs + "px", height: H * cs + "px" });
+      const s = $("startHint"), head = maze.entrance, [dx, dy] = outward(head), gap = cs * 0.9 + 6;
+      const x = cx(head) - dx * gap, y = cy(head) - dy * gap;
+      s.style.left = x + "px"; s.style.top = y + "px";
+      s.style.transform = dx === -1 ? "translate(0, -50%)" : dx === 1 ? "translate(-100%, -50%)"
+        : dy === -1 ? "translate(-50%, 0)" : "translate(-50%, -100%)";
+    }
+
+    // ---------------------------------------------------------------- ui state
+    const hint = $("hint");
+    function syncUI() {
+      const making = mode === "draw";
+      $("makeBar").style.display = making ? "" : "none";
+      $("playBar").style.display = making ? "none" : "";
+      $("drawTools").style.display = making ? "" : "none";
+      $("penBtn").classList.toggle("is-active", tool === "pen");
+      $("eraseBtn").classList.toggle("is-active", tool === "erase");
+      $("clearBtn").disabled = !strokes.length;
+      $("undo").disabled = !(making ? drawUndo : solveUndo).length;
+      $("redo").disabled = !(making ? drawRedo : solveRedo).length;
+      $("editLabel").textContent = authored ? "edit solution" : "make your own";
+      $("editBtn").title = authored ? "Go back to drawing the solution" : "Start a new maze from a blank drawing";
+      $("cols").value = W;
+      $("vCols").textContent = `${W}×${H}`;
+      const solved = !making && userPath[userPath.length - 1] === maze?.exit;
+      hint.textContent = !making && solved ? "solved" : "";
+      $("emptyHint").hidden = !(making && !strokes.length);
+      $("startHint").hidden = !atStart();
+    }
+
+    function rebuild() {
+      maze = build();
+      needsBuild = false; dirty = true;
+      if (mode === "solve") resetSolve();
+      syncUI();
+    }
+    function resetSolve() {
+      userPath = maze ? [maze.entrance] : [];
+      solveUndo.length = 0; solveAnim = null; reveal = 0;
+    }
+    function setMode(m) {
+      if (m === mode) return;
+      mode = m; solveAnim = null;
+      if (mode === "solve") resetSolve();
+      writeURL(); syncUI(); dirty = true;
+    }
+
+    // ---------------------------------------------------------------- input
+    function boardPoint(e) {
+      const r = canvas.getBoundingClientRect();
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      return { x, y, u: (x - ox) / (cs * W), v: (y - oy) / (cs * H) };
+    }
+    function cellAt(p) {
+      const gx = Math.floor((p.x - ox) / cs), gy = Math.floor((p.y - oy) / cs);
+      if (gx < 0 || gy < 0 || gx >= W || gy >= H) return -1;
+      return gy * W + gx;
+    }
+    const onBoard = (p) => p.u >= 0 && p.u < 1 && p.v >= 0 && p.v < 1;
+    // where the segment from an inside point (u0, v0) to an outside one (u1, v1) crosses the edge
+    function edgePoint(u0, v0, u1, v1) {
+      let t = 1;
+      if (u1 < 0) t = Math.min(t, u0 / (u0 - u1));
+      if (u1 >= 1) t = Math.min(t, (1 - u0) / (u1 - u0));
+      if (v1 < 0) t = Math.min(t, v0 / (v0 - v1));
+      if (v1 >= 1) t = Math.min(t, (1 - v0) / (v1 - v0));
+      const e = 1e-4; // stay just inside
+      return [Math.min(1 - e, Math.max(0, u0 + (u1 - u0) * t)), Math.min(1 - e, Math.max(0, v0 + (v1 - v0) * t))];
+    }
+
+    let gesture = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (!maze) return;
+      const p = boardPoint(e);
+      if (!onBoard(p)) return; // outside the maze, the mouse does nothing
+      canvas.setPointerCapture(e.pointerId);
+      if (mode === "draw") {
+        drawUndo.push(strokes.map((s) => s.slice()));
+        if (tool === "pen") {
+          const s = [[p.u, p.v]];
+          strokes.push(s);
+          gesture = { kind: "pen", s };
+          needsBuild = true;
+        } else {
+          gesture = { kind: "erase", erased: false };
+          eraseAt(p);
+        }
+      } else {
+        solveAnim = null;
+        solveUndo.push(userPath.slice());
+        const c = cellAt(p);
+        const k = c >= 0 ? userPath.indexOf(c) : -1;
+        gesture = { kind: "solve", head: k, last: c, lastPt: p, before: userPath.length + ":" + userPath[userPath.length - 1] };
+        // pressing straight ahead of the path's end, with a clear line to it, extends the path there
+        if (k < 0 && c >= 0) {
+          gesture.head = userPath.length - 1;
+          const before = userPath.length;
+          solveStep(c);
+          if (userPath.length === before) gesture.head = -1;
+        }
+      }
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      const p = boardPoint(e);
+      canvas.style.cursor = !onBoard(p) ? "default" : mode === "draw" ? "crosshair" : "pointer";
+      if (!gesture) return;
+      if (gesture.kind === "pen") {
+        // leaving the maze lifts the pen at the edge; coming back in starts a new stroke
+        if (!onBoard(p)) {
+          if (gesture.s) {
+            const [lx, ly] = gesture.s[gesture.s.length - 1];
+            gesture.s.push(edgePoint(lx, ly, p.u, p.v));
+            gesture.s = null; needsBuild = true;
+          }
+          return;
+        }
+        if (!gesture.s) { gesture.s = [[p.u, p.v]]; strokes.push(gesture.s); needsBuild = true; return; }
+        const s = gesture.s, [lx, ly] = s[s.length - 1];
+        if (Math.hypot((p.u - lx) * W, (p.v - ly) * H) > 0.3) { s.push([p.u, p.v]); needsBuild = true; }
+      } else if (gesture.kind === "erase") {
+        if (onBoard(p)) eraseAt(p);
+      } else {
+        // walk every cell between the last pointer cell and this one, so fast drags don't skip
+        const c = cellAt(p);
+        if (c === gesture.last) return;
+        const steps = gridLine(gesture.last, c, gesture.lastPt || p, p);
+        for (const cell of steps) solveStep(cell);
+        gesture.last = c; gesture.lastPt = p;
+      }
+    });
+    const endGesture = () => {
+      if (!gesture) return;
+      // keep the undo snapshot only if the gesture changed something; a real change clears redo
+      const changed = gesture.kind === "pen" ? true
+        : gesture.kind === "erase" ? gesture.erased
+        : gesture.before !== userPath.length + ":" + userPath[userPath.length - 1];
+      const [undoStack, redoStack] = gesture.kind === "solve" ? [solveUndo, solveRedo] : [drawUndo, drawRedo];
+      if (changed) redoStack.length = 0; else undoStack.pop();
+      if (changed && gesture.kind !== "solve") writeURL();
+      gesture = null;
+      syncUI();
+    };
+    canvas.addEventListener("pointerup", endGesture);
+    canvas.addEventListener("pointercancel", endGesture);
+
+    function eraseAt(p) {
+      const u = p.u, v = p.v, r = 0.8;
+      const before = strokes.length;
+      strokes = strokes.filter((s) => !s.some(([x, y]) => Math.hypot((x - u) * W, (y - v) * H) < r));
+      if (strokes.length !== before) { gesture.erased = true; needsBuild = true; }
+    }
+
+    // cells crossed moving from pointer position a to b (by sampling), ending at cell `to`
+    function gridLine(from, to, a, b) {
+      const out = [];
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (cs * 0.25)));
+      let prev = from;
+      for (let j = 1; j <= n; j++) {
+        const c = cellAt({ x: a.x + (b.x - a.x) * j / n, y: a.y + (b.y - a.y) * j / n });
+        if (c !== prev) { out.push(c); prev = c; }
+      }
+      if (out[out.length - 1] !== to) out.push(to);
+      return out;
+    }
+
+    // the solver's drag rule: moving onto your path makes that cell the "head", and moving back
+    // toward the start retraces (the path shrinks to the head); moving from the head into a new
+    // open neighbor cuts the path back to the head and extends it there
+    // the cells from a (exclusive) to b in a straight row or column, if nothing is in the way: no
+    // wall, and none of the first keep+1 cells of your path. Never turns a corner.
+    function straightRun(a, b, keep) {
+      const ax = a % W, ay = (a / W) | 0, bx = b % W, by = (b / W) | 0;
+      if (a === b || (ax !== bx && ay !== by)) return null;
+      const step = ax === bx ? (by > ay ? W : -W) : (bx > ax ? 1 : -1);
+      const run = [];
+      for (let c = a; c !== b;) {
+        const n = c + step;
+        if (!isOpen(c, n)) return null;
+        const k = userPath.indexOf(n);
+        if (k >= 0 && k <= keep) return null;
+        run.push(n); c = n;
+      }
+      return run;
+    }
+
+    function solveStep(c) {
+      if (c < 0) return;
+      const k = userPath.indexOf(c);
+      if (k >= 0) {
+        if (gesture.head >= 0 && k < gesture.head) { userPath.length = k + 1; dirty = true; syncUI(); }
+        gesture.head = k;
+        return;
+      }
+      const h = gesture.head;
+      if (h < 0 || h == null) return;
+      const run = straightRun(userPath[h], c, h);
+      if (!run) return;
+      userPath.length = h + 1;
+      userPath.push(...run);
+      gesture.head = userPath.length - 1;
+      dirty = true;
+      syncUI();
+    }
+
+    // undo/redo swap whole snapshots: the strokes while making, your path while playing
+    function timeTravel(back) {
+      const [from, to] = mode === "draw"
+        ? (back ? [drawUndo, drawRedo] : [drawRedo, drawUndo])
+        : (back ? [solveUndo, solveRedo] : [solveRedo, solveUndo]);
+      if (!from.length) return;
+      if (mode === "draw") {
+        to.push(strokes); strokes = from.pop(); needsBuild = true; writeURL();
+      } else {
+        solveAnim = null;
+        to.push(userPath); userPath = from.pop(); dirty = true;
+      }
+      syncUI();
+    }
+    const undo = () => timeTravel(true), redo = () => timeTravel(false);
+
+    function animateSolve() {
+      if (!maze) return;
+      solveUndo.push(userPath.slice()); solveRedo.length = 0;
+      userPath = [maze.entrance]; reveal = 0;
+      const dur = Math.min(9000, Math.max(1500, maze.path.length * 22));
+      solveAnim = { t0: performance.now(), dur };
+      syncUI();
+    }
+
+    $("playBtn").addEventListener("click", () => setMode("solve"));
+    $("editBtn").addEventListener("click", () => {
+      if (!authored) {
+        // someone else's maze: start fresh rather than reveal their drawing
+        authored = true; strokes = []; seed = randomSeed();
+        drawUndo.length = 0; drawRedo.length = 0; needsBuild = true;
+      }
+      setMode("draw");
+    });
+    $("penBtn").addEventListener("click", () => { tool = "pen"; syncUI(); });
+    $("eraseBtn").addEventListener("click", () => { tool = "erase"; syncUI(); });
+    $("clearBtn").addEventListener("click", () => {
+      if (!strokes.length) return;
+      drawUndo.push(strokes); drawRedo.length = 0; strokes = []; needsBuild = true; writeURL(); syncUI();
+    });
+    $("cols").addEventListener("input", (e) => {
+      W = +e.target.value; H = rowsFor(W);
+      layout(); needsBuild = true; writeURL(); syncUI();
+    });
+    $("reseed").addEventListener("click", () => { seed = randomSeed(); needsBuild = true; writeURL(); });
+    for (const btn of document.querySelectorAll(".dm-share")) btn.addEventListener("click", async () => {
+      const url = buildURL(true), label = btn.querySelector("span");
+      try { await navigator.clipboard.writeText(url); label.textContent = "copied"; }
+      catch { window.prompt("Copy this link", url); }
+      setTimeout(() => { label.textContent = "copy link"; }, 1500);
+    });
+    $("undo").addEventListener("click", undo);
+    $("redo").addEventListener("click", redo);
+    $("solveBtn").addEventListener("click", animateSolve);
+    addEventListener("keydown", (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      e.shiftKey ? redo() : undo();
+    });
+    addEventListener("resize", layout);
+
+    // ---------------------------------------------------------------- about-modal diagrams
+    // Each diagram runs the real generator (build, and coverPath inside it) on a small grid by
+    // swapping the grid globals for the duration of the call, then draws the result itself.
+    function withGrid(w, h, s, drawing, fn) {
+      const saved = [W, H, seed, strokes];
+      W = w; H = h; seed = s; strokes = drawing;
+      try { return fn(); } finally { [W, H, seed, strokes] = saved; }
+    }
+    const vizMazes = {
+      routes: () => withGrid(16, 10, 11, [], build),
+      grow: () => withGrid(16, 10, 5, [[[0.12, 0.72], [0.3, 0.28], [0.5, 0.72], [0.7, 0.28], [0.88, 0.72]]], build),
+      cover: () => withGrid(20, 12, 9, [
+        [[0.62, 0.2], [0.42, 0.16], [0.3, 0.3], [0.4, 0.48], [0.58, 0.56], [0.66, 0.72], [0.56, 0.86], [0.34, 0.84]],
+      ], build),
+    };
+
+    // size a diagram canvas to its width, clear it, and return what the draw helpers need
+    function vizFrame(cv, m) {
+      const w = cv.clientWidth;
+      if (!w) return null;
+      const s = Math.floor((w - 24) / m.W), h = s * m.H + 24, d = Math.max(1, devicePixelRatio || 1);
+      if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) {
+        cv.width = Math.round(w * d); cv.height = Math.round(h * d); cv.style.height = h + "px";
+      }
+      const g = cv.getContext("2d");
+      g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+      return { g, s, m, x0: Math.round((w - s * m.W) / 2), y0: 12 };
+    }
+    const vx = (v, i) => v.x0 + ((i % v.m.W) + 0.5) * v.s;
+    const vy = (v, i) => v.y0 + (((i / v.m.W) | 0) + 0.5) * v.s;
+
+    // walls from an open-bits array; skip(i, j) hides the wall between cells i and j
+    function vizWalls(v, open, { gates = true, skip = () => false } = {}) {
+      const { g, s, x0, y0, m } = v;
+      g.strokeStyle = C.wall; g.globalAlpha = 0.8; g.lineCap = "square";
+      g.lineWidth = Math.max(1, s * 0.1);
+      g.beginPath();
+      const seg = (a, b, c, d) => { g.moveTo(a, b); g.lineTo(c, d); };
+      for (let y = 0; y < m.H; y++) for (let x = 0; x < m.W; x++) {
+        const i = y * m.W + x, px = x0 + x * s, py = y0 + y * s;
+        if (x < m.W - 1 && !(open[i] & 1) && !skip(i, i + 1)) seg(px + s, py, px + s, py + s);
+        if (y < m.H - 1 && !(open[i] & 2) && !skip(i, i + m.W)) seg(px, py + s, px + s, py + s);
+      }
+      const gap = (i, dx, dy) => gates && [m.entrance, m.exit].some((c) => {
+        const [gx, gy] = outward(c, m.W);
+        return c === i && gx === dx && gy === dy;
+      });
+      for (let x = 0; x < m.W; x++) {
+        if (!gap(x, 0, -1)) seg(x0 + x * s, y0, x0 + (x + 1) * s, y0);
+        if (!gap((m.H - 1) * m.W + x, 0, 1)) seg(x0 + x * s, y0 + m.H * s, x0 + (x + 1) * s, y0 + m.H * s);
+      }
+      for (let y = 0; y < m.H; y++) {
+        if (!gap(y * m.W, -1, 0)) seg(x0, y0 + y * s, x0, y0 + (y + 1) * s);
+        if (!gap(y * m.W + m.W - 1, 1, 0)) seg(x0 + m.W * s, y0 + y * s, x0 + m.W * s, y0 + (y + 1) * s);
+      }
+      g.stroke(); g.globalAlpha = 1;
+    }
+    // a polyline through cell centers, drawn up to a fractional count n of cells
+    function vizPath(v, cells, n, width, color = C.thread, alpha = 1) {
+      if (n < 1 || !cells.length) return;
+      const { g } = v, k = Math.min(cells.length, Math.floor(n)), f = n - k;
+      g.strokeStyle = color; g.globalAlpha = alpha; g.lineWidth = width; g.lineCap = "round"; g.lineJoin = "round";
+      g.beginPath(); g.moveTo(vx(v, cells[0]), vy(v, cells[0]));
+      for (let i = 1; i < k; i++) g.lineTo(vx(v, cells[i]), vy(v, cells[i]));
+      if (f > 0 && k < cells.length) {
+        const a = cells[k - 1], b = cells[k];
+        g.lineTo(lerp(vx(v, a), vx(v, b), f), lerp(vy(v, a), vy(v, b), f));
+      }
+      g.stroke(); g.globalAlpha = 1;
+    }
+    function vizFill(v, i, color, alpha, inset = 0) {
+      const { g, s, x0, y0, m } = v;
+      g.fillStyle = color; g.globalAlpha = alpha;
+      g.fillRect(x0 + (i % m.W) * s + inset, y0 + ((i / m.W) | 0) * s + inset, s - 2 * inset, s - 2 * inset);
+      g.globalAlpha = 1;
+    }
+    function vizDot(v, i, r, color = C.thread) {
+      v.g.fillStyle = color; v.g.beginPath(); v.g.arc(vx(v, i), vy(v, i), r, 0, 2 * Math.PI); v.g.fill();
+    }
+
+    // the one route between two cells, found by following open walls
+    function treeRoute(m, a, b) {
+      const from = new Int32Array(m.W * m.H).fill(-1), queue = [a];
+      from[a] = a;
+      for (let qi = 0; qi < queue.length; qi++) {
+        const c = queue[qi], x = c % m.W;
+        const next = [];
+        if (x < m.W - 1 && m.open[c] & 1) next.push(c + 1);
+        if (x > 0 && m.open[c - 1] & 1) next.push(c - 1);
+        if (m.open[c] & 2) next.push(c + m.W);
+        if (c >= m.W && m.open[c - m.W] & 2) next.push(c - m.W);
+        for (const j of next) if (from[j] < 0) { from[j] = c; queue.push(j); }
+      }
+      const route = [];
+      for (let c = b; c !== a; c = from[c]) route.push(c);
+      route.push(a);
+      return route.reverse();
+    }
+
+    const vizDraw = {
+      // two random cells, and the one route between them growing from one to the other
+      routes(st, t) {
+        const m = st.m, cycle = 2.6;
+        const k = Math.floor((t - st.t0) / 1000 / cycle), f = ((t - st.t0) / 1000 / cycle) % 1;
+        if (st.k !== k) {
+          st.k = k;
+          let a, b;
+          do { a = Math.floor(Math.random() * m.W * m.H); b = Math.floor(Math.random() * m.W * m.H); }
+          while (Math.abs(a % m.W - b % m.W) + Math.abs(((a / m.W) | 0) - ((b / m.W) | 0)) < 10);
+          st.route = treeRoute(m, a, b);
+        }
+        const v = vizFrame(st.cv, m); if (!v) return;
+        vizWalls(v, m.open, { gates: false });
+        vizPath(v, st.route, 1 + ease(Math.min(1, f / 0.35)) * (st.route.length - 1), v.s * 0.34);
+        vizDot(v, st.route[0], v.s * 0.3);
+        vizDot(v, st.route[st.route.length - 1], v.s * 0.3);
+      },
+
+      // the route alone, then corridors growing off it into the empty cells
+      grow(st, t) {
+        const m = st.m, sec = ((t - st.t0) / 1000) % 7.5;
+        const n = Math.floor(m.growth.length * ease(Math.max(0, Math.min(1, (sec - 1) / 4.5))));
+        const open = new Uint8Array(m.W * m.H), reached = new Uint8Array(m.W * m.H);
+        const carve = (a, b) => {
+          const lo = Math.min(a, b), hi = Math.max(a, b);
+          open[lo] |= hi === lo + 1 ? 1 : 2;
+        };
+        for (const c of m.path) reached[c] = 1;
+        for (let k = 1; k < m.path.length; k++) carve(m.path[k - 1], m.path[k]);
+        for (let k = 0; k < n; k++) { carve(...m.growth[k]); reached[m.growth[k][1]] = 1; }
+        const v = vizFrame(st.cv, m); if (!v) return;
+        for (let i = 0; i < m.W * m.H; i++) if (!reached[i]) vizFill(v, i, C.bg, 1);
+        vizWalls(v, open, { skip: (i, j) => !reached[i] && !reached[j] });
+        vizPath(v, m.path, m.path.length, v.s * 0.3);
+      },
+
+      // drawing → blocks it touches → a tree through the blocks → the walk around that tree
+      cover(st, t, caption) {
+        const m = st.m, cv = m.cover, sec = ((t - st.t0) / 1000) % 11.5;
+        const stage = sec < 1.8 ? 0 : sec < 3.8 ? 1 : sec < 5.8 ? 2 : 3;
+        const text = ["your drawing", "step 1: every 2×2 block it touches, plus a bridge to the edge",
+          "step 2: a random tree linking those blocks", "step 3: the walk around the tree"][stage];
+        if (caption && caption.textContent !== text) caption.textContent = text;
+        const v = vizFrame(st.cv, m); if (!v) return;
+        const { g, s, x0, y0 } = v;
+        // faint cell grid, stronger block grid
+        g.lineWidth = 1;
+        for (let x = 0; x <= m.W; x++) {
+          g.strokeStyle = C.wall; g.globalAlpha = x % 2 ? 0.07 : stage ? 0.2 : 0.07;
+          g.beginPath(); g.moveTo(x0 + x * s, y0); g.lineTo(x0 + x * s, y0 + m.H * s); g.stroke();
+        }
+        for (let y = 0; y <= m.H; y++) {
+          g.strokeStyle = C.wall; g.globalAlpha = y % 2 ? 0.07 : stage ? 0.2 : 0.07;
+          g.beginPath(); g.moveTo(x0, y0 + y * s); g.lineTo(x0 + m.W * s, y0 + y * s); g.stroke();
+        }
+        g.globalAlpha = 1;
+        for (let i = 0; i < m.W * m.H; i++) if (m.drawn[i]) vizFill(v, i, C.ink, 0.75, 1);
+        const blockXY = (b) => [x0 + (2 * (b % cv.BW) + 1) * s, y0 + (2 * ((b / cv.BW) | 0) + 1) * s];
+        if (stage >= 1) {
+          for (let b = 0; b < cv.BW * cv.BH; b++) if (cv.kept[b]) {
+            const [bx, by] = blockXY(b);
+            g.fillStyle = cv.inked[b] ? C.ink : C.muted; g.globalAlpha = 0.18;
+            g.fillRect(bx - s, by - s, 2 * s, 2 * s);
+            g.strokeStyle = cv.inked[b] ? C.ink : C.muted; g.globalAlpha = 0.9; g.lineWidth = 1.5;
+            g.strokeRect(bx - s + 1, by - s + 1, 2 * s - 2, 2 * s - 2);
+          }
+          g.globalAlpha = 1;
+        }
+        if (stage >= 2) {
+          g.strokeStyle = C.wall; g.lineWidth = Math.max(2, s * 0.22); g.lineCap = "round";
+          g.globalAlpha = stage === 3 ? 0.35 : 0.9;
+          g.beginPath();
+          for (const [a, b] of cv.treeEdges) { const [ax, ay] = blockXY(a), [bx, by] = blockXY(b); g.moveTo(ax, ay); g.lineTo(bx, by); }
+          g.stroke();
+          g.fillStyle = C.wall;
+          for (let b = 0; b < cv.BW * cv.BH; b++) if (cv.kept[b]) {
+            const [bx, by] = blockXY(b); g.beginPath(); g.arc(bx, by, Math.max(2, s * 0.18), 0, 2 * Math.PI); g.fill();
+          }
+          g.globalAlpha = 1;
+        }
+        if (stage === 3) {
+          const f = Math.min(1, (sec - 5.8) / 4);
+          vizPath(v, m.path, 1 + f * (m.path.length - 1), v.s * 0.3);
+          vizDot(v, m.path[0], v.s * 0.28);
+        }
+      },
+    };
+
+    let vizRAF = null;
+    function startViz(el) {
+      const caption = el.querySelector("#coverCaption");
+      const states = [...el.querySelectorAll("canvas.dm-viz")].map((cv) => ({
+        cv, kind: cv.dataset.viz, m: vizMazes[cv.dataset.viz](), t0: performance.now(),
+      }));
+      const tick = (t) => {
+        for (const st of states) vizDraw[st.kind](st, t, caption);
+        vizRAF = requestAnimationFrame(tick);
+      };
+      vizRAF = requestAnimationFrame(tick);
+    }
+    document.addEventListener("cohesion-modal-open", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) startViz(e.detail.el);
+    });
+    document.addEventListener("cohesion-modal-close", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) { cancelAnimationFrame(vizRAF); vizRAF = null; }
+    });
+
+    // ---------------------------------------------------------------- boot
+    {
+      const p = new URLSearchParams(location.search);
+      const g = /^(\d+)x(\d+)$/.exec(p.get("g") || "");
+      if (g) { W = even(Math.max(2, Math.min(200, +g[1]))); H = even(Math.max(2, Math.min(200, +g[2]))); }
+      else { W = even(Math.max(14, Math.min(60, Math.round(availRect().w / 22)))); H = rowsFor(W); }
+      if (p.has("s")) seed = parseInt(p.get("s"), 36) >>> 0;
+      strokes = decodeStrokes(p.get("d"));
+      // a link with a drawing and no m= is someone else's maze: open it ready to play
+      authored = !strokes.length || p.has("m");
+      mode = strokes.length && p.get("m") !== "draw" ? "solve" : "draw";
+    }
+    layout();
+    rebuild();
+    if (mode === "draw") writeURL();
+
+    let lastT = performance.now();
+    function frame(t) {
+      const dt = Math.min(0.1, (t - lastT) / 1000); lastT = t;
+      if ((window.devicePixelRatio || 1) !== dpr) layout(); // moved to another screen; no resize fires
+      if (needsBuild) rebuild();
+      if (solveAnim) {
+        const f = Math.min(1, (t - solveAnim.t0) / solveAnim.dur);
+        const n = Math.max(1, Math.round(ease(f) * maze.path.length));
+        if (n !== userPath.length) { userPath = maze.path.slice(0, n); syncUI(); }
+        if (f >= 1) solveAnim = null;
+        dirty = true;
+      }
+      const target = mode === "solve" && userPath[userPath.length - 1] === maze.exit ? 1 : 0;
+      if (reveal !== target) {
+        reveal = target > reveal ? Math.min(1, reveal + dt / 1.2) : Math.max(0, reveal - dt / 0.4);
+        dirty = true;
+      }
+      if (atStart()) dirty = true; // keep the start marker pulsing
+      if (dirty) { draw(); dirty = false; }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
