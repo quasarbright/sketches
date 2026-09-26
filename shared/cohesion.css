@@ -112,11 +112,15 @@ code {
   padding: 8px 14px; transition: background .12s, border-color .12s;
 }
 .btn:hover { background: #272c3b; }
-.btn-primary, .btn.is-active {
+/* variants repeat the `button.btn` form so they outrank the base rule's 0,1,1 on <button> */
+.btn.btn-primary, button.btn.btn-primary, .btn.is-active, button.btn.is-active {
   background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600;
 }
-.btn-primary:hover { background: var(--accent-hi); }
-.btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.btn.btn-primary:hover, button.btn.btn-primary:hover,
+.btn.is-active:hover, button.btn.is-active:hover { background: var(--accent-hi); }
+.btn.btn-danger, button.btn.btn-danger {
+  color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* ---- labeled slider with live readout ---- */
