@@ -41,6 +41,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* No double-tap zoom on phones (tapping a button twice quickly zoomed the page); pinch zoom
+   and plain taps still work. A canvas that handles its own gestures sets touch-action: none,
+   which still wins: the browser uses the strictest value along the ancestors. */
+html, body, button, input, select, textarea { touch-action: manipulation; }
+
 body {
   margin: 0;
   background: var(--bg);
