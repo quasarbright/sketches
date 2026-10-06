@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hilbert Portrait</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- identity: a sheet of paper under a fine-liner — blue-black ink, one vermilion pen tip -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg:        #15161a;
+      --panel:     #1e2026;
+      --panel-2:   #282b33;
+      --border:    #363a44;
+      --text:      #ece9e2;
+      --muted:     #9a978f;
+      --faint:     #625f59;
+      --accent:    #e2603a;   /* the pen tip */
+      --accent-hi: #f17a55;
+      --on-accent: #15161a;
+
+      --paper:     #f2eee5;
+      --ink:       #1c2233;
+
+      --font-ui:      "IBM Plex Sans", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Fraunces", Georgia, serif;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+
+    #sheet {
+      /* explicit px size + offset set in JS; absolute rather than fixed (iOS renders fixed canvases blurry) */
+      position: absolute; display: block;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    }
+
+    .hp-head {
+      position: fixed; top: 16px; left: 20px; z-index: 3; pointer-events: none;
+    }
+    .hp-title {
+      font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; line-height: 1;
+      margin: 0; letter-spacing: -.01em;
+    }
+    .hp-stats {
+      font-family: var(--font-mono); font-size: .78rem; color: var(--muted);
+      margin-top: 6px; white-space: pre;
+    }
+
+    #drop {
+      position: fixed; inset: 0; z-index: 20; display: none;
+      place-items: center; pointer-events: none;
+      background: rgba(10,10,12,.72);
+    }
+    #drop.on { display: grid; }
+    #drop .dropzone {
+      border-color: var(--accent); background: rgba(226,96,58,.08); color: var(--text);
+      padding: 48px 64px;
+    }
+
+    @media (max-width: 640px) {
+      .hp-title { font-size: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="sheet"></canvas>
+
+  <div class="hp-head">
+    <h1 class="hp-title">Hilbert Portrait</h1>
+    <div class="hp-stats" id="stats"></div>
+  </div>
+
+  <div id="drop"><div class="dropzone"><div class="icon">&#8595;</div>drop the photo</div></div>
+  <input type="file" id="file" accept="image/*" hidden />
+
+  <control-panel floating title="Curve" id="panel">
+    <div class="control" title="The finest the curve is allowed to get. Each step quarters the cell size, so the darkest parts get four times as much line.">
+      <div class="control-head"><span class="name">detail</span><span class="value" id="depthV"></span></div>
+      <input type="range" id="depth" min="4" max="9" step="1" value="8" />
+    </div>
+    <div class="control" title="The coarsest the curve is allowed to get, so even white areas get some line">
+      <div class="control-head"><span class="name">floor</span><span class="value" id="floorV"></span></div>
+      <input type="range" id="floor" min="0" max="6" step="1" value="2" />
+    </div>
+    <div class="control" title="Above 1 pushes mid-tones lighter, so only the darkest parts get dense. Below 1 darkens mid-tones.">
+      <div class="control-head"><span class="name">contrast</span><span class="value" id="gammaV"></span></div>
+      <input type="range" id="gamma" min="0.4" max="3" step="0.05" value="1.2" />
+    </div>
+    <div class="control" title="Line width, as a fraction of the gap between neighbouring lines at full detail">
+      <div class="control-head"><span class="name">line weight</span><span class="value" id="weightV"></span></div>
+      <input type="range" id="weight" min="0.1" max="1" step="0.05" value="0.55" />
+    </div>
+    <div class="control" title="How much to blur the photo first. More blur means fewer stray dense patches from noise and texture.">
+      <div class="control-head"><span class="name">smoothing</span><span class="value" id="blurV"></span></div>
+      <input type="range" id="blur" min="0" max="4" step="0.5" value="1" />
+    </div>
+    <label class="check" title="White line on black: dense curve now means light instead of dark">
+      <input type="checkbox" id="invert" /> invert
+    </label>
+  </control-panel>
+
+  <div class="control-bar" id="bar">
+    <button class="btn btn-primary" id="upload" title="Pick a photo (or drop / paste one anywhere)">photo</button>
+    <button class="btn" id="play" title="Watch the line draw itself, start to finish">draw</button>
+    <button class="btn" id="png" title="Save as PNG">png</button>
+    <button class="btn" id="svg" title="Save the line as an SVG polyline (one path, good for pen plotters)">svg</button>
+    <about-modal label="about">
+      <h2 class="title">Hilbert Portrait</h2>
+      <p>The whole picture is one line. It never lifts, never crosses itself, and visits every part
+      of the sheet. Up close it's a maze of right-angle turns; from across the room it's the photo.</p>
+
+      <div class="section-label">the curve</div>
+      <p>A Hilbert curve is built by recursion. Start with a square and a path that walks its four
+      quarters in a U: in at the bottom-left, out at the bottom-right. Now replace each quarter
+      with a smaller copy of the whole U, rotated or flipped so that each copy's exit lands right
+      next to the following copy's entrance. Repeat. After $n$ steps the path visits a
+      $2^n \times 2^n$ grid of cells, every one exactly once, as a single unbroken line.</p>
+
+      <div class="section-label">tone from depth</div>
+      <p>Because every copy keeps the same entrance and exit, nothing forces all the quarters to
+      recurse equally far. A light patch can stop early and be crossed by a few long strokes; a
+      dark patch can keep subdividing until it's packed with tight wiggles. The pieces still join
+      end to end, so it's still one line.</p>
+      <p>A cell of side $s$ gets roughly one line per $s$ of width, so with line width $w$ it is
+      inked to about $w/s$. To make a patch with darkness $D$ (0 = white, 1 = black), the cell size
+      should be $s = s_{\min}/D$, where $s_{\min}$ is the finest cell. That's a recursion depth of</p>
+      $$d = d_{\max} + \log_2 D.$$
+      <p>So every halving of darkness costs one level of recursion. The sketch works out that
+      target depth for every pixel, then splits a cell whenever the average target under it is
+      deeper than the cell is. <em>Contrast</em> bends the tone curve before that
+      ($D \leftarrow D^{\gamma}$), and <em>floor</em> stops white areas from going completely
+      empty.</p>
+
+      <div class="section-label">wide and tall photos</div>
+      <p>A Hilbert curve fills a square, but its entrance and exit sit on the same side. Several
+      squares side by side can therefore be chained exit to entrance, so a landscape photo becomes
+      a row of squares and a portrait one becomes a column. It's still one line.</p>
+
+      <div class="section-label">your photo</div>
+      <p>It stays in this tab. Nothing is uploaded. The SVG export is the line itself as a single
+      polyline, ready for a pen plotter.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { isBackground } from "../shared/cohesion.js";
+
+    const $ = (id) => document.getElementById(id);
+    const canvas = $("sheet");
+    const ctx = canvas.getContext("2d");
+    const css = getComputedStyle(document.documentElement);
+    const PAPER = css.getPropertyValue("--paper").trim();
+    const INK = css.getPropertyValue("--ink").trim();
+    const TIP = css.getPropertyValue("--accent").trim();
+
+    const params = {
+      depth: 8, floor: 2, gamma: 1.2, weight: 0.55, blur: 1, invert: false,
+    };
+
+    let source = null;     // HTMLCanvasElement or HTMLImageElement
+    let layout = null;     // { k, horizontal } — how many squares, which way they chain
+    let path = null;       // Float32Array of x,y in finest-cell units
+    let nPts = 0;
+    let anim = null;       // { raf, i } while drawing itself
+
+    /* ------------------------------------------------------------------ *
+     * demo picture: a lit sphere on a falling-off backdrop — a full tone range
+     * ------------------------------------------------------------------ */
+    function demoImage() {
+      const c = document.createElement("canvas");
+      c.width = 1000; c.height = 500;
+      const g = c.getContext("2d");
+      const bg = g.createLinearGradient(0, 0, 1000, 500);
+      bg.addColorStop(0, "#f6f6f6"); bg.addColorStop(1, "#a4a4a4");
+      g.fillStyle = bg; g.fillRect(0, 0, 1000, 500);
+      // shadow
+      g.fillStyle = "rgba(0,0,0,.5)";
+      g.beginPath(); g.ellipse(560, 440, 210, 38, 0, 0, Math.PI * 2); g.fill();
+      // sphere
+      const sp = g.createRadialGradient(430, 160, 15, 500, 240, 200);
+      sp.addColorStop(0, "#ffffff"); sp.addColorStop(.35, "#b4b4b4");
+      sp.addColorStop(.85, "#1e1e1e"); sp.addColorStop(1, "#060606");
+      g.fillStyle = sp;
+      g.beginPath(); g.arc(500, 240, 185, 0, Math.PI * 2); g.fill();
+      // a dark ring and a light square, for some hard edges
+      g.lineWidth = 24; g.strokeStyle = "#121212";
+      g.beginPath(); g.arc(850, 130, 65, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = "#fbfbfb"; g.fillRect(90, 300, 110, 110);
+      return c;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * sampling: photo -> target-depth grid
+     * ------------------------------------------------------------------ */
+
+    // Chain k squares along the photo's long side; crop the rest away (centred).
+    function chooseLayout(w, h) {
+      const horizontal = w >= h;
+      const ratio = horizontal ? w / h : h / w;
+      const k = Math.max(1, Math.min(4, Math.round(ratio)));
+      return { k, horizontal };
+    }
+
+    function sampleTargets() {
+      const n = 1 << params.depth;                 // finest cells per square side
+      const { k, horizontal } = layout;
+      const gw = horizontal ? n * k : n, gh = horizontal ? n : n * k;
+
+      const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
+      const want = gw / gh;
+      let cw = sw, ch = sh;
+      if (sw / sh > want) cw = sh * want; else ch = sw / want;
+      const cx = (sw - cw) / 2, cy = (sh - ch) / 2;
+
+      // two-step downsample: the browser's smoothing alone aliases badly at large ratios
+      const mid = document.createElement("canvas");
+      const scale = Math.min(1, (gw * 4) / cw);
+      mid.width = Math.max(gw, Math.round(cw * scale));
+      mid.height = Math.max(gh, Math.round(ch * scale));
+      const mg = mid.getContext("2d");
+      mg.imageSmoothingQuality = "high";
+      mg.drawImage(source, cx, cy, cw, ch, 0, 0, mid.width, mid.height);
+
+      const c = document.createElement("canvas");
+      c.width = gw; c.height = gh;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.imageSmoothingQuality = "high";
+      g.drawImage(mid, 0, 0, gw, gh);
+      if (params.blur > 0) {
+        // blur a copy over the sharp one: the copy's edges fade to transparent and
+        // let the sharp edge show through, instead of darkening toward black
+        const sharp = document.createElement("canvas");
+        sharp.width = gw; sharp.height = gh;
+        sharp.getContext("2d").drawImage(c, 0, 0);
+        g.filter = `blur(${params.blur}px)`;
+        g.drawImage(sharp, 0, 0);
+        g.filter = "none";
+      }
+      const data = g.getImageData(0, 0, gw, gh).data;
+
+      // target depth per finest cell: d = dmax + log2(D), clamped to [floor, dmax]
+      const T = new Float32Array(gw * gh);
+      const dmax = params.depth, floor = Math.min(params.floor, dmax);
+      for (let i = 0; i < gw * gh; i++) {
+        const r = data[i * 4] / 255, gr = data[i * 4 + 1] / 255, b = data[i * 4 + 2] / 255;
+        const lum = Math.pow(0.2126 * lin(r) + 0.7152 * lin(gr) + 0.0722 * lin(b), 1 / 2.2);
+        let D = params.invert ? lum : 1 - lum;
+        D = Math.pow(D, params.gamma);
+        const d = D > 0 ? dmax + Math.log2(D) : -Infinity;
+        T[i] = Math.max(floor, Math.min(dmax, d));
+      }
+      return { T, gw, gh, n };
+    }
+    const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+
+    // summed-area table for O(1) mean target depth over any aligned cell
+    function summedArea(T, gw, gh) {
+      const S = new Float64Array((gw + 1) * (gh + 1));
+      for (let y = 0; y < gh; y++) {
+        let row = 0;
+        for (let x = 0; x < gw; x++) {
+          row += T[y * gw + x];
+          S[(y + 1) * (gw + 1) + x + 1] = S[y * (gw + 1) + x + 1] + row;
+        }
+      }
+      return S;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * the adaptive Hilbert recursion
+     * A cell is the square at (x0,y0) spanned by vectors (xi,xj) and (yi,yj).
+     * The curve enters near (x0,y0) and leaves near (x0,y0)+(yi,yj).
+     * ------------------------------------------------------------------ */
+    function build() {
+      const { T, gw, gh, n } = sampleTargets();
+      const S = summedArea(T, gw, gh);
+      const W1 = gw + 1;
+      const meanT = (x, y, s) =>
+        (S[(y + s) * W1 + x + s] - S[y * W1 + x + s] - S[(y + s) * W1 + x] + S[y * W1 + x]) / (s * s);
+
+      let cap = 1 << 16;
+      let pts = new Float32Array(cap);
+      let m = 0;
+      const push = (x, y) => {
+        if (m + 2 > cap) { cap *= 2; const p = new Float32Array(cap); p.set(pts); pts = p; }
+        pts[m++] = x; pts[m++] = y;
+      };
+
+      const rec = (x0, y0, xi, xj, yi, yj, level) => {
+        const s = Math.abs(xi + yi);               // side length (one of the vectors is axis-aligned)
+        const bx = Math.min(x0, x0 + xi + yi), by = Math.min(y0, y0 + xj + yj);
+        if (level < params.depth && meanT(bx, by, s) > level + 0.5) {
+          const hxi = xi / 2, hxj = xj / 2, hyi = yi / 2, hyj = yj / 2;
+          rec(x0, y0, hyi, hyj, hxi, hxj, level + 1);
+          rec(x0 + hxi, y0 + hxj, hxi, hxj, hyi, hyj, level + 1);
+          rec(x0 + hxi + hyi, y0 + hxj + hyj, hxi, hxj, hyi, hyj, level + 1);
+          rec(x0 + hxi + yi, y0 + hxj + yj, -hyi, -hyj, -hxi, -hxj, level + 1);
+        } else {
+          push(x0 + (xi + yi) / 2, y0 + (xj + yj) / 2);
+        }
+      };
+
+      // Each square enters at one corner of its long-axis edge and leaves at the next
+      // square's corner, so the chain stays one line.
+      const { k, horizontal } = layout;
+      for (let q = 0; q < k; q++) {
+        if (horizontal) rec(q * n, n, 0, -n, n, 0, 0);   // enter bottom-left, exit bottom-right
+        else rec(0, q * n, n, 0, 0, n, 0);               // enter top-left, exit bottom-left
+      }
+
+      path = pts;
+      nPts = m / 2;
+      return { gw, gh, n };
+    }
+
+    /* ------------------------------------------------------------------ *
+     * drawing
+     * ------------------------------------------------------------------ */
+    let grid = { gw: 1, gh: 1, n: 1 };
+    let view = { scale: 1 };
+
+    function fitCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const narrow = vw < 640;
+      const padX = narrow ? 12 : 48;
+      const padTop = narrow ? 70 : 64, padBot = narrow ? 96 : 92;
+      const availW = vw - padX * 2, availH = vh - padTop - padBot;
+      const scale = Math.min(availW / grid.gw, availH / grid.gh);
+      const w = Math.floor(grid.gw * scale), h = Math.floor(grid.gh * scale);
+      canvas.style.width = w + "px"; canvas.style.height = h + "px";
+      canvas.style.left = Math.round((vw - w) / 2) + "px";
+      canvas.style.top = Math.round(padTop + (availH - h) / 2) + "px";
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      view = { scale: (w / grid.gw) * dpr, dpr };
+    }
+
+    function colors() {
+      return params.invert ? { bg: INK, fg: PAPER } : { bg: PAPER, fg: INK };
+    }
+
+    function strokeRange(from, to) {
+      const sc = view.scale;
+      ctx.beginPath();
+      ctx.moveTo(path[from * 2] * sc, path[from * 2 + 1] * sc);
+      for (let i = from + 1; i < to; i++) ctx.lineTo(path[i * 2] * sc, path[i * 2 + 1] * sc);
+      ctx.stroke();
+    }
+
+    function prepCtx() {
+      const { bg, fg } = colors();
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = fg;
+      ctx.lineWidth = Math.max(0.5, params.weight * view.scale);
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+    }
+
+    function render() {
+      stopAnim();
+      prepCtx();
+      if (nPts > 1) strokeRange(0, nPts);
+    }
+
+    function updateStats() {
+      let len = 0;
+      for (let i = 1; i < nPts; i++) {
+        len += Math.hypot(path[i * 2] - path[i * 2 - 2], path[i * 2 + 1] - path[i * 2 - 1]);
+      }
+      // length in "sheet widths", the only unit that means anything without a printer
+      const widths = len / grid.gw;
+      $("stats").textContent =
+        `1 line · ${nPts.toLocaleString()} turns\n` +
+        `${widths.toFixed(0)}× the width of the sheet`;
+    }
+
+    /* ---- the line drawing itself ---- */
+    function stopAnim() {
+      if (anim) { cancelAnimationFrame(anim.raf); anim = null; }
+      $("play").textContent = "draw";
+    }
+
+    function play() {
+      if (anim) { render(); return; }
+      prepCtx();
+      const dur = Math.min(14000, Math.max(5000, nPts * 0.08)); // ms
+      const t0 = performance.now();
+      let done = 0;
+      const tipR = Math.max(3 * view.dpr, ctx.lineWidth * 1.6);
+      let under = null; // pixels under the pen tip, restored each frame
+      const frame = (now) => {
+        // rAF's timestamp can predate t0 on the first frame
+        const target = Math.min(nPts, Math.max(1, Math.ceil(((now - t0) / dur) * nPts)));
+        if (under) ctx.putImageData(under.img, under.x, under.y);
+        if (target > done) {
+          strokeRange(Math.max(0, done - 1), target);
+          done = target;
+        }
+        if (done < nPts && done > 0) {
+          const sc = view.scale;
+          const x = path[(done - 1) * 2] * sc, y = path[(done - 1) * 2 + 1] * sc;
+          const bx = Math.max(0, Math.floor(x - tipR - 2)), by = Math.max(0, Math.floor(y - tipR - 2));
+          const bw = Math.ceil(tipR * 2 + 4), bh = bw;
+          under = { img: ctx.getImageData(bx, by, bw, bh), x: bx, y: by };
+          ctx.save(); ctx.fillStyle = TIP;
+          ctx.beginPath(); ctx.arc(x, y, tipR, 0, Math.PI * 2); ctx.fill();
+          ctx.restore();
+          anim.raf = requestAnimationFrame(frame);
+        } else if (done < nPts) {
+          anim.raf = requestAnimationFrame(frame);
+        } else {
+          anim = null;
+          $("play").textContent = "draw";
+        }
+      };
+      anim = { raf: requestAnimationFrame(frame) };
+      $("play").textContent = "stop";
+    }
+
+    /* ------------------------------------------------------------------ *
+     * pipeline
+     * ------------------------------------------------------------------ */
+    let pending = false;
+    function rebuild() {
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        if (!source) return;
+        grid = build();
+        fitCanvas();
+        render();
+        updateStats();
+      });
+    }
+
+    function setSource(img) {
+      source = img;
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      layout = chooseLayout(w, h);
+      rebuild();
+    }
+
+    function loadFile(file) {
+      if (!file || !file.type.startsWith("image/")) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { setSource(img); URL.revokeObjectURL(url); };
+      img.src = url;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * export
+     * ------------------------------------------------------------------ */
+    function download(blob, name) {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function savePng() {
+      // a finished drawing, not a mid-animation frame
+      if (anim) render();
+      canvas.toBlob((b) => download(b, "hilbert-portrait.png"), "image/png");
+    }
+
+    function saveSvg() {
+      const { bg, fg } = colors();
+      const parts = new Array(nPts);
+      for (let i = 0; i < nPts; i++) parts[i] = `${+path[i * 2].toFixed(2)},${+path[i * 2 + 1].toFixed(2)}`;
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${grid.gw} ${grid.gh}" ` +
+        `width="${grid.gw * 4}" height="${grid.gh * 4}">` +
+        `<rect width="100%" height="100%" fill="${bg}"/>` +
+        `<polyline fill="none" stroke="${fg}" stroke-width="${params.weight}" ` +
+        `stroke-linecap="round" stroke-linejoin="round" points="${parts.join(" ")}"/></svg>`;
+      download(new Blob([svg], { type: "image/svg+xml" }), "hilbert-portrait.svg");
+    }
+
+    /* ------------------------------------------------------------------ *
+     * controls
+     * ------------------------------------------------------------------ */
+    const sliders = {
+      depth:  (v) => `${v} · ${(1 << v)}²`,
+      floor:  (v) => `${v}`,
+      gamma:  (v) => (+v).toFixed(2),
+      weight: (v) => (+v).toFixed(2),
+      blur:   (v) => (+v === 0 ? "off" : `${(+v).toFixed(1)}`),
+    };
+    const ids = { depth: "depth", floor: "floor", gamma: "gamma", weight: "weight", blur: "blur" };
+
+    if (!isBackground()) {
+      for (const [key, fmt] of Object.entries(sliders)) {
+        const el = $(ids[key]);
+        const sync = () => { params[key] = +el.value; $(key + "V").textContent = fmt(el.value); };
+        sync();
+        el.addEventListener("input", () => {
+          sync();
+          // line weight is purely visual; everything else changes the curve
+          if (key === "weight") render(); else rebuild();
+        });
+      }
+      $("invert").addEventListener("change", (e) => { params.invert = e.target.checked; rebuild(); });
+      if (window.innerWidth < 640) $("panel").setAttribute("collapsed", "");
+
+      $("upload").addEventListener("click", () => $("file").click());
+      $("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
+      $("play").addEventListener("click", play);
+      $("png").addEventListener("click", savePng);
+      $("svg").addEventListener("click", saveSvg);
+
+      // drop or paste anywhere
+      let dragDepth = 0;
+      window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("drop").classList.add("on"); });
+      window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").classList.remove("on"); } });
+      window.addEventListener("dragover", (e) => e.preventDefault());
+      window.addEventListener("drop", (e) => {
+        e.preventDefault(); dragDepth = 0; $("drop").classList.remove("on");
+        loadFile(e.dataTransfer.files[0]);
+      });
+      window.addEventListener("paste", (e) => {
+        const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+        if (item) loadFile(item.getAsFile());
+      });
+    } else {
+      $("bar").remove();
+      document.querySelector(".hp-head").remove();
+    }
+
+    window.addEventListener("resize", () => { if (path) { fitCanvas(); render(); } });
+
+    setSource(demoImage());
+  </script>
+</body>
+</html>
