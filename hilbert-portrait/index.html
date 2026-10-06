@@ -129,6 +129,9 @@
       recurse equally far. A light patch can stop early and be crossed by a few long strokes; a
       dark patch can keep subdividing until it's packed with tight wiggles. The pieces still join
       end to end, so it's still one line.</p>
+      <p>Where a big cell meets a small one their centres don't line up, so the line takes a
+      little Z-shaped step inside the big cell: out toward the shared edge, along it, and across.
+      That keeps every bend a right angle, and the line never touches itself.</p>
       <p>A cell of side $s$ gets roughly one line per $s$ of width, so with line width $w$ it is
       inked to about $w/s$. To make a patch with darkness $D$ (0 = white, 1 = black), the cell size
       should be $s = s_{\min}/D$, where $s_{\min}$ is the finest cell. That's a recursion depth of</p>
@@ -306,8 +309,30 @@
           rec(x0 + hxi + hyi, y0 + hxj + hyj, hxi, hxj, hyi, hyj, level + 1);
           rec(x0 + hxi + yi, y0 + hxj + yj, -hyi, -hyj, -hxi, -hxj, level + 1);
         } else {
-          push(x0 + (xi + yi) / 2, y0 + (xj + yj) / 2);
+          leaf(x0 + (xi + yi) / 2, y0 + (xj + yj) / 2, s);
         }
+      };
+
+      // Consecutive leaves always share an edge, but when they differ in size their centres
+      // don't line up. Bridge them with a Z inside the bigger cell: out from its centre to just
+      // inside the shared edge, along the edge, then across. The two bridges a cell can have
+      // sit in different halves of it, so the line never meets itself.
+      let px = 0, py = 0, ps = 0;
+      const leaf = (x, y, s) => {
+        if (ps && ps !== s) {
+          const bigFirst = ps > s;
+          const bx = bigFirst ? px : x, by = bigFirst ? py : y, bs = Math.max(ps, s);
+          const sx = bigFirst ? x : px, sy = bigFirst ? y : py, ss = Math.min(ps, s);
+          const inset = bs / 2 - ss / 2;
+          const acrossX = Math.abs(sx - bx) > Math.abs(sy - by);  // neighbours side by side
+          let m1x, m1y, m2x, m2y;
+          if (acrossX) { m1x = m2x = bx + Math.sign(sx - bx) * inset; m1y = by; m2y = sy; }
+          else         { m1y = m2y = by + Math.sign(sy - by) * inset; m1x = bx; m2x = sx; }
+          if (bigFirst) { push(m1x, m1y); push(m2x, m2y); }
+          else          { push(m2x, m2y); push(m1x, m1y); }
+        }
+        push(x, y);
+        px = x; py = y; ps = s;
       };
 
       // Each square enters at one corner of its long-axis edge and leaves at the next
@@ -373,14 +398,18 @@
     }
 
     function updateStats() {
-      let len = 0;
+      let len = 0, turns = 0, pdx = 0, pdy = 0;
       for (let i = 1; i < nPts; i++) {
-        len += Math.hypot(path[i * 2] - path[i * 2 - 2], path[i * 2 + 1] - path[i * 2 - 1]);
+        const dx = path[i * 2] - path[i * 2 - 2], dy = path[i * 2 + 1] - path[i * 2 - 1];
+        len += Math.abs(dx) + Math.abs(dy);         // every segment is axis-aligned
+        const ux = Math.sign(dx), uy = Math.sign(dy);
+        if (i > 1 && (ux !== pdx || uy !== pdy)) turns++;
+        pdx = ux; pdy = uy;
       }
       // length in "sheet widths", the only unit that means anything without a printer
       const widths = len / grid.gw;
       $("stats").textContent =
-        `1 line · ${nPts.toLocaleString()} turns\n` +
+        `1 line · ${turns.toLocaleString()} turns\n` +
         `${widths.toFixed(0)}× the width of the sheet`;
     }
 
