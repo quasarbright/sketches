@@ -129,9 +129,13 @@
       recurse equally far. A light patch can stop early and be crossed by a few long strokes; a
       dark patch can keep subdividing until it's packed with tight wiggles. The pieces still join
       end to end, so it's still one line.</p>
-      <p>Where a big cell meets a small one their centres don't line up, so the line takes a
-      little Z-shaped step inside the big cell: out toward the shared edge, along it, and across.
-      That keeps every bend a right angle, and the line never touches itself.</p>
+      <p>Where a big cell meets a small one their centres don't line up, so the line doesn't
+      go through centres. Instead it picks where to cross each shared edge, so every cell holds
+      either a straight run or a single right-angle turn, just like a cell of an ordinary Hilbert
+      curve. A cell the line runs straight through needs both crossings at the same height, and it
+      can always get them: both neighbours sit against the same side of it, so the smaller one's
+      edge fits inside the larger one's. Where every cell is the same size, this lands every
+      turn at a cell centre: the classic curve exactly.</p>
       <p>A cell of side $s$ gets roughly one line per $s$ of width, so with line width $w$ it is
       inked to about $w/s$. To make a patch with darkness $D$ (0 = white, 1 = black), the cell size
       should be $s = s_{\min}/D$, where $s_{\min}$ is the finest cell. That's a recursion depth of</p>
@@ -291,14 +295,8 @@
       const meanT = (x, y, s) =>
         (S[(y + s) * W1 + x + s] - S[y * W1 + x + s] - S[(y + s) * W1 + x] + S[y * W1 + x]) / (s * s);
 
-      let cap = 1 << 16;
-      let pts = new Float32Array(cap);
-      let m = 0;
-      const push = (x, y) => {
-        if (m + 2 > cap) { cap *= 2; const p = new Float32Array(cap); p.set(pts); pts = p; }
-        pts[m++] = x; pts[m++] = y;
-      };
-
+      // leaves in curve order: centre and side
+      const LX = [], LY = [], LS = [];
       const rec = (x0, y0, xi, xj, yi, yj, level) => {
         const s = Math.abs(xi + yi);               // side length (one of the vectors is axis-aligned)
         const bx = Math.min(x0, x0 + xi + yi), by = Math.min(y0, y0 + xj + yj);
@@ -309,30 +307,8 @@
           rec(x0 + hxi + hyi, y0 + hxj + hyj, hxi, hxj, hyi, hyj, level + 1);
           rec(x0 + hxi + yi, y0 + hxj + yj, -hyi, -hyj, -hxi, -hxj, level + 1);
         } else {
-          leaf(x0 + (xi + yi) / 2, y0 + (xj + yj) / 2, s);
+          LX.push(x0 + (xi + yi) / 2); LY.push(y0 + (xj + yj) / 2); LS.push(s);
         }
-      };
-
-      // Consecutive leaves always share an edge, but when they differ in size their centres
-      // don't line up. Bridge them with a Z inside the bigger cell: out from its centre to just
-      // inside the shared edge, along the edge, then across. The two bridges a cell can have
-      // sit in different halves of it, so the line never meets itself.
-      let px = 0, py = 0, ps = 0;
-      const leaf = (x, y, s) => {
-        if (ps && ps !== s) {
-          const bigFirst = ps > s;
-          const bx = bigFirst ? px : x, by = bigFirst ? py : y, bs = Math.max(ps, s);
-          const sx = bigFirst ? x : px, sy = bigFirst ? y : py, ss = Math.min(ps, s);
-          const inset = bs / 2 - ss / 2;
-          const acrossX = Math.abs(sx - bx) > Math.abs(sy - by);  // neighbours side by side
-          let m1x, m1y, m2x, m2y;
-          if (acrossX) { m1x = m2x = bx + Math.sign(sx - bx) * inset; m1y = by; m2y = sy; }
-          else         { m1y = m2y = by + Math.sign(sy - by) * inset; m1x = bx; m2x = sx; }
-          if (bigFirst) { push(m1x, m1y); push(m2x, m2y); }
-          else          { push(m2x, m2y); push(m1x, m1y); }
-        }
-        push(x, y);
-        px = x; py = y; ps = s;
       };
 
       // Each square enters at one corner of its long-axis edge and leaves at the next
@@ -343,9 +319,59 @@
         else rec(0, q * n, n, 0, 0, n, 0);               // enter top-left, exit bottom-left
       }
 
-      path = pts;
-      nPts = m / 2;
+      path = seamless(LX, LY, LS);
+      nPts = path.length / 2;
       return { gw, gh, n };
+    }
+
+    /* ------------------------------------------------------------------ *
+     * threading the line through the leaves
+     * Consecutive leaves always share an edge, so the line crosses each shared edge once,
+     * straight across. Joining centres would put diagonals wherever a big leaf meets a small
+     * one, so instead choose *where* along each edge to cross, and let each leaf hold either a
+     * straight run (in and out through opposite sides) or exactly one right-angle turn (through
+     * adjacent sides), like a cell of an ordinary Hilbert curve.
+     *
+     * A straight-through leaf needs both its crossings at the same height. They always can be:
+     * both neighbours touch the leaf's entry/exit side, so their edges overlap from that side,
+     * and the shorter one lies inside the longer. A run of straight leaves therefore crosses at
+     * the centre of the smallest neighbour in the run. When all leaves are one size this puts
+     * every turn at a cell centre: the classic curve exactly.
+     * ------------------------------------------------------------------ */
+    function seamless(X, Y, S) {
+      const n = X.length;
+      if (n === 1) return new Float32Array([X[0], Y[0]]);
+      const m = n - 1;
+      const vert = new Uint8Array(m);      // 1: the shared edge is vertical (leaves side by side)
+      const coord = new Float64Array(m);   // where along that edge the line crosses
+      const size = new Float64Array(m);    // the smaller leaf's side
+      for (let k = 0; k < m; k++) {
+        const dx = X[k + 1] - X[k], dy = Y[k + 1] - Y[k];
+        vert[k] = Math.abs(dx) > Math.abs(dy) ? 1 : 0;
+        const sm = S[k] <= S[k + 1] ? k : k + 1;
+        size[k] = S[sm];
+        coord[k] = vert[k] ? Y[sm] : X[sm];
+      }
+      for (let k = 0; k < m; ) {
+        let j = k, best = k;
+        while (j + 1 < m && vert[j + 1] === vert[k]) j++;
+        for (let i = k; i <= j; i++) if (size[i] < size[best]) best = i;
+        for (let i = k; i <= j; i++) coord[i] = coord[best];
+        k = j + 1;
+      }
+
+      const out = new Float32Array((m + 1) * 2);
+      let o = 0;
+      const push = (x, y) => { out[o++] = x; out[o++] = y; };
+      push(vert[0] ? X[0] : coord[0], vert[0] ? coord[0] : Y[0]);
+      for (let k = 1; k < m; k++) {
+        // the leaf between crossings k-1 and k turns where the two crossing lines meet
+        if (vert[k - 1] !== vert[k]) {
+          if (vert[k - 1]) push(coord[k], coord[k - 1]); else push(coord[k - 1], coord[k]);
+        }
+      }
+      push(vert[m - 1] ? X[n - 1] : coord[m - 1], vert[m - 1] ? coord[m - 1] : Y[n - 1]);
+      return out.subarray(0, o);
     }
 
     /* ------------------------------------------------------------------ *
@@ -422,30 +448,45 @@
     function play() {
       if (anim) { render(); return; }
       prepCtx();
-      const dur = Math.min(14000, Math.max(5000, nPts * 0.08)); // ms
+      // pace by distance, not by vertex: one vertex can be a long straight run
+      const cum = new Float64Array(nPts);
+      for (let i = 1; i < nPts; i++) {
+        cum[i] = cum[i - 1] + Math.abs(path[i * 2] - path[i * 2 - 2]) + Math.abs(path[i * 2 + 1] - path[i * 2 - 1]);
+      }
+      const total = cum[nPts - 1] || 1;
+      const dur = Math.min(14000, Math.max(5000, nPts * 0.15)); // ms
+      const sc = view.scale;
       const t0 = performance.now();
-      let done = 0;
+      let i = 0;                                  // last vertex fully drawn
+      let lx = path[0] * sc, ly = path[1] * sc;   // where the pen is
       const tipR = Math.max(3 * view.dpr, ctx.lineWidth * 1.6);
       let under = null; // pixels under the pen tip, restored each frame
       const frame = (now) => {
-        // rAF's timestamp can predate t0 on the first frame
-        const target = Math.min(nPts, Math.max(1, Math.ceil(((now - t0) / dur) * nPts)));
         if (under) ctx.putImageData(under.img, under.x, under.y);
-        if (target > done) {
-          strokeRange(Math.max(0, done - 1), target);
-          done = target;
+        // rAF's timestamp can predate t0 on the first frame
+        const d = Math.min(total, Math.max(0, (now - t0) / dur) * total);
+        ctx.beginPath(); ctx.moveTo(lx, ly);
+        while (i + 1 < nPts && cum[i + 1] <= d) {
+          i++;
+          ctx.lineTo(path[i * 2] * sc, path[i * 2 + 1] * sc);
         }
-        if (done < nPts && done > 0) {
-          const sc = view.scale;
-          const x = path[(done - 1) * 2] * sc, y = path[(done - 1) * 2 + 1] * sc;
-          const bx = Math.max(0, Math.floor(x - tipR - 2)), by = Math.max(0, Math.floor(y - tipR - 2));
-          const bw = Math.ceil(tipR * 2 + 4), bh = bw;
-          under = { img: ctx.getImageData(bx, by, bw, bh), x: bx, y: by };
+        if (i + 1 < nPts) {
+          const t = (d - cum[i]) / (cum[i + 1] - cum[i] || 1);
+          lx = (path[i * 2] + (path[i * 2 + 2] - path[i * 2]) * t) * sc;
+          ly = (path[i * 2 + 1] + (path[i * 2 + 3] - path[i * 2 + 1]) * t) * sc;
+        } else {
+          lx = path[i * 2] * sc; ly = path[i * 2 + 1] * sc;
+        }
+        ctx.lineTo(lx, ly);
+        ctx.stroke();
+
+        if (d < total) {
+          const bx = Math.max(0, Math.floor(lx - tipR - 2)), by = Math.max(0, Math.floor(ly - tipR - 2));
+          const bw = Math.ceil(tipR * 2 + 4);
+          under = { img: ctx.getImageData(bx, by, bw, bw), x: bx, y: by };
           ctx.save(); ctx.fillStyle = TIP;
-          ctx.beginPath(); ctx.arc(x, y, tipR, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(lx, ly, tipR, 0, Math.PI * 2); ctx.fill();
           ctx.restore();
-          anim.raf = requestAnimationFrame(frame);
-        } else if (done < nPts) {
           anim.raf = requestAnimationFrame(frame);
         } else {
           anim = null;
