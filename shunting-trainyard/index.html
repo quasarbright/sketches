@@ -573,7 +573,7 @@
     function switchAt(px, py) {
       for (let k = 0; k < yard.switches.length; k++) {
         const n = yard.nodes[yard.switches[k].id];
-        if (Math.hypot(sx(n.x) - px, sy(n.y) - py) < Math.max(14, L * 0.3)) return k;
+        if (Math.hypot(sx(n.x) - px, sy(n.y) - py) < Math.max(18, L * 0.5)) return k;
       }
       return -1;
     }
@@ -685,8 +685,8 @@
       return lit;
     }
 
-    function trackPath(t, s0 = 0, s1 = t.len) {
-      ctx.beginPath();
+    function trackPath(t, s0 = 0, s1 = t.len, fresh = true) {
+      if (fresh) ctx.beginPath();
       const p0 = pointOnTrack(t, s0);
       ctx.moveTo(sx(p0.x), sy(p0.y));
       for (let i = 1; i < t.pts.length - 1; i++) if (t.cum[i] > s0 && t.cum[i] < s1) ctx.lineTo(sx(t.pts[i][0]), sy(t.pts[i][1]));
@@ -836,8 +836,53 @@
         if (a1 < t.len) { ctx.globalAlpha = alpha * (1 - cutB); trackPath(t, a1, t.len); ctx.stroke(); }
         ctx.globalAlpha = 1;
       }
+      // A switch is the stretch of track right around its points: the end of the
+      // trunk and the start of both legs. It sits on a soft amber pad so it reads
+      // as something to click, and its rail is amber along the leg it's set to.
+      const TRUNK_END = 0.55, LEG_START = 0.85;
+      const piece = (trackId, nodeId, len) => {
+        const t = yard.tracks[trackId];
+        return t.from === nodeId ? [t, 0, Math.min(len, t.len)] : [t, Math.max(0, t.len - len), t.len];
+      };
+      const switchLook = yard.switches.map((S, k) => {
+        const locked = switchLocked(yard, state, k);
+        const hot = hover && hover.kind === "switch" && hover.k === k && !drag;
+        const flash = flashSwitch && flashSwitch.k === k && now - flashSwitch.t < 900;
+        return { S, k, locked, hot, flash };
+      });
+      for (const { S, locked, hot, flash } of switchLook) {
+        ctx.strokeStyle = flash ? C.danger : locked ? C.faint : C.amber;
+        ctx.globalAlpha = flash ? 0.45 : locked ? 0.25 : hot ? 0.34 : 0.16;
+        ctx.lineWidth = tw * (hot && !locked ? 3.2 : 2.8);
+        // one path, one stroke, so the overlapping pieces don't stack up darker
+        ctx.beginPath();
+        for (const [t, a, b] of [piece(S.trunk, S.id, TRUNK_END), ...S.legs.map((l) => piece(l, S.id, LEG_START))]) trackPath(t, a, b, false);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       for (const t of Object.values(yard.tracks)) strokeTrack(t, tw, C.dim, 1);
       for (const t of Object.values(yard.tracks)) strokeTrack(t, tw * 0.55, C.lit, litAmt.get(t.id));
+      // the switch's own rail: amber through the points along the set leg (cross-fading
+      // as it swings); hovering lights the other leg faintly, to show what a click does
+      for (const { S, k, locked, hot } of switchLook) {
+        const rail = locked ? C.muted : C.amber;
+        ctx.lineWidth = tw * 0.55; ctx.strokeStyle = rail;
+        let [t, a, b] = piece(S.trunk, S.id, TRUNK_END);
+        trackPath(t, a, b); ctx.stroke();
+        S.legs.forEach((leg, i) => {
+          const set = i === 0 ? 1 - swing[k] : swing[k];
+          const alpha = Math.max(set, hot && !locked ? 0.4 : 0);
+          if (alpha <= 0.01) return;
+          [t, a, b] = piece(leg, S.id, LEG_START);
+          // the unset leg's first stretch is cut back at the points (see strokeTrack)
+          ctx.globalAlpha = alpha;
+          if (t.from === S.id) trackPath(t, Math.max(a, set < 0.5 ? BLANK * (1 - set) : 0), b);
+          else trackPath(t, a, Math.min(b, t.len - (set < 0.5 ? BLANK * (1 - set) : 0)));
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        });
+        if (hot && locked) { const n = yard.nodes[S.id]; labels.push({ text: "car on the points", x: sx(n.x), y: sy(n.y), dy: L * 0.6 }); }
+      }
       // buffer stops
       for (const n of Object.values(yard.nodes)) {
         if (n.kind !== "buffer") continue;
@@ -884,34 +929,6 @@
         });
       }
 
-      // switch levers
-      yard.switches.forEach((S, k) => {
-        const n = yard.nodes[S.id], x = sx(n.x), y = sy(n.y);
-        const locked = switchLocked(yard, state, k);
-        const hot = hover && hover.kind === "switch" && hover.k === k && !drag;
-        const flash = flashSwitch && flashSwitch.k === k && now - flashSwitch.t < 900;
-        const r = Math.max(9, L * 0.24);
-        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = hot && !locked ? "#f2a93b33" : "#12161999";
-        ctx.fill();
-        ctx.lineWidth = hot ? 3 : 2;
-        ctx.strokeStyle = flash ? C.danger : locked ? C.faint : hot ? C.amberHi : C.amber;
-        ctx.stroke();
-        // a pointer along the set leg, swinging when thrown; on hover, a ghost along the other
-        const d0 = legDir(S.legs[0], S.id), d1 = legDir(S.legs[1], S.id);
-        const a0 = Math.atan2(d0.y, d0.x), a1 = a0 + Math.atan2(Math.sin(Math.atan2(d1.y, d1.x) - a0), Math.cos(Math.atan2(d1.y, d1.x) - a0));
-        const sa = a0 + (a1 - a0) * swing[k], set = { x: Math.cos(sa), y: Math.sin(sa) };
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + set.x * r * 0.8, y + set.y * r * 0.8);
-        ctx.lineWidth = Math.max(2.5, L * 0.06); ctx.strokeStyle = locked ? C.faint : C.amber; ctx.stroke();
-        if (hot && !locked) {
-          const other = legDir(S.legs[1 - state.sw[k]], S.id);
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + other.x * r * 1.6, y + other.y * r * 1.6);
-          ctx.lineWidth = 2; ctx.strokeStyle = C.amberHi; ctx.stroke();
-          ctx.setLineDash([]);
-        }
-        if ((hot && locked) || (flash && flashSwitch.why)) labels.push({ text: "car on the points", x, y, dy: r + 14 });
-      });
 
       // cars
       const poses = cars.map((_, c) => poseOf(c));
