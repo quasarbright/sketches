@@ -1,4 +1,4 @@
-// Shunting trainyard: track geometry, the rules of moving cars, and a solver.
+// Shunting yard: track geometry, the rules of moving cars, and a solver.
 //
 // Units are car lengths. A track is a polyline between two nodes, cut into
 // car-length slots. A node is a buffer stop (one track), a plain join (two),
