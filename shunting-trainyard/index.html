@@ -142,12 +142,6 @@
     .st-home .st-btn { width: 50px; height: 50px; padding: 0; border-radius: 50%; }
     .st-score .st-stat { min-width: 96px; }
 
-    /* the end card's table of what each star takes */
-    .st-cuts { display: grid; grid-template-columns: auto auto; gap: 6px 14px; justify-content: center; align-items: center; margin: -6px 0 24px; }
-    .st-cuts .st-cut-stars { display: flex; gap: 2px; justify-content: flex-end; }
-    .st-cuts .st-cut-stars svg { width: 18px; height: 18px; }
-    .st-cuts .st-cut-moves { font-weight: 700; font-size: .95rem; color: var(--muted); text-align: left; font-variant-numeric: tabular-nums; }
-    .st-cuts .is-yours { color: var(--text); }
 
     /* ---------- results ---------- */
     .st-win {
@@ -155,25 +149,24 @@
       background: rgba(8,10,12,.55);
     }
     .st-card {
-      position: relative; width: min(400px, 100%); text-align: center; padding: 30px 26px 26px;
+      position: relative; width: min(500px, 100%); text-align: center; padding: 30px 26px 26px;
       background: var(--panel); border-radius: 26px; box-shadow: 0 6px 0 var(--lip), 0 24px 60px rgba(0,0,0,.6);
       animation: st-pop .45s cubic-bezier(.2, 1.5, .4, 1);
     }
     @keyframes st-pop { from { transform: scale(.6) translateY(30px); opacity: 0; } }
-    .st-card-x {
-      position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border: 0; border-radius: 50%;
-      background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center;
-    }
-    .st-card-x:hover { background: var(--panel-2); color: var(--text); }
-    .st-card-x svg.st-ico { width: 18px; height: 18px; }
     .st-card h2 { margin: 0; font: 400 2.4rem/1 var(--font-display); color: var(--accent); text-shadow: 0 4px 0 var(--accent-lip); }
-    .st-stars { display: flex; justify-content: center; gap: 8px; margin: 20px 0 8px; }
+    .st-win-moves { margin-top: 10px; font-weight: 700; font-size: 1.05rem; color: var(--muted); }
+    .st-stars { display: flex; justify-content: center; gap: 14px; margin: 18px 0 26px; }
+    .st-star-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .st-star-slot span { font-weight: 800; font-size: .85rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+    .st-star-slot.is-on span { color: var(--text); }
+    .st-card-actions { flex-wrap: wrap; }
+    .st-card-actions svg.st-ico { width: 18px; height: 18px; }
     .st-stars svg { width: 46px; height: 46px; }
     .st-stars svg.is-on { animation: st-star .5s cubic-bezier(.2, 1.6, .4, 1) both; }
-    .st-stars svg:nth-child(2).is-on { animation-delay: .15s; }
-    .st-stars svg:nth-child(3).is-on { animation-delay: .3s; }
+    .st-star-slot:nth-child(2) svg.is-on { animation-delay: .15s; }
+    .st-star-slot:nth-child(3) svg.is-on { animation-delay: .3s; }
     @keyframes st-star { from { transform: scale(0) rotate(-40deg); } }
-    .st-verdict { font-weight: 700; font-size: 1.1rem; color: var(--text); margin-bottom: 18px; }
     .st-results { display: flex; justify-content: center; margin-bottom: 24px; }
     .st-results .st-stat { min-width: 70px; }
     .st-card-actions { display: flex; gap: 12px; justify-content: center; }
@@ -229,9 +222,9 @@
   <!-- in play -->
   <div class="st-bar" id="bar" hidden>
     <div class="st-ctl st-home">
-      <button class="st-btn" id="back" title="back to the puzzle list (Esc)">
+      <button class="st-btn" id="back" title="back to the level list (Esc)">
         <svg class="st-ico" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>
-      </button><span>Puzzles</span>
+      </button><span>Level select</span>
     </div>
     <div class="st-score">
       <div class="st-stat is-moves" title="moves so far: each switch you throw and each coupling you make or break">
@@ -254,15 +247,15 @@
       </button><span>Undo</span>
     </div>
     <div class="st-ctl">
-      <button class="st-btn" id="reset" title="put every car back where this puzzle started (R)">
+      <button class="st-btn" id="reset" title="put every car back where this level started (R)">
         <svg class="st-ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
       </button><span>Restart</span>
     </div>
     <div class="st-gap"></div>
     <div class="st-ctl">
-      <button class="st-btn is-amber" id="skip" title="go on to the next puzzle">
+      <button class="st-btn is-amber" id="skip" title="go on to the next level">
         <svg class="st-ico" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
-      </button><span>Next puzzle</span>
+      </button><span>Next level</span>
     </div>
   </div>
 
@@ -270,19 +263,13 @@
   <!-- results -->
   <div class="st-win" id="win" hidden>
     <div class="st-card" role="dialog" aria-labelledby="winTitle">
-      <button class="st-card-x" id="winClose" title="close this and look at the yard">
-        <svg class="st-ico" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
       <h2 id="winTitle">Shunted!</h2>
+      <div class="st-win-moves" id="winMoves"></div>
       <div class="st-stars" id="stars"></div>
-      <div class="st-verdict" id="verdict"></div>
-      <div class="st-results">
-        <div class="st-stat is-moves"><span class="st-stat-label">Your moves</span><span class="st-stat-value" id="winMoves"></span></div>
-      </div>
-      <div class="st-cuts" id="cuts"></div>
       <div class="st-card-actions">
-        <button class="st-btn" id="winMenu" title="back to the puzzle list">Puzzles</button>
-        <button class="st-btn is-amber" id="winNext" title="go on to the next puzzle">Next puzzle</button>
+        <button class="st-btn" id="winRetry" title="play this level again from the start">Try again</button>
+        <button class="st-btn" id="winMenu" title="back to the level list"><svg class="st-ico" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>Level select</button>
+        <button class="st-btn is-amber" id="winNext" title="go on to the next level">Next level</button>
       </div>
     </div>
   </div>
@@ -341,7 +328,7 @@
       swing = state.sw.slice(); litAmt = new Map();
       playing = true;
       $("menu").hidden = true; $("bar").hidden = false; $("controls").hidden = false; $("win").hidden = true;
-      $("tagNum").textContent = `Puzzle ${levelIndex + 1}`;
+      $("tagNum").textContent = `Level ${levelIndex + 1}`;
       $("tagName").textContent = level.name;
       $("tagGoal").textContent = level.blurb;
       layout();
@@ -349,14 +336,14 @@
       updateGates();
     }
 
-    // what's open: the next puzzle once this one is done, the list after the tutorials
+    // what's open: the next level once this one is done, the list after the tutorials
     function updateGates() {
       const last = levelIndex === LEVELS.length - 1;
       $("skip").disabled = !done(levelIndex) || last;
-      $("skip").title = done(levelIndex) ? "go on to the next puzzle" : "finish this puzzle to open the next one";
+      $("skip").title = done(levelIndex) ? "go on to the next level" : "finish this level to open the next one";
       $("back").parentElement.hidden = !listOpen();
       $("winMenu").hidden = !listOpen();
-      $("winNext").hidden = last && !listOpen();
+      $("winNext").hidden = last;
     }
 
     function showMenu() {
@@ -415,16 +402,16 @@
           // not reached yet: no peeking
           btn.classList.add("is-locked");
           btn.disabled = true;
-          btn.title = "finish the puzzle before this one to open it";
+          btn.title = "finish the level before this one to open it";
           btn.innerHTML = `<span class="st-lock"><svg class="st-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>` +
-            `<span class="st-level-num">Puzzle ${i + 1}</span><span class="st-level-name">???</span>` +
+            `<span class="st-level-num">Level ${i + 1}</span><span class="st-level-name">???</span>` +
             `<span class="st-mini-stars">${[1, 2, 3].map(() => starSvg(false)).join("")}</span>`;
           box.appendChild(btn);
           return;
         }
         btn.title = `${lv.name}: ${lv.blurb}`;
         btn.innerHTML = thumb(lv) +
-          `<span class="st-level-num">Puzzle ${i + 1}</span>` +
+          `<span class="st-level-num">Level ${i + 1}</span>` +
           `<span class="st-level-name">${lv.name}</span>` +
           `<span class="st-mini-stars">${[1, 2, 3].map((k) => starSvg(b != null && b >= k)).join("")}</span>`;
         btn.onclick = () => startLevel(i);
@@ -660,10 +647,10 @@
     $("back").onclick = showMenu;
     $("winMenu").onclick = showMenu;
     $("winNext").onclick = () => startLevel(levelIndex + 1);
-    $("winClose").onclick = () => { $("win").hidden = true; };
+    $("winRetry").onclick = () => startLevel(levelIndex);
     window.addEventListener("keydown", (e) => {
       if (e.target.closest("input, textarea") || document.querySelector(".cohesion-modal-backdrop")) return;
-      if (e.key === "Escape") { if (!$("win").hidden) $("win").hidden = true; else if (playing) showMenu(); return; }
+      if (e.key === "Escape") { if ($("win").hidden && playing) showMenu(); return; }
       if (!playing) return;
       if (e.key === "z") { e.preventDefault(); undo(); }
       else if (e.key === "r" && !e.metaKey && !e.ctrlKey) $("reset").click();
@@ -1051,16 +1038,12 @@
       const cuts = starCuts(level), stars = starsFor(level, moves);
       earned[level.name] = Math.max(stars, earned[level.name] ?? 0);
       updateGates();
-      $("stars").innerHTML = [1, 2, 3].map((k) => starSvg(k <= stars)).join("");
-      $("verdict").textContent = ["Done. Fewer moves earns stars.", "Done. Can you do it in fewer?", "Nicely done.", "Perfect. It can't be done in fewer."][stars];
-      $("winMoves").textContent = moves;
-      // what each star takes
-      $("cuts").innerHTML = cuts ? [3, 2, 1].map((k) =>
-        `<span class="st-cut-stars">${[1, 2, 3].slice(0, k).map(() => starSvg(true)).join("")}</span>` +
-        `<span class="st-cut-moves${stars === k ? " is-yours" : ""}">${cuts[3 - k]} move${cuts[3 - k] === 1 ? "" : "s"} or fewer</span>`).join("") : "";
-      const last = levelIndex === LEVELS.length - 1;
-      $("winNext").textContent = last ? "Back to puzzle 1" : "Next puzzle";
-      if (last) $("winNext").hidden = true; // the list is the way on from the last puzzle
+      $("winMoves").textContent = `${moves} move${moves === 1 ? "" : "s"}`;
+      // each star with the most moves that earns it underneath
+      $("stars").innerHTML = [1, 2, 3].map((k) =>
+        `<div class="st-star-slot${k <= stars ? " is-on" : ""}">${starSvg(k <= stars)}` +
+        (cuts ? `<span>${cuts[3 - k]}</span>` : "") + `</div>`).join("");
+      $("winNext").hidden = levelIndex === LEVELS.length - 1;
       setTimeout(() => { if (solved) $("win").hidden = false; }, 350);
     }
 
