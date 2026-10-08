@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snowflake Maker</title>
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #070b13;
+      --panel:     #101826;
+      --panel-2:   #172133;
+      --border:    #22304a;
+      --text:      #e6f1fa;
+      --muted:     #8a9bb0;
+      --faint:     #55657a;
+      --accent:    #8fd3f4;
+      --accent-hi: #b8e5fa;
+      --on-accent: #070b13;
+
+      --font-ui:      "Manrope", ui-sans-serif, system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, Menlo, monospace;
+      --font-display: "Cormorant Garamond", Georgia, serif;
+
+      --ice:   #8fd3f4;
+    }
+
+    html, body { height: 100%; overflow: hidden; }
+    body { background: var(--bg); margin: 0; }
+
+    .sm-plate canvas { position: fixed; inset: 0; display: block; }
+    /* The glow layer is blurred by the compositor: a real soft falloff around the ice, for free.
+       A canvas stroke has hard edges, so the softness has to come from blurring the whole layer. */
+    #glow { z-index: 0; filter: blur(9px); }
+    #ice  { z-index: 1; }
+    #fx   { z-index: 2; touch-action: none; cursor: crosshair; }
+
+    .sm-head { position: fixed; top: 16px; left: 22px; z-index: 3; pointer-events: none; max-width: min(520px, 70vw); }
+    .sm-title {
+      font-family: var(--font-display); font-weight: 300; font-size: 2.5rem; line-height: 1;
+      letter-spacing: .01em; color: var(--text); margin: 0;
+    }
+
+    /* ---- left tool rail ---- */
+    .sm-tools {
+      position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 4;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .sm-toolgroup {
+      display: flex; flex-direction: column; gap: 2px; padding: 5px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    .sm-tool {
+      width: 40px; height: 40px; display: grid; place-items: center;
+      border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer;
+    }
+    .sm-tool:hover { background: var(--panel-2); }
+    .sm-tool.is-active { background: var(--accent); color: var(--on-accent); }
+    .sm-tool:disabled { color: var(--faint); background: transparent; cursor: default; }
+    .sm-tool svg {
+      width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    .sm-empty {
+      position: fixed; z-index: 3; pointer-events: none; white-space: nowrap;
+      padding: 6px 12px; border-radius: 999px; transform: translate(-50%, 0);
+      background: var(--panel); border: 1px solid var(--accent); color: var(--text);
+      font: 500 .9rem var(--font-ui); box-shadow: 0 6px 18px rgba(0,0,0,.4);
+    }
+    .sm-empty[hidden] { display: none; }
+
+    @media (max-width: 700px) {
+      .sm-title { font-size: 1.4rem; line-height: 46px; }
+      /* the tools become a row under the flake; history and download a smaller row top right */
+      .sm-head { left: 16px; top: 12px; }
+      .sm-tools { position: static; transform: none; }
+      .sm-toolgroup { flex-direction: row; position: fixed; z-index: 4; }
+      .sm-toolgroup:nth-child(1) { left: 50%; bottom: 38px; transform: translateX(-50%); }
+      .sm-toolgroup:nth-child(2) { top: 12px; right: 64px; }
+      .sm-toolgroup:nth-child(3) { top: 12px; right: 12px; }
+      .sm-toolgroup:nth-child(n+2) .sm-tool { width: 34px; height: 34px; }
+      .sm-toolgroup:nth-child(n+2) .sm-tool svg { width: 19px; height: 19px; }
+      .sm-empty { white-space: normal; text-align: center; width: 230px; border-radius: 14px; }
+    }
+
+    mike-footer[overlay] { opacity: 1 !important; }
+  </style>
+</head>
+<body>
+  <div class="sm-plate"><canvas id="glow"></canvas><canvas id="ice"></canvas><canvas id="fx"></canvas></div>
+
+  <header class="sm-head">
+    <h1 class="sm-title">Snowflake Maker</h1>
+  </header>
+  <div class="sm-empty" id="empty" hidden>drag up from the center to grow the six arms</div>
+
+  <div class="sm-tools">
+    <div class="sm-toolgroup">
+      <button class="sm-tool" data-tool="grow" title="Grow (G): drag from the end of a branch to grow it straight on, or off at 60° to start one new branch there. You can also drag a branch off partway along another">
+        <svg viewBox="0 0 24 24"><path d="M12 21V4M12 13l6-6"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="split2" title="Split in two (S): drag off a branch at 60° to split off a mirrored pair, one to each side, or drag the end straight on to grow it. The two are clones from then on: whatever you do to one happens to both">
+        <svg viewBox="0 0 24 24"><path d="M12 21V12M12 12L5.5 5.5M12 12l6.5-6.5"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="split3" title="Split in three (T): drag from the end of a branch to grow a mirrored pair off it and carry it straight on as well. Partway along a branch, it makes just the pair">
+        <svg viewBox="0 0 24 24"><path d="M12 21V11M12 11L5.5 4.5M12 11l6.5-6.5M12 11V3"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="circle" title="Circle cap (1): click the end of a branch, or any point where branches meet, to cap it with a round plate, sized to the branch">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="hexagon" title="Hexagon cap (2): click the end of a branch, or any point where branches meet, to cap it with a six-sided plate, the shape ice crystals grow in, sized to the branch">
+        <svg viewBox="0 0 24 24"><polygon points="12,5 18.1,8.5 18.1,15.5 12,19 5.9,15.5 5.9,8.5"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="rhombus" title="Diamond cap (3): click the end of a branch, or any point where branches meet, to cap it with a 60°/120° diamond pointing the way the branch was growing, sized to the branch">
+        <svg viewBox="0 0 24 24"><polygon points="12,3 16.5,12 12,21 7.5,12"/></svg>
+      </button>
+      <button class="sm-tool" data-tool="erase" title="Erase (E): click a branch to remove it from the last branch point before where you click, with everything grown off that part. Click a cap to remove just the cap. What will go is shown in red">
+        <svg viewBox="0 0 24 24"><path d="M8 20h12M5 15.5l8.5-8.5 5 5L12 18.5H8z"/></svg>
+      </button>
+    </div>
+    <div class="sm-toolgroup">
+      <button class="sm-tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
+        <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button>
+      <button class="sm-tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
+        <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button>
+      <button class="sm-tool" id="clear" title="Clear: start over with an empty flake">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+      </button>
+    </div>
+    <div class="sm-toolgroup">
+      <button class="sm-tool" id="png" title="Download the snowflake as a PNG image">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+<script type="module">
+import { Flake, UP, DEG, ptKey, projT, distToSeg } from "./flake.js";
+
+/* ---------------- state ---------------- */
+const R = 300;                       // world radius of the plate; the view scales it to fit
+const f = new Flake({ R });
+let tool = "split2";
+
+const undoStack = [], redoStack = [];
+
+/* ---------------- canvases ---------------- */
+const glowCv = document.getElementById("glow"), iceCv = document.getElementById("ice"), fxCv = document.getElementById("fx");
+const glow = glowCv.getContext("2d"), ice = iceCv.getContext("2d"), fx = fxCv.getContext("2d");
+const BLUR = 9;     // matches the CSS blur on #glow, so a saved PNG looks like the screen
+let vw = 0, vh = 0, dpr = 1, view = 1, cx = 0, cy = 0;
+
+const css = getComputedStyle(document.documentElement);
+const tok = (n, d) => css.getPropertyValue(n).trim() || d;
+const ICE = tok("--ice", "#8fd3f4");
+const ACCENT_HI = tok("--accent-hi", "#b8e5fa");
+const DANGER = tok("--danger", "#e0556b");
+const BG = tok("--bg", "#070b13");
+const FRESH_COL = "#eef9ff";        // new ice comes in near-white and cools into the blue
+const FRESH_MS = 650;
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // clientWidth, not innerWidth: they disagree on mobile Safari and stretch the canvas
+  vw = document.documentElement.clientWidth;
+  vh = document.documentElement.clientHeight;
+  for (const cv of [glowCv, iceCv, fxCv]) {
+    cv.width = Math.round(vw * dpr); cv.height = Math.round(vh * dpr);
+    cv.style.width = vw + "px"; cv.style.height = vh + "px";
+  }
+  // As big as fits, centered. On a wide screen it's centered on the page, clear of the rail on the
+  // left (with the same margin on the right) and the title and footer. On a phone the rail sits at
+  // the bottom, so the flake is centered in the space between the title and the rail.
+  const narrow = vw < 700;
+  if (narrow) {
+    const top = 64, bottom = document.querySelector(".sm-toolgroup").getBoundingClientRect().top - 8;
+    const r = Math.max(60, Math.min(vw / 2 - 12, (bottom - top) / 2));
+    cx = vw / 2;
+    cy = (top + bottom) / 2;
+    view = r / R;
+  } else {
+    const r = Math.max(60, Math.min(vw / 2 - 76, vh / 2 - 80));
+    cx = vw / 2;
+    cy = vh / 2;
+    view = r / R;
+  }
+  thick = Math.min(1.8, Math.max(1, 1 / view));
+  repaint();
+}
+
+function world(c) {
+  c.setTransform(dpr * view, 0, 0, dpr * view, cx * dpr, cy * dpr);
+  c.lineCap = "round"; c.lineJoin = "round";
+}
+const toWorld = (sx, sy) => [(sx - cx) / view, (sy - cy) / view];
+
+/* ---------------- the look ----------------
+ * The same rendering as the generated snowflake: a soft bloom and a red/blue fringe on a blurred
+ * glow layer, then each branch as a solid stroke with a bright edge on the side facing the light.
+ */
+const BLOOM = "rgba(120,196,240,.25)";
+const WARM = "rgba(240,120,86,.30)";     // an ice halo's inner edge is red…
+const COOL = "rgba(104,146,255,.30)";    // …and its outer edge blue
+const LIGHT = [-0.707, -0.707];          // lit from the upper left
+
+// Branch widths are in the flake's own units, so they'd shrink with it on a small screen and the
+// ice would come out spindly. `thick` makes up for that, up to a point, keeping branches about as
+// thick on screen as they are on a desktop. Set in resize().
+let thick = 1;
+function widthFor(order) { return Math.max(1.8, 4.8 - order * .9) * thick; }
+
+function paintGlow(c, segs) {
+  if (!segs.length) return;
+  c.save();
+  c.globalCompositeOperation = "lighter";
+  c.lineCap = "butt";
+  c.lineWidth = 4 * thick;
+  for (const [tint, dir] of [[WARM, -1], [COOL, 1]]) {
+    c.strokeStyle = tint;
+    c.beginPath();
+    for (const s of segs) {
+      const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2, m = Math.hypot(mx, my) || 1;
+      const ox = mx / m * 2.5 * thick * dir, oy = my / m * 2.5 * thick * dir;
+      c.moveTo(s.x1 + ox, s.y1 + oy); c.lineTo(s.x2 + ox, s.y2 + oy);
+    }
+    c.stroke();
+  }
+  // one stroke for all of it, so overlapping segments don't double up into bright beads
+  c.strokeStyle = BLOOM; c.lineWidth = 7 * thick;
+  c.beginPath();
+  for (const s of segs) { c.moveTo(s.x1, s.y1); c.lineTo(s.x2, s.y2); }
+  c.stroke();
+  c.restore();
+}
+
+function paintSegs(c, segs, colorOf, extra = () => 0) {
+  const groups = new Map();
+  for (const s of segs) {
+    const w = widthFor(s.order) + extra(s), col = colorOf(s), k = w + "|" + col;
+    let g = groups.get(k);
+    if (!g) groups.set(k, g = { w, col, list: [] });
+    g.list.push(s);
+  }
+  for (const { w, col, list } of groups.values()) {
+    c.strokeStyle = col; c.lineWidth = w;
+    c.beginPath();
+    for (const s of list) { c.moveTo(s.x1, s.y1); c.lineTo(s.x2, s.y2); }
+    c.stroke();
+    // the lit edge: ice is a prism, not a wire
+    c.strokeStyle = "#fff"; c.lineWidth = Math.max(.5, w * .4);
+    for (const s of list) {
+      const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = Math.hypot(dx, dy) || 1;
+      let nx = -dy / len, ny = dx / len, lit = nx * LIGHT[0] + ny * LIGHT[1];
+      if (lit < 0) { nx = -nx; ny = -ny; lit = -lit; }
+      c.globalAlpha = lit * .55;
+      const o = w * .32;
+      c.beginPath(); c.moveTo(s.x1 + nx * o, s.y1 + ny * o); c.lineTo(s.x2 + nx * o, s.y2 + ny * o); c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+}
+
+function shapePoints(s) {
+  s = { ...s, r: s.r * thick };   // caps fatten with the branches on a small screen
+  const pts = [];
+  if (s.kind === "circle") {
+    const r = s.r * .8;
+    for (let i = 0; i < 24; i++) { const t = i * Math.PI / 12; pts.push([s.x + Math.cos(t) * r, s.y + Math.sin(t) * r]); }
+  } else if (s.kind === "hexagon") {
+    // square to the lattice, so its sides run parallel to branches
+    for (let i = 0; i < 6; i++) { const t = UP + i * Math.PI / 3; pts.push([s.x + Math.cos(t) * s.r, s.y + Math.sin(t) * s.r]); }
+  } else {
+    // 60°/120° diamond, long way along the branch, centered on the tip
+    const ca = Math.cos(s.a), sa = Math.sin(s.a), w = s.r / Math.sqrt(3);
+    const pt = (u, v) => [s.x + ca * u - sa * v, s.y + sa * u + ca * v];
+    pts.push(pt(-s.r, 0), pt(0, -w), pt(s.r, 0), pt(0, w));
+  }
+  return pts;
+}
+function shapePath(c, pts) {
+  c.beginPath(); pts.forEach(([x, y], i) => c[i ? "lineTo" : "moveTo"](x, y)); c.closePath();
+}
+function paintShapes(c, shapes, colorOf, glowCtx) {
+  if (glowCtx) {
+    glowCtx.save(); glowCtx.globalCompositeOperation = "lighter"; glowCtx.fillStyle = BLOOM;
+    for (const s of shapes) { shapePath(glowCtx, shapePoints(s)); glowCtx.fill(); }
+    glowCtx.restore();
+  }
+  for (const s of shapes) {
+    const pts = shapePoints(s);
+    c.fillStyle = colorOf(s); shapePath(c, pts); c.fill();
+    c.strokeStyle = "#fff"; c.lineWidth = 1;
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length];
+      const ex = bx - ax, ey = by - ay, len = Math.hypot(ex, ey) || 1;
+      let nx = ey / len, ny = -ex / len;
+      if ((ax - s.x) * nx + (ay - s.y) * ny < 0) { nx = -nx; ny = -ny; }
+      const lit = nx * LIGHT[0] + ny * LIGHT[1];
+      if (lit <= 0) continue;
+      c.globalAlpha = lit * .7;
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
+    }
+    c.globalAlpha = 1;
+  }
+}
+
+// Lay the whole flake down on the glow and ice layers. Only happens when a move is made or undone.
+function repaint() {
+  for (const [c, cv] of [[glow, glowCv], [ice, iceCv]]) {
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
+  }
+  world(glow); world(ice);
+  // anything still growing in is drawn on the live layer instead, until it's finished
+  const settled = s => !growing?.ids.has(s.id);
+  paintGlow(glow, f.images.filter(settled));
+  paintSegs(ice, f.images.filter(settled), () => ICE);
+  paintShapes(ice, f.capImages.filter(settled), () => ICE, glow);
+  updateUI();
+}
+
+/* ---------------- the live layer ----------------
+ * Wiped every frame: tips, whatever is being dragged,
+ * and moves that just landed, still growing in or cooling from white into the ice color.
+ */
+const fresh = new Map();   // stored id → time it finished growing, for cooling
+let pointer = null;        // world coords of the pointer, when it's over the page
+let hover = null, drag = null;
+// A move that's been placed but is still growing out to its full length: {ids, shown, max}.
+// `shown` is how far along it is, in world units for branches and as a radius for caps.
+let growing = null;
+let lastFrame = 0;
+
+// Ease `shown` toward `target`, so nothing jumps: not a drag changing direction, not a branch
+// landing on release.
+function approach(shown, target, dt) {
+  const next = shown + (target - shown) * (1 - Math.exp(-dt / 70));
+  return Math.abs(target - next) < .3 ? target : next;
+}
+
+// Branches cut off at `shown` from where the move started, caps scaled to it. A move that lays
+// down several branches end to end (clones going on alone past where the others stopped) grows
+// them in order: each starts once the one before has reached its end. `off` is how far along the
+// move a branch starts.
+const len = s => Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+const upTo = (imgs, shown) => imgs.flatMap(s => {
+  const k = Math.min(1, (shown - (s.off || 0)) / (len(s) || 1));
+  return k > 0 ? [{ ...s, x2: s.x1 + (s.x2 - s.x1) * k, y2: s.y1 + (s.y2 - s.y1) * k }] : [];
+});
+const capsUpTo = (caps, shown) => caps.map(c => ({ ...c, r: Math.min(c.r, shown) }));
+
+// The images of the branches a move made, each tagged with `off`, and how long the whole move is.
+function grownBy(made) {
+  const off = new Map();
+  for (const s of made) off.set(s.id, off.has(s.parent) ? off.get(s.parent) + len(made.find(m => m.id === s.parent)) : 0);
+  const imgs = f.images.filter(s => off.has(s.id)).map(s => ({ ...s, off: off.get(s.id) }));
+  return { imgs, max: Math.max(0, ...imgs.map(s => s.off + len(s))) };
+}
+
+function finishGrowing(now) {
+  if (!growing) return;
+  for (const id of growing.ids) fresh.set(id, now);
+  growing = null;
+  repaint();
+}
+
+const mix = (a, b, k) => {
+  const h = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16));
+  const A = h(a), B = h(b);
+  return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * k)).join(",")})`;
+};
+
+
+function drawFx(now) {
+  const dt = lastFrame ? Math.min(now - lastFrame, 100) : 16;
+  lastFrame = now;
+  fx.setTransform(1, 0, 0, 1, 0, 0);
+  fx.clearRect(0, 0, fxCv.width, fxCv.height);
+  world(fx);
+
+  // just-landed moves, cooling
+  const cooling = [], coolingCaps = [];
+  for (const [id, t] of fresh) {
+    const k = (now - t) / FRESH_MS;
+    if (k >= 1) { fresh.delete(id); continue; }
+    for (const s of f.images) if (s.id === id) cooling.push({ ...s, k });
+    for (const s of f.capImages) if (s.id === id) coolingCaps.push({ ...s, k });
+  }
+  paintSegs(fx, cooling, s => mix(FRESH_COL, ICE, s.k), s => (1 - s.k) * .8);
+  paintShapes(fx, coolingCaps, s => mix(FRESH_COL, ICE, s.k));
+
+  // the last move placed, finishing growing out from wherever the drag left it
+  if (growing) {
+    growing.shown = approach(growing.shown, growing.max, dt);
+    paintSegs(fx, upTo(growing.imgs, growing.shown), () => FRESH_COL, () => .8);
+    paintShapes(fx, capsUpTo(f.capImages.filter(c => growing.ids.has(c.id)), growing.shown), () => FRESH_COL);
+    if (growing.shown >= growing.max) finishGrowing(now);
+  }
+
+  // tips: the ends you can still grow from
+  fx.fillStyle = "rgba(238,249,255,.55)";
+  for (const t of f.tips()) { fx.beginPath(); fx.arc(t.x, t.y, 2.2 / view, 0, Math.PI * 2); fx.fill(); }
+  if (f.empty) {
+    const p = .5 + .5 * Math.sin(now / 380);
+    fx.fillStyle = FRESH_COL;
+    fx.beginPath(); fx.arc(0, 0, (3 + p * 2) / view, 0, Math.PI * 2); fx.fill();
+  }
+
+  if (drag) drawDrag(dt);
+  else if (hover) drawHover();
+}
+
+function ring(x, y, r, col) {
+  fx.strokeStyle = col; fx.lineWidth = 1.5 / view;
+  fx.beginPath(); fx.arc(x, y, r / view, 0, Math.PI * 2); fx.stroke();
+}
+
+function drawHover() {
+  const h = hover;
+  if (h.kind === "anchor") {
+    // the whole set of copies of the branch under the pointer, so you can see what one move reaches
+    if (h.seg) {
+      fx.strokeStyle = "rgba(238,249,255,.28)";
+      fx.lineWidth = 9 / view;
+      fx.beginPath();
+      for (const s of f.images) if (s.id === h.seg.id) { fx.moveTo(s.x1, s.y1); fx.lineTo(s.x2, s.y2); }
+      fx.stroke();
+    }
+    // the directions a drag from here can go
+    fx.strokeStyle = "rgba(184,229,250,.55)"; fx.lineWidth = 1.5 / view;
+    fx.beginPath();
+    for (const o of h.opts) {
+      const a = 7 / view, b = 18 / view;
+      fx.moveTo(h.x + Math.cos(o.a) * a, h.y + Math.sin(o.a) * a);
+      fx.lineTo(h.x + Math.cos(o.a) * b, h.y + Math.sin(o.a) * b);
+    }
+    fx.stroke();
+    ring(h.x, h.y, 6, ACCENT_HI);
+  } else if (h.kind === "cap") {
+    // what a click will place, on every clone
+    const caps = f.trial(() => { const c = f.capAt(h.x, h.y, tool, capSize(h.order)); return c ? f.capImages.filter(i => i.id === c.id) : []; });
+    fx.globalAlpha = .45;
+    paintShapes(fx, caps, () => FRESH_COL);
+    fx.globalAlpha = 1;
+  } else if (h.kind === "erase") {
+    if (h.cap) paintShapes(fx, f.capImages.filter(c => c.id === h.id), () => DANGER);
+    else {
+      // exactly what a click takes: the branch, or just its stretch past the cut, and what grew from it
+      const { cut, segs, caps } = h.plan;
+      const tail = cut === null ? [] : f.images.filter(s => s.id === h.id).map(s => ({
+        ...s, x1: s.x1 + (s.x2 - s.x1) * cut, y1: s.y1 + (s.y2 - s.y1) * cut,
+      }));
+      const whole = cut === null ? new Set([...segs]) : segs;
+      paintSegs(fx, [...tail, ...f.images.filter(s => whole.has(s.id))], () => DANGER, () => .4);
+      paintShapes(fx, f.capImages.filter(c => caps.has(c.id)), () => DANGER);
+    }
+  }
+}
+
+// What's being dragged out, eased toward the pointer so it grows rather than jumping a step at a time.
+function drawDrag(dt) {
+  const d = drag;
+  d.shown = approach(d.shown, d.max, dt);
+  if (d.plan.length) paintSegs(fx, upTo(d.plan, d.shown), () => FRESH_COL, () => .5);
+  ring(d.anchor.x, d.anchor.y, 6, ACCENT_HI);
+}
+
+/* ---------------- picking ---------------- */
+const TOL = 14;   // screen px
+
+function pointAlong(s, x, y) {
+  // the point on an image segment closest to (x, y)
+  const t = Math.max(0, Math.min(1, projT(s, x, y)));
+  return { x: s.x1 + (s.x2 - s.x1) * t, y: s.y1 + (s.y2 - s.y1) * t };
+}
+
+const sameDir = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 1e-3;
+
+// The branch a point belongs to: one that ends there, or one it lies partway along.
+function baseSeg(x, y) {
+  const k = ptKey(x, y);
+  return f.images.find(s => ptKey(s.x2, s.y2) === k) ||
+    f.images.find(s => { const t = projT(s, x, y); return t > 1e-6 && t < 1 - 1e-6 && distToSeg(s, x, y) < 1e-6; });
+}
+
+function pickHover(x, y) {
+  const tol = TOL / view;
+  if (tool === "grow" || tool === "split2" || tool === "split3") {
+    // A split is mirrored about the branch it comes off, so it needs one: not the bare center.
+    // In two goes off to both sides; in three also carries on, so it needs the end of a branch.
+    const anchor = (px, py, seg) => {
+      let opts = f.optionsAt(px, py);
+      // From the bare center there's no branch to split, so every tool just grows the arms.
+      if (tool === "grow" || !seg) return opts.length ? { kind: "anchor", x: px, y: py, opts, seg } : null;
+      // A split makes whatever parts of it have room: partway along a branch there's no straight
+      // on, so split in three makes just the pair; with the sides blocked, just straight on.
+      const base = Math.atan2(seg.y2 - seg.y1, seg.x2 - seg.x1);
+      opts = opts.filter(o => [0, 60, -60].some(t => sameDir(o.a, base + t * DEG)));
+      return opts.length ? { kind: "anchor", x: px, y: py, opts, seg, base } : null;
+    };
+    const node = f.nearestNode(x, y, tol);
+    if (node) {
+      const a = anchor(node.x, node.y, baseSeg(node.x, node.y));
+      if (a) return a;
+    }
+    const s = f.nearestSeg(x, y, tol);
+    if (s) {
+      const p = pointAlong(s, x, y);
+      return anchor(p.x, p.y, baseSeg(p.x, p.y) || s);
+    }
+    return null;
+  }
+  if (tool === "erase") {
+    const c = f.nearestCap(x, y);
+    if (c) return { kind: "erase", id: c.id, cap: true };
+    const s = f.nearestSeg(x, y, tol);
+    return s ? { kind: "erase", id: s.id, plan: f.erasePlan(s, x, y) } : null;
+  }
+  // caps: on any branch point, sized to the branch it belongs to
+  const node = f.nearestNode(x, y, tol);
+  const s = node && f.capBase(node.x, node.y);
+  return s ? { kind: "cap", x: node.x, y: node.y, order: s.order } : null;
+}
+
+// A cap is sized like the branch it ends: a big plate on a thick arm, a small one on a thin twig.
+const capSize = order => 11 * widthFor(order) / widthFor(0);
+
+/* ---------------- moves ---------------- */
+// Make a move for real. Whatever it added grows in from `shown` (where the drag had got to) to full.
+function commit(fn, shown = 0) {
+  finishGrowing(performance.now());
+  const before = f.snapshot();
+  const made = [fn()].flat().filter(Boolean);   // a three-way split adds two branches at once
+  if (!made.length) return;
+  undoStack.push(before);
+  redoStack.length = 0;
+  const ids = new Set(made.map(m => m.id));
+  const { imgs, max } = grownBy(made);
+  const caps = f.capImages.filter(c => ids.has(c.id));
+  growing = { ids, imgs, shown, max: Math.max(max, ...caps.map(c => c.r)) };
+  repaint();
+}
+
+// The move a drag would make right now, tried out on the real flake and undone, so the preview is
+// exactly what letting go will place.
+// Split in two grows a single branch when dragged straight on (or out of the center), and the
+// mirrored pair when dragged off to either side.
+function moveFor(d) {
+  const single = d.kind === "grow" || d.base === undefined || (d.kind === "split2" && sameDir(d.opt.a, d.base));
+  if (single) return () => f.grow(d.anchor.x, d.anchor.y, d.opt, d.want);
+  return () => f.split(d.anchor.x, d.anchor.y, d.base, d.want, d.kind === "split3");
+}
+
+function updateDrag(x, y) {
+  const d = drag;
+  const vx = x - d.anchor.x, vy = y - d.anchor.y;
+  const len = Math.hypot(vx, vy);
+  let key = "";
+  d.plan = []; d.max = 0;
+  if (len < 3 / view) return;
+  if (d.kind !== "split3" || d.base === undefined) {
+    // the allowed direction closest to where the pointer is, and how far along it the pointer is
+    let best = null, bc = -Infinity;
+    for (const o of d.opts) {
+      const c = (Math.cos(o.a) * vx + Math.sin(o.a) * vy) / len;
+      if (c > bc) { bc = c; best = o; }
+    }
+    if (bc <= 0) return;
+    d.opt = best;
+    d.want = Math.cos(best.a) * vx + Math.sin(best.a) * vy;
+    key = String(best.a);
+  } else {
+    d.want = len;   // a three-way split goes every way at once, so only the distance matters
+  }
+  if (key !== d.key) { d.key = key; d.shown = 0; }   // a new direction grows from scratch
+  ({ imgs: d.plan, max: d.max } = f.trial(() => grownBy([moveFor(d)()].flat().filter(Boolean))));
+}
+
+fxCv.addEventListener("pointerdown", e => {
+  if (e.button !== 0) return;
+  const [x, y] = toWorld(e.clientX, e.clientY);
+  hover = pickHover(x, y);
+  if (!hover) return;
+  fxCv.setPointerCapture(e.pointerId);
+  const start = [e.clientX, e.clientY], base = { start, shown: 0, max: 0, plan: [] };
+  if (hover.kind === "anchor") drag = { ...base, kind: tool, anchor: { x: hover.x, y: hover.y }, opts: hover.opts, base: hover.base };
+  else if (hover.kind === "cap") { commit(() => f.capAt(hover.x, hover.y, tool, capSize(hover.order))); hover = null; }
+  else if (hover.kind === "erase") {
+    const h = hover;
+    commit(() => { h.cap ? f.erase(h.id) : f.applyErase(h.plan); return { id: -1 }; });
+    hover = null;
+  }
+});
+
+fxCv.addEventListener("pointermove", e => {
+  const [x, y] = toWorld(e.clientX, e.clientY);
+  pointer = [x, y];
+  if (drag) {
+    if (Math.hypot(e.clientX - drag.start[0], e.clientY - drag.start[1]) > 4) drag.moved = true;
+    if (drag.moved) updateDrag(x, y);
+  } else hover = pickHover(x, y);
+});
+
+// Letting go places whatever the drag was showing. A click without a drag places no branch.
+fxCv.addEventListener("pointerup", e => {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  if (d.moved && d.plan.length) commit(moveFor(d), d.shown);
+  const [x, y] = toWorld(e.clientX, e.clientY);
+  hover = pickHover(x, y);
+});
+fxCv.addEventListener("pointercancel", () => { drag = null; });
+fxCv.addEventListener("pointerleave", () => { if (!drag) { pointer = null; hover = null; } });
+
+/* ---------------- UI ---------------- */
+const emptyEl = document.getElementById("empty");
+
+function setTool(t) {
+  tool = t;
+  for (const b of document.querySelectorAll(".sm-tool[data-tool]")) b.classList.toggle("is-active", b.dataset.tool === t);
+  hover = pointer ? pickHover(...pointer) : null;
+}
+
+function updateUI() {
+  document.getElementById("undo").disabled = !undoStack.length;
+  document.getElementById("redo").disabled = !redoStack.length;
+  document.getElementById("clear").disabled = f.empty;
+  emptyEl.hidden = !f.empty || !["grow", "split2", "split3"].includes(tool);
+  emptyEl.style.left = cx + "px";
+  emptyEl.style.top = (cy + 22) + "px";
+}
+
+for (const b of document.querySelectorAll(".sm-tool[data-tool]")) b.addEventListener("click", () => setTool(b.dataset.tool));
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push(f.snapshot()); f.restore(undoStack.pop()); repaint();
+}
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(f.snapshot()); f.restore(redoStack.pop()); repaint();
+}
+document.getElementById("undo").addEventListener("click", undo);
+document.getElementById("redo").addEventListener("click", redo);
+document.getElementById("clear").addEventListener("click", () => {
+  if (f.empty) return;
+  undoStack.push(f.snapshot()); redoStack.length = 0;
+  f.segs = []; f.caps = []; f.rebuild();
+  repaint();
+});
+
+window.addEventListener("keydown", e => {
+  if (e.target.closest?.("input, textarea")) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod) return;
+  const k = { g: "grow", s: "split2", t: "split3", 1: "circle", 2: "hexagon", 3: "rhombus", e: "erase" }[e.key.toLowerCase()];
+  if (k) setTool(k);
+});
+
+document.getElementById("png").addEventListener("click", () => {
+  const flat = document.createElement("canvas");
+  flat.width = iceCv.width; flat.height = iceCv.height;
+  const c = flat.getContext("2d");
+  c.fillStyle = BG; c.fillRect(0, 0, flat.width, flat.height);
+  c.filter = `blur(${BLUR * dpr}px)`; c.drawImage(glowCv, 0, 0); c.filter = "none";
+  c.drawImage(iceCv, 0, 0);
+  // crop to the plate
+  const s = Math.round((R * view + 24) * dpr);
+  const out = document.createElement("canvas");
+  out.width = out.height = s * 2;
+  out.getContext("2d").drawImage(flat, Math.round(cx * dpr) - s, Math.round(cy * dpr) - s, s * 2, s * 2, 0, 0, s * 2, s * 2);
+  const a = document.createElement("a");
+  a.download = "snowflake.png";
+  a.href = out.toDataURL("image/png");
+  a.click();
+});
+
+window.addEventListener("resize", resize);
+
+function frame(now) { drawFx(now); requestAnimationFrame(frame); }
+
+// for tests: the model, and where a world point lands on screen
+window.snowflakeMaker = { f, toScreen: (x, y) => [cx + x * view, cy + y * view], setTool };
+
+setTool("split2");
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
