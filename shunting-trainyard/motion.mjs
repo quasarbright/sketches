@@ -225,22 +225,31 @@ export function joints(yard, state) {
   return out;
 }
 
-// The goal: counting from the goal's end of its track, the cars there are
-// exactly the goal's cars in order, with nothing but locos after them (and no
-// loco in between), each fully on the track.
+// Where each goal car belongs: packed against the goal's end of its track,
+// one car length apart, in the order listed (left to right along the track).
+export function goalSpots(yard, g) {
+  const t = yard.tracks[g.track], n = g.cars.length;
+  return g.cars.map((car, k) => {
+    const idx = t.from === g.end ? k : n - 1 - k; // how many cars in from the end
+    return { car, s: t.from === g.end ? 0.5 + idx : t.len - 0.5 - idx };
+  });
+}
+
+// How long a car (and a goal marker) is drawn, in car lengths.
+export const BODY = 0.84;
+
+// Is the car touching its spot: on the goal track, with its body overlapping
+// the marker? (Loose on purpose; nobody should have to line cars up to the pixel.)
+export function atSpot(state, track, car, s) {
+  const p = state.at[car];
+  return p.track === track && Math.abs(p.s - s) < BODY;
+}
+
+// The goal: every goal car touching its spot, and no other car (locomotives
+// aside) left on the goal track.
 export function goalMet(yard, cars, goals, state) {
   return goals.every((g) => {
-    const t = yard.tracks[g.track];
-    const here = [];
-    state.at.forEach((p, c) => { if (p.track === g.track) here.push(c); });
-    for (const c of here) {
-      const p = state.at[c];
-      if (!cars[c].loco && (p.s < 0.5 - 1e-3 || p.s > t.len - 0.5 + 1e-3)) return false;
-    }
-    const fromEnd = (c) => toNode(yard, state.at[c], g.end);
-    here.sort((a, b) => fromEnd(a) - fromEnd(b));
-    // g.cars is listed left to right (from → to); nearest the end first
-    const want = t.from === g.end ? g.cars : g.cars.slice().reverse();
-    return want.every((c, i) => here[i] === c) && here.slice(want.length).every((c) => cars[c].loco);
+    if (!goalSpots(yard, g).every(({ car, s }) => atSpot(state, g.track, car, s))) return false;
+    return state.at.every((p, c) => p.track !== g.track || cars[c].loco || g.cars.includes(c));
   });
 }

@@ -89,6 +89,17 @@ test("against a switch set the other way, the nose stops where the drawn track e
   near(state.at[0].s - 0.5, BLANK, "nose BLANK short of the points");
 });
 
+test("done means every goal car is touching its own marker", () => {
+  const lv = loadLevel({ layout: ladder(3, [3, 3]), start: { head: "L", s1: ". A B" }, goals: [{ track: "s1", end: "E1", cars: "A B" }] });
+  const state = fromSlots(lv.yard, lv.state);
+  assert.ok(goalMet(lv.yard, lv.cars, lv.goals, state), "packed against the buffer: done");
+  const B = 2, A = 1;
+  state.at[B].s -= 0.5; state.at[A].s -= 0.5; // half a car short of the buffer: still touching
+  assert.ok(goalMet(lv.yard, lv.cars, lv.goals, state));
+  state.at[B].s -= 0.5; state.at[A].s -= 0.5; // a whole car short: not touching
+  assert.ok(!goalMet(lv.yard, lv.cars, lv.goals, state));
+});
+
 test("every level's start is a legal position and not already solved", () => {
   for (const lv of LEVELS) {
     const { yard, cars, goals, state } = loadLevel(lv);

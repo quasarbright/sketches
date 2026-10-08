@@ -281,7 +281,7 @@
     import { loadLevel } from "./setup.mjs";
     import { walk, nextTrack, pointOnTrack } from "./yard.mjs";
     import {
-      fromSlots, clone, drive, coast, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet, BLANK,
+      fromSlots, clone, drive, coast, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet, BLANK, goalSpots, atSpot,
     } from "./motion.mjs";
 
     const C = {
@@ -772,14 +772,6 @@
       return side;
     }
 
-    // cars on a goal track, nearest the goal's end first
-    function orderFromEnd(g) {
-      const t = yard.tracks[g.track];
-      const here = [];
-      state.at.forEach((p, c) => { if (p.track === g.track) here.push(c); });
-      const fromEnd = (c) => (t.from === g.end ? state.at[c].s : t.len - state.at[c].s);
-      return here.sort((a, b) => fromEnd(a) - fromEnd(b));
-    }
 
     let lastNow = null;
     function frame(now) {
@@ -889,13 +881,12 @@
       // on whichever side of the track has more room
       for (const g of goals) {
         const side = markerSide(g);
-        const order = orderFromEnd(g), t = yard.tracks[g.track], n = g.cars.length;
-        g.cars.forEach((carIdx, k) => {
+        const t = yard.tracks[g.track];
+        goalSpots(yard, g).forEach(({ car: carIdx, s: spot }) => {
           // packed against the goal's end, where a train shoved up to the buffer ends up
           const car = cars[carIdx];
-          const idx = t.from === g.end ? k : n - 1 - k;
-          const sl = pointOnTrack(t, t.from === g.end ? 0.5 + idx : t.len - 0.5 - idx);
-          const ok = order[idx] === g.cars[k];
+          const sl = pointOnTrack(t, spot);
+          const ok = atSpot(state, g.track, carIdx, spot);
           ctx.save();
           ctx.translate(sx(sl.x), sy(sl.y)); ctx.rotate(sl.ang);
           const w = L * 0.84, off = L * 0.42;
