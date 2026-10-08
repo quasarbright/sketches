@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Snowflake Maker</title>
+  <title>Snowflake Studio</title>
   <link rel="stylesheet" href="../shared/cohesion.css" />
   <script type="module" src="../shared/cohesion.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -96,7 +96,7 @@
   <div class="sm-plate"><canvas id="glow"></canvas><canvas id="ice"></canvas><canvas id="fx"></canvas></div>
 
   <header class="sm-head">
-    <h1 class="sm-title">Snowflake Maker</h1>
+    <h1 class="sm-title">Snowflake Studio</h1>
   </header>
   <div class="sm-empty" id="empty" hidden>drag up from the center to grow the six arms</div>
 
@@ -691,7 +691,7 @@ window.addEventListener("resize", resize);
 function frame(now) { drawFx(now); requestAnimationFrame(frame); }
 
 // for tests: the model, and where a world point lands on screen
-window.snowflakeMaker = { f, toScreen: (x, y) => [cx + x * view, cy + y * view], setTool };
+window.snowflakeStudio = { f, toScreen: (x, y) => [cx + x * view, cy + y * view], setTool };
 
 setTool("split2");
 resize();
