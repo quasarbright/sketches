@@ -393,7 +393,8 @@
       }
       st.pos.forEach((p, c) => {
         const sl = y.slots[p];
-        svg += `<rect x="-0.42" y="-0.22" width="0.84" height="0.44" rx="0.08" fill="${carColor(cs[c])}" transform="translate(${X(sl.x)} ${Y(sl.y)}) rotate(${(sl.ang * 180 / Math.PI).toFixed(1)})"/>`;
+        const rect = (dy, fill) => `<rect x="-0.42" y="-0.22" width="0.84" height="0.44" rx="0.08" fill="${fill}" transform="translate(${X(sl.x)} ${(+Y(sl.y) + dy).toFixed(2)}) rotate(${(sl.ang * 180 / Math.PI).toFixed(1)})"/>`;
+        svg += rect(0.07, shade(carColor(cs[c]))) + rect(0.035, shade(carColor(cs[c]))) + rect(0, carColor(cs[c]));
       });
       return svg + "</svg>";
     }
@@ -668,14 +669,35 @@
       ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
     }
 
+    // a color with some black mixed in, for the sides of things
+    function shade(hex, f = 0.42) {
+      const n = parseInt(hex.slice(1, 7), 16);
+      const ch = (v) => Math.round(v * (1 - f)).toString(16).padStart(2, "0");
+      return "#" + ch(n >> 16) + ch((n >> 8) & 255) + ch(n & 255);
+    }
+    // a little fake 3D: everything stands up off the panel, so its side shows
+    // below it on screen. Screen-down, in layout pixels (the yard may be turned).
+    const depth = () => Math.max(3, L * 0.11);
+    const downX = () => Math.sin(rot), downY = () => Math.cos(rot);
+
     function drawCar(c, pose, opts = {}) {
       const car = cars[c];
+      const w = L * 0.84, h = L * 0.42, r = L * 0.07, col = carColor(car);
+      // the side: the body swept straight down, in a darker shade
+      ctx.fillStyle = shade(col);
+      for (let k = depth(); k > 0; k -= 1) {
+        ctx.save();
+        ctx.translate(sx(pose.x) + downX() * k, sy(pose.y) + downY() * k);
+        ctx.rotate(pose.ang);
+        roundRect(-w / 2, -h / 2, w, h, r);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.save();
       ctx.translate(sx(pose.x), sy(pose.y));
       ctx.rotate(pose.ang);
-      const w = L * 0.84, h = L * 0.42;
-      roundRect(-w / 2, -h / 2, w, h, L * 0.07);
-      ctx.fillStyle = carColor(car);
+      roundRect(-w / 2, -h / 2, w, h, r);
+      ctx.fillStyle = col;
       ctx.fill();
       if (opts.outline) { ctx.lineWidth = 2; ctx.strokeStyle = C.amberHi; ctx.stroke(); }
       if (car.loco) {
@@ -771,8 +793,14 @@
         if (n.kind !== "buffer") continue;
         const d = legDir(n.tracks[0], n.id);
         const x = sx(n.x), y = sy(n.y), r = L * 0.24;
-        ctx.beginPath(); ctx.moveTo(x - d.y * r, y + d.x * r); ctx.lineTo(x + d.y * r, y - d.x * r);
-        ctx.lineWidth = Math.max(3, L * 0.08); ctx.strokeStyle = C.muted; ctx.lineCap = "butt"; ctx.stroke(); ctx.lineCap = "round";
+        ctx.lineWidth = Math.max(3, L * 0.08); ctx.lineCap = "butt";
+        for (const [k, col] of [[depth() * 0.7, shade(C.muted)], [0, C.muted]]) {
+          const ox2 = downX() * k, oy2 = downY() * k;
+          ctx.beginPath(); ctx.moveTo(x - d.y * r + ox2, y + d.x * r + oy2); ctx.lineTo(x + d.y * r + ox2, y - d.x * r + oy2);
+          if (k) ctx.lineTo(x + d.y * r, y - d.x * r), ctx.lineTo(x - d.y * r, y + d.x * r), ctx.closePath();
+          ctx.strokeStyle = col; ctx.stroke();
+        }
+        ctx.lineCap = "round";
       }
 
       // goal: a marker beside the track for each car, in order from the goal's end,
@@ -852,7 +880,10 @@
           for (let o = 0; o < cars.length; o++) if (!consist.has(o) && isCoupled(state, c, o)) stack.push(o);
         }
       }
-      cars.forEach((_, c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1 }));
+      // nearer the bottom of the screen is nearer the viewer: draw those last
+      const screenDown = (p) => sx(p.x) * downX() + sy(p.y) * downY();
+      cars.map((_, c) => c).sort((a, b) => screenDown(poses[a]) - screenDown(poses[b]))
+        .forEach((c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1 }));
 
       // loco chevrons: you can drive this, and which ways
       cars.forEach((car, c) => {
