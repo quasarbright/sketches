@@ -34,25 +34,150 @@
       --font-display: "Fraunces", Georgia, serif;
     }
 
-    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+    html, body { margin: 0; background: var(--bg); }
 
-    #sheet {
-      /* explicit px size + offset set in JS; absolute rather than fixed (iOS renders fixed canvases blurry) */
-      position: absolute; display: block;
-      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    /* the bench: sheet on the left, the steps from photo to file down the right */
+    .hp {
+      display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+      height: 100vh; height: 100dvh;
     }
-
-    .hp-head {
-      position: fixed; top: 16px; left: 20px; z-index: 3; pointer-events: none;
+    .hp-main {
+      display: flex; flex-direction: column; min-width: 0; min-height: 0;
+      padding: 18px 28px 36px;      /* bottom: room for the floating footer */
     }
+    .hp-head { display: flex; align-items: baseline; gap: 14px; }
     .hp-title {
       font-family: var(--font-display); font-weight: 600; font-size: 1.6rem; line-height: 1;
       margin: 0; letter-spacing: -.01em;
     }
-    .hp-stats {
-      font-family: var(--font-mono); font-size: .78rem; color: var(--muted);
-      margin-top: 6px; white-space: pre;
+    .hp-head about-modal .btn {
+      background: none; border: none; padding: 2px 0; color: var(--muted);
+      text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--faint);
     }
+    .hp-head about-modal .btn:hover { color: var(--text); }
+
+    #stage { position: relative; flex: 1; min-height: 0; margin: 16px 0 12px; }
+    #sheet {
+      /* explicit px size + offset set in JS; absolute rather than fixed (iOS renders fixed canvases blurry) */
+      position: absolute; display: block;
+      box-shadow: 0 10px 40px rgba(0,0,0,.5);
+      touch-action: pan-y; -webkit-touch-callout: none; user-select: none;
+    }
+    @media (hover: hover) { #sheet { cursor: none; } }
+
+    /* the loupe: the line redrawn at magnification, wherever you point */
+    #loupe {
+      position: absolute; z-index: 2; pointer-events: none; display: none;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(0,0,0,.35), 0 12px 32px rgba(0,0,0,.55);
+    }
+    #loupe.on { display: block; }
+    #loupeMag {
+      position: absolute; z-index: 3; pointer-events: none; display: none;
+      font-family: var(--font-mono); font-size: .72rem; color: var(--on-accent);
+      background: var(--accent); padding: 1px 6px; border-radius: 8px;
+      transform: translate(-50%, -50%);
+    }
+    #loupeMag.on { display: block; }
+
+    .hp-caption {
+      /* sits just under the sheet; position and width set in JS */
+      position: absolute; flex-wrap: wrap;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      font-family: var(--font-mono); font-size: .78rem; color: var(--muted);
+    }
+    .hp-caption .hint { color: var(--faint); }
+    #play { font-family: var(--font-mono); font-size: .8rem; padding: 6px 12px; white-space: nowrap; }
+    .drawctl { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+    .speed { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .speed input { width: 90px; }
+    /* fixed width (mono, so ch is exact) so the slider doesn't shift as digits come and go */
+    .speed .v { color: var(--text); width: 13ch; text-align: right; flex: none; }
+
+    /* sidebar */
+    .hp-side {
+      background: var(--panel); border-left: 1px solid var(--border);
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .side-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 12px 10px 20px; border-bottom: 1px solid var(--border);
+    }
+    .side-title { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .side-toggle {
+      display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+      background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+      color: var(--muted); cursor: pointer;
+    }
+    .side-toggle:hover { color: var(--text); border-color: var(--border); }
+    .side-toggle svg { transition: transform .15s; }
+    body.live #saveStep { display: none; }
+
+    /* collapsed: a thin rail on the right with the toggle, the sheet gets the room */
+    body.side-closed .hp { grid-template-columns: minmax(0, 1fr) 46px; }
+    body.side-closed .side-body, body.side-closed .side-title { display: none; }
+    body.side-closed .side-head { padding: 10px 8px; justify-content: center; border-bottom: none; }
+    body.side-closed .side-toggle svg { transform: rotate(180deg); }
+    .step { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 16px; }
+    .step .section-label { margin: 0; }
+    .step .note { font-size: .8rem; color: var(--faint); margin: -6px 0 0; line-height: 1.45; }
+    .step .btn-row .btn { flex: 1; }
+
+    /* webcam / photo switch */
+    .seg {
+      display: grid; grid-template-columns: 1fr 1fr; padding: 3px; gap: 3px;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    }
+    .seg button {
+      font: inherit; font-size: .9rem; color: var(--muted); background: none; border: none;
+      padding: 7px 0; border-radius: 4px; cursor: pointer;
+    }
+    .seg button:hover { color: var(--text); }
+    .seg button[aria-pressed="true"] { background: var(--bg); color: var(--text); font-weight: 600; }
+    .panel-stack { display: flex; flex-direction: column; gap: 16px; }
+    body:not(.live) #livePanel, body.live #photoPanel { display: none; }
+
+    #live { position: absolute; display: none; box-shadow: 0 10px 40px rgba(0,0,0,.5); touch-action: pan-y; }
+    body.live #live { display: block; }
+    body.live #sheet, body.live .drawctl { display: none; }
+    /* no WebGL: live video falls back to the 2D canvas */
+    body.live.nogl #sheet { display: block; }
+    body.live.nogl #live { display: none; }
+    body.gated #capture { display: none; }
+    @media (hover: hover) { #live { cursor: none; } }
+    /* before the camera is running, the whole stage is a drop target that says what to do */
+    #gate {
+      position: absolute; inset: 0; z-index: 4; display: none;
+      flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+      text-align: center; padding: 24px;
+      border: 2px dashed var(--border); border-radius: var(--radius);
+      color: var(--muted); cursor: pointer;
+      transition: border-color .12s, background .12s;
+    }
+    #gate.on { display: flex; }
+    #gate:hover, #gate.dragover { border-color: var(--accent); background: rgba(226,96,58,.05); }
+    #gate .gate-icon { font-size: 2rem; color: var(--faint); line-height: 1; }
+    #gate.dragover .gate-icon { color: var(--accent); }
+    #gate .gate-title { font-family: var(--font-display); font-size: 1.4rem; font-weight: 600; color: var(--text); }
+    #gate .gate-body { margin: 0 0 8px; max-width: 34em; line-height: 1.5; }
+    body.gated .hp-caption, body.gated #live { visibility: hidden; }
+
+    #photoNow { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 12px; align-items: center; }
+    #thumb {
+      width: 56px; height: 56px; object-fit: cover; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--panel-2); filter: grayscale(1);
+    }
+    #photoNow .what { font-size: .9rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #photoPick { padding: 11px 14px; font-size: 1rem; }
+    #png, #svg { font-size: .85rem; padding: 6px 12px; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---- about-modal diagrams ---- */
+    .hp-viz { display: block; width: 100%; max-width: 440px; margin: 14px auto 4px; }
+    .hp-viz-caption { font-size: .8rem; color: var(--muted); text-align: center; margin-top: 2px; }
+    .cohesion-about ol { padding-left: 1.3em; }
+    .cohesion-about li { margin: .35em 0; }
 
     #drop {
       position: fixed; inset: 0; z-index: 20; display: none;
@@ -65,99 +190,180 @@
       padding: 48px 64px;
     }
 
-    @media (max-width: 640px) {
-      .hp-title { font-size: 1.25rem; }
+    .background .hp { grid-template-columns: minmax(0, 1fr); }
+    .background .hp-side, .background .hp-head, .background .hp-caption { display: none; }
+    .background .hp-main { padding: 0; }
+    .background #stage { margin: 0; }
+
+    /* phones: one column that scrolls; the stage's height is set in JS from the sheet's shape */
+    @media (max-width: 760px) {
+      .hp { display: block; height: auto; }
+      .hp-main { padding: 14px 16px 12px; }
+      .hp-title { font-size: 1.3rem; }
+      #stage { flex: none; margin: 12px 0 10px; }
+      .hp-side { border-left: none; border-top: 1px solid var(--border); overflow: visible; padding-bottom: 36px; }
+      /* below the sheet, the toggle folds the controls up instead of off to the side */
+      .side-head { padding: 8px 12px 8px 16px; }
+      .side-toggle svg { transform: rotate(-90deg); }
+      body.side-closed .side-title { display: inline; }
+      body.side-closed .side-head { justify-content: space-between; padding: 8px 12px 8px 16px; }
+      body.side-closed .side-toggle svg { transform: rotate(90deg); }
+      .step { padding: 16px; }
     }
   </style>
 </head>
 <body>
-  <canvas id="sheet"></canvas>
+<div class="hp">
+  <main class="hp-main">
+    <header class="hp-head">
+      <h1 class="hp-title">Hilbert Portrait</h1>
+      <about-modal label="how it works">
+      <h2 class="title">Hilbert Portrait</h2>
+      <p class="intro">The picture is drawn with a single line that never lifts, never crosses
+        itself, and passes through every part of the sheet. The line is a Hilbert curve that's
+        allowed to wiggle more finely where the picture is dark.</p>
 
-  <div class="hp-head">
-    <h1 class="hp-title">Hilbert Portrait</h1>
-    <div class="hp-stats" id="stats"></div>
-  </div>
+      <div class="section-label">a line through every cell</div>
+      <p>Split a square into four cells and walk them in an arch: in at the bottom-left, up,
+        across, and down and out at the bottom-right. Now split each of those cells into four and
+        replace it with a smaller arch, turned so that it ends right beside where the next one
+        starts. Do it again,
+        and again. After $n$ rounds the path visits all the cells of a $2^n \times 2^n$ grid, each
+        exactly once, as one line that never crosses itself. Keep going forever and you get the
+        <b>Hilbert curve</b>, which David Hilbert described in 1891.</p>
+      <canvas class="hp-viz" data-viz="levels"></canvas>
+      <p class="hp-viz-caption" data-caption="levels">&nbsp;</p>
+      <p class="hp-viz-caption">the wide <span style="color:var(--accent)">orange</span> band is the round before</p>
+
+      <div class="section-label">smaller cells, darker gray</div>
+      <p>Each cell holds a piece of line about as long as the cell is wide. Halve the cell size and
+        each cell holds half as much line, but four of them fit in the same space, so the patch
+        carries twice the ink. How deep the curve goes sets how dark it looks: the finest cells are
+        the darkest the pen can make, one level coarser is half as dark, then a quarter, an eighth,
+        and so on.</p>
+      <canvas class="hp-viz" data-viz="shades"></canvas>
+      <p class="hp-viz-caption">the same area at five depths, each with half the ink of the last</p>
+
+      <div class="section-label">deep in one place, shallow in another</div>
+      <p>So to draw a picture, the curve should go deep where the picture is dark and stay shallow
+        where it's light. Can it do both and still be one line? Look at where each small arch
+        starts and ends: in one corner, out the next corner along the same side, the same as the
+        big one. So a quarter that stops early is still an arch with its doors in the right places,
+        its neighbors still connect to it, and the whole thing is still one line.</p>
+      <canvas class="hp-viz" data-viz="doors"></canvas>
+      <p>Where a big cell meets a small one, their centers don't line up, and joining centers would
+        put a diagonal there. So the line crosses each shared edge at the smaller cell's height and
+        turns inside the bigger one instead. Every cell ends up holding either a straight run or a
+        single right-angle turn, just like a cell of the plain curve.</p>
+
+      <div class="section-label">dithering</div>
+      <p>That leaves five or six grays, and a picture has hundreds. Printing has it worse, with only
+        ink and paper. Making every dot whichever of black or white is nearer loses the shading.
+        <b>Dithering</b> mixes black and white dots so that, from a distance, they average out to
+        the grays in between.</p>
+      <canvas class="hp-viz" data-viz="pixels"></canvas>
+
+      <div class="section-label">dithering with the curve</div>
+      <p>The curve can do the same with its cell sizes. Where the picture falls between two shades,
+        it mixes cells of both sizes. Picking the nearest shade everywhere leaves flat bands, and
+        mixing brings the shading back.</p>
+      <canvas class="hp-viz" data-viz="curves"></canvas>
+
+      <div class="section-label">wide and tall pictures</div>
+      <p>A Hilbert curve fills a square, and its entrance and exit sit on the same side, one at
+        each corner. So squares placed side by side can be chained exit to entrance. A landscape
+        picture becomes a row of squares, a portrait one a column, and it's still one line.</p>
+      <canvas class="hp-viz" data-viz="chain"></canvas>
+    </about-modal>
+    </header>
+
+    <div id="stage">
+      <canvas id="sheet"></canvas>
+      <canvas id="live"></canvas>
+      <div id="gate" role="button" tabindex="0" title="Choose a photo, or drop one here">
+        <div class="gate-icon" aria-hidden="true">&#8595;</div>
+        <div class="gate-title" id="gateTitle">Allow camera access</div>
+        <p class="gate-body" id="gateBody">to draw from your webcam live, or drop a photo here.</p>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="gateCam">Try again</button>
+          <button class="btn" id="gatePhoto">Choose a photo</button>
+        </div>
+      </div>
+      <canvas id="loupe"></canvas>
+      <span id="loupeMag"></span>
+      <div class="hp-caption" id="caption">
+        <span><span id="stats"></span> <span class="hint" id="hint"></span></span>
+        <span class="drawctl">
+          <label class="speed" title="How fast the pen moves, in cells of the finest grid per second. It keeps this speed the whole way.">
+            <span>speed</span>
+            <input type="range" id="speed" min="0" max="100" step="1" value="60" title="How fast the pen moves, in cells of the finest grid per second. It keeps this speed the whole way." />
+            <span class="v" id="speedV"></span>
+          </label>
+          <button class="btn" id="play" title="Watch the pen draw the whole line, start to finish">watch it draw</button>
+        </span>
+      </div>
+    </div>
+  </main>
+
+  <aside class="hp-side" id="side">
+    <div class="side-head">
+      <span class="side-title">Controls</span>
+      <button class="side-toggle" id="sideToggle" title="Hide the controls" aria-expanded="true" aria-controls="sideBody">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="side-body" id="sideBody">
+    <section class="step">
+      <div class="seg" role="group" aria-label="Draw from">
+        <button id="modeLive" title="Draw from your camera, live">Webcam</button>
+        <button id="modePhoto" title="Draw from a photo">Photo</button>
+      </div>
+      <div id="livePanel" class="panel-stack">
+        <button class="btn btn-primary" id="capture" title="Freeze this frame as a photo, to save it or watch it draw">Capture this frame</button>
+        <p class="note" id="camNote">The video stays on your device.</p>
+      </div>
+      <div id="photoPanel" class="panel-stack">
+        <div id="photoNow">
+          <img id="thumb" alt="" />
+          <div class="what" id="photoName">Sample picture</div>
+        </div>
+        <button class="btn btn-primary" id="photoPick" title="Pick a photo from your device">Choose a photo</button>
+        <p class="note">Or drop or paste one anywhere. It stays on your device.</p>
+      </div>
+    </section>
+
+
+    <section class="step">
+      <div class="section-label">Drawing</div>
+      <div class="control">
+        <div class="control-head"><span class="name" title="The smallest the curve's wiggles get, in the darkest parts. Finer shows more detail but makes a longer line.">finest grid</span><span class="value" id="depthV"></span></div>
+        <input type="range" id="depth" min="4" max="9" step="1" value="8" title="The smallest the curve's wiggles get, in the darkest parts. Finer shows more detail but makes a longer line." />
+      </div>
+      <div class="control">
+        <div class="control-head"><span class="name" title="Line width, as a fraction of the gap between neighboring lines where the curve is finest">line weight</span><span class="value" id="weightV"></span></div>
+        <input type="range" id="weight" min="0.1" max="1" step="0.05" value="0.85" title="Line width, as a fraction of the gap between neighboring lines where the curve is finest" />
+      </div>
+      <label class="check" title="Draw a light line on a dark sheet. Dense curve then means light instead of dark.">
+        <input type="checkbox" id="invert" /> white on black
+      </label>
+    </section>
+
+    <section class="step" id="saveStep">
+      <div class="section-label">Save</div>
+      <div class="btn-row">
+        <button class="btn" id="png" title="Save the picture as a PNG at this size">Save PNG</button>
+        <button class="btn" id="svg" title="Save the line as one SVG path, for a pen plotter or any size print">Save SVG</button>
+      </div>
+      <p class="note">The SVG is the line as a single path, ready for a pen plotter.</p>
+    </section>
+    </div>
+  </aside>
+</div>
+
+  <mike-footer overlay></mike-footer>
 
   <div id="drop"><div class="dropzone"><div class="icon">&#8595;</div>drop the photo</div></div>
   <input type="file" id="file" accept="image/*" hidden />
-
-  <control-panel floating title="Curve" id="panel">
-    <div class="control" title="The finest the curve is allowed to get. Each step quarters the cell size, so the darkest parts get four times as much line.">
-      <div class="control-head"><span class="name">detail</span><span class="value" id="depthV"></span></div>
-      <input type="range" id="depth" min="4" max="9" step="1" value="8" />
-    </div>
-    <div class="control" title="The coarsest the curve is allowed to get, so even white areas get some line">
-      <div class="control-head"><span class="name">floor</span><span class="value" id="floorV"></span></div>
-      <input type="range" id="floor" min="0" max="6" step="1" value="2" />
-    </div>
-    <div class="control" title="Above 1 pushes mid-tones lighter, so only the darkest parts get dense. Below 1 darkens mid-tones.">
-      <div class="control-head"><span class="name">contrast</span><span class="value" id="gammaV"></span></div>
-      <input type="range" id="gamma" min="0.4" max="3" step="0.05" value="1.2" />
-    </div>
-    <div class="control" title="Line width, as a fraction of the gap between neighbouring lines at full detail">
-      <div class="control-head"><span class="name">line weight</span><span class="value" id="weightV"></span></div>
-      <input type="range" id="weight" min="0.1" max="1" step="0.05" value="0.55" />
-    </div>
-    <div class="control" title="How much to blur the photo first. More blur means fewer stray dense patches from noise and texture.">
-      <div class="control-head"><span class="name">smoothing</span><span class="value" id="blurV"></span></div>
-      <input type="range" id="blur" min="0" max="4" step="0.5" value="1" />
-    </div>
-    <label class="check" title="White line on black: dense curve now means light instead of dark">
-      <input type="checkbox" id="invert" /> invert
-    </label>
-  </control-panel>
-
-  <div class="control-bar" id="bar">
-    <button class="btn btn-primary" id="upload" title="Pick a photo (or drop / paste one anywhere)">photo</button>
-    <button class="btn" id="play" title="Watch the line draw itself, start to finish">draw</button>
-    <button class="btn" id="png" title="Save as PNG">png</button>
-    <button class="btn" id="svg" title="Save the line as an SVG polyline (one path, good for pen plotters)">svg</button>
-    <about-modal label="about">
-      <h2 class="title">Hilbert Portrait</h2>
-      <p>The whole picture is one line. It never lifts, never crosses itself, and visits every part
-      of the sheet. Up close it's a maze of right-angle turns; from across the room it's the photo.</p>
-
-      <div class="section-label">the curve</div>
-      <p>A Hilbert curve is built by recursion. Start with a square and a path that walks its four
-      quarters in a U: in at the bottom-left, out at the bottom-right. Now replace each quarter
-      with a smaller copy of the whole U, rotated or flipped so that each copy's exit lands right
-      next to the following copy's entrance. Repeat. After $n$ steps the path visits a
-      $2^n \times 2^n$ grid of cells, every one exactly once, as a single unbroken line.</p>
-
-      <div class="section-label">tone from depth</div>
-      <p>Because every copy keeps the same entrance and exit, nothing forces all the quarters to
-      recurse equally far. A light patch can stop early and be crossed by a few long strokes; a
-      dark patch can keep subdividing until it's packed with tight wiggles. The pieces still join
-      end to end, so it's still one line.</p>
-      <p>Where a big cell meets a small one their centres don't line up, so the line doesn't
-      go through centres. Instead it picks where to cross each shared edge, so every cell holds
-      either a straight run or a single right-angle turn, just like a cell of an ordinary Hilbert
-      curve. A cell the line runs straight through needs both crossings at the same height, and it
-      can always get them: both neighbours sit against the same side of it, so the smaller one's
-      edge fits inside the larger one's. Where every cell is the same size, this lands every
-      turn at a cell centre: the classic curve exactly.</p>
-      <p>A cell of side $s$ gets roughly one line per $s$ of width, so with line width $w$ it is
-      inked to about $w/s$. To make a patch with darkness $D$ (0 = white, 1 = black), the cell size
-      should be $s = s_{\min}/D$, where $s_{\min}$ is the finest cell. That's a recursion depth of</p>
-      $$d = d_{\max} + \log_2 D.$$
-      <p>So every halving of darkness costs one level of recursion. The sketch works out that
-      target depth for every pixel, then splits a cell whenever the average target under it is
-      deeper than the cell is. <em>Contrast</em> bends the tone curve before that
-      ($D \leftarrow D^{\gamma}$), and <em>floor</em> stops white areas from going completely
-      empty.</p>
-
-      <div class="section-label">wide and tall photos</div>
-      <p>A Hilbert curve fills a square, but its entrance and exit sit on the same side. Several
-      squares side by side can therefore be chained exit to entrance, so a landscape photo becomes
-      a row of squares and a portrait one becomes a column. It's still one line.</p>
-
-      <div class="section-label">your photo</div>
-      <p>It stays in this tab. Nothing is uploaded. The SVG export is the line itself as a single
-      polyline, ready for a pen plotter.</p>
-    </about-modal>
-  </div>
-
-  <mike-footer overlay></mike-footer>
 
   <script type="module">
     import { isBackground } from "../shared/cohesion.js";
@@ -165,14 +371,18 @@
     const $ = (id) => document.getElementById(id);
     const canvas = $("sheet");
     const ctx = canvas.getContext("2d");
+    const liveCanvas = $("live");    // WebGL, for the webcam
+    let mode = "photo";              // "live" (webcam) or "photo"
     const css = getComputedStyle(document.documentElement);
     const PAPER = css.getPropertyValue("--paper").trim();
     const INK = css.getPropertyValue("--ink").trim();
     const TIP = css.getPropertyValue("--accent").trim();
 
     const params = {
-      depth: 8, floor: 2, gamma: 1.2, weight: 0.55, blur: 1, invert: false,
+      depth: 8, weight: 0.85, invert: false,
     };
+    const FLOOR = 2;   // coarsest level: even white areas get a few long strokes
+    const BLUR = 1;    // px of blur on the sampled photo, so noise doesn't speckle the shading
 
     let source = null;     // HTMLCanvasElement or HTMLImageElement
     let layout = null;     // { k, horizontal } — how many squares, which way they chain
@@ -210,7 +420,7 @@
      * sampling: photo -> target-depth grid
      * ------------------------------------------------------------------ */
 
-    // Chain k squares along the photo's long side; crop the rest away (centred).
+    // Chain k squares along the photo's long side; crop the rest away (centerd).
     function chooseLayout(w, h) {
       const horizontal = w >= h;
       const ratio = horizontal ? w / h : h / w;
@@ -218,59 +428,107 @@
       return { k, horizontal };
     }
 
+    const isVideo = (s) => s instanceof HTMLVideoElement;
+    const sourceSize = (s) => isVideo(s) ? [s.videoWidth, s.videoHeight]
+      : [s.naturalWidth || s.width, s.naturalHeight || s.height];
+
+    // canvases reused between frames, so live video doesn't allocate a few per frame
+    const scratchCanvases = {};
+    function scratch(name, w, h) {
+      let c = scratchCanvases[name];
+      if (!c) {
+        c = scratchCanvases[name] = document.createElement("canvas");
+        c.g = c.getContext("2d", { willReadFrequently: name === "grid" });
+      }
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+      c.g.imageSmoothingQuality = "high";
+      return c;
+    }
+
+    // live video: blend each frame with the last so sensor noise doesn't make the curve
+    // shimmer, and ease the tone stretch instead of jumping it every frame
+    let smooth = null;     // { key, D: Float32Array, lo, hi }
+    let lastMeanLum = 0.5;
+
     function sampleTargets() {
       const n = 1 << params.depth;                 // finest cells per square side
       const { k, horizontal } = layout;
       const gw = horizontal ? n * k : n, gh = horizontal ? n : n * k;
 
-      const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
+      const [sw, sh] = sourceSize(source);
       const want = gw / gh;
       let cw = sw, ch = sh;
       if (sw / sh > want) cw = sh * want; else ch = sw / want;
       const cx = (sw - cw) / 2, cy = (sh - ch) / 2;
 
       // two-step downsample: the browser's smoothing alone aliases badly at large ratios
-      const mid = document.createElement("canvas");
       const scale = Math.min(1, (gw * 4) / cw);
-      mid.width = Math.max(gw, Math.round(cw * scale));
-      mid.height = Math.max(gh, Math.round(ch * scale));
-      const mg = mid.getContext("2d");
-      mg.imageSmoothingQuality = "high";
+      const mid = scratch("mid", Math.max(gw, Math.round(cw * scale)), Math.max(gh, Math.round(ch * scale)));
+      const mg = mid.g;
+      mg.save();
+      // the camera is shown mirrored, like a mirror, so moving left moves the drawing left
+      if (isVideo(source)) { mg.translate(mid.width, 0); mg.scale(-1, 1); }
       mg.drawImage(source, cx, cy, cw, ch, 0, 0, mid.width, mid.height);
+      mg.restore();
 
-      const c = document.createElement("canvas");
-      c.width = gw; c.height = gh;
-      const g = c.getContext("2d", { willReadFrequently: true });
-      g.imageSmoothingQuality = "high";
+      const c = scratch("grid", gw, gh), g = c.g;
       g.drawImage(mid, 0, 0, gw, gh);
-      if (params.blur > 0) {
+      if (BLUR > 0) {
         // blur a copy over the sharp one: the copy's edges fade to transparent and
         // let the sharp edge show through, instead of darkening toward black
-        const sharp = document.createElement("canvas");
-        sharp.width = gw; sharp.height = gh;
-        sharp.getContext("2d").drawImage(c, 0, 0);
-        g.filter = `blur(${params.blur}px)`;
+        const sharp = scratch("sharp", gw, gh);
+        sharp.g.drawImage(c, 0, 0);
+        g.filter = `blur(${BLUR}px)`;
         g.drawImage(sharp, 0, 0);
         g.filter = "none";
       }
       const data = g.getImageData(0, 0, gw, gh).data;
 
-      // target depth per finest cell: d = dmax + log2(D), clamped to [floor, dmax]
-      const T = new Float32Array(gw * gh);
-      const dmax = params.depth, floor = Math.min(params.floor, dmax);
-      for (let i = 0; i < gw * gh; i++) {
+      // darkness per finest cell (0 = white, 1 = black)
+      const N = gw * gh;
+      const D = new Float32Array(N);
+      let lumSum = 0;
+      for (let i = 0; i < N; i++) {
         const r = data[i * 4] / 255, gr = data[i * 4 + 1] / 255, b = data[i * 4 + 2] / 255;
         const lum = Math.pow(0.2126 * lin(r) + 0.7152 * lin(gr) + 0.0722 * lin(b), 1 / 2.2);
-        let D = params.invert ? lum : 1 - lum;
-        D = Math.pow(D, params.gamma);
-        const d = D > 0 ? dmax + Math.log2(D) : -Infinity;
-        T[i] = Math.max(floor, Math.min(dmax, d));
+        lumSum += lum;
+        D[i] = params.invert ? lum : 1 - lum;
       }
-      return { T, gw, gh, n };
+      lastMeanLum = lumSum / N;
+
+      const live = isVideo(source);
+      const key = `${gw}x${gh}:${params.invert}`;
+      if (live && smooth && smooth.key === key) {
+        for (let i = 0; i < N; i++) D[i] = smooth.D[i] += (D[i] - smooth.D[i]) * 0.5;
+      }
+
+      let [lo, hi] = toneRange(D);
+      if (live) {
+        if (smooth && smooth.key === key) {
+          lo = smooth.lo += (lo - smooth.lo) * 0.1;
+          hi = smooth.hi += (hi - smooth.hi) * 0.1;
+        } else smooth = { key, D: D.slice(), lo, hi };
+      }
+      stretchTones(D, lo, hi);
+      return { D, gw, gh, n };
+    }
+
+    // Stretch so the photo's darkest and lightest 1% reach full black and white, so a dim or
+    // washed-out photo still uses every shade.
+    function toneRange(D) {
+      const N = D.length, sample = new Float32Array(Math.ceil(N / 7));
+      for (let i = 0, j = 0; i < N; i += 7) sample[j++] = D[i];
+      sample.sort();
+      const at = (q) => sample[Math.min(sample.length - 1, Math.floor(q * sample.length))];
+      const lo = at(0.01);
+      return [lo, Math.max(at(0.99), lo + 0.05)];
+    }
+    function stretchTones(D, lo, hi) {
+      for (let i = 0; i < D.length; i++) D[i] = Math.min(1, Math.max(0, (D[i] - lo) / (hi - lo)));
     }
     const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 
-    // summed-area table for O(1) mean target depth over any aligned cell
+    // summed-area table for O(1) mean darkness over any aligned cell
     function summedArea(T, gw, gh) {
       const S = new Float64Array((gw + 1) * (gh + 1));
       for (let y = 0; y < gh; y++) {
@@ -289,18 +547,30 @@
      * The curve enters near (x0,y0) and leaves near (x0,y0)+(yi,yj).
      * ------------------------------------------------------------------ */
     function build() {
-      const { T, gw, gh, n } = sampleTargets();
-      const S = summedArea(T, gw, gh);
-      const W1 = gw + 1;
-      const meanT = (x, y, s) =>
-        (S[(y + s) * W1 + x + s] - S[y * W1 + x + s] - S[(y + s) * W1 + x] + S[y * W1 + x]) / (s * s);
+      const { D, gw, gh, n } = sampleTargets();
+      const c = curve(D, gw, gh, params.depth, FLOOR, layout, "ordered");
+      path = c.path;
+      nPts = path.length / 2;
+      return { gw, gh, n };
+    }
 
-      // leaves in curve order: centre and side
+    // The whole method, from a darkness grid (one value per finest cell) to the line.
+    // Also used, on small made-up pictures, by the about-modal diagrams.
+    //   dither: "ordered", or "none" to round each cell to the nearest shade
+    function curve(D, gw, gh, depth, floor, { k, horizontal }, dither) {
+      const n = 1 << depth;
+      const S = summedArea(D, gw, gh);
+      const W1 = gw + 1;
+      const meanD = (x, y, s) =>
+        (S[(y + s) * W1 + x + s] - S[y * W1 + x + s] - S[(y + s) * W1 + x] + S[y * W1 + x]) / (s * s);
+      const split = chooseSplits(meanD, gw, gh, n, depth, floor, dither);
+
+      // leaves in curve order: center and side
       const LX = [], LY = [], LS = [];
       const rec = (x0, y0, xi, xj, yi, yj, level) => {
         const s = Math.abs(xi + yi);               // side length (one of the vectors is axis-aligned)
         const bx = Math.min(x0, x0 + xi + yi), by = Math.min(y0, y0 + xj + yj);
-        if (level < params.depth && meanT(bx, by, s) > level + 0.5) {
+        if (level < depth && split[level][(by / s) * (gw / s) + bx / s]) {
           const hxi = xi / 2, hxj = xj / 2, hyi = yi / 2, hyj = yj / 2;
           rec(x0, y0, hyi, hyj, hxi, hxj, level + 1);
           rec(x0 + hxi, y0 + hxj, hxi, hxj, hyi, hyj, level + 1);
@@ -313,30 +583,70 @@
 
       // Each square enters at one corner of its long-axis edge and leaves at the next
       // square's corner, so the chain stays one line.
-      const { k, horizontal } = layout;
       for (let q = 0; q < k; q++) {
         if (horizontal) rec(q * n, n, 0, -n, n, 0, 0);   // enter bottom-left, exit bottom-right
         else rec(0, q * n, n, 0, 0, n, 0);               // enter top-left, exit bottom-left
       }
 
-      path = seamless(LX, LY, LS);
-      nPts = path.length / 2;
-      return { gw, gh, n };
+      return { path: seamless(LX, LY, LS), leaves: { X: LX, Y: LY, S: LS } };
+    }
+
+    /* ------------------------------------------------------------------ *
+     * which cells split: dithering between the shades
+     * A cell of side s holds a line of length s, so it's inked to 1/s of the darkest the pen
+     * gets (side 1). Each level of the grid is one shade, each half as dark as the next finer.
+     * Go down the levels. At each level, every cell that exists either stops, giving darkness
+     * 1/s, or splits into four, giving at least 2/s.
+     *
+     * Ordered (Bayer) dither: where the picture sits a fraction f of the way from this cell's
+     * shade to the next darker one, the cells whose threshold in a fixed 4×4 pattern is under f
+     * split, so a patch between two shades gets both, in proportion. Each cell depends only on
+     * its own patch of the picture, so live video doesn't reshuffle from frame to frame.
+     * "none" splits only when the next shade is nearer, which leaves flat bands.
+     * Returns, per level, one flag per cell: 1 = split.
+     * ------------------------------------------------------------------ */
+    const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+
+    function chooseSplits(meanD, gw, gh, n, depth, floorLevel, dither) {
+      const dmax = depth, floor = Math.min(floorLevel, dmax), ordered = dither === "ordered";
+      const split = [], exists = [];
+      for (let L = 0; L <= dmax; L++) {
+        const cells = (gw / (n >> L)) * (gh / (n >> L));
+        split.push(new Uint8Array(cells)); exists.push(new Uint8Array(cells));
+      }
+      exists[0].fill(1);
+      for (let L = 0; L < dmax; L++) {
+        const s = n >> L, cw = gw / s, ch = gh / s, ex = exists[L];
+        for (let cy = 0; cy < ch; cy++) for (let cx = 0; cx < cw; cx++) {
+          const i = cy * cw + cx;
+          if (!ex[i]) continue;
+          // how far the picture here is from this level's shade toward the next: 0 at this
+          // shade (darkness 1/s), 1 at the next (2/s)
+          const f = meanD(cx * s, cy * s, s) * s - 1;
+          const go = L < floor || (ordered ? f > BAYER4[(cy & 3) * 4 + (cx & 3)] : f > 0.5);
+          if (go) {
+            split[L][i] = 1;
+            const ccw = cw * 2, c0 = 2 * cy * ccw + 2 * cx;
+            exists[L + 1][c0] = exists[L + 1][c0 + 1] = exists[L + 1][c0 + ccw] = exists[L + 1][c0 + ccw + 1] = 1;
+          }
+        }
+      }
+      return split;
     }
 
     /* ------------------------------------------------------------------ *
      * threading the line through the leaves
      * Consecutive leaves always share an edge, so the line crosses each shared edge once,
-     * straight across. Joining centres would put diagonals wherever a big leaf meets a small
+     * straight across. Joining centers would put diagonals wherever a big leaf meets a small
      * one, so instead choose *where* along each edge to cross, and let each leaf hold either a
      * straight run (in and out through opposite sides) or exactly one right-angle turn (through
      * adjacent sides), like a cell of an ordinary Hilbert curve.
      *
      * A straight-through leaf needs both its crossings at the same height. They always can be:
-     * both neighbours touch the leaf's entry/exit side, so their edges overlap from that side,
+     * both neighbors touch the leaf's entry/exit side, so their edges overlap from that side,
      * and the shorter one lies inside the longer. A run of straight leaves therefore crosses at
-     * the centre of the smallest neighbour in the run. When all leaves are one size this puts
-     * every turn at a cell centre: the classic curve exactly.
+     * the center of the smallest neighbor in the run. When all leaves are one size this puts
+     * every turn at a cell center: the classic curve exactly.
      * ------------------------------------------------------------------ */
     function seamless(X, Y, S) {
       const n = X.length;
@@ -380,20 +690,39 @@
     let grid = { gw: 1, gh: 1, n: 1 };
     let view = { scale: 1 };
 
+    const stage = $("stage");
+    const narrowQuery = matchMedia("(max-width: 760px)");
+
     function fitCanvas() {
       const dpr = window.devicePixelRatio || 1;
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const narrow = vw < 640;
-      const padX = narrow ? 12 : 48;
-      const padTop = narrow ? 70 : 64, padBot = narrow ? 96 : 92;
-      const availW = vw - padX * 2, availH = vh - padTop - padBot;
+      const cap = $("caption");
+      const availW = stage.clientWidth;
+      cap.style.width = availW + "px";      // measure its height at roughly the width it'll get
+      const capH = isBackground() ? 0 : cap.offsetHeight + 12;
+      let availH;
+      if (narrowQuery.matches) {
+        // one scrolling column: the sheet takes the full width, capped so a tall photo still
+        // leaves the controls in reach
+        availH = Math.min(availW * grid.gh / grid.gw, document.documentElement.clientHeight * 0.75);
+        // the camera prompt needs room even before there's a picture to size it by
+        if (document.body.classList.contains("gated")) availH = Math.max(availH, document.documentElement.clientHeight * 0.6);
+        stage.style.height = Math.floor(availH + capH) + "px";
+      } else {
+        stage.style.height = "";
+        availH = stage.clientHeight - capH;
+      }
       const scale = Math.min(availW / grid.gw, availH / grid.gh);
       const w = Math.floor(grid.gw * scale), h = Math.floor(grid.gh * scale);
+      const left = Math.round((availW - w) / 2), top = Math.round((availH - h) / 2);
       canvas.style.width = w + "px"; canvas.style.height = h + "px";
-      canvas.style.left = Math.round((vw - w) / 2) + "px";
-      canvas.style.top = Math.round(padTop + (availH - h) / 2) + "px";
+      canvas.style.left = left + "px"; canvas.style.top = top + "px";
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
-      view = { scale: (w / grid.gw) * dpr, dpr };
+      for (const p of ["width", "height", "left", "top"]) liveCanvas.style[p] = canvas.style[p];
+      if (liveCanvas.width !== canvas.width || liveCanvas.height !== canvas.height) {
+        liveCanvas.width = canvas.width; liveCanvas.height = canvas.height;
+      }
+      cap.style.left = left + "px"; cap.style.width = w + "px"; cap.style.top = top + h + 12 + "px";
+      view = { scale: (w / grid.gw) * dpr, dpr, css: w / grid.gw, left, top, w, h };
     }
 
     function colors() {
@@ -419,8 +748,81 @@
 
     function render() {
       stopAnim();
-      prepCtx();
-      if (nPts > 1) strokeRange(0, nPts);
+      if (mode === "live" && gl) renderLive();
+      else { prepCtx(); if (nPts > 1) strokeRange(0, nPts); }
+      drawLoupe();
+    }
+
+    /* ---- live drawing with WebGL ----
+     * Every segment is horizontal or vertical, so a thick segment is just a rectangle: the
+     * segment's extent grown by half the line width on all sides. Neighboring rectangles
+     * overlap at each corner, which fills the joins. One instanced draw call for the lot. */
+    let gl = null, glProg = null, glVao = null, glBuf = null, rects = new Float32Array(0);
+    const glU = {};
+
+    function initGL() {
+      gl = liveCanvas.getContext("webgl2", { antialias: true, preserveDrawingBuffer: true });
+      if (!gl) return;
+      const vs = `#version 300 es
+        in vec4 a_rect;          // x0, y0, x1, y1 in finest cells
+        uniform vec2 u_grid;
+        void main() {
+          int v = gl_VertexID;   // two triangles: (0,0) (1,0) (0,1) and (0,1) (1,0) (1,1)
+          vec2 c = vec2((v == 1 || v == 4 || v == 5) ? 1.0 : 0.0, (v == 2 || v == 3 || v == 5) ? 1.0 : 0.0);
+          vec2 p = mix(a_rect.xy, a_rect.zw, c);
+          gl_Position = vec4(p.x / u_grid.x * 2.0 - 1.0, 1.0 - p.y / u_grid.y * 2.0, 0.0, 1.0);
+        }`;
+      const fs = `#version 300 es
+        precision mediump float;
+        uniform vec4 u_color;
+        out vec4 color;
+        void main() { color = u_color; }`;
+      const shader = (type, src) => {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src); gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+        return s;
+      };
+      glProg = gl.createProgram();
+      gl.attachShader(glProg, shader(gl.VERTEX_SHADER, vs));
+      gl.attachShader(glProg, shader(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(glProg);
+      glU.grid = gl.getUniformLocation(glProg, "u_grid");
+      glU.color = gl.getUniformLocation(glProg, "u_color");
+      glVao = gl.createVertexArray();
+      gl.bindVertexArray(glVao);
+      glBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, glBuf);
+      const loc = gl.getAttribLocation(glProg, "a_rect");
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 4, gl.FLOAT, false, 0, 0);
+      gl.vertexAttribDivisor(loc, 1);
+    }
+
+    const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+
+    function renderLive() {
+      const { bg, fg } = colors();
+      const [br, bgG, bb] = rgb(bg);
+      gl.viewport(0, 0, liveCanvas.width, liveCanvas.height);
+      gl.clearColor(br, bgG, bb, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const m = nPts - 1;
+      if (m < 1) return;
+      if (rects.length < m * 4) rects = new Float32Array(Math.ceil(m * 1.5) * 4);
+      const h = params.weight / 2;
+      for (let i = 0, o = 0; i < m; i++, o += 4) {
+        const ax = path[i * 2], ay = path[i * 2 + 1], bx = path[i * 2 + 2], by = path[i * 2 + 3];
+        rects[o] = Math.min(ax, bx) - h; rects[o + 1] = Math.min(ay, by) - h;
+        rects[o + 2] = Math.max(ax, bx) + h; rects[o + 3] = Math.max(ay, by) + h;
+      }
+      gl.useProgram(glProg);
+      gl.uniform2f(glU.grid, grid.gw, grid.gh);
+      gl.uniform4f(glU.color, ...rgb(fg), 1);
+      gl.bindVertexArray(glVao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, glBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, rects.subarray(0, m * 4), gl.STREAM_DRAW);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, m);
     }
 
     function updateStats() {
@@ -435,18 +837,22 @@
       // length in "sheet widths", the only unit that means anything without a printer
       const widths = len / grid.gw;
       $("stats").textContent =
-        `1 line · ${turns.toLocaleString()} turns\n` +
-        `${widths.toFixed(0)}× the width of the sheet`;
+        `one line · ${turns.toLocaleString()} turns · ${widths.toFixed(0)} sheet-widths long`;
     }
 
     /* ---- the line drawing itself ---- */
     function stopAnim() {
       if (anim) { cancelAnimationFrame(anim.raf); anim = null; }
-      $("play").textContent = "draw";
+      $("play").textContent = "watch it draw";
     }
+
+    // speed slider is log-scale: 0..100 -> 10..10000 cells/s
+    const speedOf = (pos) => 10 * Math.pow(1000, pos / 100);
+    let penSpeed = speedOf(60);
 
     function play() {
       if (anim) { render(); return; }
+      if (nPts < 2) return;
       prepCtx();
       // pace by distance, not by vertex: one vertex can be a long straight run
       const cum = new Float64Array(nPts);
@@ -454,17 +860,19 @@
         cum[i] = cum[i - 1] + Math.abs(path[i * 2] - path[i * 2 - 2]) + Math.abs(path[i * 2 + 1] - path[i * 2 - 1]);
       }
       const total = cum[nPts - 1] || 1;
-      const dur = Math.min(14000, Math.max(5000, nPts * 0.15)); // ms
       const sc = view.scale;
-      const t0 = performance.now();
+      // constant pen speed in finest cells per second, read every frame so the slider works mid-draw
+      let d = 0, last = null;
       let i = 0;                                  // last vertex fully drawn
       let lx = path[0] * sc, ly = path[1] * sc;   // where the pen is
       const tipR = Math.max(3 * view.dpr, ctx.lineWidth * 1.6);
       let under = null; // pixels under the pen tip, restored each frame
       const frame = (now) => {
         if (under) ctx.putImageData(under.img, under.x, under.y);
-        // rAF's timestamp can predate t0 on the first frame
-        const d = Math.min(total, Math.max(0, (now - t0) / dur) * total);
+        // clamp the step so a backgrounded tab doesn't jump ahead on return
+        const dt = last === null ? 0 : Math.min(0.1, (now - last) / 1000);
+        last = now;
+        d = Math.min(total, d + penSpeed * dt);
         ctx.beginPath(); ctx.moveTo(lx, ly);
         while (i + 1 < nPts && cum[i + 1] <= d) {
           i++;
@@ -479,6 +887,8 @@
         }
         ctx.lineTo(lx, ly);
         ctx.stroke();
+        anim.i = i; anim.pen = [lx / sc, ly / sc];
+        drawLoupe();
 
         if (d < total) {
           const bx = Math.max(0, Math.floor(lx - tipR - 2)), by = Math.max(0, Math.floor(ly - tipR - 2));
@@ -490,23 +900,109 @@
           anim.raf = requestAnimationFrame(frame);
         } else {
           anim = null;
-          $("play").textContent = "draw";
+          $("play").textContent = "watch it draw";
+          drawLoupe();
         }
       };
-      anim = { raf: requestAnimationFrame(frame) };
+      anim = { raf: requestAnimationFrame(frame), i: 0, pen: [path[0], path[1]] };
       $("play").textContent = "stop";
     }
+
+    /* ---- the loupe: the line redrawn at magnification around the pointer ---- */
+    const loupe = $("loupe"), lctx = loupe.getContext("2d"), magTag = $("loupeMag");
+    let lens = null;       // { x, y } pointer in stage css px, while the loupe is up
+    let magMul = 1;        // the user's scroll-wheel adjustment on top of the default
+    let lensUsed = false;
+
+    function loupeSize() { return narrowQuery.matches ? 150 : 220; }
+
+    // default: the finest wiggles about 7px apart, whatever size the sheet is shown at
+    function magnification() {
+      const base = Math.max(2, 7 / view.css);
+      return Math.min(40, Math.max(1.5, base * magMul));
+    }
+
+    function drawLoupe() {
+      if (!lens || !path) { loupe.classList.remove("on"); magTag.classList.remove("on"); return; }
+      const L = loupeSize(), dpr = view.dpr;
+      if (loupe.width !== Math.round(L * dpr)) {
+        loupe.width = loupe.height = Math.round(L * dpr);
+        loupe.style.width = loupe.style.height = L + "px";
+      }
+      // touch: lift the loupe above the finger so the finger doesn't cover it
+      const lift = lens.touch ? L * 0.5 + 40 : 0;
+      const cx = lens.x, cy = lens.y - lift;
+      loupe.style.left = cx - L / 2 + "px"; loupe.style.top = cy - L / 2 + "px";
+
+      const mag = magnification();
+      const s = view.css * mag * dpr;                       // loupe px per grid unit
+      const gx = (lens.x - view.left) / view.css, gy = (lens.y - view.top) / view.css;
+      const half = L / 2 / (view.css * mag) + 1;             // grid units visible each side
+
+      const { bg, fg } = colors();
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.fillStyle = "#0b0c0f";
+      lctx.fillRect(0, 0, loupe.width, loupe.height);
+      lctx.setTransform(s, 0, 0, s, loupe.width / 2 - gx * s, loupe.height / 2 - gy * s);
+      lctx.fillStyle = bg;
+      lctx.fillRect(0, 0, grid.gw, grid.gh);
+      lctx.strokeStyle = fg;
+      lctx.lineWidth = params.weight;
+      lctx.lineCap = "round"; lctx.lineJoin = "round";
+
+      // only the segments near the pointer; every segment is axis-aligned
+      const end = anim ? anim.i + 1 : nPts;
+      const x0 = gx - half, x1 = gx + half, y0 = gy - half, y1 = gy + half;
+      lctx.beginPath();
+      let pen = false;
+      for (let i = 1; i < end; i++) {
+        const ax = path[i * 2 - 2], ay = path[i * 2 - 1], bx = path[i * 2], by = path[i * 2 + 1];
+        const hit = Math.max(ax, bx) >= x0 && Math.min(ax, bx) <= x1 && Math.max(ay, by) >= y0 && Math.min(ay, by) <= y1;
+        if (hit) {
+          if (!pen) lctx.moveTo(ax, ay);
+          lctx.lineTo(bx, by);
+          pen = true;
+        } else pen = false;
+      }
+      if (anim) {
+        const k = anim.i;
+        if (!pen) lctx.moveTo(path[k * 2], path[k * 2 + 1]);
+        lctx.lineTo(anim.pen[0], anim.pen[1]);
+      }
+      lctx.stroke();
+      if (anim) {
+        lctx.fillStyle = TIP;
+        lctx.beginPath(); lctx.arc(anim.pen[0], anim.pen[1], Math.max(params.weight * 1.6, 4 / (view.css * mag)), 0, Math.PI * 2); lctx.fill();
+      }
+
+      loupe.classList.add("on");
+      magTag.textContent = `${mag < 10 ? mag.toFixed(1) : Math.round(mag)}×`;
+      magTag.style.left = cx + L * 0.354 + "px"; magTag.style.top = cy + L * 0.354 + "px";
+      magTag.classList.add("on");
+    }
+
+    function showLens(clientX, clientY, touch) {
+      const r = stage.getBoundingClientRect();
+      const x = clientX - r.left, y = clientY - r.top;
+      // the pointer only does anything over the sheet itself
+      if (x < view.left || x > view.left + view.w || y < view.top || y > view.top + view.h) { hideLens(); return; }
+      lens = { x, y, touch };
+      if (!lensUsed) { lensUsed = true; $("hint").textContent = ""; }
+      drawLoupe();
+    }
+    function hideLens() { lens = null; drawLoupe(); }
 
     /* ------------------------------------------------------------------ *
      * pipeline
      * ------------------------------------------------------------------ */
     let pending = false;
     function rebuild() {
+      if (mode === "live") return;       // the frame loop picks up changes on the next frame
       if (pending) return;
       pending = true;
       requestAnimationFrame(() => {
         pending = false;
-        if (!source) return;
+        if (!source || mode === "live") return;
         grid = build();
         fitCanvas();
         render();
@@ -514,10 +1010,166 @@
       });
     }
 
-    function setSource(img) {
+    let photo = null;          // { img, name, url } — what photo mode shows
+    let depthTouched = false;
+    let invertTouched = false; // set by hand during this camera session
+
+    function setMode(m) {
+      stopAnim();
+      mode = m;
+      document.body.classList.toggle("live", m === "live");
+      document.body.classList.toggle("nogl", m === "live" && !gl);
+      $("modeLive").setAttribute("aria-pressed", m === "live");
+      $("modePhoto").setAttribute("aria-pressed", m === "photo");
+      if (m === "photo") { stopLive(); setGate(null); showPhoto(); }
+    }
+
+    /* ---- webcam ---- */
+    let video = null, stream = null, liveGen = 0, lastStats = 0, lightEma = null, needFit = false;
+
+    const GATE = {
+      asking:      ["Allow camera access", "to draw from your webcam live, or drop a photo here.", false],
+      blocked:     ["Camera access is blocked", "Allow the camera for this site in your browser's settings and try again, or drop a photo here.", true],
+      nocamera:    ["No camera found", "Connect one and try again, or drop a photo here.", true],
+      unsupported: ["This browser can't use a camera here", "Drop a photo here instead.", false],
+      error:       ["The camera didn't start", "Try again, or drop a photo here.", true],
+    };
+    function setGate(state, detail) {
+      document.body.classList.toggle("gated", !!state);
+      $("gate").classList.toggle("on", !!state);
+      if (state) {
+        const [title, body, retry] = GATE[state];
+        $("gateTitle").textContent = title;
+        $("gateBody").textContent = detail ? `${body} (${detail})` : body;
+        $("gateCam").style.display = retry ? "" : "none";
+      }
+      fitCanvas();
+    }
+
+    async function startLive() {
+      setMode("live");
+      if (stream) return;
+      setGate("asking");
+      if (!navigator.mediaDevices?.getUserMedia) { setGate("unsupported"); return; }
+      const gen = ++liveGen;
+      let s;
+      try {
+        s = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false,
+        });
+      } catch (err) {
+        if (gen !== liveGen || mode !== "live") return;
+        const n = err.name;
+        setGate(n === "NotAllowedError" || n === "SecurityError" ? "blocked"
+          : n === "NotFoundError" || n === "OverconstrainedError" ? "nocamera" : "error",
+          n === "NotAllowedError" || n === "NotFoundError" ? null : err.message);
+        return;
+      }
+      // switched to photo while the browser was asking
+      if (gen !== liveGen || mode !== "live") { s.getTracks().forEach((t) => t.stop()); return; }
+      stream = s;
+      video = document.createElement("video");
+      video.muted = true; video.playsInline = true; video.srcObject = stream;
+      // a camera that's unplugged or taken by another app mid-session
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        if (gen !== liveGen) return;
+        stopLive(); setGate("nocamera");
+      });
+      try { await video.play(); } catch (err) { if (gen === liveGen) setGate("error", err.message); return; }
+      if (gen !== liveGen || mode !== "live") return;
+      source = video; smooth = null; lightEma = null; invertTouched = false; layout = null;
+      // live builds every frame, so a step coarser than photos by default
+      if (!depthTouched) { params.depth = 8; $("depth").value = 8; }
+      needFit = true;
+      scheduleLive(gen);
+    }
+
+    function stopLive() {
+      liveGen++;
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      stream = null; video = null;
+    }
+
+    function scheduleLive(gen) {
+      const next = () => liveFrame(gen);
+      if (video && video.requestVideoFrameCallback) video.requestVideoFrameCallback(next);
+      else requestAnimationFrame(next);
+    }
+
+    function liveFrame(gen) {
+      if (gen !== liveGen || mode !== "live" || !video) return;
+      if (video.readyState >= 2 && video.videoWidth) {
+        if (document.body.classList.contains("gated")) setGate(null);
+        const lay = chooseLayout(video.videoWidth, video.videoHeight);
+        if (!layout || lay.k !== layout.k || lay.horizontal !== layout.horizontal) { layout = lay; relabelGrids(); }
+        const g = build();
+        const resized = g.gw !== grid.gw || g.gh !== grid.gh;
+        grid = g;
+        if (resized || needFit) { fitCanvas(); needFit = false; }
+        render();
+        // white on black when the room is dark, with a gap between the two cutoffs so it
+        // doesn't flip back and forth around one value
+        if (!invertTouched) {
+          lightEma = lightEma === null ? lastMeanLum : lightEma + (lastMeanLum - lightEma) * 0.05;
+          const want = params.invert ? lightEma < 0.44 : lightEma < 0.40;
+          if (want !== params.invert) { params.invert = want; $("invert").checked = want; }
+        }
+        const now = performance.now();
+        if (now - lastStats > 400) { updateStats(); lastStats = now; }
+      }
+      scheduleLive(gen);
+    }
+
+    function capture() {
+      if (!video || !video.videoWidth) return;
+      const c = document.createElement("canvas");
+      c.width = video.videoWidth; c.height = video.videoHeight;
+      const g = c.getContext("2d");
+      g.translate(c.width, 0); g.scale(-1, 1);   // mirrored, as it was shown
+      g.drawImage(video, 0, 0);
+      setSource(c, "Webcam capture");
+    }
+    // average perceived lightness of the whole photo, 0 = black, 1 = white, from a small copy
+    function meanLightness(img) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 64;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 64, 64);
+      const d = g.getImageData(0, 0, 64, 64).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        sum += Math.pow(0.2126 * lin(d[i] / 255) + 0.7152 * lin(d[i + 1] / 255) + 0.0722 * lin(d[i + 2] / 255), 1 / 2.2);
+      }
+      return sum / (64 * 64);
+    }
+
+    // a new photo: remember it and show it
+    function setSource(img, name, url) {
+      if (photo && photo.url && photo.url !== url) URL.revokeObjectURL(photo.url);
+      photo = { img, name, url };
+      setMode("photo");
+    }
+
+    function showPhoto() {
+      if (!photo) photo = { img: demoImage(), name: "Sample picture" };
+      const { img, name, url } = photo;
       source = img;
       const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       layout = chooseLayout(w, h);
+      // about 512 finest cells along the long side, enough for a face to read, unless the
+      // finest grid has been set by hand
+      if (!depthTouched) {
+        params.depth = Math.round(9 - Math.log2(layout.k));
+        $("depth").value = params.depth;
+      }
+      // a clearly dark photo is drawn white on black, so the line draws the lit parts instead
+      // of filling in the shadows. Ordinary photos average around 0.45, hence a cutoff under it.
+      params.invert = meanLightness(img) < 0.42;
+      $("invert").checked = params.invert;
+      $("thumb").src = url || img.toDataURL("image/jpeg", 0.7);
+      $("photoName").textContent = name;
+      $("photoName").title = name;
+      relabelGrids();
       rebuild();
     }
 
@@ -525,7 +1177,7 @@
       if (!file || !file.type.startsWith("image/")) return;
       const url = URL.createObjectURL(file);
       const img = new Image();
-      img.onload = () => { setSource(img); URL.revokeObjectURL(url); };
+      img.onload = () => setSource(img, file.name || "Pasted photo", url);
       img.src = url;
     }
 
@@ -543,7 +1195,7 @@
     function savePng() {
       // a finished drawing, not a mid-animation frame
       if (anim) render();
-      canvas.toBlob((b) => download(b, "hilbert-portrait.png"), "image/png");
+      (mode === "live" && gl ? liveCanvas : canvas).toBlob((b) => download(b, "hilbert-portrait.png"), "image/png");
     }
 
     function saveSvg() {
@@ -562,14 +1214,17 @@
     /* ------------------------------------------------------------------ *
      * controls
      * ------------------------------------------------------------------ */
-    const sliders = {
-      depth:  (v) => `${v} · ${(1 << v)}²`,
-      floor:  (v) => `${v}`,
-      gamma:  (v) => (+v).toFixed(2),
-      weight: (v) => (+v).toFixed(2),
-      blur:   (v) => (+v === 0 ? "off" : `${(+v).toFixed(1)}`),
+    let relabelGrids = () => {};   // set once the controls are wired; the labels depend on the photo's shape
+    // grids read as the whole sheet's cells, e.g. 512 × 256 for two squares side by side
+    const gridLabel = (v) => {
+      const n = 1 << v, k = layout ? layout.k : 1;
+      return layout && !layout.horizontal ? `${n} × ${n * k}` : `${n * k} × ${n}`;
     };
-    const ids = { depth: "depth", floor: "floor", gamma: "gamma", weight: "weight", blur: "blur" };
+    const sliders = {
+      depth:  gridLabel,
+      weight: (v) => (+v).toFixed(2),
+    };
+    const ids = { depth: "depth", weight: "weight" };
 
     if (!isBackground()) {
       for (const [key, fmt] of Object.entries(sliders)) {
@@ -579,25 +1234,86 @@
         el.addEventListener("input", () => {
           sync();
           // line weight is purely visual; everything else changes the curve
+          if (key === "depth") depthTouched = true;
           if (key === "weight") render(); else rebuild();
         });
       }
-      $("invert").addEventListener("change", (e) => { params.invert = e.target.checked; rebuild(); });
-      if (window.innerWidth < 640) $("panel").setAttribute("collapsed", "");
+      $("invert").addEventListener("change", (e) => { params.invert = e.target.checked; invertTouched = true; rebuild(); });
+      $("modeLive").addEventListener("click", () => { if (mode !== "live") startLive(); });
+      $("modePhoto").addEventListener("click", () => { if (mode !== "photo") setMode("photo"); });
+      $("capture").addEventListener("click", capture);
 
-      $("upload").addEventListener("click", () => $("file").click());
+      // collapsible controls; remembered per browser
+      const setSide = (open) => {
+        document.body.classList.toggle("side-closed", !open);
+        $("sideToggle").setAttribute("aria-expanded", open);
+        $("sideToggle").title = open ? "Hide the controls" : "Show the controls";
+        try { localStorage.setItem("hilbert-portrait:side", open ? "open" : "closed"); } catch {}
+        needFit = true;
+        if (path) { fitCanvas(); render(); }
+      };
+      let sideStored = null;
+      try { sideStored = localStorage.getItem("hilbert-portrait:side"); } catch {}
+      if (sideStored === "closed") setSide(false);
+      $("sideToggle").addEventListener("click", () => setSide(document.body.classList.contains("side-closed")));
+      $("gateCam").addEventListener("click", (e) => { e.stopPropagation(); startLive(); });
+      $("gatePhoto").addEventListener("click", (e) => { e.stopPropagation(); $("file").click(); });
+      $("gate").addEventListener("click", () => $("file").click());
+      $("gate").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });      relabelGrids = () => { $("depthV").textContent = gridLabel(params.depth); };
+
+      // loupe: follows a mouse; on touch, press and hold, then slide
+      const fine = matchMedia("(hover: hover)").matches;
+      $("hint").textContent = fine ? "· hover to look closely, scroll to zoom" : "· press and hold to look closely";
+      let hold = null, holding = false;
+      const endTouch = () => { if (hold) clearTimeout(hold.timer); hold = null; holding = false; hideLens(); };
+      for (const el of [canvas, liveCanvas]) {
+        el.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") showLens(e.clientX, e.clientY, false); });
+        el.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hideLens(); });
+        el.addEventListener("wheel", (e) => {
+          e.preventDefault();
+          magMul = Math.min(6, Math.max(0.25, magMul * Math.exp(-e.deltaY * 0.0015)));
+          showLens(e.clientX, e.clientY, false);
+        }, { passive: false });
+        el.addEventListener("touchstart", (e) => {
+          if (e.touches.length !== 1) return;
+          const t = e.touches[0], x = t.clientX, y = t.clientY;
+          hold = { x, y, timer: setTimeout(() => { holding = true; showLens(x, y, true); }, 220) };
+        }, { passive: true });
+        el.addEventListener("touchmove", (e) => {
+          const t = e.touches[0];
+          if (holding) { e.preventDefault(); showLens(t.clientX, t.clientY, true); }
+          else if (hold && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 8) { clearTimeout(hold.timer); hold = null; }
+        }, { passive: false });
+        el.addEventListener("touchend", endTouch);
+        el.addEventListener("touchcancel", endTouch);
+        el.addEventListener("contextmenu", (e) => e.preventDefault());
+      }
+
+      $("photoPick").addEventListener("click", () => $("file").click());
       $("file").addEventListener("change", (e) => loadFile(e.target.files[0]));
       $("play").addEventListener("click", play);
+      const syncSpeed = () => {
+        penSpeed = speedOf(+$("speed").value);
+        $("speedV").textContent = `${penSpeed < 100 ? penSpeed.toFixed(0) : Math.round(penSpeed / 10) * 10} cells/s`;
+      };
+      syncSpeed();
+      $("speed").addEventListener("input", syncSpeed);
       $("png").addEventListener("click", savePng);
       $("svg").addEventListener("click", saveSvg);
 
       // drop or paste anywhere
+      // while the camera prompt is up, the stage itself lights up as the drop target
       let dragDepth = 0;
-      window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("drop").classList.add("on"); });
-      window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").classList.remove("on"); } });
+      const dropTarget = () => document.body.classList.contains("gated") ? $("gate") : $("drop");
+      const dragOff = () => { dragDepth = 0; $("drop").classList.remove("on"); $("gate").classList.remove("dragover"); };
+      window.addEventListener("dragenter", (e) => {
+        e.preventDefault(); dragDepth++;
+        const t = dropTarget(); t.classList.add(t.id === "gate" ? "dragover" : "on");
+      });
+      window.addEventListener("dragleave", () => { if (--dragDepth <= 0) dragOff(); });
       window.addEventListener("dragover", (e) => e.preventDefault());
       window.addEventListener("drop", (e) => {
-        e.preventDefault(); dragDepth = 0; $("drop").classList.remove("on");
+        e.preventDefault(); dragOff();
         loadFile(e.dataTransfer.files[0]);
       });
       window.addEventListener("paste", (e) => {
@@ -605,13 +1321,285 @@
         if (item) loadFile(item.getAsFile());
       });
     } else {
-      $("bar").remove();
-      document.querySelector(".hp-head").remove();
+      document.body.classList.add("background");
     }
 
     window.addEventListener("resize", () => { if (path) { fitCanvas(); render(); } });
 
-    setSource(demoImage());
+    /* ------------------------------------------------------------------ *
+     * about-modal diagrams: the real curve() on small made-up pictures
+     * ------------------------------------------------------------------ */
+    const SQUARE = { k: 1, horizontal: true };
+    function field(gw, gh, f) {
+      const D = new Float32Array(gw * gh);
+      for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) D[y * gw + x] = f((x + 0.5) / gw, (y + 0.5) / gh);
+      return D;
+    }
+    // a black circle in the middle of a white square
+    const disc = (x, y) => (Math.hypot(x - 0.5, y - 0.5) < 0.3 ? 1 : 0);
+    // a big sphere lit from the left, on a mid-gray backdrop: a long smooth run from white to
+    // black across the sphere, where rounding to the nearest shade shows up as rings
+    const sphere = (x, y) => {
+      const dx = (x - 0.5) / 0.42, dy = (y - 0.5) / 0.42, r2 = dx * dx + dy * dy;
+      if (r2 >= 1) return 0.3 + 0.3 * x;
+      const lit = Math.max(0, -0.75 * dx - 0.35 * dy + 0.56 * Math.sqrt(1 - r2));
+      return 1 - (0.03 + 0.97 * lit);
+    };
+    const stretched = (D) => { stretchTones(D, ...toneRange(D)); return D; };
+
+    // a darkness grid shown as a picture, in the sheet's own ink and paper
+    function grayCanvas(D, w, h) {
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const g = c.getContext("2d"), img = g.createImageData(w, h);
+      const p = rgb(PAPER), k = rgb(INK);
+      for (let i = 0; i < w * h; i++) {
+        for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = 255 * (p[ch] + (k[ch] - p[ch]) * D[i]);
+        img.data[i * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      return c;
+    }
+
+    // `count` square panels side by side across a diagram canvas, each with its label under it
+    // labels wrap onto more lines in a narrow panel rather than run into the next one
+    function wrapLabel(g, text, width) {
+      const lines = [];
+      let line = "";
+      for (const word of text.split(" ")) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && g.measureText(next).width > width) { lines.push(line); line = word; } else line = next;
+      }
+      return [...lines, line];
+    }
+    function vizPanels(cv, count, labels, gap = 8) {
+      const cw = cv.clientWidth || 1, sideGuess = (cw - gap * (count - 1)) / count;
+      const font = `12.5px ${css.getPropertyValue("--font-ui")}`, lineH = 15;
+      const mg = cv.getContext("2d");
+      mg.font = font;
+      const wrapped = labels.map((t) => wrapLabel(mg, t, sideGuess - 6));
+      const labelH = 8 + lineH * Math.max(...wrapped.map((l) => l.length));
+      const v = vizCtx(cv, (sideGuess + labelH) / cw); if (!v) return null;
+      const side = (v.w - gap * (count - 1)) / count, x = (i) => i * (side + gap);
+      const g = v.g;
+      g.font = font; g.fillStyle = css.getPropertyValue("--muted").trim();
+      g.textAlign = "center"; g.textBaseline = "alphabetic";
+      wrapped.forEach((lines, i) => lines.forEach((l, j) => g.fillText(l, x(i) + side / 2, side + 17 + j * lineH)));
+      return { ...v, side, x };
+    }
+
+    // plain two-tone dots, for explaining dithering before the curve comes back in.
+    // Returns a w×h canvas of ink and paper.
+    function blackWhite(D, w, h, diffuse) {
+      const E = Float32Array.from(D);
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const g = c.getContext("2d"), img = g.createImageData(w, h);
+      const [pr, pg, pb] = rgb(PAPER).map((v) => v * 255), [ir, ig, ib] = rgb(INK).map((v) => v * 255);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = y * w + x, ink = E[i] > 0.5;
+        img.data.set(ink ? [ir, ig, ib, 255] : [pr, pg, pb, 255], i * 4);
+        if (!diffuse) continue;
+        // Floyd–Steinberg: the leftover goes to the undecided neighbors
+        const err = E[i] - (ink ? 1 : 0);
+        if (x + 1 < w) E[i + 1] += err * 7 / 16;
+        if (y + 1 < h) {
+          if (x > 0) E[i + w - 1] += err * 3 / 16;
+          E[i + w] += err * 5 / 16;
+          if (x + 1 < w) E[i + w + 1] += err * 1 / 16;
+        }
+      }
+      g.putImageData(img, 0, 0);
+      return c;
+    }
+
+    // a curve plus its running length, so it can be drawn in at a steady pen speed
+    function vizCurve(D, gw, gh, depth, floor, lay, dither) {
+      const c = curve(D, gw, gh, depth, floor, lay, dither);
+      const n = c.path.length / 2, cum = new Float64Array(n);
+      for (let i = 1; i < n; i++) {
+        cum[i] = cum[i - 1] + Math.abs(c.path[i * 2] - c.path[i * 2 - 2]) + Math.abs(c.path[i * 2 + 1] - c.path[i * 2 - 1]);
+      }
+      return { ...c, gw, gh, cum, total: cum[n - 1] || 1 };
+    }
+
+    // size a diagram canvas to its CSS width and the given aspect, and clear it
+    function vizCtx(cv, aspect) {
+      const w = cv.clientWidth;
+      if (!w) return null;
+      const h = Math.round(w * aspect), d = Math.max(1, devicePixelRatio || 1);
+      if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) {
+        cv.width = Math.round(w * d); cv.height = Math.round(h * d); cv.style.height = h + "px";
+      }
+      const g = cv.getContext("2d");
+      g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+      return { g, w, h };
+    }
+
+    // one sheet: paper, optionally the cells, and the line drawn in up to length `upto`
+    function vizSheet(g, x0, y0, px, c, { upto = Infinity, cells = false, lw = Math.max(1.2, px * 0.3) } = {}) {
+      g.fillStyle = PAPER;
+      g.fillRect(x0, y0, c.gw * px, c.gh * px);
+      if (cells) {
+        g.strokeStyle = INK; g.globalAlpha = 0.14; g.lineWidth = 1;
+        const { X, Y, S } = c.leaves;
+        for (let i = 0; i < X.length; i++) {
+          const s = S[i];
+          g.strokeRect(x0 + (X[i] - s / 2) * px + 0.5, y0 + (Y[i] - s / 2) * px + 0.5, s * px - 1, s * px - 1);
+        }
+        g.globalAlpha = 1;
+      }
+      const p = c.path, n = p.length / 2;
+      g.strokeStyle = INK; g.lineWidth = lw; g.lineCap = "round"; g.lineJoin = "round";
+      g.beginPath();
+      g.moveTo(x0 + p[0] * px, y0 + p[1] * px);
+      let i = 1;
+      for (; i < n && c.cum[i] <= upto; i++) g.lineTo(x0 + p[i * 2] * px, y0 + p[i * 2 + 1] * px);
+      let tip = null;
+      if (i < n && upto < c.total) {
+        const t = (upto - c.cum[i - 1]) / (c.cum[i] - c.cum[i - 1] || 1);
+        tip = [x0 + (p[i * 2 - 2] + (p[i * 2] - p[i * 2 - 2]) * t) * px, y0 + (p[i * 2 - 1] + (p[i * 2 + 1] - p[i * 2 - 1]) * t) * px];
+        g.lineTo(tip[0], tip[1]);
+      }
+      g.stroke();
+      if (tip) { g.fillStyle = TIP; g.beginPath(); g.arc(tip[0], tip[1], Math.max(3, lw * 1.4), 0, Math.PI * 2); g.fill(); }
+    }
+
+    // draw-in over `draw` seconds, hold `hold` seconds, repeat; returns the length drawn so far
+    const drawIn = (c, sec, draw, hold) => {
+      const t = sec % (draw + hold);
+      return t >= draw ? Infinity : (t / draw) * c.total;
+    };
+
+    const vizSetup = {
+      // the same recursion, one more level each time
+      levels() {
+        const curves = [1, 2, 3, 4, 5].map((L) => {
+          const n = 1 << L;
+          return vizCurve(field(n, n, () => 1), n, n, L, 0, SQUARE, "none");
+        });
+        const times = curves.map((_, i) => ({ draw: 0.8 + 0.5 * i, hold: 1.1 }));
+        const cycle = times.reduce((a, t) => a + t.draw + t.hold, 0);
+        return { curves, times, cycle, square: true };
+      },
+      doors() {
+        return { pic: grayCanvas(field(256, 256, disc), 256, 256), c: vizCurve(field(32, 32, disc), 32, 32, 5, 1, SQUARE, "none") };
+      },
+      shades() {
+        // depth 4 on a 16×16 patch; darkness 2^(L-4) lands exactly on level L
+        return { curves: [4, 3, 2, 1, 0].map((L) => vizCurve(field(16, 16, () => 2 ** (L - 4)), 16, 16, 4, 0, SQUARE, "none")) };
+      },
+      // the sphere as plain black and white dots
+      pixels() {
+        const D = stretched(field(80, 80, sphere));
+        return { pic: grayCanvas(stretched(field(256, 256, sphere)), 256, 256), a: blackWhite(D, 80, 80, false), b: blackWhite(D, 80, 80, true) };
+      },
+      // one flat gray between the ¼ and ½ shades: all one size, or a mix of the two
+      // the same sphere drawn by the curve, fine enough that the shading has room to show
+      curves() {
+        const D = stretched(field(256, 256, sphere));
+        return { pic: grayCanvas(D, 256, 256), a: vizCurve(D, 256, 256, 8, 1, SQUARE, "none"), b: vizCurve(D, 256, 256, 8, 1, SQUARE, "ordered") };
+      },
+      chain() {
+        return { c: vizCurve(field(24, 8, () => 1), 24, 8, 3, 0, { k: 3, horizontal: true }, "none") };
+      },
+    };
+
+    const vizDraw = {
+      levels(st, sec, el) {
+        let t = sec % st.cycle, i = 0;
+        while (t >= st.times[i].draw + st.times[i].hold) { t -= st.times[i].draw + st.times[i].hold; i++; }
+        const c = st.curves[i], n = c.gw;
+        const cap = el.querySelector('[data-caption="levels"]'), text = `${i + 1} round${i ? "s" : ""}: ${n} × ${n} cells, one line`;
+        if (cap && cap.textContent !== text) cap.textContent = text;
+        const v = vizCtx(st.cv, 1); if (!v) return;
+        const px = v.w / n;
+        vizSheet(v.g, 0, 0, px, c, { upto: t >= st.times[i].draw ? Infinity : (t / st.times[i].draw) * c.total, cells: true, lw: Math.max(1.5, Math.min(4, px * 0.12)) });
+        // the previous round, wide and faint underneath: each of its cells became a small arch
+        if (i > 0) {
+          const p = st.curves[i - 1], ppx = v.w / p.gw;
+          v.g.save(); v.g.globalAlpha = 0.18; v.g.globalCompositeOperation = "multiply";
+          v.g.strokeStyle = TIP; v.g.lineWidth = ppx * 0.5; v.g.lineCap = "round"; v.g.lineJoin = "round";
+          v.g.beginPath();
+          for (let j = 0; j < p.path.length / 2; j++) v.g[j ? "lineTo" : "moveTo"](p.path[j * 2] * ppx, p.path[j * 2 + 1] * ppx);
+          v.g.stroke(); v.g.restore();
+        }
+      },
+      // the picture, then the curve drawing itself in over it
+      doors(st, sec) {
+        const v = vizPanels(st.cv, 2, ["the picture", "the curve, cells outlined"], 12); if (!v) return;
+        v.g.drawImage(st.pic, v.x(0), 0, v.side, v.side);
+        const px = v.side / 32;
+        vizSheet(v.g, v.x(1), 0, px, st.c, { upto: drawIn(st.c, sec, 7, 2.5), cells: true, lw: Math.max(1.2, px * 0.22) });
+      },
+      shades(st) {
+        const gap = 10, label = 20, cw = st.cv.clientWidth || 1;
+        const v = vizCtx(st.cv, ((cw - gap * 4) / 5 + label) / cw); if (!v) return;
+        const side = (v.w - gap * 4) / 5, px = side / 16;
+        const names = ["1", "½", "¼", "⅛", "1/16"];
+        st.curves.forEach((c, i) => {
+          const x = i * (side + gap);
+          // same pen width in every panel, so only the amount of line differs
+          vizSheet(v.g, x, 0, px, c, { lw: px * 0.55 });
+          v.g.fillStyle = css.getPropertyValue("--muted").trim(); v.g.font = "12px " + css.getPropertyValue("--font-mono");
+          v.g.textAlign = "center"; v.g.fillText(names[i], x + side / 2, side + 15);
+        });
+      },
+      pixels(st) {
+        const v = vizPanels(st.cv, 3, ["the picture", "nearest black or white", "dithering"]); if (!v) return;
+        v.g.drawImage(st.pic, v.x(0), 0, v.side, v.side);
+        v.g.imageSmoothingEnabled = false;   // keep each dot a crisp square
+        v.g.drawImage(st.a, v.x(1), 0, v.side, v.side);
+        v.g.drawImage(st.b, v.x(2), 0, v.side, v.side);
+      },
+      curves(st) {
+        const v = vizPanels(st.cv, 3, ["the picture", "nearest shade", "dithering"]); if (!v) return;
+        v.g.drawImage(st.pic, v.x(0), 0, v.side, v.side);
+        const px = v.side / 256;
+        // the page's default line weight, so the densest cells read as dark as they do there
+        vizSheet(v.g, v.x(1), 0, px, st.a, { lw: px * 0.85 });
+        vizSheet(v.g, v.x(2), 0, px, st.b, { lw: px * 0.85 });
+      },
+      chain(st, sec) {
+        const v = vizCtx(st.cv, 8 / 24); if (!v) return;
+        const px = v.w / 24;
+        vizSheet(v.g, 0, 0, px, st.c, { upto: drawIn(st.c, sec, 4.5, 1.5), lw: Math.max(1.5, px * 0.18) });
+        // the three squares
+        v.g.strokeStyle = INK; v.g.globalAlpha = 0.25; v.g.lineWidth = 1;
+        for (let q = 0; q < 3; q++) v.g.strokeRect(q * 8 * px + 0.5, 0.5, 8 * px - 1, 8 * px - 1);
+        v.g.globalAlpha = 1;
+      },
+    };
+
+    let vizRAF = null;
+    function startViz(el) {
+      const states = [...el.querySelectorAll("canvas.hp-viz")].map((cv) => {
+        const st = { cv, kind: cv.dataset.viz, ...vizSetup[cv.dataset.viz]() };
+        if (st.square) cv.style.maxWidth = "300px";
+        // side-by-side panels get the modal's full width, so each panel is big enough to read
+        if (["doors", "pixels", "curves"].includes(st.kind)) cv.style.maxWidth = "100%";
+        return st;
+      });
+      const t0 = performance.now();
+      const tick = (now) => {
+        // rAF's timestamp can predate t0 on the first frame
+        const sec = Math.max(0, (now - t0) / 1000);
+        for (const st of states) vizDraw[st.kind](st, sec, el);
+        vizRAF = requestAnimationFrame(tick);
+      };
+      vizRAF = requestAnimationFrame(tick);
+    }
+    document.addEventListener("cohesion-modal-open", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) startViz(e.detail.el);
+    });
+    document.addEventListener("cohesion-modal-close", (e) => {
+      if (e.detail.className?.includes("cohesion-about")) { cancelAnimationFrame(vizRAF); vizRAF = null; }
+    });
+
+    try { initGL(); } catch (err) { gl = null; console.warn("WebGL unavailable, drawing live video with canvas 2D", err); }
+    // webcam by default; the portfolio background version sticks to the sample picture
+    if (isBackground()) setMode("photo");
+    else startLive();
   </script>
 </body>
 </html>
