@@ -76,6 +76,34 @@ export function fewestFlips(start) {
   }
 }
 
+// the obvious way: bring the biggest unsorted pancake to the top, flip it down into place, repeat
+// (skipping flips that would do nothing). At most two flips a pancake.
+export function greedyFlips(start) {
+  let s = start.slice(), flips = 0;
+  for (let size = s.length; size >= 2; size--) {
+    const i = s.indexOf(size);
+    if (i === size - 1) continue;
+    if (i > 0) { s = flip(s, i + 1); flips++; }
+    s = flip(s, size); flips++;
+  }
+  return flips;
+}
+
+// the target for a stack: halfway between the obvious way and the fewest possible, rounded down
+export function parFlips(fewest, greedy) {
+  return Math.floor((fewest + greedy) / 2);
+}
+
+// the most flips that earn one, two and three stars: the obvious way, par, and the fewest.
+// Each star needs strictly fewer flips than the one before, so where those counts coincide
+// (small stacks often have all three equal) the lower stars allow one more flip each.
+export function starTargets(fewest, greedy) {
+  const three = fewest;
+  const two = Math.max(parFlips(fewest, greedy), three + 1);
+  const one = Math.max(greedy, two + 1);
+  return [one, two, three];
+}
+
 // ---------- history ----------
 // Every flip is its own undo, so the history is just the list of k's and a cursor; flips past
 // the cursor are the ones redo would play again.
@@ -96,8 +124,8 @@ export class History {
 }
 
 // ---------- solve timer (copied from cutwist's session.mjs) ----------
-// Armed by a scramble; the first flip after starts it; sorting the stack stops it.
-// now: a clock in ms (performance.now in the page).
+// Armed by a scramble; the first flip after starts it; sorting the stack stops it. Pausing
+// stops the clock until resume (or the next flip). now: a clock in ms (performance.now in the page).
 export class SolveTimer {
   constructor(now = () => performance.now()) {
     this.now = now;
@@ -105,30 +133,36 @@ export class SolveTimer {
   }
   // hidden: no scramble to time
   clear() { this.t = null; }
-  arm() { this.t = { acc: 0, since: null, done: false }; }
-  // "hidden" | "armed" | "running" | "done"
+  arm() { this.t = { acc: 0, since: null, paused: false, done: false }; }
+  // "hidden" | "armed" | "running" | "paused" | "done"
   get state() {
     const t = this.t;
     if (!t) return "hidden";
     if (t.done) return "done";
-    return t.since !== null ? "running" : "armed";
+    if (t.since !== null) return "running";
+    return t.paused ? "paused" : "armed";
   }
   get ms() {
     const t = this.t;
     return t ? t.acc + (t.since !== null ? this.now() - t.since : 0) : 0;
   }
-  // a flip: starts an armed timer
+  // a flip: starts an armed timer, or resumes a paused one
   turn() {
     const t = this.t;
     if (!t || t.done || t.since !== null) return;
     t.since = this.now();
+    t.paused = false;
   }
-  solved() {
+  resume() { if (this.state === "paused") this.turn(); }
+  pause() { this.stop(false); }
+  solved() { this.stop(true); }
+  stop(done) {
     const t = this.t;
     if (!t || t.since === null) return;
     t.acc = this.ms;
     t.since = null;
-    t.done = true;
+    if (done) t.done = true;
+    else t.paused = true;
   }
 }
 

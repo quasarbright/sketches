@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pancakes</title>
+  <title>Pancake Sort</title>
 
   <link rel="stylesheet" href="../shared/cohesion.css" />
   <script type="module" src="../shared/cohesion.js"></script>
@@ -12,7 +12,7 @@
        Shrikhand is the sign over the diner counter, Martian Mono the order-ticket printer. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Figtree:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Figtree:wght@400;500;600;700;800&family=Martian+Mono:wght@400;500&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -38,101 +38,236 @@
 
     #griddle { position: absolute; top: 0; left: 0; display: block; touch-action: none; }
 
-    .pc-head { position: fixed; top: 18px; left: 22px; z-index: 3; pointer-events: none; }
-    .pc-title {
-      margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 2.1rem;
-      line-height: 1; color: var(--accent); letter-spacing: .01em;
-    }
-    .pc-hint { margin: 8px 0 0; max-width: 300px; font-size: .85rem; color: var(--muted); line-height: 1.4; }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+    svg.pc-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 
-    .pc-top { position: fixed; top: 16px; right: 18px; z-index: 4; display: flex; gap: 8px; align-items: center; }
-    .pc-size { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--muted); }
-    .pc-size select {
-      font: 500 .85rem var(--font-mono); color: var(--text); background: var(--panel-2);
-      border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 6px; cursor: pointer;
+    /* chunky pressable buttons: a darker lip underneath that the button sinks into when pressed */
+    .pc-btn {
+      --lip: #120e0b;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font: 800 1rem var(--font-ui); letter-spacing: .01em; color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 16px; padding: 12px 20px; cursor: pointer;
+      box-shadow: 0 4px 0 var(--lip), 0 8px 18px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s, opacity .15s;
     }
+    .pc-btn:hover { background: #3a2e23; }
+    .pc-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lip), 0 4px 10px rgba(0,0,0,.3); }
+    .pc-btn:disabled { opacity: .35; cursor: default; }
+    .pc-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .pc-btn.is-gold { background: var(--accent); color: var(--on-accent); --lip: #9a5e1f; }
+    .pc-btn.is-gold:hover { background: #f1c060; }
 
-    /* bottom: the order ticket (flips so far, status, timer) over the actions */
-    .pc-bottom {
-      position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%); z-index: 4;
-      width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px;
+    /* ---------- start screen ---------- */
+    .pc-menu {
+      position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px 16px 60px;
+      background: radial-gradient(120% 80% at 50% 30%, rgba(21,17,14,.55), rgba(21,17,14,.92));
+      backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      transition: opacity .3s;
     }
-    .pc-ticket {
-      display: flex; align-items: center; min-height: 40px;
-      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
-      font-family: var(--font-mono); font-size: .8rem; transition: border-color .2s;
+    .pc-menu[hidden] { display: none; }
+    .pc-menu-inner { text-align: center; max-width: 720px; }
+    .pc-logo {
+      margin: 0; font: 400 clamp(2.4rem, 11vw, 5.6rem)/1 var(--font-display); white-space: nowrap; color: var(--accent);
+      text-shadow: 0 5px 0 #8a4f1a, 0 14px 30px rgba(0,0,0,.5); transform: rotate(-3deg);
     }
-    .pc-ticket.is-solved { border-color: var(--accent); }
-    .pc-flips {
-      flex: 1; min-width: 0; display: flex; gap: 3px; padding: 8px 10px; overflow-x: auto;
-      scrollbar-width: none; align-items: center;
+    /* sits over the blurred stack, so it needs more than --muted to read over a pale pancake */
+    .pc-pitch {
+      margin: 22px auto 30px; max-width: 440px; font-size: 1.05rem; line-height: 1.5; color: #d8c9b0;
+      text-shadow: 0 1px 2px rgba(12,9,7,.9), 0 0 12px rgba(12,9,7,.8);
     }
-    .pc-flips::-webkit-scrollbar { display: none; }
-    .pc-flip {
-      flex: none; min-width: 1.9em; text-align: center; padding: 3px 4px; border-radius: 4px;
-      background: var(--panel-2); color: var(--text); animation: pc-in .18s ease-out;
-    }
-    .pc-flip.is-undone { color: var(--faint); background: transparent; }
-    .pc-flips-empty { color: var(--faint); }
-    @keyframes pc-in { from { transform: translateY(4px); opacity: 0; } }
-    .pc-side { flex: none; display: flex; gap: 12px; align-items: center; padding: 0 12px; white-space: nowrap; }
-    .pc-status { color: var(--muted); }
-    .pc-ticket.is-solved .pc-status { color: var(--accent); }
-    .pc-timer { color: var(--text); font-variant-numeric: tabular-nums; }
-    .pc-timer.is-armed { color: var(--faint); }
-    .pc-ticket.is-solved .pc-timer { color: var(--accent); }
+    .pc-pitch b { color: var(--text); font-weight: 700; }
+    .pc-levels { display: flex; gap: 16px; justify-content: center; }
+    .pc-level { flex-direction: column; gap: 6px; width: 180px; padding: 20px 14px 18px; border-radius: 22px; }
+    .pc-level svg { width: 110px; height: 70px; margin-bottom: 4px; }
+    .pc-level > div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .pc-level-name { font: 400 1.7rem/1 var(--font-display); color: var(--accent); }
+    .pc-level-sub { font-weight: 600; font-size: .9rem; color: var(--muted); }
 
-    .pc-actions { display: flex; gap: 6px; justify-content: center; }
-    .pc-actions .btn { padding: 7px 14px; }
-    .pc-actions .btn:disabled { color: var(--faint); cursor: default; }
-    .btn:hover { background: #382c21; }
+    /* ---------- in play: top bar and scoreboard ---------- */
+    .pc-bar {
+      position: fixed; top: 14px; left: 16px; right: 16px; z-index: 4;
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; pointer-events: none;
+    }
+    .pc-bar > * { pointer-events: auto; }
+    .pc-pause { width: 48px; height: 48px; padding: 0; border-radius: 50%; }
+    .pc-pause svg.pc-ico { stroke-width: 3.2; }
+    .pc-score {
+      display: flex; align-items: stretch; background: var(--panel); border-radius: 20px; padding: 8px 6px;
+      box-shadow: 0 4px 0 #120e0b, 0 10px 24px rgba(0,0,0,.4);
+    }
+    .pc-stat { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 20px; min-width: 76px; }
+    .pc-stat + .pc-stat { border-left: 2px solid var(--border); }
+    .pc-stat-label { font: 800 .68rem var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .pc-stat-value { font: 800 1.45rem/1.15 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text); }
+    .pc-stat.is-flips .pc-stat-value { font: 400 2rem/1.05 var(--font-display); color: var(--accent); }
+    .pc-stat.is-time .pc-stat-value { min-width: 4.2ch; text-align: center; white-space: nowrap; }
+    .pc-stat.is-time.is-armed .pc-stat-value { color: var(--faint); }
+    .pc-level-tag { font: 400 1.25rem/1 var(--font-display); color: var(--muted); padding-top: 8px; min-width: 90px; text-align: right; }
 
-    mike-footer[overlay] { z-index: 4; }
+    /* the first-flip nudge, a caption over the stack (no pointer: the top pancake it would
+       point at is the one you can't flip) */
+    .pc-nudge {
+      position: fixed; left: 50%; z-index: 3; transform: translate(-50%, 0); pointer-events: none;
+      font-weight: 700; font-size: .95rem; color: var(--on-accent); background: var(--accent-hi);
+      padding: 8px 14px; border-radius: 12px; white-space: nowrap; transition: opacity .3s;
+      box-shadow: 0 6px 16px rgba(0,0,0,.35);
+    }
+    .pc-nudge.is-gone { opacity: 0; }
+
+    /* bottom: round controls with a label under each */
+    .pc-controls {
+      position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 4;
+      display: flex; gap: 14px; align-items: flex-start;
+    }
+    .pc-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+    .pc-ctl .pc-btn { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
+    .pc-ctl span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+    .pc-controls .pc-gap { width: 10px; }
+
+    /* ---------- results ---------- */
+    .pc-win {
+      position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px;
+      background: rgba(12,9,7,.55);
+    }
+    .pc-win[hidden] { display: none; }
+    .pc-card {
+      position: relative; width: min(400px, 100%); text-align: center; padding: 30px 26px 26px;
+      background: var(--panel); border-radius: 26px; box-shadow: 0 6px 0 #120e0b, 0 24px 60px rgba(0,0,0,.6);
+      animation: pc-pop .45s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes pc-pop { from { transform: scale(.6) translateY(30px); opacity: 0; } }
+    .pc-card h2 { margin: 0; font: 400 2.8rem/1 var(--font-display); color: var(--accent); transform: rotate(-2deg); }
+    .pc-stars { display: flex; justify-content: center; gap: 14px; margin: 22px 0 26px; }
+    .pc-star { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .pc-star span { font: 800 .9rem var(--font-ui); color: var(--faint); font-variant-numeric: tabular-nums; }
+    .pc-star.is-on span { color: var(--accent); }
+    .pc-stars svg { width: 46px; height: 46px; }
+    .pc-stars svg path { fill: var(--panel-2); stroke: #3a2e23; stroke-width: 1; }
+    .pc-stars svg.is-on path { fill: var(--accent); stroke: #9a5e1f; }
+    .pc-stars svg.is-on { animation: pc-star .5s cubic-bezier(.2, 1.6, .4, 1) both; }
+    .pc-star:nth-child(2) svg.is-on { animation-delay: .15s; }
+    .pc-star:nth-child(3) svg.is-on { animation-delay: .3s; }
+    @keyframes pc-star { from { transform: scale(0) rotate(-40deg); } }
+    .pc-results { display: flex; justify-content: center; margin-top: 18px; }
+    .pc-results .pc-stat { min-width: 90px; }
+    .pc-card-actions { display: flex; gap: 10px; justify-content: center; }
+    .pc-card-actions .pc-btn { padding: 12px 16px; }
+    .pc-pause-actions { display: flex; flex-direction: column; gap: 12px; margin: 24px auto 4px; width: min(220px, 100%); }
+
+    mike-footer[overlay] { z-index: 11 !important; } /* over the start screen (cohesion sets 4 inline) */
 
     @media (max-width: 600px) {
-      .pc-title { font-size: 1.6rem; }
-      .pc-hint { max-width: 190px; font-size: .78rem; }
-      .pc-top { flex-direction: column; align-items: flex-end; }
-      .pc-side { gap: 8px; padding: 0 8px; }
-      .pc-actions .btn { padding: 7px 10px; }
+      .pc-levels { flex-direction: column; align-items: center; gap: 12px; }
+      .pc-level { flex-direction: row; width: 100%; max-width: 320px; padding: 14px 18px; justify-content: flex-start; gap: 14px; text-align: left; }
+      .pc-level svg { width: 72px; height: 46px; margin: 0; flex: none; }
+      .pc-level > div { align-items: flex-start; }
+      .pc-pitch { margin: 18px auto 22px; font-size: .95rem; }
+      .pc-bar { flex-wrap: wrap; justify-content: space-between; }
+      .pc-score { order: 3; width: 100%; justify-content: center; padding: 6px 2px; }
+      .pc-stat { padding: 0 10px; min-width: 0; flex: 1; }
+      .pc-level-tag { padding-top: 10px; }
+      .pc-controls { gap: 10px; }
+      .pc-ctl .pc-btn { width: 50px; height: 50px; }
+      .pc-controls .pc-gap { width: 2px; }
+      /* three buttons don't fit in a row: New stack across the top, the other two under it */
+      .pc-card-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .pc-card-actions #winNext { grid-column: 1 / -1; order: -1; }
     }
-    @media (prefers-reduced-motion: reduce) { .pc-flip { animation: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .pc-card, .pc-stars svg.is-on { animation: none; }
+    }
   </style>
 </head>
 <body>
   <canvas id="griddle"></canvas>
 
-  <div class="pc-head">
-    <h1 class="pc-title">Pancakes</h1>
-    <p class="pc-hint">Slide the spatula under a pancake and flip everything above it. Get the smallest on top.</p>
+  <!-- start screen: pick a stack -->
+  <div class="pc-menu" id="menu">
+    <div class="pc-menu-inner">
+      <h1 class="pc-logo">Pancake Sort</h1>
+      <p class="pc-pitch">Sort the stack so the <b>smallest is on top</b>. The only move: slide the
+        spatula under a pancake and <b>flip everything above&nbsp;it</b>.</p>
+      <div class="pc-levels" id="levels"></div>
+    </div>
   </div>
 
-  <div class="pc-top">
-    <label class="pc-size" title="how many pancakes in the stack (changing it serves a new scrambled stack)">stack
-      <select id="size" title="how many pancakes in the stack (changing it serves a new scrambled stack)"></select>
-    </label>
-  </div>
-
-  <div class="pc-bottom">
-    <div class="pc-ticket" id="ticket">
-      <div class="pc-flips" id="flips" title="your flips: each number is how many pancakes went over"></div>
-      <div class="pc-side">
-        <span class="pc-status" id="status"></span>
-        <span class="pc-timer" id="timer" hidden title="solve time: starts on your first flip after a scramble and stops when the stack is sorted">0.00</span>
+  <!-- in play -->
+  <div class="pc-bar" id="bar" hidden>
+    <button class="pc-btn pc-pause" id="pause" title="pause (Esc)" aria-label="pause">
+      <svg class="pc-ico" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>
+    </button>
+    <div class="pc-score" id="score">
+      <div class="pc-stat is-flips" id="statFlips" title="flips you've made on this stack">
+        <span class="pc-stat-label">Flips</span><span class="pc-stat-value" id="flips">0</span>
+      </div>
+      <div class="pc-stat is-time" id="statTime" title="starts on your first flip and stops when the stack is sorted">
+        <span class="pc-stat-label">Time</span><span class="pc-stat-value" id="timer">0.00</span>
       </div>
     </div>
-    <div class="pc-actions">
-      <button class="btn" id="undo" title="take back the last flip (⌘Z)">↶ undo</button>
-      <button class="btn" id="redo" title="flip again what you took back (⇧⌘Z)">redo ↷</button>
-      <button class="btn" id="scramble" title="serve a new stack in a random order">scramble</button>
-      <button class="btn" id="reset" title="back to how this stack was served if you've flipped since, otherwise back to sorted">reset</button>
+    <div class="pc-level-tag" id="levelTag"></div>
+  </div>
+
+  <div class="pc-nudge is-gone" id="nudge">Click a pancake to flip it and everything above it</div>
+
+  <div class="pc-controls" id="controls" hidden>
+    <div class="pc-ctl">
+      <button class="pc-btn" id="undo" title="take back the last flip (⌘Z)">
+        <svg class="pc-ico" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+      </button><span>Undo</span>
+    </div>
+    <div class="pc-ctl">
+      <button class="pc-btn" id="redo" title="flip again what you took back (⇧⌘Z)">
+        <svg class="pc-ico" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+      </button><span>Redo</span>
+    </div>
+    <div class="pc-gap"></div>
+    <div class="pc-ctl">
+      <button class="pc-btn" id="reset" title="start this stack over from how it was served">
+        <svg class="pc-ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      </button><span>Restart</span>
+    </div>
+    <div class="pc-ctl">
+      <button class="pc-btn is-gold" id="scramble" title="serve a new stack at this difficulty">
+        <svg class="pc-ico" viewBox="0 0 24 24"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/></svg>
+      </button><span>New stack</span>
+    </div>
+  </div>
+
+  <!-- results -->
+  <div class="pc-win" id="win" hidden>
+    <div class="pc-card" role="dialog" aria-labelledby="winTitle">
+      <h2 id="winTitle">Sorted!</h2>
+      <div class="pc-results">
+        <div class="pc-stat is-flips"><span class="pc-stat-label">Flips</span><span class="pc-stat-value" id="winFlips"></span></div>
+        <div class="pc-stat"><span class="pc-stat-label">Time</span><span class="pc-stat-value" id="winTime"></span></div>
+      </div>
+      <!-- each star with the most flips that earns it -->
+      <div class="pc-stars" id="stars"></div>
+      <div class="pc-card-actions">
+        <button class="pc-btn" id="winMenu" title="back to the start screen to pick another stack">Menu</button>
+        <button class="pc-btn" id="winRetry" title="the same stack again, from how it was served">Try again</button>
+        <button class="pc-btn is-gold" id="winNext" title="serve a new stack at this difficulty">New stack</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- paused -->
+  <div class="pc-win" id="paused" hidden>
+    <div class="pc-card pc-pause-card" role="dialog" aria-labelledby="pauseTitle">
+      <h2 id="pauseTitle">Paused</h2>
+      <div class="pc-pause-actions">
+        <button class="pc-btn is-gold" id="resume" title="back to the stack (Esc)">Resume</button>
+        <button class="pc-btn" id="pauseRestart" title="the same stack again, from how it was served">Restart</button>
+        <button class="pc-btn" id="pauseMenu" title="back to the start screen to pick another stack">Menu</button>
+      </div>
     </div>
   </div>
 
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { flip, sorted, isSorted, scramble, fewestFlips, History, SolveTimer, formatTime } from "./pancakes.mjs";
+    import { flip, sorted, isSorted, scramble, fewestFlips, greedyFlips, starTargets, History, SolveTimer, formatTime } from "./pancakes.mjs";
 
     const $ = (id) => document.getElementById(id);
     const canvas = $("griddle"), ctx = canvas.getContext("2d");
@@ -143,10 +278,11 @@
 
     // ---------- game state ----------
     let n = 7;
-    try { n = Math.min(12, Math.max(4, +localStorage.getItem("pancakes.n") || 7)); } catch {}
     let stack;        // the real order, top first (flips apply here at once)
     let served;       // the order the current stack was scrambled into
-    let par = null;   // fewest flips from `served`
+    // the most flips that earn one, two and three stars for `served` (the obvious way, par, the
+    // fewest possible; see starTargets). The page shows these under the stars without naming them
+    let targets = [0, 0, 0];
     const history = new History();
     const timer = new SolveTimer();
 
@@ -154,8 +290,9 @@
     let shown;              // the order being drawn (lags `stack` while a flip animates)
     let anim = null;        // { k, t0, dur }
     const queue = [];       // flips waiting to be animated
-    const pos = {};         // per pancake size: { y } drawn vertical offset from its slot (for serving)
+    const pos = {};         // per pancake size, how it's dropped onto the griddle: { t0, h, tilt } (see dropPose)
     let hoverK = 0;         // pancakes above the spatula, or 0 for none
+    const aimK = () => (queue.length ? queue[0] : hoverK); // where the spatula is headed
     let spat = { x: 0, k: 0, a: 0 }; // spatula: slide-in amount, which gap, visibility
     let butter = 0;         // 0..1, the pat that lands on a solved stack
     let freezeU = null;     // debugging: hold a toss at this point (see window.pancakes)
@@ -170,12 +307,14 @@
       layout();
     }
     function layout() {
-      const top = W < 600 ? 110 : 90, bottom = 150;
+      // room for the scoreboard above (two rows on a phone) and the round controls below
+      const top = W < 600 ? 150 : 110, bottom = 140;
       const griddleY = H - bottom;
       const room = griddleY - top;
       // a whole-stack flip swings the widest pancake upright, so it needs a width of headroom
       const maxW = Math.max(60, Math.min(W - 48, 520, room * 0.95));
-      const T = Math.min(40, (room * 0.6) / n, maxW * 0.12);
+      // as thick as fits (big stacks get thinner, but not so thin they're hard to tap)
+      const T = Math.min(40, (room * 0.78) / n, maxW * 0.12);
       L = { cx: W / 2, griddleY, maxW, minW: maxW * 0.3, T, th: T * 0.86 };
     }
     const widthOf = (s) => L.minW + (L.maxW - L.minW) * (n === 1 ? 1 : (s - 1) / (n - 1));
@@ -219,11 +358,11 @@
       glow.addColorStop(0, "rgba(232,120,40,.10)");
       glow.addColorStop(1, "rgba(232,120,40,0)");
       ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-      const x0 = L.cx - L.maxW / 2 - 50, x1 = L.cx + L.maxW / 2 + 50;
+      // the griddle, edge to edge
       const g = ctx.createLinearGradient(0, y, 0, y + 14);
       g.addColorStop(0, "#4a3d33"); g.addColorStop(0.15, "#2a221c"); g.addColorStop(1, "#1a1511");
       ctx.fillStyle = g;
-      ctx.beginPath(); ctx.roundRect(x0, y, x1 - x0, 14, 3); ctx.fill();
+      ctx.fillRect(0, y, W, 14);
     }
 
     // side view of a turner: a thin blade, a neck kinked up, a dark handle with rivets.
@@ -295,12 +434,15 @@
       const u = anim ? (freezeU ?? clamp01((now - anim.t0) / anim.dur)) : 0;
       // the gap the hover opens above the spatula
       const open = L.T * 0.35;
-      const lifted = (i) => (!anim && i < hoverK ? open * spat.a : 0);
+      const lifted = (i) => (!anim && i < aimK() ? open * spat.a : 0);
 
       // the pancakes that stay put (all of them, when nothing's flying)
       for (let i = k; i < n; i++) {
         const s = shown[i];
-        ctx.save(); ctx.translate(L.cx, slotY(i) - lifted(i) + pos[s].y); drawPancake(s); ctx.restore();
+        const d = dropPose(s, now);
+        ctx.save(); ctx.translate(L.cx, slotY(i) - lifted(i) + d.y + L.th / 2);
+        ctx.rotate(d.a); ctx.scale(d.sx, d.sy); ctx.translate(0, -L.th / 2); // squash onto its bottom
+        drawPancake(s); ctx.restore();
       }
       // the flying block, turned as one about its own center, in front of the spatula under it;
       // the gap the spatula opened closes as it lands
@@ -315,17 +457,123 @@
         ctx.restore();
       }
 
+      if (syrupT0 !== null && !anim) drawSyrup(now, false);
+
       // butter on a solved stack, riding on the top pancake
       if (butter > 0 && !anim) {
         const b = Math.min(1, butter), sz = Math.max(12, L.T * 0.8) * (0.6 + 0.4 * b);
-        const y = slotY(0) - lifted(0) + pos[shown[0]].y - L.th / 2 - sz * 0.35 + (1 - b) * -30;
+        const y = slotY(0) - lifted(0) - L.th / 2 - sz * 0.35 + (1 - b) * -30;
         ctx.save(); ctx.globalAlpha = b; ctx.translate(L.cx, y);
         ctx.fillStyle = "#f6e3a1"; ctx.beginPath(); ctx.roundRect(-sz * 0.7, -sz * 0.35, sz * 1.4, sz * 0.7, 3); ctx.fill();
         ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillRect(-sz * 0.6, -sz * 0.3, sz * 1.2, 2);
         ctx.restore();
       }
+      if (syrupT0 !== null && !anim) drawSyrup(now, true); // the stream, in front of the butter
 
       if (!anim && spat.a > 0.01 && spat.k > 0) drawSpatulaNow(spat.k, u, open);
+    }
+
+    // ---------- syrup ----------
+    // On a solved stack: a stream pours onto the top pancake (a little off center, missing the
+    // butter), a pool spreads across it, and once it reaches the rim, drips run down both sides
+    // of the stack, out along each ledge where the pancake below is wider, and a couple run
+    // down the front. Times in ms from when the pour starts.
+    const SYRUP = { LAND: 160, POUR: 900, POOL: 800, DRIP0: 800, DRIP: 1200, END: 2000 };
+    let syrupT0 = null;
+    const SYRUP_DARK = "rgba(118,48,12,.94)", SYRUP_HI = "rgba(222,128,52,.8)";
+    // the path a drip takes down one side (dir -1 left, +1 right), as points
+    function dripPath(dir) {
+      const pts = [];
+      for (let i = 0; i < n; i++) {
+        const x = L.cx + dir * (widthOf(shown[i]) / 2 - 1); // hugging the rim
+        const top = slotY(i) - L.th / 2, bottom = slotY(i) + L.th / 2;
+        if (i === 0) pts.push([x, top]);
+        else pts.push([x, top - 1.5]); // out along the ledge to this pancake's rim
+        pts.push([x, bottom]);
+        if (i + 1 < n) pts.push([x, slotY(i + 1) - L.th / 2 - 1.5]); // falls through the gap
+      }
+      return pts;
+    }
+    // the polyline from pts, cut off after length len; returns the end point
+    function strokeTo(pts, len, width) {
+      ctx.lineWidth = width;
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      let end = pts[0];
+      for (let i = 1; i < pts.length && len > 0; i++) {
+        const [ax, ay] = pts[i - 1], [bx, by] = pts[i], d = Math.hypot(bx - ax, by - ay);
+        const f = Math.min(1, len / (d || 1));
+        end = [ax + (bx - ax) * f, ay + (by - ay) * f];
+        ctx.lineTo(end[0], end[1]);
+        len -= d;
+      }
+      ctx.stroke();
+      return end;
+    }
+    const pathLength = (pts, upTo) => {
+      let s = 0;
+      for (let i = 1; i <= Math.min(upTo, pts.length - 1); i++) s += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      return s;
+    };
+    function drawSyrup(now, stream) {
+      const t = now - syrupT0;
+      if (t < 0) return;
+      const w0 = widthOf(shown[0]), top0 = slotY(0) - L.th / 2;
+      const pourX = L.cx + w0 * 0.2;
+      ctx.save(); ctx.lineCap = "round"; ctx.lineJoin = "round";
+      const easeOut = (x) => 1 - (1 - x) ** 3;
+
+      if (stream) {
+        // falls from above, pours, then its tail drops onto the pool
+        const y0 = Math.max(-10, top0 - 280);
+        const head = y0 + (top0 - 2 - y0) * clamp01(t / SYRUP.LAND);
+        const tail = y0 + (top0 - 2 - y0) * ease(clamp01((t - SYRUP.POUR) / 220));
+        if (tail < head - 1) {
+          ctx.strokeStyle = SYRUP_DARK; ctx.lineWidth = 5;
+          ctx.beginPath(); ctx.moveTo(pourX, tail); ctx.lineTo(pourX, head); ctx.stroke();
+          ctx.strokeStyle = SYRUP_HI; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(pourX - 1, tail); ctx.lineTo(pourX - 1, head); ctx.stroke();
+        }
+        ctx.restore();
+        return;
+      }
+
+      // the pool, spreading out from where the stream lands to the rim
+      const p = easeOut(clamp01((t - SYRUP.LAND) / SYRUP.POOL));
+      if (p > 0) {
+        const l = pourX - (pourX - (L.cx - w0 / 2 - 1.5)) * p, r = pourX + (L.cx + w0 / 2 + 1.5 - pourX) * p;
+        ctx.fillStyle = SYRUP_DARK;
+        ctx.beginPath(); ctx.roundRect(l, top0 - 6, r - l, 10, 5); ctx.fill();
+        ctx.strokeStyle = SYRUP_HI; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(l + 6, top0 - 4); ctx.lineTo(r - 6, top0 - 4); ctx.stroke();
+      }
+
+      // drips down the sides (the right one runs further) and the front
+      const d = easeOut(clamp01((t - SYRUP.DRIP0) / SYRUP.DRIP));
+      if (d > 0) {
+        for (const [dir, reach] of [[1, 2], [-1, 1]]) {
+          const pts = dripPath(dir);
+          // down to the bottom of pancake `reach`, or the whole stack if it's shorter
+          const len = pathLength(pts, Math.min(pts.length - 1, reach * 3 + 1)) * d;
+          ctx.strokeStyle = SYRUP_DARK;
+          const end = strokeTo(pts, len, 7);
+          ctx.fillStyle = SYRUP_DARK; // the bead at the front of the drip
+          ctx.beginPath(); ctx.ellipse(end[0], end[1] + 2, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = SYRUP_HI;
+          strokeTo(pts.map(([x, y]) => [x + dir * 1.2, y - 1]), len - 5, 1.4);
+        }
+        for (const [fx, reach, delay] of [[-0.24, 1.3, 0], [0.04, 2.2, 120]]) {
+          const dd = easeOut(clamp01((t - SYRUP.DRIP0 - delay) / SYRUP.DRIP));
+          if (dd <= 0) continue;
+          const x = L.cx + w0 * fx, y1 = top0 + L.T * reach * dd;
+          ctx.strokeStyle = SYRUP_DARK; ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.moveTo(x, top0); ctx.lineTo(x, y1); ctx.stroke();
+          ctx.fillStyle = SYRUP_DARK;
+          ctx.beginPath(); ctx.ellipse(x, y1 + 2, 4.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = SYRUP_HI; ctx.lineWidth = 1.3;
+          ctx.beginPath(); ctx.moveTo(x - 1.2, top0 + 2); ctx.lineTo(x - 1.2, y1 - 2); ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
 
     // the spatula: slid in under pancake k while hovering; in a toss it rides up with the
@@ -362,7 +610,10 @@
         anim = null;
         spat.x = 0; spat.a = hoverK ? 0.4 : 0; spat.k = hoverK;
       }
-      if (!anim && queue.length) {
+      // a flip starts once the spatula has slid in under its pancake (so a tap, with no hover
+      // beforehand, still shows it coming in)
+      const ready = (k) => reduceMotion || (spat.k === k && spat.x > 0.96 && spat.a > 0.96);
+      if (!anim && queue.length && ready(queue[0])) {
         const k = queue.shift();
         const dur = reduceMotion ? 1 : Math.min(760, 440 + 26 * k) * (queue.length ? 0.55 : 1) * SLOW;
         anim = { k, t0: now, dur, rise: tossRise(k) };
@@ -370,17 +621,24 @@
       }
 
       if (!anim) {
-        // the spatula follows the hover
-        const want = hoverK ? 1 : 0;
-        if (hoverK && hoverK !== spat.k) { spat.k = hoverK; spat.x = Math.min(spat.x, 0.55); }
+        // the spatula heads for the next flip's pancake, or else follows the hover
+        const aim = aimK();
+        const want = aim ? 1 : 0;
+        if (aim && aim !== spat.k) { spat.k = aim; spat.x = Math.min(spat.x, 0.55); }
         spat.x += (want - spat.x) * Math.min(1, dt / 70);
         spat.a += (want - spat.a) * Math.min(1, dt / 60);
-        if (!hoverK && spat.a < 0.02) spat.k = 0;
+        if (!aim && spat.a < 0.02) spat.k = 0;
         // poll for a sorted stack while nothing's moving
-        if (isSorted(stack) && timer.state === "running") { timer.solved(); renderTicket(); }
+        // (and nothing still waiting to play: between queued flips there's no animation while
+        // the spatula slides in)
+        if (!queue.length && isSorted(stack) && timer.state === "running") {
+          timer.solved(); renderHud(); setHover(0);
+          // the butter lands, the syrup pours, then the results come up
+          syrupT0 = reduceMotion ? -Infinity : now + 300;
+          winTimer = setTimeout(showWin, reduceMotion ? 0 : 300 + SYRUP.END + 150);
+        }
       }
       // served pancakes settle onto the stack
-      for (const s in pos) pos[s].y *= Math.pow(0.0001, dt / 600);
       butter = timer.state === "done" && isSorted(shown) && !anim ? Math.min(1, butter + dt / 250) : 0;
 
       if (timer.state === "running") $("timer").textContent = formatTime(timer.ms);
@@ -394,81 +652,169 @@
       if (record) history.record(k);
       timer.turn();
       queue.push(k);
-      renderTicket();
+      renderHud();
     }
-    // drop a new order onto the griddle, bottom pancake first
+    // drop a new order onto the griddle one pancake at a time, bottom first: each falls from
+    // above the screen, lands with a squash and a little hop, and the next is already on its way
+    const FALL = 300, SETTLE = 240;
     function serve(order) {
       queue.length = 0; anim = null;
       stack = order.slice(); shown = order.slice();
-      for (let i = 0; i < n; i++) pos[shown[i]] = { y: reduceMotion ? 0 : -(H * 0.6 + (n - i) * 28) };
+      const now = performance.now(), gap = Math.min(85, 1000 / n);
+      for (let i = 0; i < n; i++) {
+        pos[shown[i]] = reduceMotion ? { t0: -Infinity, h: 0, tilt: 0 }
+          : { t0: now + 80 + (n - 1 - i) * gap, h: slotY(i) + L.th + 40, tilt: (Math.random() - 0.5) * 0.5 };
+      }
+      dropEnd = now + 80 + (n - 1) * gap + FALL + SETTLE;
       hoverK = 0; spat.k = 0; spat.a = 0;
+      syrupT0 = null;
+    }
+    let dropEnd = 0;
+    const dropping = () => performance.now() < dropEnd;
+    // where a served pancake is at time now: y offset from its slot, tilt, and squash
+    function dropPose(s, now) {
+      const p = pos[s], t = now - p.t0;
+      if (t >= FALL + SETTLE) return { y: 0, a: 0, sx: 1, sy: 1 };
+      if (t < FALL) {
+        const f = Math.max(0, t) / FALL;
+        return { y: -p.h * (1 - f * f), a: p.tilt * (1 - f), sx: 1, sy: 1 };
+      }
+      const s2 = (t - FALL) / SETTLE, squash = Math.max(0, 1 - s2 * 2.2);
+      return { y: -L.T * 0.35 * Math.sin(Math.PI * s2) * (1 - s2), a: 0, sx: 1 + 0.1 * squash, sy: 1 - 0.25 * squash };
     }
     function newStack(size) {
       n = size;
       for (const s in pos) delete pos[s];
       layout();
       served = scramble(n);
-      par = fewestFlips(served);
+      targets = starTargets(fewestFlips(served), greedyFlips(served));
       history.clear(); timer.arm();
+      hideWin();
       serve(served);
-      renderTicket();
+      renderHud();
     }
 
-    $("scramble").onclick = () => newStack(n);
-    $("reset").onclick = () => {
-      // back to the scramble if you've flipped since, otherwise back to sorted
-      if (!stack.every((s, i) => s === served[i])) { history.clear(); timer.arm(); serve(served); }
-      else { history.clear(); timer.clear(); served = sorted(n); par = 0; serve(served); }
-      renderTicket();
-    };
-    $("undo").onclick = () => { const k = history.undo(); if (k) doFlip(k, false); };
-    $("redo").onclick = () => { const k = history.redo(); if (k) doFlip(k, false); };
+    // ---------- screens ----------
+    const LEVELS = [
+      { name: "Easy", n: 5 },
+      { name: "Medium", n: 12 },
+      { name: "Hard", n: 20 },
+    ];
+    let level = LEVELS[0];
+    // a little scrambled stack for each level's card
+    function stackIcon(count) {
+      const h = 70, bar = Math.min(9, (h - 4) / count - 1.2), gap = (h - count * bar) / (count + 1);
+      let s = 7 + count * 13, out = "";
+      const order = sorted(count);
+      for (let i = count - 1; i > 0; i--) { s = (s * 16807) % 2147483647; const j = s % (i + 1); [order[i], order[j]] = [order[j], order[i]]; }
+      order.forEach((size, i) => {
+        const w = 30 + 76 * (count === 1 ? 1 : (size - 1) / (count - 1));
+        const c = mix(LIGHT, DARK, (size - 1) / (count - 1));
+        out += `<rect x="${55 - w / 2}" y="${gap + i * (bar + gap)}" width="${w}" height="${bar}" rx="${bar / 2}" fill="${rgb(c)}"/>`;
+      });
+      return `<svg viewBox="0 0 110 ${h}" aria-hidden="true">${out}</svg>`;
+    }
+    for (const lv of LEVELS) {
+      const b = document.createElement("button");
+      b.className = "pc-btn pc-level";
+      b.title = `a stack of ${lv.n} pancakes`;
+      b.innerHTML = `${stackIcon(lv.n)}<div><span class="pc-level-name">${lv.name}</span><span class="pc-level-sub">${lv.n} pancakes</span></div>`;
+      b.onclick = () => play(lv);
+      $("levels").append(b);
+    }
+    function play(lv) {
+      level = lv;
+      $("menu").hidden = true;
+      $("bar").hidden = $("controls").hidden = false;
+      $("levelTag").textContent = lv.name;
+      newStack(lv.n);
+    }
+    function showMenu() {
+      hideWin(); hidePause();
+      $("menu").hidden = false;
+      $("bar").hidden = $("controls").hidden = true;
+      $("nudge").classList.add("is-gone");
+      setHover(0);
+    }
 
-    const sel = $("size");
-    for (let i = 4; i <= 12; i++) sel.add(new Option(String(i), String(i)));
-    sel.value = String(n);
-    sel.onchange = () => {
-      try { localStorage.setItem("pancakes.n", sel.value); } catch {}
-      newStack(+sel.value);
-      sel.blur();
-    };
+    let winTimer = 0;
+    const STAR = `<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z" stroke-linejoin="round"/></svg>`;
+    function showWin() {
+      const c = history.count;
+      const stars = targets.filter((t) => c <= t).length;
+      $("stars").innerHTML = targets.map((t) => `<div class="pc-star">${STAR}<span>${t}</span></div>`).join("");
+      [...$("stars").children].forEach((s, i) => {
+        s.classList.toggle("is-on", i < stars);
+        s.firstChild.classList.toggle("is-on", i < stars);
+      });
+      $("stars").title = `stars for sorting it in ${targets.join(", ").replace(/, (\d+)$/, " and $1")} flips or fewer`;
+      $("winFlips").textContent = c;
+      $("winTime").textContent = formatTime(timer.ms);
+      $("win").hidden = false;
+      $("winNext").focus({ preventScroll: true });
+    }
+    function hideWin() { clearTimeout(winTimer); $("win").hidden = true; }
+
+    // pause: stops the clock and covers the stack
+    function showPause() {
+      if (solved() || !$("menu").hidden) return;
+      timer.pause(); renderHud(); setHover(0);
+      $("paused").hidden = false;
+      $("resume").focus({ preventScroll: true });
+    }
+    function hidePause() { $("paused").hidden = true; timer.resume(); }
+    // back to the stack as it was served
+    function restart() {
+      hideWin(); hidePause();
+      if (stack.every((s, i) => s === served[i])) return;
+      history.clear(); timer.arm(); serve(served); renderHud();
+    }
+
+    // once the stack is sorted nothing on the board responds: the syrup pours, then the results
+    const solved = () => timer.state === "done";
+    $("pause").onclick = showPause;
+    $("resume").onclick = hidePause;
+    $("pauseRestart").onclick = $("winRetry").onclick = $("reset").onclick = restart;
+    $("pauseMenu").onclick = $("winMenu").onclick = showMenu;
+    $("winNext").onclick = $("scramble").onclick = () => newStack(n);
+    $("paused").onclick = (e) => { if (e.target === $("paused")) hidePause(); };
+    $("undo").onclick = () => { if (solved()) return; const k = history.undo(); if (k) doFlip(k, false); };
+    $("redo").onclick = () => { if (solved()) return; const k = history.redo(); if (k) doFlip(k, false); };
 
     addEventListener("keydown", (e) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      if (solved()) return; // the results are coming, or up: only their buttons lead anywhere
+      if (e.key === "Escape") {
+        if (!$("paused").hidden) hidePause();
+        else if ($("menu").hidden) showPause();
+        return;
+      }
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z" || !$("menu").hidden || !$("paused").hidden) return;
       e.preventDefault();
       (e.shiftKey ? $("redo") : $("undo")).click();
     });
 
-    // ---------- ticket ----------
-    function renderTicket() {
-      const box = $("flips");
-      box.textContent = "";
-      if (!history.flips.length) {
-        const e = document.createElement("span");
-        e.className = "pc-flips-empty";
-        e.textContent = timer.state === "hidden" ? "sorted" : "no flips yet";
-        box.append(e);
-      }
-      history.flips.forEach((k, i) => {
-        const e = document.createElement("span");
-        e.className = "pc-flip" + (i >= history.cursor ? " is-undone" : "");
-        e.textContent = k;
-        box.append(e);
-      });
-      box.scrollLeft = box.scrollWidth;
-      const done = timer.state === "done";
-      $("ticket").classList.toggle("is-solved", done);
+    // ---------- scoreboard ----------
+    const touch = matchMedia("(pointer: coarse)").matches;
+    $("nudge").textContent = touch
+      ? "Tap a pancake to flip it and everything above it"
+      : "Click a pancake to flip it and everything above it";
+    function renderHud() {
       const c = history.count;
-      $("status").textContent = done
-        ? `sorted in ${c} · fewest ${par}`
-        : `${c} flip${c === 1 ? "" : "s"}`;
-      const t = $("timer");
-      t.hidden = timer.state === "hidden";
-      t.classList.toggle("is-armed", timer.state === "armed");
-      t.textContent = formatTime(timer.ms);
-      $("undo").disabled = !history.canUndo;
-      $("redo").disabled = !history.canRedo;
+      $("flips").textContent = c;
+      $("statTime").classList.toggle("is-armed", timer.state === "armed" || timer.state === "paused");
+      $("timer").textContent = formatTime(timer.ms);
+      const done = solved();
+      $("undo").disabled = done || !history.canUndo;
+      $("redo").disabled = done || !history.canRedo;
+      $("reset").disabled = done || !history.flips.length;
+      $("scramble").disabled = $("pause").disabled = done;
+      // the nudge sits over the stack until the first flip of the first stack
+      const nudge = $("nudge");
+      nudge.style.top = Math.max(0, slotY(0) - L.th / 2 - 58) + "px";
+      if (history.count > 0) nudgeDone = true;
+      nudge.classList.toggle("is-gone", nudgeDone || !$("menu").hidden);
     }
+    let nudgeDone = false;
 
     // ---------- pointer ----------
     // which flip the pointer is over: k = pancakes from the top down to and including the
@@ -485,23 +831,24 @@
       hoverK = k;
       canvas.style.cursor = k ? "pointer" : "default";
     }
-    canvas.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch") setHover(kAt(e.clientX, e.clientY)); });
+    // nothing to grab while a new stack is still landing
+    canvas.addEventListener("pointermove", (e) => { if (e.pointerType !== "touch") setHover(dropping() || solved() ? 0 : kAt(e.clientX, e.clientY)); });
     canvas.addEventListener("pointerleave", () => setHover(0));
     canvas.addEventListener("pointerdown", (e) => {
-      const k = kAt(e.clientX, e.clientY);
-      // on touch, the first tap slides the spatula in and a second tap on the same pancake flips
-      if (e.pointerType === "touch" && k !== hoverK) { setHover(k); return; }
-      if (k) doFlip(k);
+      const k = dropping() || solved() ? 0 : kAt(e.clientX, e.clientY);
+      if (k) doFlip(k); // a tap flips straight away, same as a click
     });
 
-    addEventListener("resize", resize);
+    addEventListener("resize", () => { resize(); if ($("menu").hidden) renderHud(); });
     resize();
-    newStack(n);
+    // behind the start screen: a sorted stack, just to look at
+    served = sorted(n);
+    serve(served);
     requestAnimationFrame(tick);
     // for tests and checking frames: pancakes.freeze(0.4) holds the current toss at that point
     window.pancakes = {
       get stack() { return stack; }, get shown() { return shown; }, doFlip, history, timer, get L() { return L; },
-      get anim() { return anim; },
+      get anim() { return anim; }, get spat() { return spat; },
       freeze(u = null) { freezeU = u; if (W > 0 && H > 0) draw(performance.now()); },
     };
   </script>
