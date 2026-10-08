@@ -245,11 +245,8 @@ export function atSpot(state, track, car, s) {
   return p.track === track && Math.abs(p.s - s) < BODY;
 }
 
-// The goal: every goal car touching its spot, and no other car (locomotives
-// aside) left on the goal track.
+// The goal: every goal car touching its spot. Where the other cars are
+// doesn't matter.
 export function goalMet(yard, cars, goals, state) {
-  return goals.every((g) => {
-    if (!goalSpots(yard, g).every(({ car, s }) => atSpot(state, g.track, car, s))) return false;
-    return state.at.every((p, c) => p.track !== g.track || cars[c].loco || g.cars.includes(c));
-  });
+  return goals.every((g) => goalSpots(yard, g).every(({ car, s }) => atSpot(state, g.track, car, s)));
 }

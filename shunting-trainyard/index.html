@@ -728,11 +728,6 @@
       ctx.fillStyle = col;
       ctx.fill();
       if (opts.outline) { ctx.lineWidth = 2; ctx.strokeStyle = C.amberHi; ctx.stroke(); }
-      if (opts.inTheWay) {
-        ctx.lineWidth = Math.max(3, L * 0.06); ctx.strokeStyle = C.danger;
-        ctx.globalAlpha = 0.8 + 0.2 * Math.sin(performance.now() / 160);
-        ctx.stroke(); ctx.globalAlpha = 1;
-      }
       if (car.loco) {
         // cab windows at both ends: it drives either way
         ctx.fillStyle = "#121619aa";
@@ -927,17 +922,10 @@
           for (let o = 0; o < cars.length; o++) if (!consist.has(o) && isCoupled(state, c, o)) stack.push(o);
         }
       }
-      // every goal car is home but something else is still on the goal track: point at it
-      const inTheWay = new Set();
-      for (const g of goals) {
-        if (!goalSpots(yard, g).every(({ car, s: spot }) => atSpot(state, g.track, car, spot))) continue;
-        state.at.forEach((p, c) => { if (p.track === g.track && !cars[c].loco && !g.cars.includes(c)) inTheWay.add(c); });
-      }
       // nearer the bottom of the screen is nearer the viewer: draw those last
       const screenDown = (p) => sx(p.x) * downX() + sy(p.y) * downY();
       cars.map((_, c) => c).sort((a, b) => screenDown(poses[a]) - screenDown(poses[b]))
-        .forEach((c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1, inTheWay: inTheWay.has(c) }));
-      for (const c of inTheWay) labels.push({ text: "not in the goal", x: sx(poses[c].x), y: sy(poses[c].y), dy: -L * 0.5 });
+        .forEach((c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1 }));
 
       // loco chevrons: you can drive this, and which ways
       cars.forEach((car, c) => {

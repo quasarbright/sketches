@@ -235,8 +235,7 @@ function applyChain(state, { chain, dest, side }) {
 
 // ---------- goals ----------
 // goal = { track, end: nodeId, cars: [carIndex, ...] } — cars listed in the
-// track's from→to order, packed against the `end` node, and nothing else but
-// locos sits on that track.
+// track's from→to order, packed against the `end` node. Other cars can be anywhere.
 export function goalSlots(yard, goal) {
   const t = yard.tracks[goal.track], n = goal.cars.length;
   return t.from === goal.end ? t.slots.slice(0, n) : t.slots.slice(t.slots.length - n);
@@ -244,16 +243,7 @@ export function goalSlots(yard, goal) {
 
 export function goalMet(yard, cars, goals, pos) {
   const occ = occupancy(yard, pos);
-  for (const g of goals) {
-    const t = yard.tracks[g.track];
-    const want = goalSlots(yard, g);
-    for (let k = 0; k < want.length; k++) if (occ[want[k]] !== g.cars[k]) return false;
-    for (const s of t.slots) {
-      const c = occ[s];
-      if (c >= 0 && !cars[c].loco && !g.cars.includes(c)) return false;
-    }
-  }
-  return true;
+  return goals.every((g) => goalSlots(yard, g).every((slot, k) => occ[slot] === g.cars[k]));
 }
 
 // ---------- solver ----------

@@ -135,11 +135,11 @@ export const LEVELS = [
   },
   {
     name: "Pick out",
-    blurb: "Leave only A B C on their siding, in marker order.",
+    blurb: "Get A B C to their markers.",
     layout: ladder(5, [5, 3]),
     start: { head: "L", s1: "x B x A C" },
     goals: [{ track: "s1", end: "E1", cars: "A B C" }],
-    fewest: 11,
+    fewest: 10,
   },
   {
     name: "Reverse three",
