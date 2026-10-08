@@ -45,28 +45,6 @@
       letter-spacing: .01em; color: var(--text); margin: 0;
     }
 
-    /* ---- left tool rail ---- */
-    .sm-tools {
-      position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 4;
-      display: flex; flex-direction: column; gap: 10px;
-    }
-    .sm-toolgroup {
-      display: flex; flex-direction: column; gap: 2px; padding: 5px;
-      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
-    }
-    .sm-tool {
-      width: 40px; height: 40px; display: grid; place-items: center;
-      border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer;
-    }
-    .sm-tool:hover { background: var(--panel-2); }
-    .sm-tool.is-active { background: var(--accent); color: var(--on-accent); }
-    .sm-tool:disabled { color: var(--faint); background: transparent; cursor: default; }
-    .sm-tool svg {
-      width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
-      stroke-linecap: round; stroke-linejoin: round;
-    }
-
     .sm-empty {
       position: fixed; z-index: 3; pointer-events: none; white-space: nowrap;
       padding: 6px 12px; border-radius: 999px; transform: translate(-50%, 0);
@@ -77,15 +55,8 @@
 
     @media (max-width: 700px) {
       .sm-title { font-size: 1.4rem; line-height: 46px; }
-      /* the tools become a row under the flake; history and download a smaller row top right */
+      /* the rail splits (shared .phone-split): tools along the bottom, the rest top right */
       .sm-head { left: 16px; top: 12px; }
-      .sm-tools { position: static; transform: none; }
-      .sm-toolgroup { flex-direction: row; position: fixed; z-index: 4; }
-      .sm-toolgroup:nth-child(1) { left: 50%; bottom: 38px; transform: translateX(-50%); }
-      .sm-toolgroup:nth-child(2) { top: 12px; right: 64px; }
-      .sm-toolgroup:nth-child(3) { top: 12px; right: 12px; }
-      .sm-toolgroup:nth-child(n+2) .sm-tool { width: 34px; height: 34px; }
-      .sm-toolgroup:nth-child(n+2) .sm-tool svg { width: 19px; height: 19px; }
       .sm-empty { white-space: normal; text-align: center; width: 230px; border-radius: 14px; }
     }
 
@@ -100,43 +71,43 @@
   </header>
   <div class="sm-empty" id="empty" hidden>drag up from the center to grow the six arms</div>
 
-  <div class="sm-tools">
-    <div class="sm-toolgroup">
-      <button class="sm-tool" data-tool="grow" title="Grow (G): drag from the end of a branch to grow it straight on, or off at 60° to start one new branch there. You can also drag a branch off partway along another">
+  <div class="tool-rail phone-split">
+    <div class="tool-group">
+      <button class="tool" data-tool="grow" title="Grow (G): drag from the end of a branch to grow it straight on, or off at 60° to start one new branch there. You can also drag a branch off partway along another">
         <svg viewBox="0 0 24 24"><path d="M12 21V4M12 13l6-6"/></svg>
       </button>
-      <button class="sm-tool" data-tool="split2" title="Split in two (S): drag off a branch at 60° to split off a mirrored pair, one to each side, or drag the end straight on to grow it. The two are clones from then on: whatever you do to one happens to both">
+      <button class="tool" data-tool="split2" title="Split in two (S): drag off a branch at 60° to split off a mirrored pair, one to each side, or drag the end straight on to grow it. The two are clones from then on: whatever you do to one happens to both">
         <svg viewBox="0 0 24 24"><path d="M12 21V12M12 12L5.5 5.5M12 12l6.5-6.5"/></svg>
       </button>
-      <button class="sm-tool" data-tool="split3" title="Split in three (T): drag from the end of a branch to grow a mirrored pair off it and carry it straight on as well. Partway along a branch, it makes just the pair">
+      <button class="tool" data-tool="split3" title="Split in three (T): drag from the end of a branch to grow a mirrored pair off it and carry it straight on as well. Partway along a branch, it makes just the pair">
         <svg viewBox="0 0 24 24"><path d="M12 21V11M12 11L5.5 4.5M12 11l6.5-6.5M12 11V3"/></svg>
       </button>
-      <button class="sm-tool" data-tool="circle" title="Circle cap (1): click the end of a branch, or any point where branches meet, to cap it with a round plate, sized to the branch">
+      <button class="tool" data-tool="circle" title="Circle cap (1): click the end of a branch, or any point where branches meet, to cap it with a round plate, sized to the branch">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
       </button>
-      <button class="sm-tool" data-tool="hexagon" title="Hexagon cap (2): click the end of a branch, or any point where branches meet, to cap it with a six-sided plate, the shape ice crystals grow in, sized to the branch">
+      <button class="tool" data-tool="hexagon" title="Hexagon cap (2): click the end of a branch, or any point where branches meet, to cap it with a six-sided plate, the shape ice crystals grow in, sized to the branch">
         <svg viewBox="0 0 24 24"><polygon points="12,5 18.1,8.5 18.1,15.5 12,19 5.9,15.5 5.9,8.5"/></svg>
       </button>
-      <button class="sm-tool" data-tool="rhombus" title="Diamond cap (3): click the end of a branch, or any point where branches meet, to cap it with a 60°/120° diamond pointing the way the branch was growing, sized to the branch">
+      <button class="tool" data-tool="rhombus" title="Diamond cap (3): click the end of a branch, or any point where branches meet, to cap it with a 60°/120° diamond pointing the way the branch was growing, sized to the branch">
         <svg viewBox="0 0 24 24"><polygon points="12,3 16.5,12 12,21 7.5,12"/></svg>
       </button>
-      <button class="sm-tool" data-tool="erase" title="Erase (E): click a branch to remove it from the last branch point before where you click, with everything grown off that part. Click a cap to remove just the cap. What will go is shown in red">
+      <button class="tool" data-tool="erase" title="Erase (E): click a branch to remove it from the last branch point before where you click, with everything grown off that part. Click a cap to remove just the cap. What will go is shown in red">
         <svg viewBox="0 0 24 24"><path d="M8 20h12M5 15.5l8.5-8.5 5 5L12 18.5H8z"/></svg>
       </button>
     </div>
-    <div class="sm-toolgroup">
-      <button class="sm-tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
+    <div class="tool-group">
+      <button class="tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
         <svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
       </button>
-      <button class="sm-tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
+      <button class="tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
         <svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
       </button>
-      <button class="sm-tool" id="clear" title="Clear: start over with an empty flake">
+      <button class="tool" id="clear" title="Clear: start over with an empty flake">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
       </button>
     </div>
-    <div class="sm-toolgroup">
-      <button class="sm-tool" id="png" title="Download the snowflake as a PNG image">
+    <div class="tool-group">
+      <button class="tool" id="png" title="Download the snowflake as a PNG image">
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
       </button>
     </div>
@@ -183,7 +154,7 @@ function resize() {
   // the bottom, so the flake is centered in the space between the title and the rail.
   const narrow = vw < 700;
   if (narrow) {
-    const top = 64, bottom = document.querySelector(".sm-toolgroup").getBoundingClientRect().top - 8;
+    const top = 64, bottom = document.querySelector(".tool-group").getBoundingClientRect().top - 8;
     const r = Math.max(60, Math.min(vw / 2 - 12, (bottom - top) / 2));
     cx = vw / 2;
     cy = (top + bottom) / 2;
@@ -627,7 +598,7 @@ const emptyEl = document.getElementById("empty");
 
 function setTool(t) {
   tool = t;
-  for (const b of document.querySelectorAll(".sm-tool[data-tool]")) b.classList.toggle("is-active", b.dataset.tool === t);
+  for (const b of document.querySelectorAll(".tool[data-tool]")) b.classList.toggle("is-active", b.dataset.tool === t);
   hover = pointer ? pickHover(...pointer) : null;
 }
 
@@ -640,7 +611,7 @@ function updateUI() {
   emptyEl.style.top = (cy + 22) + "px";
 }
 
-for (const b of document.querySelectorAll(".sm-tool[data-tool]")) b.addEventListener("click", () => setTool(b.dataset.tool));
+for (const b of document.querySelectorAll(".tool[data-tool]")) b.addEventListener("click", () => setTool(b.dataset.tool));
 
 function undo() {
   if (!undoStack.length) return;

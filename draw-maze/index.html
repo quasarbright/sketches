@@ -51,28 +51,12 @@
       font-size: .9rem; color: var(--muted); margin-top: 6px;
     }
 
-    /* ---- left tool rail ---- */
-    .dm-tools {
-      position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 4;
-      display: flex; flex-direction: column; gap: 10px;
-    }
-    .dm-toolgroup {
-      display: flex; flex-direction: column; gap: 2px; padding: 5px;
-      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
-    }
-    .dm-tool {
-      width: 40px; height: 40px; display: grid; place-items: center;
-      border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer;
-    }
-    .dm-tool:hover { background: var(--panel-2); }
-    .dm-tool.is-active { background: var(--ink); color: var(--bg); }
-    .dm-tool:disabled { color: var(--faint); background: transparent; cursor: default; }
-    .dm-tool svg, .dm-btn svg {
-      width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+    /* ---- left tool rail: the shared .tool-rail, with the active tool in the drawing's ink ---- */
+    .tool.is-active { background: var(--ink); color: var(--bg); }
+    .dm-btn svg {
+      width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2;
       stroke-linecap: round; stroke-linejoin: round;
     }
-    .dm-btn svg { width: 17px; height: 17px; }
 
     /* ---- bottom bars: one for making, one for playing ---- */
     .dm-bar {
@@ -122,8 +106,6 @@
     .cohesion-about li { margin: .35em 0; }
 
     @media (max-width: 700px) {
-      .dm-tools { left: 8px; }
-      .dm-tool { width: 36px; height: 36px; }
       .dm-bar { bottom: 36px; gap: 5px; }
       .dm-btn { padding: 0 10px; font-size: .85rem; }
       .dm-size > span:first-child, #makeBar .dm-share span { display: none; }
@@ -145,23 +127,23 @@
     <div class="dm-hint" id="hint"></div>
   </div>
 
-  <div class="dm-tools">
-    <div class="dm-toolgroup" id="drawTools">
-      <button class="dm-tool" id="penBtn" title="Pen: draw on the grid. Scribble over an area to fill it; separate marks get joined up for you.">
+  <div class="tool-rail">
+    <div class="tool-group" id="drawTools">
+      <button class="tool" id="penBtn" title="Pen: draw on the grid. Scribble over an area to fill it; separate marks get joined up for you.">
         <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button>
-      <button class="dm-tool" id="eraseBtn" title="Eraser: drag over a stroke to delete it">
+      <button class="tool" id="eraseBtn" title="Eraser: drag over a stroke to delete it">
         <svg viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
       </button>
-      <button class="dm-tool" id="clearBtn" title="Clear: delete the whole drawing">
+      <button class="tool" id="clearBtn" title="Clear: delete the whole drawing">
         <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>
-    <div class="dm-toolgroup">
-      <button class="dm-tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
+    <div class="tool-group">
+      <button class="tool" id="undo" title="Undo (⌘Z / Ctrl+Z)">
         <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
       </button>
-      <button class="dm-tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
+      <button class="tool" id="redo" title="Redo (⇧⌘Z / Ctrl+Shift+Z)">
         <svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
       </button>
     </div>

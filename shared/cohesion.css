@@ -176,6 +176,54 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 }
 .control-bar .btn { padding: 6px 12px; }
 
+/* ---- tool rail (editors: pick a tool, then act on the canvas with it) ----
+ * <div class="tool-rail">
+ *   <div class="tool-group"> <button class="tool is-active" title="Pen (P): …"><svg>…</svg></button> … </div>
+ *   <div class="tool-group"> undo / redo / clear </div>
+ * </div>
+ * Fixed on the left, vertically centered; one group per kind of button. The active tool gets
+ * .is-active (accent fill; a project can restyle `.tool.is-active`). Icons are 24×24-viewBox
+ * stroke SVGs. On phones it stays on the left, smaller. Add .phone-split to instead put the
+ * first group (the tools) in a row along the bottom and the other groups in a row top right,
+ * for pages with nothing else at the bottom (see snowflake-studio).
+ */
+.tool-rail {
+  position: fixed; left: 16px; top: 50%; transform: translateY(-50%); z-index: 4;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.tool-group {
+  display: flex; flex-direction: column; gap: 2px; padding: 5px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.tool {
+  width: 40px; height: 40px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 10px; background: transparent; color: var(--text); cursor: pointer;
+}
+.tool:hover { background: var(--panel-2); }
+.tool.is-active { background: var(--accent); color: var(--on-accent); }
+.tool:disabled { color: var(--faint); background: transparent; cursor: default; }
+.tool svg {
+  width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 700px) {
+  .tool-rail { left: 8px; }
+  .tool { width: 36px; height: 36px; }
+
+  /* the rail's own transform would make it the frame its fixed children are placed in */
+  .tool-rail.phone-split {
+    left: auto; right: 12px; top: 12px; transform: none; flex-direction: row; gap: 6px;
+  }
+  .tool-rail.phone-split > .tool-group { flex-direction: row; }
+  .tool-rail.phone-split > .tool-group:first-child {
+    position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%);
+  }
+  .tool-rail.phone-split > .tool-group:first-child .tool { width: 40px; height: 40px; }
+  .tool-rail.phone-split > .tool-group:not(:first-child) .tool { width: 34px; height: 34px; }
+  .tool-rail.phone-split > .tool-group:not(:first-child) .tool svg { width: 19px; height: 19px; }
+}
+
 /* ---- stats readout (top-left of sims) ---- */
 .readout {
   position: fixed; top: 12px; left: 14px; z-index: 5;
