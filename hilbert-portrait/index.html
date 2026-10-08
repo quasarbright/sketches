@@ -202,12 +202,28 @@
       .hp-title { font-size: 1.3rem; }
       #stage { flex: none; margin: 12px 0 10px; }
       .hp-side { border-left: none; border-top: 1px solid var(--border); overflow: visible; padding-bottom: 36px; }
+      /* speed + button get their own full-width row, the slider taking what's left */
+      .drawctl { width: 100%; margin-left: 0; }
+      .speed { flex: 1; min-width: 0; }
+      .speed input { flex: 1; width: auto; min-width: 0; }
       /* below the sheet, the toggle folds the controls up instead of off to the side */
       .side-head { padding: 8px 12px 8px 16px; }
-      .side-toggle svg { transform: rotate(-90deg); }
+      /* collapsed: out of the page, a bar pinned to the bottom of the screen; the floating footer
+         moves up to sit just above it */
+      body.side-closed .hp-side {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; padding-bottom: 0;
+        box-shadow: 0 -8px 24px rgba(0,0,0,.45);
+      }
+      body.side-closed .hp-main { padding-bottom: 96px; }
+      body.side-closed mike-footer[overlay] { bottom: 45px !important; }   /* beats the component's inline style */
+      /* the footer floats over the scrolling controls; fade them out under it instead of
+         printing on top of them */
+      mike-footer[overlay] { background: linear-gradient(to bottom, transparent, var(--panel) 60%); }
+      body.side-closed mike-footer[overlay] { background: linear-gradient(to bottom, transparent, var(--bg) 60%); }
       body.side-closed .side-title { display: inline; }
-      body.side-closed .side-head { justify-content: space-between; padding: 8px 12px 8px 16px; }
-      body.side-closed .side-toggle svg { transform: rotate(90deg); }
+      body.side-closed .side-head { justify-content: space-between; padding: 8px 12px 8px 16px; cursor: pointer; }
+      body.side-closed .side-toggle svg { transform: rotate(-90deg); }
+      body:not(.side-closed) .side-toggle svg { transform: rotate(90deg); }
       .step { padding: 16px; }
     }
   </style>
@@ -1243,19 +1259,26 @@
       $("modePhoto").addEventListener("click", () => { if (mode !== "photo") setMode("photo"); });
       $("capture").addEventListener("click", capture);
 
-      // collapsible controls; remembered per browser
-      const setSide = (open) => {
+      // collapsible controls, remembered per browser and separately for phone and desktop
+      // layouts; open unless closed by hand (on phones the open panel just scrolls)
+      const sideKey = () => `hilbert-portrait:side:${narrowQuery.matches ? "narrow" : "wide"}`;
+      const setSide = (open, remember = true) => {
         document.body.classList.toggle("side-closed", !open);
         $("sideToggle").setAttribute("aria-expanded", open);
         $("sideToggle").title = open ? "Hide the controls" : "Show the controls";
-        try { localStorage.setItem("hilbert-portrait:side", open ? "open" : "closed"); } catch {}
+        if (remember) try { localStorage.setItem(sideKey(), open ? "open" : "closed"); } catch {}
         needFit = true;
         if (path) { fitCanvas(); render(); }
       };
-      let sideStored = null;
-      try { sideStored = localStorage.getItem("hilbert-portrait:side"); } catch {}
-      if (sideStored === "closed") setSide(false);
-      $("sideToggle").addEventListener("click", () => setSide(document.body.classList.contains("side-closed")));
+      const restoreSide = () => {
+        let stored = null;
+        try { stored = localStorage.getItem(sideKey()); } catch {}
+        setSide(stored !== "closed", false);
+      };
+      restoreSide();
+      narrowQuery.addEventListener("change", restoreSide);
+      // the whole header toggles, so the collapsed bar at the bottom of a phone is easy to hit
+      document.querySelector(".side-head").addEventListener("click", () => setSide(document.body.classList.contains("side-closed")));
       $("gateCam").addEventListener("click", (e) => { e.stopPropagation(); startLive(); });
       $("gatePhoto").addEventListener("click", (e) => { e.stopPropagation(); $("file").click(); });
       $("gate").addEventListener("click", () => $("file").click());
