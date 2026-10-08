@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ladder, LEVELS } from "./levels.mjs";
 import { loadLevel } from "./setup.mjs";
-import { fromSlots, drive, toggleCoupling, switchLocked, throwSwitch, joints, goalMet, FOUL } from "./motion.mjs";
+import { fromSlots, drive, toggleCoupling, switchLocked, throwSwitch, joints, goalMet, FOUL, BLANK } from "./motion.mjs";
 
 const setup = (start, layout = ladder(3, [3, 3])) => {
   const lv = loadLevel({ layout, start, goals: [] });
@@ -40,7 +40,7 @@ test("coupled cars move rigidly both ways, across a switch", () => {
 test("buffers stop a train", () => {
   const { yard, state } = setup({ head: ". L" });
   const r = drive(yard, state, 0, -1, 5);
-  near(r.moved, 1.15, "rolls until it touches the buffer");
+  near(r.moved, 1.3, "rolls until it touches the buffer");
   assert.equal(r.stop.why, "buffer");
 });
 
@@ -69,7 +69,7 @@ test("coming through the points from the trunk shoves a car near the points up t
 test("the shove stops if the car it shoves can't move", () => {
   const { yard, state } = setup({ head: ". . L", s2: "A B C" });
   const r = drive(yard, state, 0, 1, 2);
-  near(r.moved, 0.15, "only as far as the spare room at the buffer lets A move");
+  near(r.moved, 0.3, "only as far as the spare room at the buffer lets A move");
   assert.equal(r.stop.why, "foul");
 });
 
@@ -80,6 +80,13 @@ test("coming down a leg into the side of a car on the other leg is blocked", () 
   assert.equal(r.stop.why, "foul");
   near(state.at[1].s, a0, "A not moved");
   assert.ok(r.moved < 1, "stopped short of the points");
+});
+
+test("against a switch set the other way, the nose stops where the drawn track ends", () => {
+  const { yard, state } = setup({ s2: ". L" });
+  const r = drive(yard, state, 0, -1, 5);
+  assert.equal(r.stop.why, "against");
+  near(state.at[0].s - 0.5, BLANK, "nose BLANK short of the points");
 });
 
 test("every level's start is a legal position and not already solved", () => {

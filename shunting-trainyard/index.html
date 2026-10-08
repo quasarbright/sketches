@@ -79,6 +79,12 @@
     .st-mini-stars { display: flex; gap: 3px; justify-content: center; }
     .st-mini-stars svg { width: 18px; height: 18px; }
 
+    .st-level.is-locked { opacity: .4; cursor: default; box-shadow: 0 4px 0 var(--lip); }
+    .st-level.is-locked:hover { background: var(--panel-2); }
+    .st-level.is-locked .st-level-name { color: var(--faint); }
+    .st-lock { width: 100%; height: 64px; display: grid; place-items: center; color: var(--faint); }
+    .st-lock svg { width: 30px; height: 30px; }
+
     .st-star path { fill: var(--panel); stroke: var(--lip); stroke-width: 1; }
     .st-star.is-on path { fill: var(--accent); stroke: var(--accent-lip); }
 
@@ -90,7 +96,9 @@
     .st-bar > * { pointer-events: auto; }
     .st-back { padding: 9px 14px 9px 10px; border-radius: 14px; font-size: .95rem; }
     .st-back svg.st-ico { width: 18px; height: 18px; }
+    /* centered on the screen, whatever sits either side of it */
     .st-score {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%);
       display: flex; align-items: stretch; background: var(--panel); border-radius: 20px; padding: 8px 6px;
       box-shadow: 0 4px 0 var(--lip), 0 10px 24px rgba(0,0,0,.4);
     }
@@ -102,7 +110,7 @@
     .st-stat.is-moves.is-over .st-stat-value { color: #e07a4f; }
     .st-stat.is-time .st-stat-value { min-width: 4.4ch; text-align: center; }
     .st-stat.is-time.is-armed .st-stat-value { color: var(--faint); }
-    .st-tag { text-align: right; min-width: 120px; max-width: 260px; padding-top: 4px; }
+    .st-tag { margin-left: auto; text-align: right; max-width: calc(50% - 90px); padding-top: 4px; }
     .st-tag-name { font: 400 1.15rem/1.1 var(--font-display); color: var(--text); }
     .st-tag-num { font: 400 .78rem var(--font-display); color: var(--faint); }
     .st-tag-goal { margin-top: 4px; font-weight: 600; font-size: .9rem; color: var(--muted); }
@@ -111,11 +119,12 @@
     .st-nudge {
       position: fixed; z-index: 3; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none;
       font-weight: 700; font-size: .95rem; color: var(--on-accent); background: var(--accent-hi);
-      padding: 8px 14px; border-radius: 12px; white-space: nowrap; transition: opacity .25s;
+      padding: 8px 14px; border-radius: 12px; transition: opacity .25s;
+      width: max-content; max-width: min(320px, calc(100vw - 24px)); text-align: center;
       box-shadow: 0 6px 16px rgba(0,0,0,.35);
     }
     .st-nudge::after {
-      content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -7px;
+      content: ""; position: absolute; left: calc(50% + var(--ax, 0px)); bottom: -7px; margin-left: -7px;
       border: 7px solid transparent; border-bottom: 0; border-top-color: var(--accent-hi);
     }
     .st-nudge.is-gone { opacity: 0; }
@@ -129,7 +138,16 @@
     .st-ctl .st-btn { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
     .st-ctl span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
     .st-controls .st-gap { width: 10px; }
-    about-modal { display: none; }
+    .st-home { pointer-events: auto; }
+    .st-home .st-btn { width: 50px; height: 50px; padding: 0; border-radius: 50%; }
+    .st-score .st-stat { min-width: 96px; }
+
+    /* the end card's table of what each star takes */
+    .st-cuts { display: grid; grid-template-columns: auto auto; gap: 6px 14px; justify-content: center; align-items: center; margin: -6px 0 24px; }
+    .st-cuts .st-cut-stars { display: flex; gap: 2px; justify-content: flex-end; }
+    .st-cuts .st-cut-stars svg { width: 18px; height: 18px; }
+    .st-cuts .st-cut-moves { font-weight: 700; font-size: .95rem; color: var(--muted); text-align: left; font-variant-numeric: tabular-nums; }
+    .st-cuts .is-yours { color: var(--text); }
 
     /* ---------- results ---------- */
     .st-win {
@@ -176,13 +194,17 @@
       .st-level-name { grid-column: 2; }
       .st-level-sub { grid-column: 2; }
       .st-level .st-mini-stars { grid-column: 3; grid-row: 1 / 4; flex-direction: column; }
+      .st-level .st-lock { grid-row: 1 / 4; height: 46px; }
       .st-bar { flex-wrap: wrap; justify-content: space-between; top: 10px; left: 10px; right: 10px; }
-      .st-score { order: 3; width: 100%; justify-content: center; padding: 6px 2px; }
-      .st-stat { padding: 0 8px; min-width: 0; flex: 1; }
-      .st-tag { min-width: 0; padding-top: 0; }
+      .st-score { padding: 6px 2px; }
+      .st-score .st-stat { min-width: 72px; }
+      /* no room beside the counter on a phone: the puzzle name gets its own row below */
+      .st-tag { position: absolute; top: 76px; left: 0; right: 0; max-width: none; text-align: center; padding: 0; }
+      .st-tag-num, .st-tag-name { display: inline; }
+      .st-tag-num::after { content: " · "; }
       .st-tag-goal { font-size: .8rem; }
       .st-controls { gap: 10px; bottom: 34px; }
-      .st-ctl .st-btn { width: 48px; height: 48px; }
+      .st-ctl .st-btn, .st-home .st-btn { width: 46px; height: 46px; }
       .st-controls .st-gap { width: 2px; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -197,30 +219,23 @@
   <div class="st-menu" id="menu">
     <div class="st-menu-inner">
       <h1 class="st-logo"><span>Shunting</span>Trainyard</h1>
-      <p class="st-pitch">Put the cars in order. Only the <b>loco</b> can move anything:
-        <b>drag it</b> to drive, <b>click a switch</b> to change tracks, and
-        <b>click between two cars</b> to couple or uncouple them.</p>
+      <p class="st-pitch">Put the cars in order. Only the <b>locomotive</b> can move anything:
+        <b>drag it</b> to drive. Every <b>switch you throw</b> and every
+        <b>coupling</b> you make or break is a move. Use as few as you can.</p>
       <div class="st-levels" id="levels"></div>
     </div>
   </div>
 
   <!-- in play -->
   <div class="st-bar" id="bar" hidden>
-    <button class="st-btn st-back" id="back" title="back to the puzzle list (Esc)">
-      <svg class="st-ico" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>Menu
-    </button>
+    <div class="st-ctl st-home">
+      <button class="st-btn" id="back" title="back to the puzzle list (Esc)">
+        <svg class="st-ico" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg>
+      </button><span>Puzzles</span>
+    </div>
     <div class="st-score">
-      <div class="st-stat is-moves" id="statMoves" title="moves so far: each time the loco sets off in a direction counts as one">
+      <div class="st-stat is-moves" title="moves so far: each switch you throw and each coupling you make or break">
         <span class="st-stat-label">Moves</span><span class="st-stat-value" id="moves">0</span>
-      </div>
-      <div class="st-stat" title="par: the fewest moves the solver found for this puzzle">
-        <span class="st-stat-label">Par</span><span class="st-stat-value" id="par">0</span>
-      </div>
-      <div class="st-stat" title="your best finish on this puzzle">
-        <span class="st-stat-label">Best</span><span class="st-stat-value" id="best">–</span>
-      </div>
-      <div class="st-stat is-time" id="statTime" title="starts when the loco first moves and stops when the puzzle is done">
-        <span class="st-stat-label">Time</span><span class="st-stat-value" id="timer">0:00</span>
       </div>
     </div>
     <div class="st-tag">
@@ -234,7 +249,7 @@
 
   <div class="st-controls" id="controls" hidden>
     <div class="st-ctl">
-      <button class="st-btn" id="undo" title="take back the last drive, switch, or coupling (Z)">
+      <button class="st-btn" id="undo" title="take back the last thing you did (Z)">
         <svg class="st-ico" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
       </button><span>Undo</span>
     </div>
@@ -245,25 +260,12 @@
     </div>
     <div class="st-gap"></div>
     <div class="st-ctl">
-      <button class="st-btn" id="help" title="how the yard works">
-        <svg class="st-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.5-2.7 4"/><path d="M12 17.6h.01"/></svg>
-      </button><span>How it works</span>
-    </div>
-    <div class="st-ctl">
       <button class="st-btn is-amber" id="skip" title="go on to the next puzzle">
         <svg class="st-ico" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
       </button><span>Next puzzle</span>
     </div>
   </div>
 
-  <about-modal label="about">
-    <h2 class="title">Shunting Trainyard</h2>
-    <p class="intro">Draft. A shunting puzzle: cars can't move by themselves, so the only way to
-      rearrange a train is to drive a locomotive back and forth, throwing switches and coupling and
-      uncoupling cars as you go.</p>
-    <p>The move count goes up by one each time the loco sets off in a direction. Par is the
-      fewest moves the solver found, searching every arrangement the yard can reach.</p>
-  </about-modal>
 
   <!-- results -->
   <div class="st-win" id="win" hidden>
@@ -275,12 +277,11 @@
       <div class="st-stars" id="stars"></div>
       <div class="st-verdict" id="verdict"></div>
       <div class="st-results">
-        <div class="st-stat is-moves"><span class="st-stat-label">Moves</span><span class="st-stat-value" id="winMoves"></span></div>
-        <div class="st-stat"><span class="st-stat-label">Par</span><span class="st-stat-value" id="winPar"></span></div>
-        <div class="st-stat"><span class="st-stat-label">Time</span><span class="st-stat-value" id="winTime"></span></div>
+        <div class="st-stat is-moves"><span class="st-stat-label">Your moves</span><span class="st-stat-value" id="winMoves"></span></div>
       </div>
+      <div class="st-cuts" id="cuts"></div>
       <div class="st-card-actions">
-        <button class="st-btn" id="winMenu" title="back to the puzzle list">Menu</button>
+        <button class="st-btn" id="winMenu" title="back to the puzzle list">Puzzles</button>
         <button class="st-btn is-amber" id="winNext" title="go on to the next puzzle">Next puzzle</button>
       </div>
     </div>
@@ -289,11 +290,11 @@
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { LEVELS } from "./levels.mjs";
+    import { LEVELS, starCuts, starsFor } from "./levels.mjs";
     import { loadLevel } from "./setup.mjs";
     import { walk, nextTrack, pointOnTrack } from "./yard.mjs";
     import {
-      fromSlots, clone, drive, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet,
+      fromSlots, clone, drive, coast, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet, BLANK,
     } from "./motion.mjs";
 
     const C = {
@@ -313,24 +314,21 @@
 
     // ---------- game state ----------
     const $ = (id) => document.getElementById(id);
-    let levelIndex = 0, level, yard, cars, goals, state, par;
-    let moves = 0, lastDir = null, history = [], solved = false, playing = false;
+    let levelIndex = 0, level, yard, cars, goals, state;
+    let moves = 0, history = [], solved = false, playing = false;
     let drag = null, hover = null, flashSwitch = null;
-    // timer: starts when the loco first moves, stops when the puzzle is done
-    let timeAcc = 0, timeSince = null;
-    const elapsed = () => timeAcc + (timeSince != null ? performance.now() - timeSince : 0);
-    const fmtTime = (ms) => { const t = Math.floor(ms / 100); return `${Math.floor(t / 600)}:${String(Math.floor(t / 10) % 60).padStart(2, "0")}.${t % 10}`; };
+    // free-rolling cars: car → { speed, dir }, carried by the car at the front of the move
+    let rolling = new Map();
+    // how far each switch has swung toward its leg 1 (eases to state.sw), and how lit each track is
+    let swing = [], litAmt = new Map();
 
-    // per-puzzle bests, kept in this browser: { [name]: { moves, stars, ms } }
-    const bests = loadBests();
-    function loadBests() {
-      try { return JSON.parse(localStorage.getItem("shunting-trainyard:bests") || "{}"); } catch { return {}; }
-    }
-    function saveBests() {
-      try { localStorage.setItem("shunting-trainyard:bests", JSON.stringify(bests)); } catch {}
-    }
-    // 3 stars at par or better, 2 within half again, 1 for finishing
-    const starsFor = (m, p) => p == null ? 3 : m <= p ? 3 : m <= Math.ceil(p * 1.5) ? 2 : 1;
+    // Progress for this visit only (a refresh starts over): stars earned per
+    // puzzle. Finishing a puzzle opens the next; the puzzle list opens once the
+    // two tutorial puzzles are done.
+    const earned = {};
+    const done = (i) => earned[LEVELS[i]?.name] != null;
+    const playable = (i) => i === 0 || done(i - 1);
+    const listOpen = () => done(1);
 
     function freshState() { const lv = loadLevel(level); return fromSlots(lv.yard, lv.state); }
 
@@ -339,41 +337,48 @@
       level = LEVELS[levelIndex];
       ({ yard, cars, goals } = loadLevel(level));
       state = freshState();
-      par = level.par ?? null;
-      moves = 0; lastDir = null; history = []; solved = false; drag = null; hover = null;
-      timeAcc = 0; timeSince = null;
+      moves = 0; history = []; solved = false; drag = null; hover = null; rolling = new Map();
+      swing = state.sw.slice(); litAmt = new Map();
       playing = true;
       $("menu").hidden = true; $("bar").hidden = false; $("controls").hidden = false; $("win").hidden = true;
       $("tagNum").textContent = `Puzzle ${levelIndex + 1}`;
       $("tagName").textContent = level.name;
       $("tagGoal").textContent = level.blurb;
-      $("par").textContent = par ?? "–";
       layout();
       updateCount();
+      updateGates();
+    }
+
+    // what's open: the next puzzle once this one is done, the list after the tutorials
+    function updateGates() {
+      const last = levelIndex === LEVELS.length - 1;
+      $("skip").disabled = !done(levelIndex) || last;
+      $("skip").title = done(levelIndex) ? "go on to the next puzzle" : "finish this puzzle to open the next one";
+      $("back").parentElement.hidden = !listOpen();
+      $("winMenu").hidden = !listOpen();
+      $("winNext").hidden = last && !listOpen();
     }
 
     function showMenu() {
+      if (!listOpen()) return;
       playing = false; drag = null; hover = null;
       $("menu").hidden = false; $("bar").hidden = true; $("controls").hidden = true; $("win").hidden = true;
       $("nudge").classList.add("is-gone");
       buildMenu();
     }
 
-    function pushHistory() { history.push({ state: clone(state), moves, lastDir }); }
+    function pushHistory() { history.push({ state: clone(state), moves }); }
     function undo() {
       if ((drag && drag.held) || !history.length) return;
-      drag = null;
-      ({ state, moves, lastDir } = history.pop());
-      if (solved) { solved = false; timeSince = performance.now(); }
+      drag = null; rolling = new Map();
+      ({ state, moves } = history.pop());
+      solved = false;
       $("win").hidden = true;
       updateCount();
     }
 
     function updateCount() {
       $("moves").textContent = moves;
-      $("statMoves").classList.toggle("is-over", par != null && moves > par);
-      const b = bests[level.name];
-      $("best").textContent = b ? b.moves : "–";
       $("undo").disabled = !history.length;
       $("reset").disabled = !history.length;
     }
@@ -403,15 +408,25 @@
       const box = $("levels");
       box.innerHTML = "";
       LEVELS.forEach((lv, i) => {
-        const b = bests[lv.name];
+        const b = earned[lv.name];
         const btn = document.createElement("button");
         btn.className = "st-btn st-level";
+        if (!playable(i)) {
+          // not reached yet: no peeking
+          btn.classList.add("is-locked");
+          btn.disabled = true;
+          btn.title = "finish the puzzle before this one to open it";
+          btn.innerHTML = `<span class="st-lock"><svg class="st-ico" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span>` +
+            `<span class="st-level-num">Puzzle ${i + 1}</span><span class="st-level-name">???</span>` +
+            `<span class="st-mini-stars">${[1, 2, 3].map(() => starSvg(false)).join("")}</span>`;
+          box.appendChild(btn);
+          return;
+        }
         btn.title = `${lv.name}: ${lv.blurb}`;
         btn.innerHTML = thumb(lv) +
           `<span class="st-level-num">Puzzle ${i + 1}</span>` +
           `<span class="st-level-name">${lv.name}</span>` +
-          `<span class="st-level-sub">${b ? `best ${b.moves} · par ${lv.par ?? "–"}` : `par ${lv.par ?? "–"}`}</span>` +
-          `<span class="st-mini-stars">${[1, 2, 3].map((k) => starSvg(b && b.stars >= k)).join("")}</span>`;
+          `<span class="st-mini-stars">${[1, 2, 3].map((k) => starSvg(b != null && b >= k)).join("")}</span>`;
         btn.onclick = () => startLevel(i);
         box.appendChild(btn);
       });
@@ -468,10 +483,27 @@
     const jointPoint = (j) => walk(yard, state.at[j.a].track, state.at[j.a].s, j.dir, 0.5, state.sw);
 
     // ---------- driving ----------
-    // The pointer sets where you want the loco; the loco heads there along the
-    // track, never faster than VMAX and never speeding up or braking harder
-    // than ACC. Nothing else moves unless the loco moves it.
-    const VMAX = 4.5, ACC = 9; // car lengths per second, and per second²
+    // The pointer sets where you want the locomotivemotive; it heads there along the
+    // track as fast as it can, up to VMAX. Cars it pushes but isn't coupled to
+    // keep its speed when it backs off, and roll on until friction stops them,
+    // like a wooden toy train given a shove.
+    const VMAX = 10;      // the locomotive's top speed, car lengths per second
+    const FRICTION = 12;  // how fast a rolling car slows, car lengths per second²
+    const FOLLOW = 0.04;  // the locomotive closes on the pointer over about this many seconds
+
+    const locoIds = () => cars.map((c, i) => (c.loco ? i : -1)).filter((i) => i >= 0);
+    const otherLocos = (loco) => new Set(locoIds().filter((i) => i !== loco));
+    // a car and everything coupled to it
+    function consistOf(c0) {
+      const out = new Set(), stack = [c0];
+      while (stack.length) {
+        const c = stack.pop();
+        if (out.has(c)) continue;
+        out.add(c);
+        for (let o = 0; o < cars.length; o++) if (!out.has(o) && isCoupled(state, c, o)) stack.push(o);
+      }
+      return out;
+    }
 
     function stepDrive(dt) {
       const loco = drag.loco, here = centerOf(loco), tg = drag.target;
@@ -483,45 +515,58 @@
         const proj = (tg.x - here.x) * h.x + (tg.y - here.y) * h.y;
         if (!best || proj > best.proj) best = { d, proj };
       }
-      const cur = state.at[loco];
-      const runningOn = (d) => lastDir && lastDir.loco === loco && lastDir.track === cur.track && lastDir.dir === d;
-      let wantDir = drag.dir, want = 0;
-      // a little dead zone before starting off the other way, so a shaky hand doesn't count extra moves
-      if (best && best.proj > (runningOn(best.d) || (drag.speed > 0 && best.d === drag.dir) ? 0.003 : 0.04)) {
-        wantDir = best.d;
-        want = Math.min(VMAX, Math.sqrt(2 * ACC * best.proj)); // slow enough to stop on the spot
-      }
-      if (drag.speed > 0 && wantDir !== drag.dir) {
-        drag.speed = Math.max(0, drag.speed - ACC * dt); // brake before reversing
-      } else {
-        drag.dir = wantDir;
-        drag.speed = want > drag.speed ? Math.min(want, drag.speed + ACC * dt) : Math.max(want, drag.speed - ACC * dt);
-      }
-      let dist = drag.speed * dt;
-      if (best && best.d === drag.dir) dist = Math.min(dist, Math.max(0, best.proj));
-      if (dist > 1e-6 && drag.dir) {
-        const before = clone(state), wasRunning = runningOn(drag.dir);
-        const r = drive(yard, state, loco, drag.dir, dist);
+      drag.still = true;
+      // a small dead zone before turning back, so it settles instead of hunting back and forth
+      if (best && best.d !== drag.lastD && best.proj < 0.04) best = null;
+      if (best && best.proj > 0.003 && dt > 0) {
+        const before = clone(state);
+        // ease toward the pointer (pointer events come in bursts), never faster than VMAX
+        const want = best.proj < 0.02 ? best.proj : best.proj * Math.min(1, dt / FOLLOW);
+        const r = drive(yard, state, loco, best.d, Math.min(want, VMAX * dt), otherLocos(loco));
+        // its speed, averaged over a few frames: what it hands on to cars it shoves
+        drag.v = (drag.v ?? 0) + (r.moved / dt - (drag.v ?? 0)) * Math.min(1, dt / 0.08);
         if (r.moved > 1e-6) {
-          if (!drag.pushed) { history.push({ state: before, moves, lastDir }); drag.pushed = true; }
-          if (!wasRunning) moves++;
-          if (timeSince == null && !solved) timeSince = performance.now();
-          lastDir = { loco, track: state.at[loco].track, dir: r.dir };
-          drag.dir = r.dir;
-          updateCount();
+          drag.still = false;
+          drag.lastD = r.dir;
+          if (!drag.pushed) { history.push({ state: before, moves }); drag.pushed = true; updateCount(); }
+          // whatever it pushed without being coupled to it is now moving at its speed
+          const attached = consistOf(loco), pushed = r.members.filter((m) => !attached.has(m.c));
+          if (pushed.length) {
+            const rear = pushed[pushed.length - 1], speed = Math.min(drag.v, r.moved / dt);
+            for (const m of pushed) rolling.delete(m.c);
+            rolling.set(rear.c, { speed, dir: rear.dir, mass: pushed.length });
+          }
         }
-        if (r.stop) { drag.speed = 0; blockedBy(r.stop); }
+        if (r.stop) blockedBy(r.stop);
       }
-      // let go and arrived: done
-      if (!drag.held && drag.speed === 0 && want === 0) drag = null;
+      if (!drag.held && drag.still) drag = null; // let go and arrived
+    }
+
+    // cars rolling on their own, slowing with friction
+    function stepRolling(dt) {
+      if (!rolling.size || dt <= 0) return;
+      const locos = new Set(locoIds());
+      const onLoco = new Set();
+      for (const l of locos) for (const c of consistOf(l)) onLoco.add(c);
+      for (const [c, v] of [...rolling]) {
+        if (!rolling.has(c)) continue;
+        if (onLoco.has(c)) { rolling.delete(c); continue; }
+        const r = coast(yard, state, c, v.dir, v.speed * dt, locos);
+        // anything it runs into shares its momentum
+        const mass = r.members.length;
+        if (mass > v.mass) { v.speed *= v.mass / mass; v.mass = mass; }
+        for (const m of r.members) if (m.c !== c) rolling.delete(m.c);
+        v.dir = r.dir;
+        v.speed -= FRICTION * dt;
+        if (r.stop || v.speed <= 0 || r.moved <= 1e-9) rolling.delete(c);
+      }
     }
 
     function blockedBy(stop) {
-      if (!stop) return;
+      if (!stop || stop.why !== "foul") return;
       const k = yard.switchIndex[stop.node];
-      if (k == null || stop.why === "buffer") return;
-      if (flashSwitch && flashSwitch.k === k && performance.now() - flashSwitch.t < 600) return;
-      flashSwitch = { k, t: performance.now(), why: stop.why === "foul" ? "car in the way" : "set the other way" };
+      if (k == null || (flashSwitch && flashSwitch.k === k && performance.now() - flashSwitch.t < 600)) return;
+      flashSwitch = { k, t: performance.now() };
     }
 
     // ---------- hit testing ----------
@@ -582,21 +627,17 @@
         if (switchLocked(yard, state, h.k)) { flashSwitch = { k: h.k, t: performance.now(), why: "car on the points" }; return; }
         pushHistory();
         throwSwitch(yard, state, h.k);
-        lastDir = null;
+        moves++;
         updateCount();
       } else if (h.kind === "joint") {
         pushHistory();
         toggleCoupling(state, h.j.a, h.j.b);
-        lastDir = null;
+        moves++;
         updateCount();
       } else if (h.kind === "loco") {
         try { canvas.setPointerCapture(e.pointerId); } catch {}
         const c = centerOf(h.c);
-        const keep = drag && drag.loco === h.c ? drag : null; // grabbing it while it's still rolling
-        drag = {
-          loco: h.c, off: { x: wx(px) - c.x, y: wy(py) - c.y }, target: { x: c.x, y: c.y },
-          held: true, pushed: false, speed: keep ? keep.speed : 0, dir: keep ? keep.dir : 0,
-        };
+        drag = { loco: h.c, off: { x: wx(px) - c.x, y: wy(py) - c.y }, target: { x: c.x, y: c.y }, held: true, pushed: false, still: true };
         canvas.style.cursor = "grabbing";
       }
     });
@@ -607,15 +648,14 @@
     $("undo").onclick = undo;
     $("reset").onclick = () => {
       if (!history.length || (drag && drag.held)) return;
-      drag = null;
+      drag = null; rolling = new Map();
       pushHistory();
       state = freshState();
-      lastDir = null;
-      if (solved) { solved = false; timeSince = performance.now(); }
+      moves = 0;
+      solved = false;
       $("win").hidden = true;
       updateCount();
     };
-    $("help").onclick = () => document.querySelector("about-modal button")?.click();
     $("skip").onclick = () => startLevel(levelIndex + 1);
     $("back").onclick = showMenu;
     $("winMenu").onclick = showMenu;
@@ -655,12 +695,13 @@
     }
 
     // the first stretch of a track leaving a node: unit direction
+    // which way a track heads away from a node, judged a little way along
+    // (a curved leg leaves the points nearly straight)
     function legDir(trackId, nodeId) {
-      const t = yard.tracks[trackId];
-      const from = t.from === nodeId;
-      const a = from ? t.pts[0] : t.pts[t.pts.length - 1], b = from ? t.pts[1] : t.pts[t.pts.length - 2];
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      return { x: (b[0] - a[0]) / len, y: (b[1] - a[1]) / len };
+      const t = yard.tracks[trackId], n = yard.nodes[nodeId];
+      const p = pointOnTrack(t, t.from === nodeId ? Math.min(0.8, t.len) : Math.max(0, t.len - 0.8));
+      const len = Math.hypot(p.x - n.x, p.y - n.y);
+      return { x: (p.x - n.x) / len, y: (p.y - n.y) / len };
     }
 
     function roundRect(x, y, w, h, r) {
@@ -757,37 +798,46 @@
     function frame(now) {
       const dt = lastNow == null ? 0 : Math.min(0.05, (now - lastNow) / 1000);
       lastNow = now;
-      if (drag && !solved && playing) stepDrive(dt);
-      if (playing) {
-        $("timer").textContent = fmtTime(elapsed());
-        $("statTime").classList.toggle("is-armed", timeSince == null && !solved);
+      if (playing && !solved) {
+        stepRolling(dt);
+        if (drag) stepDrive(dt);
       }
-      // done as soon as the goal is met and the train has stopped, held or not
-      if (playing && !solved && (!drag || drag.speed === 0) && goalMet(yard, cars, goals, state)) win();
+      // done as soon as the goal is met and everything has stopped, held or not
+      if (playing && !solved && !rolling.size && (!drag || drag.still) && goalMet(yard, cars, goals, state)) win();
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
       if (!playing) { requestAnimationFrame(frame); return; } // the start screen covers it
       if (rot) { ctx.translate(W, 0); ctx.rotate(rot); }
       const tw = Math.max(4, L * 0.13);
-      const lit = litTracks();
+      const labels = []; // drawn last
       ctx.lineCap = "round"; ctx.lineJoin = "round";
+      // switches swing over and the lit route follows, rather than cutting
+      const ease = (cur, to, rate) => cur + Math.sign(to - cur) * Math.min(Math.abs(to - cur), rate * dt);
+      state.sw.forEach((v, k) => { swing[k] = ease(swing[k] ?? v, v, 1 / 0.18); });
+      const lit = litTracks();
+      for (const id of Object.keys(yard.tracks)) litAmt.set(id, ease(litAmt.get(id) ?? (lit.has(id) ? 1 : 0), lit.has(id) ? 1 : 0, 1 / 0.25));
 
-      // track: dim everywhere, lamp-lit along the route the locos can reach
-      for (const t of Object.values(yard.tracks)) {
-        trackPath(t); ctx.lineWidth = tw; ctx.strokeStyle = C.dim; ctx.stroke();
+      // track: dim everywhere, lamp-lit along the route the locomotives can reach.
+      // At a switch, the first stretch of the leg it isn't set to is missing.
+      const unset = (t, nodeId) => {
+        const k = yard.switchIndex[nodeId];
+        if (k == null) return 0;
+        const leg = yard.switches[k].legs.indexOf(t.id);
+        return leg < 0 ? 0 : leg === 0 ? swing[k] : 1 - swing[k];
+      };
+      function strokeTrack(t, width, color, alpha) {
+        if (alpha <= 0.002) return;
+        const cutA = unset(t, t.from), cutB = unset(t, t.to);
+        const a0 = cutA ? BLANK : 0, a1 = cutB ? t.len - BLANK : t.len;
+        ctx.lineWidth = width; ctx.strokeStyle = color;
+        ctx.globalAlpha = alpha; trackPath(t, a0, a1); ctx.stroke();
+        if (a0 > 0) { ctx.globalAlpha = alpha * (1 - cutA); trackPath(t, 0, a0); ctx.stroke(); }
+        if (a1 < t.len) { ctx.globalAlpha = alpha * (1 - cutB); trackPath(t, a1, t.len); ctx.stroke(); }
+        ctx.globalAlpha = 1;
       }
-      for (const t of Object.values(yard.tracks)) {
-        if (!lit.has(t.id)) continue;
-        trackPath(t); ctx.lineWidth = tw * 0.55; ctx.strokeStyle = C.lit; ctx.stroke();
-      }
-      // switches: blank out the leg that isn't set, right at the points
-      yard.switches.forEach((S, k) => {
-        const t = yard.tracks[S.legs[1 - state.sw[k]]];
-        const atFrom = t.from === S.id;
-        trackPath(t, atFrom ? 0 : t.len - 0.42, atFrom ? 0.42 : t.len);
-        ctx.lineWidth = tw + 2; ctx.strokeStyle = C.bg; ctx.stroke();
-      });
+      for (const t of Object.values(yard.tracks)) strokeTrack(t, tw, C.dim, 1);
+      for (const t of Object.values(yard.tracks)) strokeTrack(t, tw * 0.55, C.lit, litAmt.get(t.id));
       // buffer stops
       for (const n of Object.values(yard.nodes)) {
         if (n.kind !== "buffer") continue;
@@ -847,8 +897,10 @@
         ctx.lineWidth = hot ? 3 : 2;
         ctx.strokeStyle = flash ? C.danger : locked ? C.faint : hot ? C.amberHi : C.amber;
         ctx.stroke();
-        // a pointer along the set leg; on hover, a ghost along the other
-        const set = legDir(S.legs[state.sw[k]], S.id);
+        // a pointer along the set leg, swinging when thrown; on hover, a ghost along the other
+        const d0 = legDir(S.legs[0], S.id), d1 = legDir(S.legs[1], S.id);
+        const a0 = Math.atan2(d0.y, d0.x), a1 = a0 + Math.atan2(Math.sin(Math.atan2(d1.y, d1.x) - a0), Math.cos(Math.atan2(d1.y, d1.x) - a0));
+        const sa = a0 + (a1 - a0) * swing[k], set = { x: Math.cos(sa), y: Math.sin(sa) };
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + set.x * r * 0.8, y + set.y * r * 0.8);
         ctx.lineWidth = Math.max(2.5, L * 0.06); ctx.strokeStyle = locked ? C.faint : C.amber; ctx.stroke();
         if (hot && !locked) {
@@ -858,12 +910,7 @@
           ctx.lineWidth = 2; ctx.strokeStyle = C.amberHi; ctx.stroke();
           ctx.setLineDash([]);
         }
-        if ((hot && locked) || flash) {
-          ctx.font = `500 ${Math.max(11, Math.round(L * 0.2))}px Barlow, sans-serif`;
-          ctx.textAlign = "center"; ctx.textBaseline = "top";
-          ctx.fillStyle = C.danger;
-          uprightText(flash ? flashSwitch.why : "car on the points", x, y, 0, r + 4);
-        }
+        if ((hot && locked) || (flash && flashSwitch.why)) labels.push({ text: "car on the points", x, y, dy: r + 14 });
       });
 
       // cars
@@ -907,7 +954,7 @@
       });
 
       // couplers between every pair of touching cars
-      if (!drag || drag.speed === 0) {
+      {
         for (const j of joints(yard, state)) {
           const m = jointPoint(j);
           const x = sx(m.x), y = sy(m.y);
@@ -929,14 +976,17 @@
             roundRect(g, -hh / 2, hl - g, hh, hh / 2); ctx.fill(); ctx.stroke();
           }
           ctx.restore();
-          if (hot) {
-            ctx.font = `500 ${Math.max(11, Math.round(L * 0.2))}px Barlow, sans-serif`;
-            ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-            ctx.fillStyle = C.amberHi;
-            uprightText(on ? "uncouple" : "couple", x, y, 0, -L * 0.32);
-          }
+          if (hot) labels.push({ text: on ? "uncouple" : "couple", x, y, dy: -L * 0.42 });
         }
       }
+
+      // hover labels go over everything: white with a soft drop shadow, legible on any car
+      ctx.font = `700 ${Math.max(12, Math.round(L * 0.21))}px Barlow, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#fff";
+      ctx.shadowColor = "rgba(0,0,0,.85)"; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+      for (const lb of labels) uprightText(lb.text, lb.x, lb.y, 0, lb.dy);
+      ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
       updateNudge();
       requestAnimationFrame(frame);
@@ -951,8 +1001,8 @@
       const sw0 = yard.switches[0], node = yard.nodes[sw0.id];
       const loco = cars.findIndex((c) => c.loco), lp = poseOf(loco);
       if (levelIndex === 0) {
-        if (state.sw[0] === 0) return at(node.x, node.y, "Click the switch to send the loco down the lower track");
-        if (moves === 0) return at(lp.x, lp.y, "Drag the loco to push A onto its marker");
+        if (state.sw[0] === 0) return at(node.x, node.y, "Click the switch to send the locomotive down the lower track");
+        if (moves === 0) return at(lp.x, lp.y, "Drag the locomotive to push A onto its marker");
       }
       if (levelIndex === 1) {
         const touching = joints(yard, state).find((j) => (j.a === loco || j.b === loco));
@@ -971,39 +1021,37 @@
       const n = nudgeFor(), el = $("nudge");
       if (!n) { el.classList.add("is-gone"); return; }
       if (n.text !== nudgeText) { el.textContent = n.text; nudgeText = n.text; }
-      el.style.left = n.p[0] + "px"; el.style.top = n.p[1] + "px";
+      // keep it on screen, with its arrow still pointing at the spot
+      const half = el.offsetWidth / 2, x = Math.max(half + 12, Math.min(W - half - 12, n.p[0]));
+      el.style.left = x + "px"; el.style.top = n.p[1] + "px";
+      el.style.setProperty("--ax", Math.max(-half + 16, Math.min(half - 16, n.p[0] - x)) + "px");
       el.classList.remove("is-gone");
     }
 
     function win() {
       solved = true; hover = null; drag = null;
       canvas.style.cursor = "default";
-      if (timeSince != null) { timeAcc = elapsed(); timeSince = null; }
-      const stars = starsFor(moves, par), prev = bests[level.name];
-      if (!prev || moves < prev.moves || (moves === prev.moves && timeAcc < prev.ms)) {
-        bests[level.name] = { moves, stars: Math.max(stars, prev?.stars ?? 0), ms: timeAcc };
-        saveBests();
-      }
-      updateCount();
+      const cuts = starCuts(level), stars = starsFor(level, moves);
+      earned[level.name] = Math.max(stars, earned[level.name] ?? 0);
+      updateGates();
       $("stars").innerHTML = [1, 2, 3].map((k) => starSvg(k <= stars)).join("");
-      $("verdict").textContent = par == null ? "Done."
-        : moves < par ? "Under par. You beat the solver!"
-        : moves === par ? "Right on par."
-        : stars === 2 ? `Close. Par is ${par}.` : `Done. Can you do it in ${par}?`;
+      $("verdict").textContent = ["Done. Fewer moves earns stars.", "Done. Can you do it in fewer?", "Nicely done.", "Perfect. It can't be done in fewer."][stars];
       $("winMoves").textContent = moves;
-      $("winPar").textContent = par ?? "–";
-      $("winTime").textContent = fmtTime(timeAcc);
+      // what each star takes
+      $("cuts").innerHTML = cuts ? [3, 2, 1].map((k) =>
+        `<span class="st-cut-stars">${[1, 2, 3].slice(0, k).map(() => starSvg(true)).join("")}</span>` +
+        `<span class="st-cut-moves${stars === k ? " is-yours" : ""}">${cuts[3 - k]} move${cuts[3 - k] === 1 ? "" : "s"} or fewer</span>`).join("") : "";
       const last = levelIndex === LEVELS.length - 1;
       $("winNext").textContent = last ? "Back to puzzle 1" : "Next puzzle";
+      if (last) $("winNext").hidden = true; // the list is the way on from the last puzzle
       setTimeout(() => { if (solved) $("win").hidden = false; }, 350);
     }
 
-    startLevel(0); // the first yard sits behind the start screen
-    showMenu();
+    startLevel(0); // straight into the first puzzle
     document.fonts.ready.then(() => requestAnimationFrame(frame));
     window.shunting = {
       get state() { return state; }, get yard() { return yard; }, get cars() { return cars; },
-      get moves() { return moves; }, get solved() { return solved; }, startLevel, showMenu,
+      get moves() { return moves; }, get solved() { return solved; }, startLevel, showMenu, earned, updateGates,
       toScreen: (x, y) => toScreenPx(sx(x), sy(y)), poseOf,
     };
   </script>

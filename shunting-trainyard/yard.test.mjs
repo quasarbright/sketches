@@ -68,17 +68,19 @@ test("trailing into a switch set the other way is blocked", () => {
 
 test("switches can't be thrown with cars across the points", () => {
   const { yard, state } = level({ head: ". . L", s1: "A" });
+  assert.ok(!switchLocked(yard, state, 0)); // touching across, but not coupled
+  toggleCoupling(state, 0, 1);
   assert.ok(switchLocked(yard, state, 0));
   assert.equal(throwSwitch(yard, state, 0), false);
   const free = level({ head: ". . L", s2: "A" });
   assert.ok(throwSwitch(free.yard, free.state, 0)); // A is on the other leg
 });
 
-test("every level's par is the solver's answer", () => {
+test("every level's fewest moves is the solver's answer", () => {
   for (const lv of LEVELS) {
-    if (lv.par == null || (lv.slowPar && !process.env.SLOW)) continue;
+    if (lv.fewest == null || (lv.fewest > 12 && !process.env.SLOW)) continue;
     const { yard, cars, goals, state } = loadLevel(lv);
     assert.ok(!goalMet(yard, cars, goals, state.pos), `${lv.name} starts solved`);
-    assert.equal(solve(yard, cars, state, goals).moves, lv.par, lv.name);
+    assert.equal(solve(yard, cars, state, goals).moves, lv.fewest, lv.name);
   }
 });

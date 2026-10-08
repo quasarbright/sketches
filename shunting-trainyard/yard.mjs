@@ -31,7 +31,7 @@ export function buildYard(def) {
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
     const len = cum[cum.length - 1];
     const bufFrom = kind(t.from) === "buffer", bufTo = kind(t.to) === "buffer";
-    const n = Math.floor(len + 1e-6);
+    const n = !bufFrom && !bufTo ? Math.round(len) : Math.floor(len + 1e-3);
     if (n < 1) throw new Error(`track ${t.id} is shorter than a car`);
     if (!bufFrom && !bufTo && Math.abs(len - n) > 1e-3) throw new Error(`track ${t.id} is ${len.toFixed(3)} long; it runs between switches, so it must be a whole number of cars`);
     // where slot 0's center sits: packed against whichever end isn't a buffer
@@ -145,10 +145,11 @@ export function occupancy(yard, pos) {
 const pairKey = (i, j) => (i < j ? `${i},${j}` : `${j},${i}`);
 export function isCoupled(state, i, j) { return state.coupled.has(pairKey(i, j)); }
 
-// A switch can't be thrown while cars sit on both sides of it along the set route.
+// A switch can't be thrown while two cars are coupled across it.
 export function switchLocked(yard, state, k, occ = occupancy(yard, state.pos)) {
   const S = yard.switches[k];
-  return occ[endSlot(yard, S.trunk, S.id)] >= 0 && occ[endSlot(yard, S.legs[state.sw[k]], S.id)] >= 0;
+  const a = occ[endSlot(yard, S.trunk, S.id)], b = occ[endSlot(yard, S.legs[state.sw[k]], S.id)];
+  return a >= 0 && b >= 0 && isCoupled(state, a, b);
 }
 
 export function throwSwitch(yard, state, k) {
@@ -256,72 +257,87 @@ export function goalMet(yard, cars, goals, pos) {
 }
 
 // ---------- solver ----------
-// Fewest drives to reach the goal. Switch throws and couplings are free, so a
-// search node is just where every car is. Each edge is one drive: pick switches, a loco, a direction,
-// how many touching cars behind it to pull, and how far to go.
-// Cars with `filler: true` are interchangeable.
-export function solve(yard, cars, start, goals, { maxStates = 2e6 } = {}) {
-  const nCars = cars.length;
+// Fewest moves to reach the goal, where a move is a click: throwing a switch,
+// or coupling or uncoupling two cars. Driving is free. So this is a search
+// where driving one car length costs nothing and a click costs one (a "0-1
+// BFS"): a search node is where every car is, how the switches are set, and
+// which touching pairs are coupled. Cars with `filler: true` are
+// interchangeable.
+export function solve(yard, cars, start, goals, { maxStates = 4e6 } = {}) {
   const fillers = cars.map((c, i) => (c.filler ? i : -1)).filter((i) => i >= 0);
   const locos = cars.map((c, i) => (c.loco ? i : -1)).filter((i) => i >= 0);
   const nSw = yard.switches.length;
 
-  const key = (pos, sw, occ) => {
-    const p = pos.slice();
+  const key = (st) => {
+    // relabel the fillers in slot order so swapping two of them is the same node
+    const rename = new Map();
     if (fillers.length > 1) {
-      const fs = fillers.map((i) => p[i]).sort((a, b) => a - b);
-      fillers.forEach((i, k) => { p[i] = fs[k]; });
+      const order = fillers.slice().sort((a, b) => st.pos[a] - st.pos[b]);
+      order.forEach((f, k) => rename.set(f, fillers[k]));
     }
-    return p.join(",");
+    const p = st.pos.slice();
+    for (const [f, g] of rename) p[g] = st.pos[f];
+    const pairs = [...st.coupled].map((k) => {
+      const [i, j] = k.split(",").map(Number);
+      const a = rename.get(i) ?? i, b = rename.get(j) ?? j;
+      return a < b ? `${a},${b}` : `${b},${a}`;
+    }).sort();
+    return p.join(",") + "|" + st.sw.join("") + "|" + pairs.join(";");
   };
+  const copy = (st) => ({ pos: st.pos.slice(), sw: st.sw.slice(), coupled: new Set(st.coupled) });
 
-  const startOcc = occupancy(yard, start.pos);
-  const seen = new Map([[key(start.pos, start.sw, startOcc), null]]);
-  if (goalMet(yard, cars, goals, start.pos)) return { moves: 0, states: 1 };
-  let frontier = [{ pos: start.pos.slice(), sw: start.sw.slice() }];
-  let depth = 0;
-  while (frontier.length) {
-    depth++;
-    const next = [];
-    for (const node of frontier) {
-      const occ = occupancy(yard, node.pos);
-      // all switch settings reachable for free
-      // with every car parked a whole car length from the points, no switch is
-      // ever pinned, so any setting is free
-      const choices = [];
-      for (let s = 0; s < nSw; s++) choices.push([0, 1]);
-      const combos = cartesian(choices);
-      for (const sw of combos) for (const loco of locos) for (const d of [1, -1]) {
-        // touching cars behind, any of which may be coupled on
-        const all = driveChain(yard, { pos: node.pos, sw, coupled: new Set() }, loco, d, occ, true);
-        const locoAt = all.chain.indexOf(loco);
-        const maxPull = all.chain.length - 1 - locoAt;
-        for (let pull = 0; pull <= maxPull; pull++) {
-          const coupled = new Set();
-          for (let k = locoAt; k < locoAt + pull; k++) coupled.add(pairKey(all.chain[k], all.chain[k + 1]));
-          const st = { pos: node.pos.slice(), sw, coupled };
-          let dir = d;
-          for (;;) {
-            dir = drive(yard, st, loco, dir);
-            if (dir === null) break;
-            const o2 = occupancy(yard, st.pos);
-            const k = key(st.pos, sw, o2);
-            if (seen.has(k)) continue;
-            seen.set(k, null);
-            if (goalMet(yard, cars, goals, st.pos)) return { moves: depth, states: seen.size };
-            next.push({ pos: st.pos.slice(), sw: sw.slice() });
-            if (seen.size > maxStates) return { moves: null, states: seen.size, gaveUp: true };
-          }
-        }
-      }
+  const s0 = copy(start);
+  if (goalMet(yard, cars, goals, s0.pos)) return { moves: 0, states: 1 };
+  const dist = new Map([[key(s0), 0]]);
+  // two queues: this cost and the next
+  let cur = [s0], next = [], cost = 0;
+  while (cur.length || next.length) {
+    if (!cur.length) { cur = next; next = []; cost++; }
+    const st = cur.pop();
+    if (dist.get(key(st)) < cost) continue;
+    const visit = (n, c) => {
+      const k = key(n);
+      const d = dist.get(k);
+      if (d != null && d <= c) return false;
+      dist.set(k, c);
+      (c === cost ? cur : next).push(n);
+      return true;
+    };
+    // free: drive any loco one car length either way
+    for (const loco of locos) for (const d of [1, -1]) {
+      const n = copy(st);
+      if (drive(yard, n, loco, d) === null) continue;
+      if (visit(n, cost) && goalMet(yard, cars, goals, n.pos)) return { moves: cost, states: dist.size };
     }
-    frontier = next;
+    // one move: throw a switch
+    const occ = occupancy(yard, st.pos);
+    for (let k = 0; k < nSw; k++) {
+      if (switchLocked(yard, st, k, occ)) continue;
+      const n = copy(st);
+      n.sw[k] = 1 - n.sw[k];
+      visit(n, cost + 1);
+    }
+    // one move: couple or uncouple a touching pair
+    for (const [a, b] of touching(yard, st, occ)) {
+      const n = copy(st);
+      toggleCoupling(n, a, b);
+      visit(n, cost + 1);
+    }
+    if (dist.size > maxStates) return { moves: null, states: dist.size, gaveUp: true };
   }
-  return { moves: null, states: seen.size };
+  return { moves: null, states: dist.size };
 }
 
-function cartesian(lists) {
-  let out = [[]];
-  for (const l of lists) out = out.flatMap((pre) => l.map((v) => [...pre, v]));
+// pairs of cars in neighboring slots along the set route
+function touching(yard, st, occ) {
+  const out = [], seen = new Set();
+  st.pos.forEach((p, a) => {
+    for (const d of [1, -1]) {
+      const nx = step(yard, p, d, st.sw);
+      if (!nx || occ[nx.slot] < 0) continue;
+      const b = occ[nx.slot], k = a < b ? `${a},${b}` : `${b},${a}`;
+      if (!seen.has(k)) { seen.add(k); out.push([a, b]); }
+    }
+  });
   return out;
 }

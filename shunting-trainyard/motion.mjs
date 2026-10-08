@@ -10,7 +10,8 @@
 
 import { nextTrack, walk } from "./yard.mjs";
 
-export const FOUL = 0.7;  // how far from the points the two legs are too close for two cars
+export const FOUL = 0.85; // how far from the points the two legs are too close for two cars
+export const BLANK = 0.42; // the stretch of a leg at the points that's cut off when the switch is set against it
 const EPS = 1e-6, TOUCH = 1e-4;
 
 const pairKey = (i, j) => (i < j ? `${i},${j}` : `${j},${i}`);
@@ -53,13 +54,13 @@ export function scan(yard, state, track, s, dir, maxDist, skip = null) {
 // track), front first, each with the direction it travels on its own track:
 // everything touching ahead of it (pushed) and, if `pull`, everything coupled
 // behind it.
-export function group(yard, state, loco, d, pull = true) {
+export function group(yard, state, loco, d, pull = true, fixed = null) {
   const at = state.at;
   const members = [{ c: loco, dir: d }];
   let cur = { track: at[loco].track, s: at[loco].s, dir: d };
   for (;;) {
     const r = scan(yard, state, cur.track, cur.s, cur.dir, 1 + TOUCH);
-    if (!r || members.some((m) => m.c === r.car)) break;
+    if (!r || members.some((m) => m.c === r.car) || (fixed && fixed.has(r.car))) break;
     members.unshift({ c: r.car, dir: r.dir });
     cur = { track: at[r.car].track, s: at[r.car].s, dir: r.dir };
   }
@@ -100,7 +101,8 @@ function barrier(yard, state, front, skip) {
       if (legFouled(yard, state, other, nodeId, skip)) return { dist: dist + room - 0.5 - FOUL, node: nodeId, why: "foul" };
     }
     const nx = nextTrack(yard, track, nodeId, state.sw);
-    if (!nx) return { dist: Math.max(0, dist + room - 0.5), node: nodeId, why: S ? "against" : "buffer" };
+    // a buffer, or a switch set against it: the nose stops where the drawn track ends
+    if (!nx) return { dist: Math.max(0, dist + room - 0.5 - (S ? BLANK : 0)), node: nodeId, why: S ? "against" : "buffer" };
     dist += room;
     if (dist > 1e3) break;
     track = nx.track; dir = nx.dir; s = dir > 0 ? 0 : yard.tracks[track].len;
@@ -123,22 +125,31 @@ function throughPoints(yard, state, front) {
 
 // Drive `loco` up to `amount` car lengths in direction d. Moves the cars in
 // place. Returns { moved, dir (the loco's travel direction now), stop }.
-export function drive(yard, state, loco, d, amount) {
-  return moveChain(yard, state, loco, d, amount, true);
+// Cars in `fixed` (other locos, which have their brakes on) can't be pushed.
+// Also returns the cars that moved, front first, with their travel directions.
+export function drive(yard, state, loco, d, amount, fixed = null) {
+  return moveChain(yard, state, loco, d, amount, true, fixed);
 }
 
-function moveChain(yard, state, lead, d, amount, pull) {
-  let moved = 0, dir = d, stop = null;
+// A free-rolling car (and whatever's coupled to it) carrying on by itself.
+export function coast(yard, state, car, d, amount, fixed = null) {
+  return moveChain(yard, state, car, d, amount, true, fixed);
+}
+
+function moveChain(yard, state, lead, d, amount, pull, fixed = null) {
+  let moved = 0, dir = d, stop = null, members = [];
   for (let guard = 0; guard < 500 && moved < amount - EPS; guard++) {
-    const members = group(yard, state, lead, dir, pull);
+    members = group(yard, state, lead, dir, pull, fixed);
     const skip = new Set(members.map((m) => m.c));
     const front = members[0];
     const bar = barrier(yard, state, front, skip);
     const fp = state.at[front.c];
     const ahead = scan(yard, state, fp.track, fp.s, front.dir, amount - moved + 1 + TOUCH, skip);
-    const gap = ahead ? Math.max(0, ahead.dist - 1) : Infinity;
+    let gap = ahead ? Math.max(0, ahead.dist - 1) : Infinity;
+    let bar2 = bar;
+    if (ahead && fixed && fixed.has(ahead.car)) { bar2 = { dist: Math.min(bar.dist, gap), why: "car" }; gap = Infinity; }
     const remaining = amount - moved;
-    let len = Math.max(0, Math.min(remaining, bar.dist, gap));
+    let len = Math.max(0, Math.min(remaining, bar2.dist, gap));
 
     // Going through the points from the trunk, the nose meets the end of any
     // car parked close to the points on the other leg, and shoves it up that
@@ -153,7 +164,7 @@ function moveChain(yard, state, lead, d, amount, pull) {
         len = Math.min(len, 0.05); // small steps while shouldering a car aside
         const need = Math.min(tp.a + len, FOUL) - (r.dist - 0.5);
         if (need > EPS) {
-          const pushed = moveChain(yard, state, r.car, r.dir, need, false).moved;
+          const pushed = fixed && fixed.has(r.car) ? 0 : moveChain(yard, state, r.car, r.dir, need, false, fixed).moved;
           if (pushed < need - EPS) { len = Math.max(0, len - (need - pushed)); side = { node: S.id, why: "foul" }; }
         }
       }
@@ -162,15 +173,16 @@ function moveChain(yard, state, lead, d, amount, pull) {
     if (len > 0) for (const m of members) {
       const p = walk(yard, state.at[m.c].track, state.at[m.c].s, m.dir, len, state.sw);
       state.at[m.c] = { track: p.track, s: p.s };
+      m.dir = p.dir;
       if (m.c === lead) dir = p.dir;
     }
     moved += len;
     if (side) { stop = side; break; }
-    if (bar.dist <= len + EPS && bar.dist < remaining - EPS) { stop = bar; break; } // up against something
+    if (bar2.dist <= len + EPS && bar2.dist < remaining - EPS) { stop = bar2; break; } // up against something
     if (gap <= len + EPS && gap < remaining - EPS) continue; // reached a car: it gets pushed from here on
     if (len <= EPS) break;
   }
-  return { moved, dir, stop };
+  return { moved, dir, stop, members };
 }
 
 // A switch can't be thrown while a car sits across the points, or while two
@@ -221,7 +233,10 @@ export function goalMet(yard, cars, goals, state) {
     const t = yard.tracks[g.track];
     const here = [];
     state.at.forEach((p, c) => { if (p.track === g.track) here.push(c); });
-    for (const c of here) { const p = state.at[c]; if (p.s < 0.5 - 1e-3 || p.s > t.len - 0.5 + 1e-3) return false; }
+    for (const c of here) {
+      const p = state.at[c];
+      if (!cars[c].loco && (p.s < 0.5 - 1e-3 || p.s > t.len - 0.5 + 1e-3)) return false;
+    }
     const fromEnd = (c) => toNode(yard, state.at[c], g.end);
     here.sort((a, b) => fromEnd(a) - fromEnd(b));
     // g.cars is listed left to right (from → to); nearest the end first
