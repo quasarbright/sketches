@@ -113,10 +113,10 @@
   <script type="module">
     import { LEVELS } from "./levels.mjs";
     import { loadLevel } from "./setup.mjs";
+    import { walk, nextTrack, goalSlots, pointOnTrack } from "./yard.mjs";
     import {
-      step, travel, occupancy, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled,
-      driveChain, drive, goalSlots, carPose, goalMet, cloneState, endSlot, pointOnTrack,
-    } from "./yard.mjs";
+      fromSlots, clone, drive, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet,
+    } from "./motion.mjs";
 
     const C = {
       bg: "#121619", dim: "#323b42", lit: "#e9e4d6", amber: "#f2a93b", amberHi: "#ffc061",
@@ -131,11 +131,12 @@
     const canvas = document.getElementById("yard");
     const ctx = canvas.getContext("2d");
     let W = 0, H = 0, dpr = 1;
-    let L = 40, ox = 0, oy = 0; // car length in px, world origin on screen
+    let L = 40, ox = 0, oy = 0, rot = 0; // car length in px, layout origin, quarter turn on phones
 
     // ---------- game state ----------
     let levelIndex = 0, level, yard, cars, goals, state, par;
     let moves = 0, lastDir = null, history = [], solved = false;
+    let drag = null, hover = null, flashSwitch = null;
     const solvedSet = new Set(loadSolved());
 
     function loadSolved() {
@@ -145,12 +146,15 @@
       try { localStorage.setItem("shunting-trainyard:solved", JSON.stringify([...solvedSet])); } catch {}
     }
 
+    function freshState() { const lv = loadLevel(level); return fromSlots(lv.yard, lv.state); }
+
     function startLevel(i) {
       levelIndex = (i + LEVELS.length) % LEVELS.length;
       level = LEVELS[levelIndex];
-      ({ yard, cars, goals, state } = loadLevel(level));
+      ({ yard, cars, goals } = loadLevel(level));
+      state = freshState();
       par = level.par ?? null;
-      moves = 0; lastDir = null; history = []; solved = false; drag = null; anim = null;
+      moves = 0; lastDir = null; history = []; solved = false; drag = null;
       document.getElementById("levelName").textContent = `${levelIndex + 1} · ${level.name}`;
       document.getElementById("levelBlurb").textContent = level.blurb;
       document.getElementById("win").classList.remove("show");
@@ -158,10 +162,9 @@
       updateCount();
     }
 
-    function pushHistory() { history.push({ state: cloneState(state), moves, lastDir }); }
+    function pushHistory() { history.push({ state: clone(state), moves, lastDir }); }
     function undo() {
       if (drag || !history.length) return;
-      if (anim) settle(performance.now(), true);
       ({ state, moves, lastDir } = history.pop());
       solved = false;
       document.getElementById("win").classList.remove("show");
@@ -187,7 +190,7 @@
       const top = W < 640 ? 120 : 130, bottom = W < 640 ? 100 : 110, side = 16;
       // On a portrait phone the yard runs down the screen instead of across it,
       // when that makes the cars bigger. The drawing happens in an unrotated
-      // "layout" space of size vw × vh, turned a quarter clockwise onto the screen.
+      // "layout" space, turned a quarter clockwise onto the screen.
       const flatL = Math.min((W - 2 * side) / bw, (H - top - bottom) / bh, 72);
       const tallL = Math.min((H - top - bottom) / bw, (W - 2 * side) / bh, 72);
       rot = H > W && tallL > flatL * 1.15 ? Math.PI / 2 : 0;
@@ -197,7 +200,6 @@
       ox = x0 + (x1 - x0 - (b.maxX - b.minX) * L) / 2 - b.minX * L;
       oy = y0 + (y1 - y0 - (b.maxY - b.minY) * L) / 2 - b.minY * L;
     }
-    let rot = 0;
     const sx = (x) => ox + x * L, sy = (y) => oy + y * L;
     const wx = (px) => (px - ox) / L, wy = (py) => (py - oy) / L;
     // pointer position (screen) → layout space
@@ -207,81 +209,75 @@
       ctx.save(); ctx.translate(x, y); ctx.rotate(-rot); ctx.fillText(text, dx, dy); ctx.restore();
     }
 
+    // ---------- where things are ----------
+    const centerOf = (c) => pointOnTrack(yard.tracks[state.at[c].track], state.at[c].s);
+    // a car body rides two bogies 0.4 either side of its center; the body is the line between them
+    function poseOf(c) {
+      const { track, s } = state.at[c];
+      const p = walk(yard, track, s, 1, 0.4, state.sw), q = walk(yard, track, s, -1, 0.4, state.sw);
+      return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, ang: Math.atan2(p.y - q.y, p.x - q.x) };
+    }
+    // unit direction the loco would roll in direction d (relative to its track), or null at a dead end
+    function heading(c, d) {
+      const { track, s } = state.at[c], here = pointOnTrack(yard.tracks[track], s);
+      const p = walk(yard, track, s, d, 0.15, state.sw);
+      const vx = p.x - here.x, vy = p.y - here.y, len = Math.hypot(vx, vy);
+      return len < 1e-4 ? null : { x: vx / len, y: vy / len };
+    }
+    function canDrive(c, d) { return drive(yard, clone(state), c, d, 0.02).moved > 1e-4; }
+    const jointPoint = (j) => walk(yard, state.at[j.a].track, state.at[j.a].s, j.dir, 0.5, state.sw);
+
     // ---------- driving ----------
-    // drag = { loco, d, frac, chain, dest, blocked, steps }
-    let drag = null, anim = null;
-
-    // How the chain moves if `loco` drives in direction d: each car's from/to slot.
-    function plan(loco, d) {
-      const occ = occupancy(yard, state.pos);
-      const r = driveChain(yard, state, loco, d, occ);
-      if (r.blocked) return r;
-      const to = new Map();
-      r.chain.forEach((c, k) => to.set(c, k === 0 ? r.dest : state.pos[r.chain[k - 1]]));
-      return { chain: r.chain, to };
-    }
-
-    // Where the loco would go in direction d (its neighboring slot), ignoring what's there.
-    function locoTarget(loco, d) {
-      const nx = step(yard, state.pos[loco], d, state.sw);
-      return nx ? nx.slot : null;
-    }
-
+    // The loco follows the pointer along the track, and nothing else moves
+    // unless the loco moves it.
     function dragTo(px, py) {
       const loco = drag.loco;
-      const p = { x: wx(px), y: wy(py) };
-      for (let guard = 0; guard < 60; guard++) {
-        const here = yard.slots[state.pos[loco]];
+      const target = { x: wx(px) - drag.off.x, y: wy(py) - drag.off.y };
+      for (let guard = 0; guard < 80; guard++) {
+        const here = centerOf(loco);
         let best = null;
         for (const d of [1, -1]) {
-          const t = locoTarget(loco, d);
-          if (t == null) continue;
-          const T = yard.slots[t];
-          const vx = T.x - here.x, vy = T.y - here.y, vv = vx * vx + vy * vy;
-          const proj = ((p.x - here.x) * vx + (p.y - here.y) * vy) / vv;
+          const h = heading(loco, d);
+          if (!h) continue;
+          const proj = (target.x - here.x) * h.x + (target.y - here.y) * h.y;
           if (!best || proj > best.proj) best = { d, proj };
         }
-        if (!best || best.proj <= 0) { drag.frac = 0; drag.plan = null; return; }
-        const pl = plan(loco, best.d);
-        drag.d = best.d;
-        if (pl.blocked) {
-          drag.plan = pl; drag.frac = 0;
-          const k = yard.switchIndex[pl.stopNode];
-          if (k != null && best.proj > 0.3 && !(flashSwitch && flashSwitch.k === k && performance.now() - flashSwitch.t < 600)) {
-            flashSwitch = { k, t: performance.now(), why: pl.fouled ? "car in the way" : "set the other way" };
-          }
-          return;
-        }
-        drag.plan = pl;
-        if (best.proj < 1) { drag.frac = best.proj; return; }
-        commitStep(loco, best.d);
+        if (!best) return;
+        const cur = state.at[loco];
+        const sameRun = lastDir && lastDir.loco === loco && lastDir.track === cur.track && lastDir.dir === best.d;
+        // a little dead zone before reversing, so a shaky hand doesn't count extra moves
+        if (best.proj < (sameRun ? 0.002 : 0.04)) return;
+        const before = clone(state);
+        const r = drive(yard, state, loco, best.d, Math.min(best.proj, 0.2));
+        if (r.moved <= 1e-6) { blockedBy(r.stop); return; }
+        if (!drag.pushed) { history.push({ state: before, moves, lastDir }); drag.pushed = true; }
+        if (!sameRun) moves++;
+        lastDir = { loco, track: state.at[loco].track, dir: r.dir };
+        updateCount();
+        if (r.stop) { blockedBy(r.stop); return; }
       }
     }
 
-    function commitStep(loco, d) {
-      if (!drag.pushed) { pushHistory(); drag.pushed = true; }
-      // a new move starts whenever the loco starts off or changes direction
-      const before = step(yard, state.pos[loco], d, state.sw);
-      const sameRun = lastDir && lastDir.loco === loco && lastDir.slot === state.pos[loco] && lastDir.d === d;
-      if (!sameRun) moves++;
-      drive(yard, state, loco, d);
-      lastDir = { loco, slot: state.pos[loco], d: before.dir };
-      drag.frac = 0; drag.plan = null;
-      updateCount();
+    function blockedBy(stop) {
+      if (!stop) return;
+      const k = yard.switchIndex[stop.node];
+      if (k == null || stop.why === "buffer") return;
+      if (flashSwitch && flashSwitch.k === k && performance.now() - flashSwitch.t < 600) return;
+      flashSwitch = { k, t: performance.now(), why: stop.why === "foul" ? "car in the way" : "set the other way" };
     }
 
     // ---------- hit testing ----------
     function switchAt(px, py) {
       for (let k = 0; k < yard.switches.length; k++) {
         const n = yard.nodes[yard.switches[k].id];
-        if (Math.hypot(sx(n.x) - px, sy(n.y) - py) < Math.max(16, L * 0.34)) return k;
+        if (Math.hypot(sx(n.x) - px, sy(n.y) - py) < Math.max(14, L * 0.3)) return k;
       }
       return -1;
     }
     function jointAt(px, py) {
       let best = null, bd = Math.max(14, L * 0.22);
       for (const j of joints(yard, state)) {
-        const m = travel(yard, j.slotA, j.slotB, 0.5, state.sw);
+        const m = jointPoint(j);
         const d = Math.hypot(sx(m.x) - px, sy(m.y) - py);
         if (d < bd) { bd = d; best = j; }
       }
@@ -290,7 +286,7 @@
     function locoAt(px, py) {
       for (let c = 0; c < cars.length; c++) {
         if (!cars[c].loco) continue;
-        const s = yard.slots[state.pos[c]];
+        const s = poseOf(c);
         const dx = wx(px) - s.x, dy = wy(py) - s.y;
         const u = dx * Math.cos(s.ang) + dy * Math.sin(s.ang), v = -dx * Math.sin(s.ang) + dy * Math.cos(s.ang);
         if (Math.abs(u) < 0.5 && Math.abs(v) < 0.35) return c;
@@ -298,16 +294,16 @@
       return -1;
     }
     function hitTest(px, py) {
-      const k = switchAt(px, py);
-      if (k >= 0) return { kind: "switch", k };
+      // a car sitting on the points covers the switch (which is locked anyway)
       const j = jointAt(px, py);
       if (j) return { kind: "joint", j };
       const c = locoAt(px, py);
       if (c >= 0) return { kind: "loco", c };
+      const k = switchAt(px, py);
+      if (k >= 0) return { kind: "switch", k };
       return null;
     }
 
-    let hover = null;
     canvas.addEventListener("pointermove", (e) => {
       const [px, py] = toLayout(e.clientX, e.clientY);
       if (drag) { dragTo(px, py); return; }
@@ -320,12 +316,12 @@
     canvas.addEventListener("pointerleave", () => { if (!drag) hover = null; });
     canvas.addEventListener("pointerdown", (e) => {
       if (solved) return;
-      if (anim) settle(performance.now(), true);
-      const h = hitTest(...toLayout(e.clientX, e.clientY));
+      const [px, py] = toLayout(e.clientX, e.clientY);
+      const h = hitTest(px, py);
       hover = h;
       if (!h) return;
       if (h.kind === "switch") {
-        if (switchLocked(yard, state, h.k)) { flashSwitch = { k: h.k, t: performance.now(), why: "cars on the points" }; return; }
+        if (switchLocked(yard, state, h.k)) { flashSwitch = { k: h.k, t: performance.now(), why: "car on the points" }; return; }
         pushHistory();
         throwSwitch(yard, state, h.k);
         lastDir = null;
@@ -336,31 +332,21 @@
         lastDir = null;
         updateCount();
       } else if (h.kind === "loco") {
-        canvas.setPointerCapture(e.pointerId);
-        drag = { loco: h.c, frac: 0, plan: null, pushed: false };
+        try { canvas.setPointerCapture(e.pointerId); } catch {}
+        const c = centerOf(h.c);
+        drag = { loco: h.c, off: { x: wx(px) - c.x, y: wy(py) - c.y }, pushed: false };
         canvas.style.cursor = "grabbing";
       }
     });
-    const endDrag = () => {
-      if (!drag) return;
-      const d = drag;
-      drag = null;
-      canvas.style.cursor = "grab";
-      if (d.plan && !d.plan.blocked && d.frac > 0) {
-        anim = { loco: d.loco, d: d.d, plan: d.plan, from: d.frac, to: d.frac >= 0.5 ? 1 : 0, t0: performance.now(), drag: d };
-      } else if (d.plan && d.frac > 0) {
-        anim = { loco: d.loco, d: d.d, plan: d.plan, from: d.frac, to: 0, t0: performance.now(), drag: d };
-      }
-    };
+    const endDrag = () => { if (drag) { drag = null; canvas.style.cursor = "grab"; } };
     canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);
-    let flashSwitch = null;
 
     document.getElementById("undo").onclick = undo;
     document.getElementById("reset").onclick = () => {
       if (!history.length) return;
       pushHistory();
-      ({ state } = loadLevel(level));
+      state = freshState();
       lastDir = null; solved = false;
       document.getElementById("win").classList.remove("show");
       updateCount();
@@ -370,7 +356,7 @@
     document.getElementById("winNext").onclick = () => startLevel(levelIndex + 1);
     window.addEventListener("keydown", (e) => {
       if (e.target.closest("input, textarea")) return;
-      if ((e.key === "z" && !e.metaKey && !e.ctrlKey) || ((e.metaKey || e.ctrlKey) && e.key === "z")) { e.preventDefault(); undo(); }
+      if (e.key === "z") { e.preventDefault(); undo(); }
       else if (e.key === "r" && !e.metaKey && !e.ctrlKey) document.getElementById("reset").click();
     });
     window.addEventListener("resize", layout);
@@ -378,16 +364,14 @@
     // ---------- drawing ----------
     // tracks reachable from a loco with the switches as they are
     function litTracks() {
-      const lit = new Set(), seen = new Set();
-      const stack = [];
-      cars.forEach((c, i) => { if (c.loco) for (const d of [1, -1]) stack.push({ slot: state.pos[i], dir: d }); });
+      const lit = new Set(), stack = [];
+      cars.forEach((c, i) => { if (c.loco) stack.push(state.at[i].track); });
       while (stack.length) {
-        const cur = stack.pop(), k = cur.slot * 2 + (cur.dir > 0 ? 1 : 0);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        lit.add(yard.slots[cur.slot].track);
-        const nx = step(yard, cur.slot, cur.dir, state.sw);
-        if (nx) stack.push(nx);
+        const id = stack.pop();
+        if (lit.has(id)) continue;
+        lit.add(id);
+        const t = yard.tracks[id];
+        for (const n of [t.from, t.to]) { const nx = nextTrack(yard, id, n, state.sw); if (nx) stack.push(nx.track); }
       }
       return lit;
     }
@@ -416,24 +400,11 @@
       ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
     }
 
-    // where each car is drawn right now
-    function carPoses() {
-      const moving = drag && drag.plan && !drag.plan.blocked && drag.frac > 0 ? drag
-        : anim && !anim.plan.blocked ? anim : null;
-      const f = moving === anim ? anim?.f : drag?.frac;
-      return state.pos.map((s, c) => {
-        const to = moving && moving.plan.to.get(c);
-        return to != null ? carPose(yard, state.sw, s, to, f) : carPose(yard, state.sw, s);
-      });
-      return poses;
-    }
-
     function drawCar(c, pose, opts = {}) {
       const car = cars[c];
-      const ang = pose.ang;
       ctx.save();
       ctx.translate(sx(pose.x), sy(pose.y));
-      ctx.rotate(ang);
+      ctx.rotate(pose.ang);
       const w = L * 0.84, h = L * 0.42;
       roundRect(-w / 2, -h / 2, w, h, L * 0.07);
       ctx.fillStyle = carColor(car);
@@ -455,21 +426,17 @@
       }
     }
 
-    // ease a released drag to the nearest slot; `force` finishes it at once
-    function settle(now, force = false) {
-      const dur = 140, t = force ? 1 : Math.min(1, (now - anim.t0) / dur);
-      const e = 1 - (1 - t) * (1 - t);
-      anim.f = anim.from + (anim.to - anim.from) * e;
-      if (t >= 1) {
-        const a = anim; anim = null;
-        if (a.to === 1 && !a.plan.blocked) { drag = a.drag; commitStep(a.loco, a.d); drag = null; }
-      }
+    // cars on a goal track, nearest the goal's end first
+    function orderFromEnd(g) {
+      const t = yard.tracks[g.track];
+      const here = [];
+      state.at.forEach((p, c) => { if (p.track === g.track) here.push(c); });
+      const fromEnd = (c) => (t.from === g.end ? state.at[c].s : t.len - state.at[c].s);
+      return here.sort((a, b) => fromEnd(a) - fromEnd(b));
     }
 
     function frame(now) {
-      // settle a released drag
-      if (anim) settle(now);
-      if (!drag && !anim && !solved && goalMet(yard, cars, goals, state.pos)) win();
+      if (!drag && !solved && goalMet(yard, cars, goals, state)) win();
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
@@ -488,8 +455,7 @@
       }
       // switches: blank out the leg that isn't set, right at the points
       yard.switches.forEach((S, k) => {
-        const off = S.legs[1 - state.sw[k]];
-        const t = yard.tracks[off];
+        const t = yard.tracks[S.legs[1 - state.sw[k]]];
         const atFrom = t.from === S.id;
         trackPath(t, atFrom ? 0 : t.len - 0.42, atFrom ? 0.42 : t.len);
         ctx.lineWidth = tw + 2; ctx.strokeStyle = C.bg; ctx.stroke();
@@ -497,18 +463,19 @@
       // buffer stops
       for (const n of Object.values(yard.nodes)) {
         if (n.kind !== "buffer") continue;
-        const tid = n.tracks[0], d = legDir(tid, n.id);
+        const d = legDir(n.tracks[0], n.id);
         const x = sx(n.x), y = sy(n.y), r = L * 0.24;
         ctx.beginPath(); ctx.moveTo(x - d.y * r, y + d.x * r); ctx.lineTo(x + d.y * r, y - d.x * r);
         ctx.lineWidth = Math.max(3, L * 0.08); ctx.strokeStyle = C.muted; ctx.lineCap = "butt"; ctx.stroke(); ctx.lineCap = "round";
       }
 
-      // goal: a marker beside each slot saying which car belongs there
-      const occ = occupancy(yard, state.pos);
+      // goal: a marker beside the track for each car, in order from the goal's end
       for (const g of goals) {
+        const order = orderFromEnd(g), t = yard.tracks[g.track], n = g.cars.length;
         goalSlots(yard, g).forEach((s, k) => {
           const sl = yard.slots[s], car = cars[g.cars[k]];
-          const ok = occ[s] === g.cars[k];
+          const idx = t.from === g.end ? k : n - 1 - k;
+          const ok = order[idx] === g.cars[k];
           ctx.save();
           ctx.translate(sx(sl.x), sy(sl.y)); ctx.rotate(sl.ang);
           const w = L * 0.84, off = L * 0.42;
@@ -518,95 +485,20 @@
           ctx.fill();
           ctx.restore();
           // the letter sits just past the bar, upright
-          const nx = -Math.sin(sl.ang), ny = Math.cos(sl.ang), dd = off + L * 0.27;
+          const nx = -Math.sin(sl.ang), ny = Math.cos(sl.ang), dd = (off + L * 0.27) / L;
           ctx.globalAlpha = ok ? 1 : 0.55;
           ctx.fillStyle = carColor(car);
           ctx.font = `600 ${Math.round(L * 0.24)}px "IBM Plex Mono", monospace`;
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          uprightText(car.name, sx(sl.x + nx * dd / L), sy(sl.y + ny * dd / L));
+          uprightText(car.name, sx(sl.x + nx * dd), sy(sl.y + ny * dd));
           ctx.globalAlpha = 1;
         });
-      }
-
-      // cars
-      const poses = carPoses();
-      const hoverLoco = drag ? drag.loco : hover && hover.kind === "loco" ? hover.c : -1;
-      const consist = new Set();
-      if (hoverLoco >= 0) {
-        // the cars that come along with this loco: everything coupled to it
-        const stack = [hoverLoco];
-        while (stack.length) {
-          const c = stack.pop();
-          if (consist.has(c)) continue;
-          consist.add(c);
-          for (let o = 0; o < cars.length; o++) if (!consist.has(o) && isCoupled(state, c, o)) stack.push(o);
-        }
-      }
-      cars.forEach((_, c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1 }));
-
-      // loco chevrons: you can drive this
-      cars.forEach((car, c) => {
-        if (!car.loco || solved) return;
-        const pose = poses[c];
-        const active = hoverLoco === c;
-        for (const d of [1, -1]) {
-          const t = locoTarget(c, d);
-          if (t == null) continue;
-          const blocked = plan(c, d).blocked;
-          if (blocked) continue;
-          const T = yard.slots[t], here = yard.slots[state.pos[c]];
-          const ux = T.x - here.x, uy = T.y - here.y, ul = Math.hypot(ux, uy);
-          const dx = ux / ul, dy = uy / ul;
-          const tipX = sx(pose.x + dx * 0.62), tipY = sy(pose.y + dy * 0.62);
-          const s = L * 0.11;
-          ctx.beginPath();
-          ctx.moveTo(tipX, tipY);
-          ctx.lineTo(tipX - dx * s * 1.3 - dy * s, tipY - dy * s * 1.3 + dx * s);
-          ctx.lineTo(tipX - dx * s * 1.3 + dy * s, tipY - dy * s * 1.3 - dx * s);
-          ctx.closePath();
-          ctx.fillStyle = C.amber;
-          ctx.globalAlpha = active ? 1 : 0.55 + 0.25 * Math.sin(now / 400);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-      });
-
-      // couplers between every pair of touching cars
-      if (!drag && !anim) {
-        for (const j of joints(yard, state, occ)) {
-          const m = travel(yard, j.slotA, j.slotB, 0.5, state.sw);
-          const x = sx(m.x), y = sy(m.y);
-          const on = isCoupled(state, j.a, j.b);
-          const hot = hover && hover.kind === "joint" && hover.j.a === j.a && hover.j.b === j.b;
-          // a coupler is a link across the gap; uncoupled, it's two hooks apart
-          const k = hot ? 1.35 : 1;
-          ctx.save();
-          ctx.translate(x, y); ctx.rotate(m.ang);
-          const hl = Math.max(7, L * 0.14) * k, hh = Math.max(4, L * 0.07) * k;
-          ctx.fillStyle = hot ? C.amberHi : on ? C.lit : C.bg;
-          ctx.strokeStyle = hot ? C.amberHi : on ? C.lit : C.lit;
-          ctx.lineWidth = 1.5;
-          if (on) {
-            roundRect(-hl, -hh / 2, hl * 2, hh, hh / 2); ctx.fill();
-          } else {
-            const g = hl * 0.35;
-            roundRect(-hl, -hh / 2, hl - g, hh, hh / 2); ctx.fill(); ctx.stroke();
-            roundRect(g, -hh / 2, hl - g, hh, hh / 2); ctx.fill(); ctx.stroke();
-          }
-          ctx.restore();
-          if (hot) {
-            ctx.font = `500 ${Math.max(11, Math.round(L * 0.2))}px Barlow, sans-serif`;
-            ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-            ctx.fillStyle = C.amberHi;
-            uprightText(on ? "uncouple" : "couple", x, y, 0, -L * 0.32);
-          }
-        }
       }
 
       // switch levers
       yard.switches.forEach((S, k) => {
         const n = yard.nodes[S.id], x = sx(n.x), y = sy(n.y);
-        const locked = switchLocked(yard, state, k, occ);
+        const locked = switchLocked(yard, state, k);
         const hot = hover && hover.kind === "switch" && hover.k === k && !drag;
         const flash = flashSwitch && flashSwitch.k === k && now - flashSwitch.t < 900;
         const r = Math.max(9, L * 0.24);
@@ -631,9 +523,78 @@
           ctx.font = `500 ${Math.max(11, Math.round(L * 0.2))}px Barlow, sans-serif`;
           ctx.textAlign = "center"; ctx.textBaseline = "top";
           ctx.fillStyle = C.danger;
-          uprightText(flash ? flashSwitch.why : "cars on the points", x, y, 0, r + 4);
+          uprightText(flash ? flashSwitch.why : "car on the points", x, y, 0, r + 4);
         }
       });
+
+      // cars
+      const poses = cars.map((_, c) => poseOf(c));
+      const hoverLoco = drag ? drag.loco : hover && hover.kind === "loco" ? hover.c : -1;
+      const consist = new Set();
+      if (hoverLoco >= 0) {
+        // the cars that come along with this loco: everything coupled to it
+        const stack = [hoverLoco];
+        while (stack.length) {
+          const c = stack.pop();
+          if (consist.has(c)) continue;
+          consist.add(c);
+          for (let o = 0; o < cars.length; o++) if (!consist.has(o) && isCoupled(state, c, o)) stack.push(o);
+        }
+      }
+      cars.forEach((_, c) => drawCar(c, poses[c], { outline: consist.has(c) && consist.size > 1 }));
+
+      // loco chevrons: you can drive this, and which ways
+      cars.forEach((car, c) => {
+        if (!car.loco || solved) return;
+        const pose = poses[c], active = hoverLoco === c;
+        for (const d of [1, -1]) {
+          if (!canDrive(c, d)) continue;
+          const h = heading(c, d);
+          const tipX = sx(pose.x + h.x * 0.62), tipY = sy(pose.y + h.y * 0.62);
+          const s = L * 0.11;
+          ctx.beginPath();
+          ctx.moveTo(tipX, tipY);
+          ctx.lineTo(tipX - h.x * s * 1.3 - h.y * s, tipY - h.y * s * 1.3 + h.x * s);
+          ctx.lineTo(tipX - h.x * s * 1.3 + h.y * s, tipY - h.y * s * 1.3 - h.x * s);
+          ctx.closePath();
+          ctx.fillStyle = C.amber;
+          ctx.globalAlpha = active ? 1 : 0.55 + 0.25 * Math.sin(now / 400);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      });
+
+      // couplers between every pair of touching cars
+      if (!drag) {
+        for (const j of joints(yard, state)) {
+          const m = jointPoint(j);
+          const x = sx(m.x), y = sy(m.y);
+          const on = isCoupled(state, j.a, j.b);
+          const hot = hover && hover.kind === "joint" && hover.j.a === j.a && hover.j.b === j.b;
+          // a coupler is a link across the gap; uncoupled, it's two hooks apart
+          const k = hot ? 1.35 : 1;
+          ctx.save();
+          ctx.translate(x, y); ctx.rotate(m.ang);
+          const hl = Math.max(7, L * 0.14) * k, hh = Math.max(4, L * 0.07) * k;
+          ctx.fillStyle = hot ? C.amberHi : on ? C.lit : C.bg;
+          ctx.strokeStyle = hot ? C.amberHi : C.lit;
+          ctx.lineWidth = 1.5;
+          if (on) {
+            roundRect(-hl, -hh / 2, hl * 2, hh, hh / 2); ctx.fill();
+          } else {
+            const g = hl * 0.35;
+            roundRect(-hl, -hh / 2, hl - g, hh, hh / 2); ctx.fill(); ctx.stroke();
+            roundRect(g, -hh / 2, hl - g, hh, hh / 2); ctx.fill(); ctx.stroke();
+          }
+          ctx.restore();
+          if (hot) {
+            ctx.font = `500 ${Math.max(11, Math.round(L * 0.2))}px Barlow, sans-serif`;
+            ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+            ctx.fillStyle = C.amberHi;
+            uprightText(on ? "uncouple" : "couple", x, y, 0, -L * 0.32);
+          }
+        }
+      }
 
       requestAnimationFrame(frame);
     }
@@ -652,7 +613,7 @@
     window.shunting = {
       get state() { return state; }, get yard() { return yard; }, get cars() { return cars; },
       get moves() { return moves; }, get solved() { return solved; }, startLevel,
-      toScreen: (x, y) => [sx(x), sy(y)],
+      toScreen: (x, y) => [sx(x), sy(y)], poseOf,
     };
   </script>
 </body>

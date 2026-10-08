@@ -81,7 +81,7 @@ export function pointOnTrack(track, s) {
 // The track you roll onto leaving `trackId` through `nodeId`, with switches
 // set as `sw`: { track, dir } (dir +1 if you enter at its `from` end), or null
 // at a buffer or a switch set against you.
-function nextTrack(yard, trackId, nodeId, sw) {
+export function nextTrack(yard, trackId, nodeId, sw) {
   const node = yard.nodes[nodeId];
   let next;
   if (node.kind === "buffer") return null;
@@ -131,30 +131,9 @@ export function walk(yard, trackId, s, dir, dist, sw) {
   return { track: trackId, s, dir, ...pointOnTrack(yard.tracks[trackId], s) };
 }
 
-// Point a fraction f of the way from slot a to its neighbor b.
-export function travel(yard, a, b, f, sw) {
-  const A = yard.slots[a];
-  for (const d of [1, -1]) {
-    const nx = step(yard, a, d, sw);
-    if (nx && nx.slot === b) return walk(yard, A.track, A.s, d, f, sw);
-  }
-  return { track: A.track, s: A.s, dir: 1, x: A.x, y: A.y, ang: A.ang };
-}
-
-// Where a car body sits: its two bogies ride the track `half` either side of
-// its center, and the body is the straight line between them. A car on its
-// way from slot a to slot b is passed as (a, b, f); a parked car as (a).
-export function carPose(yard, sw, a, b = null, f = 0, half = 0.4) {
-  const c = b == null
-    ? { track: yard.slots[a].track, s: yard.slots[a].s, dir: 1 }
-    : travel(yard, a, b, f, sw);
-  const p = walk(yard, c.track, c.s, c.dir, half, sw);
-  const q = walk(yard, c.track, c.s, -c.dir, half, sw);
-  return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, ang: Math.atan2(p.y - q.y, p.x - q.x) };
-}
-
-// ---------- state ----------
-// state = { pos: [slot per car], sw: [leg index per switch], coupled: Set("i,j" with i<j) }
+// ---------- slot state (the solver's model) ----------
+// Here cars sit only on slot centers; motion.mjs has the continuous version
+// the game uses. state = { pos: [slot per car], sw: [leg index per switch], coupled: Set("i,j" with i<j) }
 // cars = [{ id, loco?: true }]
 
 export function occupancy(yard, pos) {
@@ -166,8 +145,6 @@ export function occupancy(yard, pos) {
 const pairKey = (i, j) => (i < j ? `${i},${j}` : `${j},${i}`);
 export function isCoupled(state, i, j) { return state.coupled.has(pairKey(i, j)); }
 
-export function cloneState(s) { return { pos: s.pos.slice(), sw: s.sw.slice(), coupled: new Set(s.coupled) }; }
-
 // A switch can't be thrown while cars sit on both sides of it along the set route.
 export function switchLocked(yard, state, k, occ = occupancy(yard, state.pos)) {
   const S = yard.switches[k];
@@ -178,22 +155,6 @@ export function throwSwitch(yard, state, k) {
   if (switchLocked(yard, state, k)) return false;
   state.sw[k] = 1 - state.sw[k];
   return true;
-}
-
-// Every place two cars touch: [{a, b, slotA, slotB}] (a, b are car indices).
-export function joints(yard, state, occ = occupancy(yard, state.pos)) {
-  const out = [], seen = new Set();
-  for (let c = 0; c < state.pos.length; c++) for (const d of [1, -1]) {
-    const nx = step(yard, state.pos[c], d, state.sw);
-    if (!nx) continue;
-    const o = occ[nx.slot];
-    if (o < 0) continue;
-    const k = pairKey(c, o);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({ a: c, b: o, slotA: state.pos[c], slotB: nx.slot });
-  }
-  return out;
 }
 
 export function toggleCoupling(state, a, b) {
@@ -255,16 +216,6 @@ function applyChain(state, { chain, dest }) {
   for (let k = 1; k < chain.length; k++) state.pos[chain[k]] = old[k - 1];
 }
 
-// The loco's travel direction in its own slot that points toward `towardSlot`
-// (a neighboring slot), or 0.
-export function dirToward(yard, state, slot, towardSlot) {
-  for (const d of [1, -1]) {
-    const nx = step(yard, slot, d, state.sw);
-    if (nx && nx.slot === towardSlot) return d;
-  }
-  return 0;
-}
-
 // ---------- goals ----------
 // goal = { track, end: nodeId, cars: [carIndex, ...] } — cars listed in the
 // track's from→to order, packed against the `end` node, and nothing else but
@@ -290,8 +241,7 @@ export function goalMet(yard, cars, goals, pos) {
 
 // ---------- solver ----------
 // Fewest drives to reach the goal. Switch throws and couplings are free, so a
-// search node is just where every car is (plus any switch that's pinned in
-// place by cars). Each edge is one drive: pick switches, a loco, a direction,
+// search node is just where every car is. Each edge is one drive: pick switches, a loco, a direction,
 // how many touching cars behind it to pull, and how far to go.
 // Cars with `filler: true` are interchangeable.
 export function solve(yard, cars, start, goals, { maxStates = 2e6 } = {}) {
@@ -306,9 +256,7 @@ export function solve(yard, cars, start, goals, { maxStates = 2e6 } = {}) {
       const fs = fillers.map((i) => p[i]).sort((a, b) => a - b);
       fillers.forEach((i, k) => { p[i] = fs[k]; });
     }
-    let k = p.join(",") + "|";
-    for (let s = 0; s < nSw; s++) k += switchLocked(yard, { sw }, s, occ) ? sw[s] : "*";
-    return k;
+    return p.join(",");
   };
 
   const startOcc = occupancy(yard, start.pos);
@@ -322,8 +270,10 @@ export function solve(yard, cars, start, goals, { maxStates = 2e6 } = {}) {
     for (const node of frontier) {
       const occ = occupancy(yard, node.pos);
       // all switch settings reachable for free
+      // with every car parked a whole car length from the points, no switch is
+      // ever pinned, so any setting is free
       const choices = [];
-      for (let s = 0; s < nSw; s++) choices.push(switchLocked(yard, node, s, occ) ? [node.sw[s]] : [0, 1]);
+      for (let s = 0; s < nSw; s++) choices.push([0, 1]);
       const combos = cartesian(choices);
       for (const sw of combos) for (const loco of locos) for (const d of [1, -1]) {
         // touching cars behind, any of which may be coupled on
