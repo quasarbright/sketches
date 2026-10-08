@@ -54,14 +54,32 @@ test("a car on the points locks the switch; next to it doesn't", () => {
   assert.ok(!switchLocked(yard, state, 0));
 });
 
-test("a car beside the points on one leg blocks the other leg at the points", () => {
+test("coming through the points from the trunk shoves a car near the points up the other leg", () => {
   const { yard, state } = setup({ head: ". . L", s2: "A" });
-  const r = drive(yard, state, 0, 1, 3);
-  near(r.moved, 0, "can't enter s1");
-  assert.equal(r.stop.why, "foul");
+  const a0 = state.at[1].s;
+  const r = drive(yard, state, 0, 1, 2);
+  near(r.moved, 2, "loco carries on");
+  near(state.at[1].s, a0 + FOUL, "A shoved just clear of the points");
   const far = setup({ head: ". . L", s2: ". A" });
-  near(drive(far.yard, far.state, 0, 1, 3).moved, 3, "fine once A is clear of the points");
-  void FOUL;
+  const a1 = far.state.at[1].s;
+  drive(far.yard, far.state, 0, 1, 2);
+  near(far.state.at[1].s, a1, "a car already clear isn't touched");
+});
+
+test("the shove stops if the car it shoves can't move", () => {
+  const { yard, state } = setup({ head: ". . L", s2: "A B C" });
+  const r = drive(yard, state, 0, 1, 2);
+  near(r.moved, 0.15, "only as far as the spare room at the buffer lets A move");
+  assert.equal(r.stop.why, "foul");
+});
+
+test("coming down a leg into the side of a car on the other leg is blocked", () => {
+  const { yard, state } = setup({ s1: ". L", s2: "A" });
+  const a0 = state.at[1].s;
+  const r = drive(yard, state, 0, -1, 2);
+  assert.equal(r.stop.why, "foul");
+  near(state.at[1].s, a0, "A not moved");
+  assert.ok(r.moved < 1, "stopped short of the points");
 });
 
 test("every level's start is a legal position and not already solved", () => {

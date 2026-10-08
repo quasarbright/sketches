@@ -93,7 +93,7 @@ export const LEVELS = [
     layout: runaround({ head: 4, main: 4, tail: 4 }),
     start: { head: "L A B C" },
     goals: [{ track: "head", end: "H", cars: "A B C" }],
-    par: 4,
+    par: 3,
   },
   {
     name: "Swap two",
@@ -101,7 +101,7 @@ export const LEVELS = [
     layout: ladder(3, [3, 3]),
     start: { head: "L", s1: ". A B" },
     goals: [{ track: "s1", end: "E1", cars: "B A" }],
-    par: 9,
+    par: 7,
   },
   {
     name: "Pick out",
@@ -109,7 +109,7 @@ export const LEVELS = [
     layout: ladder(4, [5, 3]),
     start: { head: "L", s1: "x B x A C" },
     goals: [{ track: "s1", end: "E1", cars: "A B C" }],
-    par: 10,
+    par: 9,
   },
   {
     name: "Reverse three",
@@ -117,7 +117,7 @@ export const LEVELS = [
     layout: ladder(4, [4, 3]),
     start: { head: "L", s1: ". A B C" },
     goals: [{ track: "s1", end: "E1", cars: "C B A" }],
-    par: 13,
+    par: 10,
   },
   {
     name: "Three sidings",
@@ -125,7 +125,7 @@ export const LEVELS = [
     layout: ladder(3, [4, 3, 3]),
     start: { head: "L", s1: ". . D B", s2: ". . C", s3: ". . A" },
     goals: [{ track: "s1", end: "E1", cars: "A B C D" }],
-    par: 13,
+    par: 10,
   },
   {
     name: "Pick four",
@@ -133,7 +133,7 @@ export const LEVELS = [
     layout: ladder(4, [5, 3, 3]),
     start: { head: "L", s1: "x C . A x", s2: "B . D" },
     goals: [{ track: "s1", end: "E1", cars: "A B C D" }],
-    par: 21,
+    par: 12,
     slowPar: true, // ~4M positions, about a minute to check
   },
 ];

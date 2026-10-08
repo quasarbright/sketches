@@ -113,7 +113,7 @@
   <script type="module">
     import { LEVELS } from "./levels.mjs";
     import { loadLevel } from "./setup.mjs";
-    import { walk, nextTrack, goalSlots, pointOnTrack } from "./yard.mjs";
+    import { walk, nextTrack, pointOnTrack } from "./yard.mjs";
     import {
       fromSlots, clone, drive, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled, goalMet,
     } from "./motion.mjs";
@@ -164,7 +164,8 @@
 
     function pushHistory() { history.push({ state: clone(state), moves, lastDir }); }
     function undo() {
-      if (drag || !history.length) return;
+      if ((drag && drag.held) || !history.length) return;
+      drag = null;
       ({ state, moves, lastDir } = history.pop());
       solved = false;
       document.getElementById("win").classList.remove("show");
@@ -228,34 +229,51 @@
     const jointPoint = (j) => walk(yard, state.at[j.a].track, state.at[j.a].s, j.dir, 0.5, state.sw);
 
     // ---------- driving ----------
-    // The loco follows the pointer along the track, and nothing else moves
-    // unless the loco moves it.
-    function dragTo(px, py) {
-      const loco = drag.loco;
-      const target = { x: wx(px) - drag.off.x, y: wy(py) - drag.off.y };
-      for (let guard = 0; guard < 80; guard++) {
-        const here = centerOf(loco);
-        let best = null;
-        for (const d of [1, -1]) {
-          const h = heading(loco, d);
-          if (!h) continue;
-          const proj = (target.x - here.x) * h.x + (target.y - here.y) * h.y;
-          if (!best || proj > best.proj) best = { d, proj };
-        }
-        if (!best) return;
-        const cur = state.at[loco];
-        const sameRun = lastDir && lastDir.loco === loco && lastDir.track === cur.track && lastDir.dir === best.d;
-        // a little dead zone before reversing, so a shaky hand doesn't count extra moves
-        if (best.proj < (sameRun ? 0.002 : 0.04)) return;
-        const before = clone(state);
-        const r = drive(yard, state, loco, best.d, Math.min(best.proj, 0.2));
-        if (r.moved <= 1e-6) { blockedBy(r.stop); return; }
-        if (!drag.pushed) { history.push({ state: before, moves, lastDir }); drag.pushed = true; }
-        if (!sameRun) moves++;
-        lastDir = { loco, track: state.at[loco].track, dir: r.dir };
-        updateCount();
-        if (r.stop) { blockedBy(r.stop); return; }
+    // The pointer sets where you want the loco; the loco heads there along the
+    // track, never faster than VMAX and never speeding up or braking harder
+    // than ACC. Nothing else moves unless the loco moves it.
+    const VMAX = 4.5, ACC = 9; // car lengths per second, and per second²
+
+    function stepDrive(dt) {
+      const loco = drag.loco, here = centerOf(loco), tg = drag.target;
+      // which way along the track gets closer to the target, and how far
+      let best = null;
+      for (const d of [1, -1]) {
+        const h = heading(loco, d);
+        if (!h) continue;
+        const proj = (tg.x - here.x) * h.x + (tg.y - here.y) * h.y;
+        if (!best || proj > best.proj) best = { d, proj };
       }
+      const cur = state.at[loco];
+      const runningOn = (d) => lastDir && lastDir.loco === loco && lastDir.track === cur.track && lastDir.dir === d;
+      let wantDir = drag.dir, want = 0;
+      // a little dead zone before starting off the other way, so a shaky hand doesn't count extra moves
+      if (best && best.proj > (runningOn(best.d) || (drag.speed > 0 && best.d === drag.dir) ? 0.003 : 0.04)) {
+        wantDir = best.d;
+        want = Math.min(VMAX, Math.sqrt(2 * ACC * best.proj)); // slow enough to stop on the spot
+      }
+      if (drag.speed > 0 && wantDir !== drag.dir) {
+        drag.speed = Math.max(0, drag.speed - ACC * dt); // brake before reversing
+      } else {
+        drag.dir = wantDir;
+        drag.speed = want > drag.speed ? Math.min(want, drag.speed + ACC * dt) : Math.max(want, drag.speed - ACC * dt);
+      }
+      let dist = drag.speed * dt;
+      if (best && best.d === drag.dir) dist = Math.min(dist, Math.max(0, best.proj));
+      if (dist > 1e-6 && drag.dir) {
+        const before = clone(state), wasRunning = runningOn(drag.dir);
+        const r = drive(yard, state, loco, drag.dir, dist);
+        if (r.moved > 1e-6) {
+          if (!drag.pushed) { history.push({ state: before, moves, lastDir }); drag.pushed = true; }
+          if (!wasRunning) moves++;
+          lastDir = { loco, track: state.at[loco].track, dir: r.dir };
+          drag.dir = r.dir;
+          updateCount();
+        }
+        if (r.stop) { drag.speed = 0; blockedBy(r.stop); }
+      }
+      // let go and arrived: done
+      if (!drag.held && drag.speed === 0 && want === 0) drag = null;
     }
 
     function blockedBy(stop) {
@@ -306,7 +324,7 @@
 
     canvas.addEventListener("pointermove", (e) => {
       const [px, py] = toLayout(e.clientX, e.clientY);
-      if (drag) { dragTo(px, py); return; }
+      if (drag && drag.held) { drag.target = { x: wx(px) - drag.off.x, y: wy(py) - drag.off.y }; return; }
       hover = solved ? null : hitTest(px, py);
       canvas.style.cursor = !hover ? "default"
         : hover.kind === "loco" ? "grab"
@@ -334,17 +352,22 @@
       } else if (h.kind === "loco") {
         try { canvas.setPointerCapture(e.pointerId); } catch {}
         const c = centerOf(h.c);
-        drag = { loco: h.c, off: { x: wx(px) - c.x, y: wy(py) - c.y }, pushed: false };
+        const keep = drag && drag.loco === h.c ? drag : null; // grabbing it while it's still rolling
+        drag = {
+          loco: h.c, off: { x: wx(px) - c.x, y: wy(py) - c.y }, target: { x: c.x, y: c.y },
+          held: true, pushed: false, speed: keep ? keep.speed : 0, dir: keep ? keep.dir : 0,
+        };
         canvas.style.cursor = "grabbing";
       }
     });
-    const endDrag = () => { if (drag) { drag = null; canvas.style.cursor = "grab"; } };
+    const endDrag = () => { if (drag && drag.held) { drag.held = false; canvas.style.cursor = "grab"; } };
     canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);
 
     document.getElementById("undo").onclick = undo;
     document.getElementById("reset").onclick = () => {
-      if (!history.length) return;
+      if (!history.length || (drag && drag.held)) return;
+      drag = null;
       pushHistory();
       state = freshState();
       lastDir = null; solved = false;
@@ -435,8 +458,13 @@
       return here.sort((a, b) => fromEnd(a) - fromEnd(b));
     }
 
+    let lastNow = null;
     function frame(now) {
-      if (!drag && !solved && goalMet(yard, cars, goals, state)) win();
+      const dt = lastNow == null ? 0 : Math.min(0.05, (now - lastNow) / 1000);
+      lastNow = now;
+      if (drag && !solved) stepDrive(dt);
+      // done as soon as the goal is met and the train has stopped, held or not
+      if (!solved && (!drag || drag.speed === 0) && goalMet(yard, cars, goals, state)) win();
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
@@ -472,9 +500,11 @@
       // goal: a marker beside the track for each car, in order from the goal's end
       for (const g of goals) {
         const order = orderFromEnd(g), t = yard.tracks[g.track], n = g.cars.length;
-        goalSlots(yard, g).forEach((s, k) => {
-          const sl = yard.slots[s], car = cars[g.cars[k]];
+        g.cars.forEach((carIdx, k) => {
+          // packed against the goal's end, where a train shoved up to the buffer ends up
+          const car = cars[carIdx];
           const idx = t.from === g.end ? k : n - 1 - k;
+          const sl = pointOnTrack(t, t.from === g.end ? 0.5 + idx : t.len - 0.5 - idx);
           const ok = order[idx] === g.cars[k];
           ctx.save();
           ctx.translate(sx(sl.x), sy(sl.y)); ctx.rotate(sl.ang);
@@ -565,7 +595,7 @@
       });
 
       // couplers between every pair of touching cars
-      if (!drag) {
+      if (!drag || drag.speed === 0) {
         for (const j of joints(yard, state)) {
           const m = jointPoint(j);
           const x = sx(m.x), y = sy(m.y);
@@ -600,7 +630,8 @@
     }
 
     function win() {
-      solved = true; hover = null;
+      solved = true; hover = null; drag = null;
+      canvas.style.cursor = "default";
       solvedSet.add(level.name); saveSolved();
       updateCount();
       document.getElementById("winSub").textContent =

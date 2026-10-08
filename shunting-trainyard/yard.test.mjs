@@ -28,11 +28,14 @@ test("neighboring slots are exactly one car length apart, across switches too", 
   }
 });
 
-test("a car beside the points blocks the other leg", () => {
+test("through the points from the trunk shoves a car on the other leg along; down a leg it's blocked", () => {
   const { yard, state } = level({ head: ". . L", s2: "A" });
-  assert.equal(drive(yard, state, 0, 1), null); // s1's first slot is fouled by A
-  const clear = level({ head: ". . L", s2: ". A" });
-  assert.notEqual(drive(clear.yard, clear.state, 0, 1), null);
+  assert.notEqual(drive(yard, state, 0, 1), null);
+  assert.equal(state.pos[1], yard.tracks.s2.slots[1]);
+  const full = level({ head: ". . L", s2: "A B C" });
+  assert.equal(drive(full.yard, full.state, 0, 1), null);
+  const down = level({ s1: ". L", s2: "A" });
+  assert.equal(drive(down.yard, down.state, 0, -1), null);
 });
 
 test("a loco pushes whatever it touches but only pulls what's coupled", () => {

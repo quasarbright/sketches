@@ -193,10 +193,25 @@ export function driveChain(yard, state, loco, d, occ = occupancy(yard, state.pos
   }
   const foul = yard.slots[next.slot].fouls.find((f) => occ[f] >= 0);
   if (foul != null) {
-    const t = yard.tracks[yard.slots[next.slot].track];
-    const stopNode = [t.from, t.to].find((n) => yard.switchIndex[n] != null && yard.tracks[yard.slots[foul].track] &&
-      [yard.tracks[yard.slots[foul].track].from, yard.tracks[yard.slots[foul].track].to].includes(n));
-    return { blocked: true, chain, stopNode, fouled: true };
+    const into = yard.slots[next.slot].track, t = yard.tracks[into];
+    const node = [t.from, t.to].find((n) => yard.switchIndex[n] != null && yard.switches[yard.switchIndex[n]].legs.includes(into));
+    const S = yard.switches[yard.switchIndex[node]];
+    // coming down a leg toward the points, the nose would hit that car's side
+    if (yard.slots[cur.slot].track !== S.trunk) return { blocked: true, chain, stopNode: node, fouled: true };
+    // coming through from the trunk, the nose shoves it (and whatever it
+    // touches) one car further up its leg
+    const ft = yard.tracks[yard.slots[foul].track];
+    let at = { slot: foul, dir: ft.from === node ? 1 : -1 };
+    const side = [occ[foul]];
+    let free;
+    for (;;) {
+      free = step(yard, at.slot, at.dir, state.sw);
+      if (!free || occ[free.slot] < 0) break;
+      side.push(occ[free.slot]);
+      at = free;
+    }
+    if (!free) return { blocked: true, chain, stopNode: node, fouled: true };
+    return { chain, dest: next.slot, side: { chain: side.reverse(), dest: free.slot } };
   }
   return { chain, dest: next.slot };
 }
@@ -210,7 +225,8 @@ export function drive(yard, state, loco, d) {
   return nd;
 }
 
-function applyChain(state, { chain, dest }) {
+function applyChain(state, { chain, dest, side }) {
+  if (side) applyChain(state, side);
   const old = chain.map((c) => state.pos[c]);
   state.pos[chain[0]] = dest;
   for (let k = 1; k < chain.length; k++) state.pos[chain[k]] = old[k - 1];
