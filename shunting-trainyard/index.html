@@ -115,7 +115,7 @@
     import { loadLevel } from "./setup.mjs";
     import {
       step, travel, occupancy, switchLocked, throwSwitch, joints, toggleCoupling, isCoupled,
-      driveChain, drive, goalSlots, goalMet, cloneState, endSlot, pointOnTrack,
+      driveChain, drive, goalSlots, carPose, goalMet, cloneState, endSlot, pointOnTrack,
     } from "./yard.mjs";
 
     const C = {
@@ -245,10 +245,10 @@
         const pl = plan(loco, best.d);
         drag.d = best.d;
         if (pl.blocked) {
-          drag.plan = pl; drag.frac = Math.min(best.proj, 1) * 0.06; // a little give, then stop
+          drag.plan = pl; drag.frac = 0;
           const k = yard.switchIndex[pl.stopNode];
           if (k != null && best.proj > 0.3 && !(flashSwitch && flashSwitch.k === k && performance.now() - flashSwitch.t < 600)) {
-            flashSwitch = { k, t: performance.now(), why: "set the other way" };
+            flashSwitch = { k, t: performance.now(), why: pl.fouled ? "car in the way" : "set the other way" };
           }
           return;
         }
@@ -281,7 +281,7 @@
     function jointAt(px, py) {
       let best = null, bd = Math.max(14, L * 0.22);
       for (const j of joints(yard, state)) {
-        const m = travel(yard, j.slotA, j.slotB, 0.5);
+        const m = travel(yard, j.slotA, j.slotB, 0.5, state.sw);
         const d = Math.hypot(sx(m.x) - px, sy(m.y) - py);
         if (d < bd) { bd = d; best = j; }
       }
@@ -418,17 +418,13 @@
 
     // where each car is drawn right now
     function carPoses() {
-      const poses = state.pos.map((s) => { const sl = yard.slots[s]; return { x: sl.x, y: sl.y, ang: sl.ang }; });
-      const moving = drag && drag.plan && drag.frac > 0 ? drag : anim ? anim : null;
-      if (moving && moving.plan && !moving.plan.blocked) {
-        const f = moving === anim ? anim.f : drag.frac;
-        for (const [c, to] of moving.plan.to) poses[c] = travel(yard, state.pos[c], to, f);
-      } else if (moving && moving.plan && moving.plan.blocked) {
-        // the loco gives a little toward whatever stops it
-        const f = moving === anim ? anim.f : drag.frac;
-        const t = locoTarget(moving.loco, moving.d);
-        if (t != null) poses[moving.loco] = travel(yard, state.pos[moving.loco], t, f);
-      }
+      const moving = drag && drag.plan && !drag.plan.blocked && drag.frac > 0 ? drag
+        : anim && !anim.plan.blocked ? anim : null;
+      const f = moving === anim ? anim?.f : drag?.frac;
+      return state.pos.map((s, c) => {
+        const to = moving && moving.plan.to.get(c);
+        return to != null ? carPose(yard, state.sw, s, to, f) : carPose(yard, state.sw, s);
+      });
       return poses;
     }
 
@@ -578,7 +574,7 @@
       // couplers between every pair of touching cars
       if (!drag && !anim) {
         for (const j of joints(yard, state, occ)) {
-          const m = travel(yard, j.slotA, j.slotB, 0.5);
+          const m = travel(yard, j.slotA, j.slotB, 0.5, state.sw);
           const x = sx(m.x), y = sy(m.y);
           const on = isCoupled(state, j.a, j.b);
           const hot = hover && hover.kind === "joint" && hover.j.a === j.a && hover.j.b === j.b;
@@ -613,7 +609,7 @@
         const locked = switchLocked(yard, state, k, occ);
         const hot = hover && hover.kind === "switch" && hover.k === k && !drag;
         const flash = flashSwitch && flashSwitch.k === k && now - flashSwitch.t < 900;
-        const r = Math.max(10, L * 0.3);
+        const r = Math.max(9, L * 0.24);
         ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fillStyle = hot && !locked ? "#f2a93b33" : "#12161999";
         ctx.fill();

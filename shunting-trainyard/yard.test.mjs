@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LEVELS, ladder } from "./levels.mjs";
 import { loadLevel } from "./setup.mjs";
-import { buildYard, drive, throwSwitch, toggleCoupling, solve, goalMet, switchLocked } from "./yard.mjs";
+import { buildYard, walk, step, drive, throwSwitch, toggleCoupling, solve, goalMet, switchLocked } from "./yard.mjs";
 
 const level = (start, layout = ladder(3, [3, 3])) =>
   loadLevel({ layout, start, goals: [] });
@@ -12,6 +12,27 @@ test("tracks are cut into whole car lengths", () => {
   assert.equal(y.tracks.head.slots.length, 3);
   assert.equal(y.tracks.s1.slots.length, 5);
   assert.equal(y.tracks.s3.slots.length, 3);
+});
+
+test("neighboring slots are exactly one car length apart, across switches too", () => {
+  for (const lv of LEVELS) {
+    const yard = buildYard(lv.layout);
+    for (const sw of [yard.switches.map(() => 0), yard.switches.map(() => 1)]) {
+      for (const sl of yard.slots) for (const d of [1, -1]) {
+        const nx = step(yard, sl.id, d, sw);
+        if (!nx) continue;
+        const p = walk(yard, sl.track, sl.s, d, 1, sw), q = yard.slots[nx.slot];
+        assert.ok(Math.hypot(p.x - q.x, p.y - q.y) < 1e-6, `${lv.name}: slot ${sl.id} → ${q.id}`);
+      }
+    }
+  }
+});
+
+test("a car beside the points blocks the other leg", () => {
+  const { yard, state } = level({ head: ". . L", s2: "A" });
+  assert.equal(drive(yard, state, 0, 1), null); // s1's first slot is fouled by A
+  const clear = level({ head: ". . L", s2: ". A" });
+  assert.notEqual(drive(clear.yard, clear.state, 0, 1), null);
 });
 
 test("a loco pushes whatever it touches but only pulls what's coupled", () => {

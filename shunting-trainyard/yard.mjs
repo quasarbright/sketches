@@ -4,8 +4,12 @@
 // car-length slots. A node is a buffer stop (one track), a plain join (two),
 // or a switch (three: a trunk and two legs, one leg selected at a time).
 // Every car sits in exactly one slot.
-
-const PAD = { buffer: 0.05, join: 0, switch: 0.4 };
+//
+// Slot centers are exactly one car length apart along the track everywhere,
+// including across nodes, so a coupled train keeps its spacing as it moves.
+// That means every track between two non-buffer nodes must be a whole number
+// of car lengths long; a track ending at a buffer leaves any spare length at
+// the buffer.
 
 // def = {
 //   nodes: { id: [x, y] },
@@ -26,12 +30,15 @@ export function buildYard(def) {
     const cum = [0];
     for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
     const len = cum[cum.length - 1];
-    const a = PAD[kind(t.from)], b = PAD[kind(t.to)];
-    const n = Math.max(1, Math.floor(len - a - b + 1e-6));
-    const spacing = (len - a - b) / n;
+    const bufFrom = kind(t.from) === "buffer", bufTo = kind(t.to) === "buffer";
+    const n = Math.floor(len + 1e-6);
+    if (n < 1) throw new Error(`track ${t.id} is shorter than a car`);
+    if (!bufFrom && !bufTo && Math.abs(len - n) > 1e-3) throw new Error(`track ${t.id} is ${len.toFixed(3)} long; it runs between switches, so it must be a whole number of cars`);
+    // where slot 0's center sits: packed against whichever end isn't a buffer
+    const first = bufFrom && !bufTo ? len - n + 0.5 : bufFrom && bufTo ? (len - n) / 2 + 0.5 : 0.5;
     const track = { id: t.id, from: t.from, to: t.to, pts, cum, len, slots: [] };
     for (let i = 0; i < n; i++) {
-      const s = a + spacing * (i + 0.5);
+      const s = first + i;
       const p = pointOnTrack(track, s);
       track.slots.push(slots.length);
       slots.push({ id: slots.length, track: t.id, i, s, x: p.x, y: p.y, ang: p.ang });
@@ -43,6 +50,15 @@ export function buildYard(def) {
   for (const id of Object.keys(nodes)) {
     nodes[id].kind = kind(id);
     if (nodes[id].kind === "switch" && !def.switches[id]) throw new Error(`node ${id} has 3 tracks but no switch`);
+  }
+  // The two legs of a switch start out side by side, so a car parked on the
+  // first slot of one leg is in the way of a car on the first slot of the
+  // other (railways call this fouling). slot.fouls lists the slots it clashes with.
+  for (const sl of slots) sl.fouls = [];
+  const endOf = (tid, nid) => { const t = tracks[tid]; return t.from === nid ? t.slots[0] : t.slots[t.slots.length - 1]; };
+  for (const S of switches) {
+    const [a, b] = S.legs.map((l) => endOf(l, S.id));
+    slots[a].fouls.push(b); slots[b].fouls.push(a);
   }
   // bounds, for fitting to the screen
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -62,6 +78,23 @@ export function pointOnTrack(track, s) {
   return { x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f, ang: Math.atan2(y1 - y0, x1 - x0) };
 }
 
+// The track you roll onto leaving `trackId` through `nodeId`, with switches
+// set as `sw`: { track, dir } (dir +1 if you enter at its `from` end), or null
+// at a buffer or a switch set against you.
+function nextTrack(yard, trackId, nodeId, sw) {
+  const node = yard.nodes[nodeId];
+  let next;
+  if (node.kind === "buffer") return null;
+  if (node.kind === "join") next = node.tracks[0] === trackId ? node.tracks[1] : node.tracks[0];
+  else {
+    const k = yard.switchIndex[nodeId], S = yard.switches[k], leg = S.legs[sw[k]];
+    if (trackId === S.trunk) next = leg;
+    else if (trackId === leg) next = S.trunk;
+    else return null; // trailing into a switch set against you
+  }
+  return { track: next, dir: yard.tracks[next].from === nodeId ? 1 : -1 };
+}
+
 // The slot you reach by leaving `slot` in direction dir (+1 toward the track's
 // `to` node, -1 toward `from`), with switches set as `sw`. Returns {slot, dir}
 // (dir is the direction of travel in the new slot's track) or null.
@@ -69,49 +102,55 @@ export function step(yard, slot, dir, sw) {
   const sl = yard.slots[slot], t = yard.tracks[sl.track];
   const j = sl.i + dir;
   if (j >= 0 && j < t.slots.length) return { slot: t.slots[j], dir };
-  const node = yard.nodes[dir > 0 ? t.to : t.from];
-  let next;
-  if (node.kind === "buffer") return null;
-  if (node.kind === "join") next = node.tracks[0] === t.id ? node.tracks[1] : node.tracks[0];
-  else {
-    const S = yard.switches[yard.switchIndex[node.id]], leg = S.legs[sw[yard.switchIndex[node.id]]];
-    if (t.id === S.trunk) next = leg;
-    else if (t.id === leg) next = S.trunk;
-    else return null; // trailing into a switch set against you
-  }
-  return enterTrack(yard, next, node.id);
-}
-
-function enterTrack(yard, trackId, nodeId) {
-  const t = yard.tracks[trackId];
-  return t.from === nodeId ? { slot: t.slots[0], dir: 1 } : { slot: t.slots[t.slots.length - 1], dir: -1 };
+  const nx = nextTrack(yard, t.id, dir > 0 ? t.to : t.from, sw);
+  if (!nx) return null;
+  const T = yard.tracks[nx.track];
+  return { slot: nx.dir > 0 ? T.slots[0] : T.slots[T.slots.length - 1], dir: nx.dir };
 }
 
 // slot at a track's end next to a node
-export function endSlot(yard, trackId, nodeId) { return enterTrack(yard, trackId, nodeId).slot; }
+export function endSlot(yard, trackId, nodeId) {
+  const t = yard.tracks[trackId];
+  return t.from === nodeId ? t.slots[0] : t.slots[t.slots.length - 1];
+}
 
-// Point along the path from slot a to its neighbor b (reached via step), at fraction f.
-export function travel(yard, a, b, f) {
-  const A = yard.slots[a], B = yard.slots[b];
-  const segs = [];
-  if (A.track === B.track) segs.push([A.track, A.s, B.s]);
-  else {
-    const ta = yard.tracks[A.track], tb = yard.tracks[B.track];
-    const node = [ta.from, ta.to].find((n) => n === tb.from || n === tb.to);
-    segs.push([A.track, A.s, node === ta.to ? ta.len : 0]);
-    segs.push([B.track, node === tb.from ? 0 : tb.len, B.s]);
+// Roll `dist` along the track from (track, s) heading dir, following switches.
+// Stops short at a buffer or a switch set against it.
+export function walk(yard, trackId, s, dir, dist, sw) {
+  if (dist < 0) { dir = -dir; dist = -dist; }
+  for (let guard = 0; guard < 100; guard++) {
+    const t = yard.tracks[trackId];
+    const room = dir > 0 ? t.len - s : s;
+    if (dist <= room) { s += dir * dist; break; }
+    const nx = nextTrack(yard, trackId, dir > 0 ? t.to : t.from, sw);
+    if (!nx) { s = dir > 0 ? t.len : 0; break; }
+    dist -= room;
+    trackId = nx.track; dir = nx.dir;
+    s = dir > 0 ? 0 : yard.tracks[trackId].len;
   }
-  const total = segs.reduce((acc, [, s0, s1]) => acc + Math.abs(s1 - s0), 0);
-  let d = f * total;
-  for (let k = 0; k < segs.length; k++) {
-    const [tid, s0, s1] = segs[k], L = Math.abs(s1 - s0);
-    if (d <= L || k === segs.length - 1) {
-      const sgn = Math.sign(s1 - s0) || 1;
-      const p = pointOnTrack(yard.tracks[tid], s0 + sgn * Math.min(d, L));
-      return p;
-    }
-    d -= L;
+  return { track: trackId, s, dir, ...pointOnTrack(yard.tracks[trackId], s) };
+}
+
+// Point a fraction f of the way from slot a to its neighbor b.
+export function travel(yard, a, b, f, sw) {
+  const A = yard.slots[a];
+  for (const d of [1, -1]) {
+    const nx = step(yard, a, d, sw);
+    if (nx && nx.slot === b) return walk(yard, A.track, A.s, d, f, sw);
   }
+  return { track: A.track, s: A.s, dir: 1, x: A.x, y: A.y, ang: A.ang };
+}
+
+// Where a car body sits: its two bogies ride the track `half` either side of
+// its center, and the body is the straight line between them. A car on its
+// way from slot a to slot b is passed as (a, b, f); a parked car as (a).
+export function carPose(yard, sw, a, b = null, f = 0, half = 0.4) {
+  const c = b == null
+    ? { track: yard.slots[a].track, s: yard.slots[a].s, dir: 1 }
+    : travel(yard, a, b, f, sw);
+  const p = walk(yard, c.track, c.s, c.dir, half, sw);
+  const q = walk(yard, c.track, c.s, -c.dir, half, sw);
+  return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2, ang: Math.atan2(p.y - q.y, p.x - q.x) };
 }
 
 // ---------- state ----------
@@ -190,6 +229,13 @@ export function driveChain(yard, state, loco, d, occ = occupancy(yard, state.pos
     // what stopped it: the node at the far end of the front car's track
     const t = yard.tracks[yard.slots[cur.slot].track];
     return { blocked: true, chain, stopNode: cur.dir > 0 ? t.to : t.from };
+  }
+  const foul = yard.slots[next.slot].fouls.find((f) => occ[f] >= 0);
+  if (foul != null) {
+    const t = yard.tracks[yard.slots[next.slot].track];
+    const stopNode = [t.from, t.to].find((n) => yard.switchIndex[n] != null && yard.tracks[yard.slots[foul].track] &&
+      [yard.tracks[yard.slots[foul].track].from, yard.tracks[yard.slots[foul].track].to].includes(n));
+    return { blocked: true, chain, stopNode, fouled: true };
   }
   return { chain, dest: next.slot };
 }
