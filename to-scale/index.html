@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>To Scale</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* a green self-healing cutting mat */
+    :root {
+      --bg:        #0f2a22;   /* mat green */
+      --panel:     #13332a;
+      --panel-2:   #1a4135;
+      --border:    #2a5a4a;
+      --text:      #e9efe9;
+      --muted:     #8fa89b;
+      --faint:     #5d7b6d;
+      --accent:    #e8c547;   /* mat-print yellow */
+      --accent-hi: #f4d76a;
+      --on-accent: #0f2a22;
+      --chalk:     #f1ede0;
+      --font-ui:      "Barlow Semi Condensed", system-ui, sans-serif;
+      --font-mono:    "IBM Plex Mono", ui-monospace, monospace;
+      --font-display: "Barlow Semi Condensed", system-ui, sans-serif;
+      --shelf-w: 292px;
+    }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+    body { font-family: var(--font-ui); color: var(--text); }
+    button, input { font-family: inherit; }
+
+    .ts-app { position: absolute; inset: 0; display: grid; grid-template-columns: var(--shelf-w) 1fr; }
+
+    /* ---------- shelf ---------- */
+    .ts-shelf {
+      background: var(--panel); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; min-height: 0; z-index: 5;
+    }
+    .ts-shelf-head { padding: 18px 18px 10px; }
+    .ts-title {
+      font-family: var(--font-display); font-weight: 700; font-size: 2rem; line-height: 1;
+      letter-spacing: .01em; margin: 0; color: var(--accent);
+    }
+    .ts-sub { color: var(--muted); font-size: .95rem; margin: 6px 0 0; }
+    .ts-shelf-scroll { overflow-y: auto; padding: 0 10px 70px; flex: 1; min-height: 0; }
+
+    .ts-custom {
+      margin: 8px 8px 14px; padding: 12px; border: 1px dashed var(--border); border-radius: 8px;
+    }
+    .ts-custom-row { display: flex; align-items: center; gap: 6px; }
+    .ts-custom-row + .ts-custom-row { margin-top: 8px; }
+    .ts-num {
+      width: 0; flex: 1; min-width: 0; background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+      font-family: var(--font-mono); font-size: .9rem;
+    }
+    .ts-num:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+    .ts-times, .ts-unit-label { color: var(--muted); font-family: var(--font-mono); font-size: .85rem; }
+    .ts-add-btn {
+      background: var(--accent); color: var(--on-accent); border: 0; border-radius: 6px;
+      padding: 7px 12px; font-weight: 600; font-size: .95rem; cursor: pointer;
+    }
+    .ts-add-btn:hover { background: var(--accent-hi); }
+    .ts-text {
+      flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 8px; font-size: .95rem;
+    }
+    .ts-text:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+    .ts-group + .ts-group { margin-top: 6px; }
+    .ts-group-name {
+      color: var(--muted); font-weight: 600; font-size: .95rem; padding: 8px; border-radius: 6px;
+      display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; user-select: none;
+    }
+    .ts-group-name::-webkit-details-marker { display: none; }
+    .ts-group-name::before {
+      content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg); transition: transform .15s; margin-right: 2px;
+    }
+    .ts-group[open] > .ts-group-name::before { transform: rotate(45deg) translate(-2px, -1px); }
+    .ts-group-name:hover { color: var(--text); background: var(--panel-2); }
+    .ts-item {
+      display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 10px;
+      width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none;
+      color: var(--text); text-align: left; cursor: grab; touch-action: none; user-select: none;
+    }
+    .ts-item:hover { background: var(--panel-2); }
+    .ts-item:active { cursor: grabbing; }
+    .ts-item svg { display: block; margin: auto; overflow: visible; }
+    .ts-item-name { font-size: 1rem; line-height: 1.15; }
+    .ts-item-dims { display: block; color: var(--muted); font-family: var(--font-mono); font-size: .75rem; margin-top: 2px; }
+
+    /* ---------- mat ---------- */
+    .ts-mat { position: relative; min-width: 0; overflow: hidden; }
+    #mat { position: absolute; left: 0; top: 0; touch-action: none; display: block; }
+
+    .ts-bar {
+      position: absolute; top: 12px; right: 12px; display: flex; flex-wrap: wrap; justify-content: flex-end;
+      gap: 6px; max-width: calc(100% - 60px); z-index: 3;
+    }
+    .ts-cluster {
+      display: flex; align-items: center; background: color-mix(in srgb, var(--panel) 88%, transparent);
+      border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px;
+      backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0,0,0,.25);
+    }
+    .ts-icon {
+      width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 6px;
+      background: none; color: var(--text); cursor: pointer; padding: 0;
+    }
+    .ts-icon:hover { background: var(--panel-2); }
+    .ts-icon:disabled { color: var(--faint); cursor: default; background: none; }
+    .ts-icon svg { width: 18px; height: 18px; }
+    .ts-icon.is-on { background: var(--accent); color: var(--on-accent); }
+    .ts-zoom {
+      font-family: var(--font-mono); font-size: .8rem; color: var(--text); min-width: 11ch; text-align: center;
+      border: 0; background: none; padding: 0 4px; height: 34px; border-radius: 6px; cursor: pointer;
+    }
+    .ts-zoom:hover { background: var(--panel-2); }
+    .ts-unit-select {
+      width: auto; height: 34px; border: 0; border-radius: 6px; cursor: pointer; appearance: none;
+      background: var(--panel-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23e8c547' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 8px center;
+      color: var(--accent); padding: 0 24px 0 10px; font-family: var(--font-mono); font-size: .85rem;
+    }
+    .ts-unit-select:hover { background-color: var(--border); }
+    .ts-unit-select option { background: var(--panel); color: var(--text); }
+    .ts-custom .ts-unit-select {
+      flex: none; height: auto; align-self: stretch; padding-top: 0; padding-bottom: 0;
+      border: 1px solid var(--border); background-color: var(--bg);
+    }
+    .ts-custom-entry { position: relative; }
+    .ts-custom-entry .ts-item { padding-right: 40px; }
+    .ts-custom-del {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      width: 30px; height: 30px; color: var(--muted); opacity: 0;
+    }
+    .ts-custom-del svg { width: 14px; height: 14px; }
+    .ts-custom-entry:hover .ts-custom-del, .ts-custom-del:focus-visible { opacity: 1; }
+    .ts-custom-del:hover { color: var(--danger); }
+    @media (hover: none) { .ts-custom-del { opacity: 1; } }
+    .ts-real-btn { height: 34px; border: 0; border-radius: 6px; background: none; color: var(--text);
+      padding: 0 10px; font-size: .95rem; font-weight: 600; cursor: pointer; }
+    .ts-real-btn:hover { background: var(--panel-2); }
+    .ts-real-btn.is-on { background: var(--accent); color: var(--on-accent); }
+    .ts-open-shelf { display: none; }
+
+    /* empty-state hint */
+    .ts-empty {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      color: var(--muted); font-size: 1.15rem; text-align: center; pointer-events: none; max-width: 80%;
+    }
+    .ts-empty b { color: var(--accent); font-weight: 600; }
+
+    /* ---------- inspector ---------- */
+    .ts-inspector {
+      position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); z-index: 3;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 12px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px 10px; backdrop-filter: blur(6px); width: max-content;
+      box-shadow: 0 6px 20px rgba(0,0,0,.3); max-width: calc(100% - 24px); box-sizing: border-box;
+    }
+    .ts-inspector[hidden] { display: none; }
+    .ts-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--bg); outline: 1px solid var(--border); cursor: pointer; padding: 0; flex: none; }
+    .ts-insp-name { width: 15ch; }
+    .ts-field { display: flex; align-items: center; gap: 4px; }
+    .ts-field .ts-num { width: 8ch; flex: none; }
+    .ts-field label { color: var(--muted); font-size: .9rem; }
+    .ts-facts { font-family: var(--font-mono); font-size: .78rem; color: var(--muted); line-height: 1.35; }
+    .ts-insp-btns { display: flex; gap: 2px; }
+
+    /* ---------- calibration ---------- */
+    .ts-calib h2 { font-family: var(--font-display); margin: 0 0 6px; font-size: 1.6rem; color: var(--accent); }
+    .ts-calib p { color: var(--muted); margin: 0 0 12px; font-size: 1rem; line-height: 1.4; max-width: 46ch; }
+    /* big objects (paper, laptops) scroll inside the stage rather than stretching the dialog */
+    .ts-calib-stage {
+      display: grid; place-items: center; min-height: 260px; max-height: 60vh; overflow: auto;
+      margin: 10px 0 12px; padding: 16px;
+    }
+    .ts-calib-obj { position: relative; }
+    .ts-calib-obj svg { display: block; }
+    .ts-calib-obj .grip { position: absolute; right: -11px; bottom: -11px; width: 22px; height: 22px;
+      border-radius: 50%; background: var(--accent); cursor: nwse-resize; touch-action: none; }
+    .ts-calib input[type=range] { width: 100%; accent-color: var(--accent); }
+    .ts-calib-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+    .ts-btn2 { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 12px; font-size: .95rem; cursor: pointer; }
+    .ts-btn2:hover { border-color: var(--muted); }
+
+    .ts-toast {
+      position: absolute; left: 50%; top: 60px; transform: translateX(-50%); z-index: 6;
+      background: var(--accent); color: var(--on-accent); padding: 6px 14px; border-radius: 6px;
+      font-weight: 600; pointer-events: none; opacity: 0; transition: opacity .2s;
+    }
+    .ts-toast.show { opacity: 1; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+    /* ---------- phones ---------- */
+    @media (max-width: 760px) {
+      .ts-app { grid-template-columns: 1fr; }
+      .ts-shelf {
+        position: fixed; left: 0; right: 0; bottom: 0; height: 68%; border-right: 0;
+        border-top: 1px solid var(--border); border-radius: 14px 14px 0 0;
+        transform: translateY(105%); transition: transform .22s ease; box-shadow: 0 -10px 30px rgba(0,0,0,.4);
+      }
+      .ts-shelf.is-open { transform: none; }
+      .ts-shelf-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 6px; }
+      .ts-title { font-size: 1.5rem; }
+      .ts-sub { display: none; }
+      .ts-open-shelf { display: grid; }
+      .ts-bar { left: 8px; right: 8px; top: 8px; max-width: none; justify-content: space-between; }
+      .ts-icon { width: 32px; height: 32px; }
+      .ts-inspector { bottom: 34px; gap: 6px 8px; }
+      .ts-insp-name { width: 11ch; }
+      .ts-facts { display: none; }
+      .ts-zoom { min-width: 6ch; }
+      .ts-item { touch-action: pan-y; }  /* let the sheet scroll; tap adds */
+    }
+    @media (min-width: 761px) { .ts-close-shelf { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="ts-app">
+    <aside class="ts-shelf" id="shelf">
+      <div class="ts-shelf-head">
+        <div>
+          <h1 class="ts-title">To Scale</h1>
+          <p class="ts-sub">Put rectangles and everyday things side by side at their real sizes.</p>
+        </div>
+        <button class="ts-icon ts-close-shelf" id="close-shelf" title="Close the shelf" aria-label="Close">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"/></svg>
+        </button>
+      </div>
+      <div class="ts-shelf-scroll" id="shelf-scroll">
+        <form class="ts-custom" id="custom-form" autocomplete="off">
+          <div class="ts-custom-row">
+            <input class="ts-num" id="custom-w" inputmode="decimal" placeholder="width" title="Width of the new rectangle" aria-label="width" />
+            <span class="ts-times">×</span>
+            <input class="ts-num" id="custom-h" inputmode="decimal" placeholder="height" title="Height of the new rectangle" aria-label="height" />
+            <select class="ts-unit-select" id="custom-unit" title="The unit the width and height are in" aria-label="Unit of the new rectangle">
+              <option value="mm">mm</option>
+              <option value="cm">cm</option>
+              <option value="m">m</option>
+              <option value="in">in</option>
+              <option value="ft">ft</option>
+            </select>
+          </div>
+          <div class="ts-custom-row">
+            <input class="ts-text" id="custom-name" placeholder="name (optional)" title="A label to show on the rectangle" aria-label="name" />
+            <button class="ts-add-btn" type="submit" title="Put a rectangle of this size on the mat">Add</button>
+          </div>
+        </form>
+        <div id="library"></div>
+      </div>
+    </aside>
+
+    <main class="ts-mat" id="mat-wrap">
+      <canvas id="mat"></canvas>
+      <div class="ts-empty" id="empty" hidden>Drag something from the shelf, or type a size and press <b>Add</b>.</div>
+
+      <div class="ts-bar">
+        <div class="ts-cluster ts-open-shelf">
+          <button class="ts-icon is-on" id="open-shelf" title="Open the shelf to add a rectangle or an object" aria-label="Add">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 4v12M4 10h12"/></svg>
+          </button>
+        </div>
+        <div class="ts-cluster">
+          <button class="ts-icon" id="undo" title="Undo (⌘Z)" aria-label="Undo">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5L3.5 8.5 7 12"/><path d="M4 8.5h7.5a4.5 4.5 0 010 9H9"/></svg>
+          </button>
+          <button class="ts-icon" id="redo" title="Redo (⇧⌘Z)" aria-label="Redo">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5l3.5 3.5L13 12"/><path d="M16 8.5H8.5a4.5 4.5 0 000 9H11"/></svg>
+          </button>
+          <button class="ts-icon" id="lineup" title="Line up: put everything in one row, bottoms level, so heights compare at a glance" aria-label="Line up">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="8" width="4" height="8"/><rect x="8" y="4" width="4" height="12"/><rect x="13.5" y="10" width="4" height="6"/><path d="M1 17.5h18" stroke-linecap="round"/></svg>
+          </button>
+          <button class="ts-icon" id="clear" title="Clear the mat (undo brings it back)" aria-label="Clear">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10h7.4l.8-10"/></svg>
+          </button>
+        </div>
+        <div class="ts-cluster">
+          <button class="ts-icon" id="zoom-out" title="Zoom out (−)" aria-label="Zoom out">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 10h10"/></svg>
+          </button>
+          <button class="ts-zoom" id="zoom-readout" title="How big things are on your screen compared with real life. Click to fit everything in view.">100%</button>
+          <button class="ts-icon" id="zoom-in" title="Zoom in (+)" aria-label="Zoom in">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 10h10M10 5v10"/></svg>
+          </button>
+          <button class="ts-real-btn" id="real-size" title="Real size (0). The first time, you match a real object held to the screen (remembered for this display); after that it zooms to 100%. Press it again at 100% to recalibrate.">1:1</button>
+        </div>
+        <div class="ts-cluster">
+          <select class="ts-unit-select" id="unit" title="The unit sizes are shown and typed in" aria-label="Unit">
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+            <option value="m">m</option>
+            <option value="in">in</option>
+            <option value="ft">ft</option>
+          </select>
+          <button class="ts-icon" id="share" title="Copy a link to this mat" aria-label="Copy link">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8.5 11.5a3.5 3.5 0 005 0l2.5-2.5a3.5 3.5 0 00-5-5L10 5"/><path d="M11.5 8.5a3.5 3.5 0 00-5 0L4 11a3.5 3.5 0 005 5l1-1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ts-inspector" id="inspector" hidden>
+        <button class="ts-swatch" id="insp-color" title="Change this shape's color"></button>
+        <input class="ts-text ts-insp-name" id="insp-name" placeholder="name" title="The label shown on this shape" aria-label="name" />
+        <div class="ts-field">
+          <input class="ts-num" id="insp-w" inputmode="decimal" title="Width" aria-label="width" />
+          <span class="ts-times">×</span>
+          <input class="ts-num" id="insp-h" inputmode="decimal" title="Height" aria-label="height" />
+          <span class="ts-unit-label" id="insp-unit">mm</span>
+        </div>
+        <div class="ts-field" id="insp-angle-field">
+          <input class="ts-num" id="insp-a" inputmode="decimal" style="width:6ch" title="Rotation in degrees. Dragging the round handle snaps to every 45°; hold Shift to rotate freely." aria-label="angle" />
+          <label for="insp-a">°</label>
+        </div>
+        <div class="ts-facts" id="insp-facts"></div>
+        <div class="ts-insp-btns">
+          <button class="ts-icon" id="insp-rot" title="Rotate 90° (R)" aria-label="Rotate 90 degrees">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 10a6 6 0 11-2-4.5"/><path d="M14.5 2.5v3.5H11"/></svg>
+          </button>
+          <button class="ts-icon" id="insp-dup" title="Duplicate (⌘D)" aria-label="Duplicate">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M13 4.5V4a1 1 0 00-1-1H4a1 1 0 00-1 1v8a1 1 0 001 1h.5"/></svg>
+          </button>
+          <button class="ts-icon" id="insp-del" title="Remove from the mat (Delete)" aria-label="Delete">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10h7.4l.8-10"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ts-toast" id="toast"></div>
+    </main>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
