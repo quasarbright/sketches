@@ -1253,7 +1253,7 @@ function openCalibration() {
   const { el, close } = openModal(`
     <div class="ts-calib">
       <h2>Match a real object</h2>
-      <p>Hold the object against the screen and drag the yellow dot (or the slider) until the outline matches its edges. A credit card works well; anything in the list does.</p>
+      <p>Hold the object against the screen with its corner on the outline's top-left corner, which stays put, then drag the yellow dot (or the slider) until the outline matches its edges. A credit card works well; anything in the list does.</p>
       <select id="cal-object" title="The object you're holding up to the screen" aria-label="Object to match">${options}</select>
       <div class="ts-calib-stage"><div class="ts-calib-obj" id="cal-obj"></div></div>
       <input type="range" id="cal-range" min="1.5" max="12" step="0.001" title="Size of the outline on screen" />
@@ -1320,7 +1320,7 @@ function loadInitial() {
   } catch {}
   // first visit: a phone, a passport and a soda can, lined up
   if (!navigator.language || navigator.language === "en-US") unit = "in";
-  for (const src of ["iphone-17-pro", "passport", "soda-can"]) place(makeShape({ src }));
+  for (const src of ["iphone-17-pro-max", "passport", "soda-can"]) place(makeShape({ src }));
   selId = null;
   return "fit";
 }
