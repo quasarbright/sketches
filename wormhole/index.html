@@ -262,10 +262,11 @@
         <div class="section-label">flying</div>
         <p>You move by the same rule as light. Let go of the keys and you coast along the straightest
           path, which can curve you around the hole. Your sense of up is carried along with you the
-          same way. Fly straight through the middle from the starting spot and B's sky comes out
-          upright. Cross near the rim of the throat, or loop around it first, and you come out tilted
-          against B's grid: no one direction is up in both universes from every crossing point, so up
-          depends on the path you took.</p>
+          same way, and near the throat that's not as simple as it sounds: carry an arrow around a
+          loop on a curved surface, never turning it, and it comes back pointing somewhere else. So
+          a loop close to the hole can leave you tilted. Once you're out where space is flat again,
+          your view slowly levels back to that universe's own up. Flying straight through the middle
+          from the starting spot, B's sky comes out upright with nothing to fix.</p>
         <p class="muted" style="font-size:.85rem">Made after optozorax's video
           <a href="https://www.youtube.com/watch?v=zA85gINcW1g" target="_blank" rel="noopener">What
           would a wormhole look like in real life?</a> The wormhole's shape is from James, von
@@ -674,6 +675,22 @@ function orthonormalize(c = cam) {
   if (Math.hypot(...R) > 1e-6) c.R = V.norm(R);
   c.U = V.cross(c.R, c.F);
 }
+// Carrying up along a path that bends near the throat tilts it (a loop there can turn it by 90°),
+// so away from the throat it eases back to the local universe's up: +y in A, and in B the vector
+// that B's (half-turned) sky draws as +y.
+function upTarget(c) {
+  if (c.l >= 0) return [0, 1, 0];
+  const d = c.n[1];
+  return [-2 * d * c.n[0], 1 - 2 * d * c.n[1], -2 * d * c.n[2]];
+}
+function levelUp(dt) {
+  const t = upTarget(cam), f = 1 - Math.exp(-2 * drOf(cam.l) ** 2 * dt); // 0 in the throat, fastest in flat space
+  const ang = Math.acos(Math.max(-1, Math.min(1, V.dot(cam.up, t))));
+  if (f === 0 || ang < 1e-5) return;
+  const ax = V.cross(cam.up, t);
+  cam.up = V.rot(cam.up, Math.hypot(...ax) > 1e-6 ? V.norm(ax) : cam.F, ang * f);
+  orthonormalize();
+}
 const MAX_PITCH = Math.PI / 2 - 0.02;
 function look(yaw, pitch) {
   if (yaw) cam.F = V.rot(cam.F, cam.up, yaw);
@@ -830,6 +847,7 @@ function frame(now) {
   target = V.scale(target, sp);
   cam.vel = V.add(cam.vel, V.scale(V.sub(target, cam.vel), 1 - Math.exp(-5 * dt)));
   move(V.scale(cam.vel, dt));
+  levelUp(dt);
 
   if (dirtyLut || cam.l !== lastL) {
     lastL = cam.l; dirtyLut = false;
