@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Wormhole</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #07080d;   /* void */
+      --panel:     #10131c;
+      --panel-2:   #171b27;
+      --border:    #262b3b;
+      --text:      #e8e6f0;
+      --muted:     #8e8ca3;
+      --faint:     #5a5970;
+      --accent:    #a58bff;   /* throat violet: side A */
+      --accent-hi: #c3b2ff;
+      --on-accent: #07080d;
+      --side-b:    #ffb36b;   /* side B */
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+
+    #gl { position: fixed; top: 0; left: 0; display: block; touch-action: none; cursor: crosshair; }
+
+    .wh-shadow { text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.85); }
+
+    /* top-left instrument: title, embedding diagram, readout */
+    .wh-hud {
+      position: fixed; top: 16px; left: 16px; z-index: 3; pointer-events: none;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .wh-title {
+      font-family: var(--font-display); font-weight: 600; font-size: 1.35rem; letter-spacing: .01em;
+      color: var(--text);
+    }
+    .wh-gauge {
+      width: 168px; padding: 8px 10px 10px; border-radius: 10px;
+      background: color-mix(in srgb, var(--panel) 70%, transparent);
+      border: 1px solid var(--border); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    .wh-gauge canvas { display: block; width: 148px; height: 120px; }
+    .wh-readout {
+      margin-top: 6px; font-family: var(--font-mono); font-size: 11px; line-height: 1.55;
+      color: var(--muted); white-space: pre;
+    }
+    .wh-readout b { color: var(--text); font-weight: 500; }
+    .wh-readout .a { color: var(--accent); }
+    .wh-readout .b { color: var(--side-b); }
+
+    /* first-run hint */
+    .wh-hint {
+      position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 3;
+      pointer-events: none; text-align: center; transition: opacity .4s;
+      font-family: var(--font-mono); font-size: 12px; color: var(--muted); line-height: 1.8;
+    }
+    .wh-hint .go {
+      display: inline-block; margin-bottom: 6px; padding: 6px 14px; border-radius: 999px;
+      font-family: var(--font-display); font-size: 15px; color: var(--on-accent); background: var(--accent);
+      text-shadow: none;
+    }
+    .wh-hint kbd { font-family: var(--font-mono); color: var(--text); }
+    .wh-hint.hidden { opacity: 0; }
+    .wh-touch-only { display: none; }
+    @media (pointer: coarse) {
+      .wh-touch-only { display: inline; }
+      .wh-mouse-only { display: none; }
+    }
+
+    /* touch controls */
+    .wh-stick {
+      position: fixed; z-index: 3; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+      border: 1.5px solid color-mix(in srgb, var(--accent) 60%, transparent); pointer-events: none; display: none;
+    }
+    .wh-stick::after {
+      content: ""; position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px;
+      border-radius: 50%; background: color-mix(in srgb, var(--accent) 55%, transparent);
+      transform: translate(var(--sx, 0px), var(--sy, 0px));
+    }
+    .wh-updown {
+      position: fixed; right: 16px; bottom: 76px; z-index: 3; display: none; flex-direction: column; gap: 8px;
+    }
+    @media (pointer: coarse) { .wh-updown { display: flex; } }
+    .wh-updown .btn { width: 48px; height: 48px; padding: 0; font-size: 18px; touch-action: none; }
+
+    .wh-fallback {
+      position: fixed; inset: 0; display: none; place-items: center; padding: 40px;
+      color: var(--muted); text-align: center; font-family: var(--font-ui);
+    }
+
+    mike-footer[overlay] { z-index: 4; opacity: 1 !important; color: var(--text) !important; }
+    mike-footer[overlay], mike-footer[overlay] a {
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9);
+    }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+
+    .control-panel .panel-title { font-family: var(--font-display); font-weight: 500; }
+    .wh-sky-a .name { color: var(--accent); }
+    .wh-sky-b .name { color: var(--side-b); }
+
+    .wh-about .a { color: var(--accent); }
+    .wh-about .b { color: var(--side-b); }
+  </style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div class="wh-fallback" id="fallback">This needs WebGL2 with float render targets, which this browser doesn't have.</div>
+
+  <div class="wh-hud wh-shadow">
+    <div class="wh-title">Wormhole</div>
+    <div class="wh-gauge">
+      <canvas id="gauge" width="296" height="240"></canvas>
+      <div class="wh-readout" id="readout"></div>
+    </div>
+  </div>
+
+  <div class="wh-hint wh-shadow" id="hint">
+    <span class="go"><span class="wh-mouse-only">click to fly</span><span class="wh-touch-only">drag to fly</span></span><br>
+    <span class="wh-mouse-only"><kbd>W A S D</kbd> move · <kbd>mouse</kbd> look<br>
+    <kbd>space</kbd> / <kbd>C</kbd> up / down · <kbd>shift</kbd> boost · <kbd>scroll</kbd> speed · <kbd>esc</kbd> release</span>
+    <span class="wh-touch-only">left thumb moves · right thumb looks</span>
+  </div>
+
+  <div class="wh-stick" id="stick"></div>
+  <div class="wh-updown">
+    <button class="btn" id="upBtn" title="Fly up">▲</button>
+    <button class="btn" id="downBtn" title="Fly down">▼</button>
+  </div>
+
+  <script>
+    // phones: start with the panel folded so the view isn't covered
+    if (document.documentElement.clientWidth < 700) document.addEventListener("DOMContentLoaded", () => document.querySelector("control-panel").setAttribute("collapsed", ""));
+  </script>
+  <control-panel floating title="Wormhole">
+    <div class="control wh-sky-a">
+      <div class="control-head"><span class="name" title="The sky of the universe on the near side of the throat, where you start">sky A</span></div>
+      <select id="skyA" title="The sky of the universe on the near side of the throat, where you start"></select>
+    </div>
+    <div class="control wh-sky-b">
+      <div class="control-head"><span class="name" title="The sky of the universe on the far side of the throat">sky B</span></div>
+      <select id="skyB" title="The sky of the universe on the far side of the throat"></select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="Radius of the narrowest part of the wormhole, the circle you fly through">throat radius</span><span class="value" id="vRho"></span></div>
+      <input type="range" id="rho" min="0.25" max="4" step="0.05" value="1" title="Radius of the narrowest part of the wormhole, the circle you fly through" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="Length of the straight tube in the middle of the wormhole. Zero means the two sides meet at a single ring.">throat length</span><span class="value" id="vLen"></span></div>
+      <input type="range" id="len" min="0" max="20" step="0.1" value="0" title="Length of the straight tube in the middle of the wormhole. Zero means the two sides meet at a single ring." />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How gradually the throat flares out into flat space. Small: a sharp lip and a thin bright ring. Large: a wide funnel that bends light over a big patch of sky.">flare</span><span class="value" id="vM"></span></div>
+      <input type="range" id="flare" min="0.02" max="3" step="0.01" value="0.5" title="How gradually the throat flares out into flat space. Small: a sharp lip and a thin bright ring. Large: a wide funnel that bends light over a big patch of sky." />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How wide your view is, in degrees">field of view</span><span class="value" id="vFov"></span></div>
+      <input type="range" id="fov" min="40" max="120" step="1" value="80" title="How wide your view is, in degrees" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How fast you fly, in throat radii per second. The scroll wheel changes it too.">speed</span><span class="value" id="vSpeed"></span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="40" title="How fast you fly, in throat radii per second. The scroll wheel changes it too." />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="Fraction of screen pixels drawn. Lower it if the frame rate drops.">resolution</span><span class="value" id="vRes"></span></div>
+      <input type="range" id="res" min="25" max="100" step="5" value="100" title="Fraction of screen pixels drawn. Lower it if the frame rate drops." />
+    </div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="reset" title="Go back to the starting spot, looking at the throat">⟳ reset</button>
+    <about-modal label="about">
+      <div class="wh-about">
+        <h2 class="title">Wormhole</h2>
+        <p class="intro">Two universes joined by a tunnel. Each one here is just a sky: a pattern
+          painted on a sphere infinitely far away. Universe <span class="a">A</span> is where you
+          start; universe <span class="b">B</span> is through the hole.</p>
+
+        <div class="section-label">the shape of the space</div>
+        <p>Picture a funnel whose narrow end is glued to the narrow end of a second funnel. A
+          two-dimensional creature living on that surface could walk down one funnel, through the
+          ring where they meet, and up into the other, never leaving the surface. Far from the ring
+          each funnel flattens out into an ordinary plane.</p>
+        <p>The wormhole is the same thing one dimension up. Every sphere around the hole has some
+          area, and the closer you get the smaller those spheres are, down to a smallest one, the
+          <b>throat</b>. Past it, the spheres grow again, but now you're in the other universe.</p>
+        <p>The picture in the top-left corner is that funnel seen edge-on, with a dot for where you are.
+          Its horizontal width is the radius <code>r</code> of the sphere you're on; going down the
+          picture is going through.</p>
+        <p>To describe where you are you need one number for the distance <code>ℓ</code> along the
+          tunnel (positive in A, negative in B, zero at the throat) and a direction on the sphere.
+          The whole shape is set by how the sphere's radius depends on <code>ℓ</code>:</p>
+        <p>$$ ds^2 = d\ell^2 + r(\ell)^2\,(d\theta^2 + \sin^2\theta\, d\varphi^2) $$</p>
+        <p>This uses the <code>r(ℓ)</code> from the paper the <em>Interstellar</em> team published about
+          rendering their wormhole: a tube of radius <b>throat radius</b> and length <b>throat
+          length</b>, flaring out into flat space over a distance set by <b>flare</b>.</p>
+
+        <div class="section-label">how light moves</div>
+        <p>Light goes as straight as it can, which on a curved surface means the shortest path. A
+          ray aimed straight at the hole goes through. A ray aimed off to the side bends around the
+          throat and comes back out into the universe it started in, in a different direction. A ray
+          aimed just past the edge of the throat circles it before escaping, and every other ray bends
+          somewhere in between.</p>
+        <p>So looking at the hole you see all of universe B squeezed into a disk, and around the disk
+          you see your own sky smeared into rings, including the part of it that's behind you.</p>
+
+        <div class="section-label">how it runs in real time</div>
+        <p>The space is perfectly round, so any ray stays in the flat slice that contains it and the
+          center of the hole. Inside that slice, where the ray ends up depends on only two numbers:
+          where you are (<code>ℓ</code>) and the angle between the ray and the direction straight
+          away from the hole.</p>
+        <p>So once a frame, the GPU traces 4096 rays in a single slice at your <code>ℓ</code>, at
+          angles from straight out to straight in, each stepped through the curved space until it's
+          far enough out that space is flat again. It stores which universe each ray ended up in and
+          which direction it was heading. Then for each pixel it measures that one angle, looks up the
+          answer, and turns it back to the pixel's own slice. The skies are drawn from formulas
+          rather than images, so they stay sharp however much the throat magnifies them.</p>
+
+        <div class="section-label">flying</div>
+        <p>You fly with the same rule light uses. When you coast, you move in the straightest
+          possible line through the curved space, and your view turns with the space so that flying
+          through the throat carries you into B the right way up.</p>
+      </div>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+<script type="module">
+// ---------------------------------------------------------------- the wormhole's shape
+// r(ℓ) from James, von Tunzelmann, Franklin & Thorne, "Visualizing Interstellar's Wormhole" (2015):
+// a cylinder of radius ρ for |ℓ| ≤ a, then flaring out over a distance ~M into flat space.
+const P = { rho: 1, a: 0, M: 0.5 };
+function rOf(l) {
+  const al = Math.abs(l);
+  if (al <= P.a) return P.rho;
+  const x = (2 * (al - P.a)) / (Math.PI * P.M);
+  return P.rho + P.M * (x * Math.atan(x) - 0.5 * Math.log1p(x * x));
+}
+function drOf(l) {
+  const al = Math.abs(l);
+  if (al <= P.a) return 0;
+  const x = (2 * (al - P.a)) / (Math.PI * P.M);
+  return Math.sign(l) * (2 / Math.PI) * Math.atan(x);
+}
+// angle (from straight out, +ℓ) past which a ray goes through the throat
+function alphaCrit(l) {
+  const s = Math.asin(Math.min(1, P.rho / rOf(l)));
+  return l >= 0 ? Math.PI - s : s;
+}
+
+// ---------------------------------------------------------------- skies
+const SKIES = [
+  ["grid", "Latitude & longitude"],
+  ["checker", "Checkerboard"],
+  ["cube", "Cube"],
+  ["dodeca", "Dodecahedron"],
+  ["octa", "Octahedron"],
+  ["icosa", "Icosahedron"],
+  ["tetra", "Tetrahedron"],
+  ["stars", "Stars"],
+  ["voronoi", "Voronoi cells"],
+  ["loxo", "Loxodromes"],
+];
+// face normals + sticker colors from cutwist's puzzle.mjs
+const SOLIDS = {"tetrahedron":{"n":[[0.57735,0.57735,0.57735],[0.57735,-0.57735,-0.57735],[-0.57735,0.57735,-0.57735],[-0.57735,-0.57735,0.57735]],"c":["#d7263d","#1b998b","#2e5fd8","#f5c518"]},"cube":{"n":[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],"c":["#c8102e","#ff6a13","#f4f4ee","#ffe600","#009e60","#0051ba"]},"octahedron":{"n":[[0.57735,0.57735,0.57735],[0.57735,0.57735,-0.57735],[0.57735,-0.57735,0.57735],[0.57735,-0.57735,-0.57735],[-0.57735,0.57735,0.57735],[-0.57735,0.57735,-0.57735],[-0.57735,-0.57735,0.57735],[-0.57735,-0.57735,-0.57735]],"c":["#f4f4ee","#c8102e","#009e60","#5c6068","#7b3fb3","#0051ba","#ff6a13","#ffe600"]},"dodecahedron":{"n":[[0,0.525731,0.850651],[0.850651,0,0.525731],[0.525731,0.850651,0],[0,0.525731,-0.850651],[-0.850651,0,0.525731],[0.525731,-0.850651,0],[0,-0.525731,0.850651],[0.850651,0,-0.525731],[-0.525731,0.850651,0],[0,-0.525731,-0.850651],[-0.850651,0,-0.525731],[-0.525731,-0.850651,0]],"c":["#f4f4ee","#ffe600","#7b3fb3","#5ab4ff","#c8102e","#8ed142","#0051ba","#ff6a13","#009e60","#5c6068","#d6c298","#ff7eb6"]},"icosahedron":{"n":[[0.57735,0.57735,0.57735],[0.57735,0.57735,-0.57735],[0.57735,-0.57735,0.57735],[0.57735,-0.57735,-0.57735],[-0.57735,0.57735,0.57735],[-0.57735,0.57735,-0.57735],[-0.57735,-0.57735,0.57735],[-0.57735,-0.57735,-0.57735],[0,0.356822,0.934172],[0.934172,0,0.356822],[0.356822,0.934172,0],[0,0.356822,-0.934172],[-0.934172,0,0.356822],[0.356822,-0.934172,0],[0,-0.356822,0.934172],[0.934172,0,-0.356822],[-0.356822,0.934172,0],[0,-0.356822,-0.934172],[-0.934172,0,-0.356822],[-0.356822,-0.934172,0]],"c":["#f4f400","#ffffff","#7d3b11","#5ec4b6","#007a89","#ff8000","#aaaaaa","#d8b87c","#d41f69","#5c5c5c","#008800","#0000ff","#980000","#b9a1ff","#3399ff","#ff0000","#8800dd","#ff66cc","#292929","#44ee00"]}};
+// order matches the solid sky ids 2..6
+const PUZZLES = ["cube", "dodecahedron", "octahedron", "icosahedron", "tetrahedron"];
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+const puzN = [], puzC = [], puzOff = [], puzCnt = [];
+for (const k of PUZZLES) {
+  puzOff.push(puzN.length / 3); puzCnt.push(SOLIDS[k].n.length);
+  SOLIDS[k].n.forEach((v, i) => { puzN.push(...v); puzC.push(...hex(SOLIDS[k].c[i])); });
+}
+// Voronoi sites: a Fibonacci sphere, jittered with a fixed seed
+const VOR = 48, vorP = [], vorC = [];
+{
+  let s = 7; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const pal = ["#3b2a6b", "#5b3f9e", "#2d4f8a", "#1f6f7a", "#6a2f5f", "#8a4a2a", "#2b3550", "#4a2b45", "#1d5a52", "#5d5a2a"];
+  for (let i = 0; i < VOR; i++) {
+    const y = 1 - (2 * (i + 0.5)) / VOR, rr = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
+    let v = [Math.cos(th) * rr + 0.25 * (rnd() - 0.5), y + 0.25 * (rnd() - 0.5), Math.sin(th) * rr + 0.25 * (rnd() - 0.5)];
+    const l = Math.hypot(...v); vorP.push(...v.map((x) => x / l));
+    vorC.push(...hex(pal[Math.floor(rnd() * pal.length)]));
+  }
+}
+
+// ---------------------------------------------------------------- GL setup
+const canvas = document.getElementById("gl");
+const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, powerPreference: "high-performance" });
+const fail = () => { document.getElementById("fallback").style.display = "grid"; throw new Error("no webgl2 float targets"); };
+if (!gl) fail();
+const f32 = gl.getExtension("EXT_color_buffer_float");
+const f16 = f32 ? null : gl.getExtension("EXT_color_buffer_half_float");
+if (!f32 && !f16) fail();
+
+const LUT_W = 1024, LUT_H = 4, LUT_N = LUT_W * LUT_H, LUT_K = LUT_N / 2;
+
+const VERT = `#version 300 es
+void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
+
+const COMMON = `#version 300 es
+precision highp float;
+precision highp int;
+const float PI = 3.14159265358979;
+const int LUT_W = ${LUT_W}, LUT_N = ${LUT_N}, LUT_K = ${LUT_K};
+uniform float uRho, uA, uM, uAlphaC;
+// sample i <-> ray angle α: half the samples on each side of the critical angle, bunched toward it
+float alphaOf(int i){
+  if (i < LUT_K) { float t = float(i) / float(LUT_K - 1); float u = 1.0 - t; return uAlphaC * (1.0 - u * u); }
+  float t = float(i - LUT_K) / float(LUT_K - 1); return uAlphaC + (PI - uAlphaC) * t * t;
+}
+`;
+
+// One ray per texel, in the plane spanned by "straight out" (+ℓ) and the ray's sideways direction.
+// State: ℓ, p = dℓ/ds, φ = angle swept round the hole. h = r² dφ/ds is conserved.
+const LUT_FRAG = COMMON + `
+uniform float uL, uLfar;
+out vec4 o;
+float rOf(float l){ float al = abs(l); if (al <= uA) return uRho; float x = 2.0 * (al - uA) / (PI * uM); return uRho + uM * (x * atan(x) - 0.5 * log(1.0 + x * x)); }
+float drOf(float l){ float al = abs(l); if (al <= uA) return 0.0; float x = 2.0 * (al - uA) / (PI * uM); return sign(l) * (2.0 / PI) * atan(x); }
+vec3 deriv(vec3 y, float h){ float r = rOf(y.x); return vec3(y.y, h * h * drOf(y.x) / (r * r * r), h / (r * r)); }
+void main(){
+  int i = int(gl_FragCoord.y) * LUT_W + int(gl_FragCoord.x);
+  float alpha = alphaOf(i);
+  vec3 y = vec3(uL, cos(alpha), 0.0);
+  float h = rOf(uL) * sin(alpha);
+  bool escaped = false;
+  for (int k = 0; k < 6000; k++) {
+    if (abs(y.x) > uLfar && y.y * y.x > 0.0) { escaped = true; break; }
+    float r = rOf(y.x);
+    float ds = min(0.03 * r, 0.2 * uM + 0.03 * max(abs(y.x) - uA, 0.0));
+    vec3 k1 = deriv(y, h), k2 = deriv(y + 0.5 * ds * k1, h), k3 = deriv(y + 0.5 * ds * k2, h), k4 = deriv(y + ds * k3, h);
+    y += ds / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+  }
+  float r = rOf(y.x), phi = y.z;
+  vec2 u = vec2(cos(phi), sin(phi)), e = vec2(-u.y, u.x);
+  vec2 D = normalize(y.y * u + (h / r) * e);          // final heading, in (out, sideways) at the start
+  float side = y.x > 0.0 ? 1.0 : 0.0;
+  if (side < 0.5) D = 2.0 * dot(D, u) * u - D;        // universe B's own axes (see main shader)
+  o = vec4(D, side, escaped ? 1.0 : 0.0);
+}`;
+
+const MAIN_FRAG = COMMON + `
+uniform sampler2D uLut;
+uniform vec3 uN, uF, uR, uU;
+uniform vec2 uRes;
+uniform float uTanHalf;
+uniform int uSkyA, uSkyB;
+uniform vec3 uPN[50], uPC[50];
+uniform int uPOff[5], uPCnt[5];
+uniform vec3 uVP[${VOR}], uVC[${VOR}];
+out vec4 o;
+
+vec4 lutFetch(int i){ return texelFetch(uLut, ivec2(i % LUT_W, i / LUT_W), 0); }
+vec4 lutAt(float alpha){
+  float x;
+  if (alpha < uAlphaC) x = (1.0 - sqrt(max(0.0, 1.0 - alpha / uAlphaC))) * float(LUT_K - 1);
+  else x = float(LUT_K) + sqrt(clamp((alpha - uAlphaC) / max(PI - uAlphaC, 1e-6), 0.0, 1.0)) * float(LUT_K - 1);
+  int i0 = clamp(int(floor(x)), 0, LUT_N - 1);
+  int i1 = (i0 == LUT_K - 1) ? i0 : min(i0 + 1, LUT_N - 1);
+  float t = x - float(i0);
+  vec4 a = lutFetch(i0), b = lutFetch(i1);
+  if (abs(a.z - b.z) > 0.5 || a.w < 0.5 || b.w < 0.5) return t < 0.5 ? a : b;
+  vec2 m = mix(a.xy, b.xy, t);
+  return vec4(m / max(length(m), 1e-6), a.z, 1.0);
+}
+
+// box-filtered coverage of a line of half-width hw at angular distance dist, pixel footprint pw
+float cover(float dist, float hw){
+  float pw = max(fwidth(dist), 1e-6);
+  float lo = max(-hw, dist - 0.5 * pw), hi = min(hw, dist + 0.5 * pw);
+  return clamp((hi - lo) / pw, 0.0, 1.0);
+}
+// screen-space rate of a longitude, ignoring its 2π jump: the smaller of it and its half-turned twin
+float seamWidth(float lon){ return min(fwidth(lon), fwidth(lon < 0.0 ? lon + 2.0 * PI : lon)); }
+float checkers(vec2 p, vec2 w){
+  vec2 i = 2.0 * (abs(fract((p - 0.5 * w) * 0.5) - 0.5) - abs(fract((p + 0.5 * w) * 0.5) - 0.5)) / w;
+  return 0.5 - 0.5 * i.x * i.y;
+}
+uvec3 pcg3d(uvec3 v){
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+vec3 hash33(vec3 p){ return vec3(pcg3d(uvec3(ivec3(p) + 65536))) / 4294967295.0; }
+
+vec3 skyGrid(vec3 d, float pw){
+  float lat = asin(clamp(d.y, -1.0, 1.0)), lon = atan(d.z, d.x), cl = max(cos(lat), 1e-5);
+  vec3 c = mix(vec3(0.11, 0.05, 0.17), vec3(0.03, 0.08, 0.19), smoothstep(-0.6, 0.6, d.y));
+  float s = PI / 12.0, m = PI / 36.0;
+  float dLatM = abs(lat - m * round(lat / m)), dLonM = asin(min(1.0, abs(sin(lon - m * round(lon / m))) * cl));
+  float dLat = abs(lat - s * round(lat / s)), dLon = asin(min(1.0, abs(sin(lon - s * round(lon / s))) * cl));
+  c = mix(c, vec3(0.32, 0.42, 0.66), 0.55 * max(cover(dLatM, 0.001), cover(dLonM, 0.001)));
+  c = mix(c, vec3(0.62, 0.84, 1.0), max(cover(dLat, 0.0022), cover(dLon, 0.0022)));
+  c = mix(c, vec3(1.0, 0.79, 0.33), cover(abs(lat), 0.0045));
+  float dPrime = cos(lon) > 0.0 ? asin(min(1.0, abs(sin(lon)) * cl)) : 9.0;
+  c = mix(c, vec3(1.0, 0.42, 0.55), cover(dPrime, 0.0045));
+  return c;
+}
+vec3 skyChecker(vec3 d, float pw){
+  float lat = asin(clamp(d.y, -1.0, 1.0)), lon = atan(d.z, d.x), cl = max(cos(lat), 1e-5);
+  vec2 p = vec2(lon / (2.0 * PI) * 24.0, (lat / PI + 0.5) * 12.0);
+  vec2 w = vec2(seamWidth(lon) * 24.0 / (2.0 * PI), fwidth(p.y)) + 1e-4;
+  return mix(vec3(0.93, 0.90, 0.83), vec3(0.12, 0.13, 0.30), checkers(p, w));
+}
+vec3 skyPuzzle(int k, vec3 d, float pw){
+  int off = uPOff[k], cnt = uPCnt[k];
+  float b1 = -2.0, b2 = -2.0; int i1 = 0, i2 = 0;
+  for (int j = 0; j < 20; j++) {
+    if (j >= cnt) break;
+    float q = dot(d, uPN[off + j]);
+    if (q > b1) { b2 = b1; i2 = i1; b1 = q; i1 = j; } else if (q > b2) { b2 = q; i2 = j; }
+  }
+  float de = asin(clamp((b1 - b2) / length(uPN[off + i1] - uPN[off + i2]), 0.0, 1.0));
+  vec3 col = uPC[off + i1];
+  return mix(col, vec3(0.04, 0.04, 0.05), cover(de, 0.003));
+}
+float vnoise(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float n000 = hash33(i).x, n100 = hash33(i + vec3(1,0,0)).x, n010 = hash33(i + vec3(0,1,0)).x, n110 = hash33(i + vec3(1,1,0)).x;
+  float n001 = hash33(i + vec3(0,0,1)).x, n101 = hash33(i + vec3(1,0,1)).x, n011 = hash33(i + vec3(0,1,1)).x, n111 = hash33(i + vec3(1,1,1)).x;
+  return mix(mix(mix(n000, n100, f.x), mix(n010, n110, f.x), f.y), mix(mix(n001, n101, f.x), mix(n011, n111, f.x), f.y), f.z);
+}
+float fbm(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }
+// each star belongs to the cell its own direction lands in, so neighbors never clip it
+vec3 starLayer(vec3 d, float S, float density, float rad, float pw){
+  vec3 p = d * S, c0 = floor(p), acc = vec3(0.0);
+  float sig = max(rad, 0.6 * pw);
+  for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) {
+    vec3 c = c0 + vec3(x, y, z);
+    vec3 h = hash33(c), h2 = hash33(c + vec3(4099.0, 1031.0, 2053.0));
+    if (h2.x > density) continue;
+    vec3 sd = normalize(c + h);
+    if (floor(sd * S) != c) continue;
+    vec3 dd = d - sd;
+    float I = (rad * rad) / (sig * sig) * exp(-0.5 * dot(dd, dd) / (sig * sig));
+    acc += mix(vec3(1.0, 0.72, 0.5), vec3(0.62, 0.78, 1.0), h2.z) * I * (0.25 + 3.0 * pow(h2.y, 5.0));
+  }
+  return acc;
+}
+vec3 skyStars(vec3 d, float pw){
+  vec3 axis = normalize(vec3(0.3, 1.0, 0.2));
+  float band = exp(-pow(dot(d, axis) * 3.2, 2.0));
+  float n = fbm(d * 2.2), n2 = fbm(d * 4.0 + 5.0);
+  vec3 c = vec3(0.006, 0.006, 0.016);
+  c += band * vec3(0.10, 0.08, 0.13) * smoothstep(0.3, 0.75, n);
+  c += vec3(0.20, 0.04, 0.16) * pow(smoothstep(0.45, 0.85, n), 2.0) * (0.4 + band);
+  c += vec3(0.02, 0.14, 0.17) * pow(smoothstep(0.5, 0.9, n2), 2.0);
+  c += starLayer(d, 45.0, 0.55, 0.0028, pw);
+  c += starLayer(d, 130.0, 0.35 + 0.5 * band, 0.0013, pw) * 0.7;
+  return c;
+}
+vec3 skyVoronoi(vec3 d, float pw){
+  float b1 = -2.0, b2 = -2.0; int i1 = 0, i2 = 0;
+  for (int j = 0; j < ${VOR}; j++) {
+    float q = dot(d, uVP[j]);
+    if (q > b1) { b2 = b1; i2 = i1; b1 = q; i1 = j; } else if (q > b2) { b2 = q; i2 = j; }
+  }
+  float de = asin(clamp((b1 - b2) / length(uVP[i1] - uVP[i2]), 0.0, 1.0));
+  vec3 col = uVC[i1] * (0.75 + 0.5 * smoothstep(0.0, 0.25, de));
+  return mix(col, vec3(0.9, 0.88, 0.95), cover(de, 0.0025));
+}
+vec3 skyLoxo(vec3 d, float pw){
+  float lat = asin(clamp(d.y, -0.999999, 0.999999)), lon = atan(d.z, d.x), cl = max(cos(lat), 1e-5);
+  float y = atanh(sin(lat));                       // Mercator: loxodromes are straight lines
+  const float N = 12.0, k = 1.0;
+  float sc = N / (2.0 * PI), back = (2.0 * PI / N) / sqrt(1.0 + k * k) * cl;
+  float u1 = (lon + k * y) * sc, u2 = (lon - k * y) * sc;
+  vec2 w = vec2((seamWidth(lon) + k * fwidth(y)) * sc) + 1e-4;
+  vec3 c = mix(vec3(0.07, 0.04, 0.14), vec3(0.13, 0.07, 0.22), checkers(vec2(u1, u2), w));
+  float d1 = abs(fract(u1 + 0.5) - 0.5) * back, d2 = abs(fract(u2 + 0.5) - 0.5) * back;
+  c = mix(c, vec3(0.65, 0.55, 1.0), cover(d1, 0.003));
+  c = mix(c, vec3(1.0, 0.70, 0.42), cover(d2, 0.003));
+  return c;
+}
+vec3 sky(int id, vec3 d, float pw){
+  if (id == 0) return skyGrid(d, pw);
+  if (id == 1) return skyChecker(d, pw);
+  if (id <= 6) return skyPuzzle(id - 2, d, pw);
+  if (id == 7) return skyStars(d, pw);
+  if (id == 8) return skyVoronoi(d, pw);
+  return skyLoxo(d, pw);
+}
+
+void main(){
+  vec2 q = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+  vec3 d = normalize(uF + uTanHalf * (q.x * uR + q.y * uU));
+  // split the ray into "straight out from the hole" and sideways
+  float c = dot(d, uN);
+  vec3 t = d - c * uN; float s = length(t);
+  vec3 tn = s > 1e-6 ? t / s : normalize(cross(uN, abs(uN.x) < 0.9 ? vec3(1,0,0) : vec3(0,1,0)));
+  vec4 L = lutAt(atan(s, c));
+  vec3 D = L.x * uN + L.y * tn;
+  // B's sky is turned half a turn about z, so flying straight through from the start keeps it upright
+  if (L.z < 0.5) D.xy = -D.xy;
+  float pw = max(max(length(dFdx(D)), length(dFdy(D))), 1e-5);
+  // one call, so derivatives inside the skies only break on the A/B boundary itself
+  vec3 col = sky(L.z > 0.5 ? uSkyA : uSkyB, D, pw);
+  if (L.w < 0.5) col = vec3(0.0);
+  o = vec4(col, 1.0);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) + "\n" + src.split("\n").map((l, i) => i + 1 + ": " + l).join("\n"));
+  return s;
+}
+function program(fsrc) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsrc));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, ""); u[name] = gl.getUniformLocation(p, name); }
+  return { p, u };
+}
+const lutProg = program(LUT_FRAG), mainProg = program(MAIN_FRAG);
+const vao = gl.createVertexArray();
+
+const lutTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, lutTex);
+gl.texImage2D(gl.TEXTURE_2D, 0, f32 ? gl.RGBA32F : gl.RGBA16F, LUT_W, LUT_H, 0, gl.RGBA, f32 ? gl.FLOAT : gl.HALF_FLOAT, null);
+for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+const lutFbo = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, lutFbo);
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, lutTex, 0);
+if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) fail();
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+gl.useProgram(mainProg.p);
+gl.uniform3fv(mainProg.u.uPN, puzN); gl.uniform3fv(mainProg.u.uPC, puzC);
+gl.uniform1iv(mainProg.u.uPOff, puzOff); gl.uniform1iv(mainProg.u.uPCnt, puzCnt);
+gl.uniform3fv(mainProg.u.uVP, vorP); gl.uniform3fv(mainProg.u.uVC, vorC);
+gl.uniform1i(mainProg.u.uLut, 0);
+
+// ---------------------------------------------------------------- camera
+// Vectors live in the tangent space at the camera: the component along n is the ℓ direction
+// (toward universe A), the rest is sideways along the sphere. In A, far out, that's just A's own
+// axes. Far out in B, B's axes are these reflected through the line along n (a half-turn about n),
+// which the ray table applies to rays ending in B.
+const V = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  scale: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+  // Rodrigues rotation of v about unit axis k by angle t
+  rot: (v, k, t) => {
+    const c = Math.cos(t), s = Math.sin(t), kv = V.cross(k, v), kd = V.dot(k, v) * (1 - c);
+    return [v[0] * c + kv[0] * s + k[0] * kd, v[1] * c + kv[1] * s + k[1] * kd, v[2] * c + kv[2] * s + k[2] * kd];
+  },
+};
+const START_L = 7;
+const cam = {};
+function resetCam() {
+  Object.assign(cam, { l: START_L * P.rho + P.a, n: [0, 0, 1], F: [0, 0, -1], R: [1, 0, 0], U: [0, 1, 0], up: [0, 1, 0], vel: [0, 0, 0] });
+}
+resetCam();
+
+// move along a straight line of the curved space by displacement s, carrying the camera frame
+function move(s) {
+  const len = Math.hypot(...s);
+  if (len === 0) return;
+  const steps = Math.max(1, Math.ceil(len / (0.02 * rOf(cam.l))));
+  const ds = V.scale(s, 1 / steps);
+  let d = ds;
+  for (let i = 0; i < steps; i++) {
+    const vl = V.dot(d, cam.n), vt = V.sub(d, V.scale(cam.n, vl)), tl = Math.hypot(...vt);
+    const lMid = cam.l + 0.5 * vl;
+    cam.l += vl;
+    if (tl > 1e-12) {
+      const axis = V.norm(V.cross(cam.n, vt)), th = tl / rOf(lMid), tf = (1 - drOf(lMid)) * th;
+      cam.n = V.rot(cam.n, axis, th);
+      for (const k of ["F", "R", "U", "up", "vel"]) cam[k] = V.rot(cam[k], axis, tf);
+      d = V.rot(d, axis, tf);
+    }
+  }
+  orthonormalize();
+}
+// No roll: the camera stays level with "up", a vector carried along with you like the rest of
+// the frame, so it means the same thing on both sides of the throat.
+function orthonormalize() {
+  cam.n = V.norm(cam.n);
+  cam.up = V.norm(cam.up);
+  cam.F = V.norm(cam.F);
+  const R = V.cross(cam.F, cam.up);
+  if (Math.hypot(...R) > 1e-6) cam.R = V.norm(R);
+  cam.U = V.cross(cam.R, cam.F);
+}
+const MAX_PITCH = Math.PI / 2 - 0.02;
+function look(yaw, pitch) {
+  if (yaw) cam.F = V.rot(cam.F, cam.up, yaw);
+  if (pitch) {
+    const cur = Math.asin(Math.max(-1, Math.min(1, V.dot(cam.F, cam.up))));
+    const next = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, cur + pitch));
+    cam.F = V.rot(cam.F, V.norm(V.cross(cam.F, cam.up)), next - cur);
+  }
+  orthonormalize();
+}
+
+// ---------------------------------------------------------------- UI
+const $ = (id) => document.getElementById(id);
+for (const id of ["skyA", "skyB"]) SKIES.forEach(([v, label], i) => $(id).add(new Option(label, i)));
+$("skyA").value = "0"; $("skyB").value = "2";
+const speedOf = () => 0.1 * Math.pow(500, $("speed").value / 100);
+function syncUI() {
+  P.rho = +$("rho").value; P.a = +$("len").value / 2; P.M = +$("flare").value;
+  $("vRho").textContent = P.rho.toFixed(2);
+  $("vLen").textContent = (2 * P.a).toFixed(1);
+  $("vM").textContent = P.M.toFixed(2);
+  $("vFov").textContent = $("fov").value + "°";
+  $("vSpeed").textContent = speedOf().toFixed(speedOf() < 10 ? 2 : 1) + "/s";
+  $("vRes").textContent = $("res").value + "%";
+  dirtyLut = true; resize();
+}
+let dirtyLut = true;
+document.querySelectorAll("control-panel input, control-panel select").forEach((el) => el.addEventListener("input", syncUI));
+$("reset").addEventListener("click", () => { resetCam(); dirtyLut = true; });
+
+let W = 0, H = 0;
+function resize() {
+  const cw = document.documentElement.clientWidth, ch = document.documentElement.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2) * $("res").value / 100;
+  W = Math.max(1, Math.round(cw * dpr)); H = Math.max(1, Math.round(ch * dpr));
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = cw + "px"; canvas.style.height = ch + "px";
+}
+window.addEventListener("resize", resize);
+
+// keyboard + mouse
+const keys = new Set();
+const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyC", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+window.addEventListener("keydown", (e) => {
+  if (e.target.closest && e.target.closest("input, select, textarea")) return;
+  if (flyKeys.has(e.code)) { keys.add(e.code); e.preventDefault(); hideHint(); }
+});
+window.addEventListener("keyup", (e) => keys.delete(e.code));
+window.addEventListener("blur", () => keys.clear());
+const SENS = 0.0022;
+canvas.addEventListener("click", () => { if (matchMedia("(pointer: fine)").matches) canvas.requestPointerLock?.(); });
+document.addEventListener("pointerlockchange", () => { if (document.pointerLockElement === canvas) hideHint(); });
+document.addEventListener("mousemove", (e) => {
+  if (document.pointerLockElement === canvas) look(-e.movementX * SENS, -e.movementY * SENS);
+});
+window.addEventListener("wheel", (e) => {
+  if (e.target !== canvas && document.pointerLockElement !== canvas) return;
+  $("speed").value = Math.max(0, Math.min(100, +$("speed").value - Math.sign(e.deltaY) * 4));
+  syncUI();
+}, { passive: true });
+
+// touch: left half is a joystick, right half looks
+const touch = { stick: null, lookId: null, lx: 0, ly: 0, mx: 0, my: 0, up: 0 };
+const stickEl = $("stick");
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.pointerType === "mouse") return;
+  canvas.setPointerCapture(e.pointerId); hideHint();
+  if (e.clientX < innerWidth / 2 && !touch.stick) {
+    touch.stick = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    Object.assign(stickEl.style, { display: "block", left: e.clientX + "px", top: e.clientY + "px" });
+  } else if (touch.lookId === null) { touch.lookId = e.pointerId; touch.lx = e.clientX; touch.ly = e.clientY; }
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (touch.stick && e.pointerId === touch.stick.id) {
+    let dx = e.clientX - touch.stick.x, dy = e.clientY - touch.stick.y; const l = Math.hypot(dx, dy), m = 55;
+    if (l > m) { dx *= m / l; dy *= m / l; }
+    touch.mx = dx / m; touch.my = -dy / m;
+    stickEl.style.setProperty("--sx", dx + "px"); stickEl.style.setProperty("--sy", dy + "px");
+  } else if (e.pointerId === touch.lookId) {
+    look(-(e.clientX - touch.lx) * 0.005, -(e.clientY - touch.ly) * 0.005);
+    touch.lx = e.clientX; touch.ly = e.clientY;
+  }
+});
+const endTouch = (e) => {
+  if (touch.stick && e.pointerId === touch.stick.id) { touch.stick = null; touch.mx = touch.my = 0; stickEl.style.display = "none"; }
+  if (e.pointerId === touch.lookId) touch.lookId = null;
+};
+canvas.addEventListener("pointerup", endTouch); canvas.addEventListener("pointercancel", endTouch);
+for (const [id, v] of [["upBtn", 1], ["downBtn", -1]]) {
+  $(id).addEventListener("pointerdown", (e) => { e.preventDefault(); touch.up = v; });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) $(id).addEventListener(ev, () => { if (touch.up === v) touch.up = 0; });
+}
+
+let hintShown = true;
+function hideHint() { if (hintShown) { hintShown = false; $("hint").classList.add("hidden"); } }
+
+// ---------------------------------------------------------------- the funnel gauge
+const gauge = $("gauge"), gctx = gauge.getContext("2d");
+function drawGauge() {
+  const w = gauge.width, h = gauge.height;
+  gctx.clearRect(0, 0, w, h);
+  // the embedding: a surface of revolution whose radius at height z is r(ℓ), dz/dℓ = √(1 − r'²)
+  const span = Math.max(P.a + 5 * P.rho + 4 * P.M, Math.min(Math.abs(cam.l) * 1.25, P.a + 60 * P.rho));
+  const N = 240, pts = [];
+  let z = 0;
+  for (let i = 0; i <= N; i++) {
+    const l = -span + (2 * span * i) / N;
+    if (i > 0) { const lm = l - span / N; z += Math.sqrt(Math.max(0, 1 - drOf(lm) ** 2)) * (2 * span / N); }
+    pts.push([rOf(l), z, l]);
+  }
+  const z0 = pts[N >> 1][1];
+  for (const p of pts) p[1] -= z0;
+  const rMax = Math.max(...pts.map((p) => p[0])), zMax = Math.max(...pts.map((p) => Math.abs(p[1])), 1e-6);
+  const sx = (w / 2 - 14) / rMax, sz = (h / 2 - 14) / zMax, s = Math.min(sx, sz);
+  const X = (r) => w / 2 + r * s, Y = (zz) => h / 2 - zz * s;
+  gctx.lineWidth = 3;
+  for (const sign of [1, -1]) {
+    for (const [from, to, col] of [[N >> 1, N, "#a58bff"], [0, N >> 1, "#ffb36b"]]) {
+      gctx.strokeStyle = col; gctx.beginPath();
+      for (let i = from; i <= to; i++) { const p = pts[i]; const x = X(sign * p[0]), y = Y(p[1]); i === from ? gctx.moveTo(x, y) : gctx.lineTo(x, y); }
+      gctx.stroke();
+    }
+  }
+  // the throat ring, edge-on
+  gctx.strokeStyle = "rgba(232,230,240,.35)"; gctx.lineWidth = 2; gctx.setLineDash([4, 4]);
+  gctx.beginPath(); gctx.moveTo(X(-P.rho), Y(0)); gctx.lineTo(X(P.rho), Y(0)); gctx.stroke(); gctx.setLineDash([]);
+  // you
+  let zc = 0;
+  { const n = 200, a = 0, b = cam.l; for (let i = 0; i < n; i++) { const lm = a + (b - a) * (i + 0.5) / n; zc += Math.sqrt(Math.max(0, 1 - drOf(lm) ** 2)) * (b - a) / n; } }
+  const off = Math.abs(cam.l) > span;
+  const px = X(Math.min(rOf(cam.l), rMax)), py = Y(Math.max(-zMax, Math.min(zMax, zc)));
+  gctx.fillStyle = "#fff"; gctx.beginPath(); gctx.arc(px, py, off ? 4 : 6, 0, Math.PI * 2); gctx.fill();
+  gctx.fillStyle = cam.l >= 0 ? "#a58bff" : "#ffb36b"; gctx.beginPath(); gctx.arc(px, py, off ? 2 : 3.5, 0, Math.PI * 2); gctx.fill();
+  gctx.font = "500 22px 'JetBrains Mono', monospace"; gctx.textBaseline = "top";
+  gctx.fillStyle = "#a58bff"; gctx.fillText("A", 4, 2);
+  gctx.fillStyle = "#ffb36b"; gctx.textBaseline = "bottom"; gctx.fillText("B", 4, h - 2);
+}
+
+// ---------------------------------------------------------------- frame loop
+let last = performance.now(), fps = 60, lastL = NaN;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+
+  // input → target velocity in the camera frame; velocity eases toward it and coasts straight
+  const k = (c) => (keys.has(c) ? 1 : 0);
+  const fw = k("KeyW") + k("ArrowUp") - k("KeyS") - k("ArrowDown") + touch.my;
+  const st = k("KeyD") + k("ArrowRight") - k("KeyA") - k("ArrowLeft") + touch.mx;
+  const up = k("Space") - k("KeyC") - k("ControlLeft") + touch.up;
+  const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 5 : 1;
+  const sp = speedOf() * P.rho * boost;
+  let target = V.add(V.add(V.scale(cam.F, fw), V.scale(cam.R, st)), V.scale(cam.U, up));
+  const tl = Math.hypot(...target); if (tl > 1) target = V.scale(target, 1 / tl);
+  target = V.scale(target, sp);
+  cam.vel = V.add(cam.vel, V.scale(V.sub(target, cam.vel), 1 - Math.exp(-5 * dt)));
+  move(V.scale(cam.vel, dt));
+
+  if (dirtyLut || cam.l !== lastL) {
+    lastL = cam.l; dirtyLut = false;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, lutFbo);
+    gl.viewport(0, 0, LUT_W, LUT_H);
+    gl.useProgram(lutProg.p);
+    gl.uniform1f(lutProg.u.uRho, P.rho); gl.uniform1f(lutProg.u.uA, P.a); gl.uniform1f(lutProg.u.uM, P.M);
+    gl.uniform1f(lutProg.u.uAlphaC, alphaCrit(cam.l));
+    gl.uniform1f(lutProg.u.uL, cam.l);
+    gl.uniform1f(lutProg.u.uLfar, Math.max(P.a + 3000 * (P.rho + P.M), Math.abs(cam.l) * 1.01));
+    gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  gl.viewport(0, 0, W, H);
+  gl.useProgram(mainProg.p);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, lutTex);
+  gl.uniform1f(mainProg.u.uRho, P.rho); gl.uniform1f(mainProg.u.uA, P.a); gl.uniform1f(mainProg.u.uM, P.M);
+  gl.uniform1f(mainProg.u.uAlphaC, alphaCrit(cam.l));
+  gl.uniform3fv(mainProg.u.uN, cam.n); gl.uniform3fv(mainProg.u.uF, cam.F);
+  gl.uniform3fv(mainProg.u.uR, cam.R); gl.uniform3fv(mainProg.u.uU, cam.U);
+  gl.uniform2f(mainProg.u.uRes, W, H);
+  gl.uniform1f(mainProg.u.uTanHalf, Math.tan(($("fov").value * Math.PI) / 360));
+  gl.uniform1i(mainProg.u.uSkyA, +$("skyA").value); gl.uniform1i(mainProg.u.uSkyB, +$("skyB").value);
+  gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  if (!(frameCount++ % 3)) {
+    drawGauge();
+    const side = cam.l >= 0 ? '<span class="a">A</span>' : '<span class="b">B</span>';
+    $("readout").innerHTML =
+      `universe <b>${side}</b>\n` +
+      `ℓ  <b>${(cam.l >= 0 ? "+" : "") + cam.l.toFixed(2)}</b>\n` +
+      `r  <b>${rOf(cam.l).toFixed(2)}</b>\n` +
+      `v  <b>${Math.hypot(...cam.vel).toFixed(2)}</b>/s   <b>${Math.round(fps)}</b> fps`;
+  }
+  if (!window.__whNoLoop) requestAnimationFrame(frame);
+}
+let frameCount = 0;
+syncUI();
+requestAnimationFrame(frame);
+
+// test hook
+window.wormhole = { cam, P, move, look, resetCam, rOf, drOf, frame: () => frame(performance.now()), gl };
+</script>
+</body>
+</html>
