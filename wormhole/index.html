@@ -408,7 +408,13 @@ float drOf(float l){ float al = abs(l); if (al <= uA) return 0.0; float x = 2.0 
 // For the disks, each table ray also records the angle φ round the hole at which it crosses NR
 // spheres spanning the disk's radii (spaced geometrically), separately going in and going out, in
 // each universe. Slot (branch * NR + j); branch 0/1 = A in/out, 2/3 = B in/out.
-float gridR(int j){ return uDiskIn * pow(uDiskOut / uDiskIn, float(j) / float(NR - 1)); }
+// The spheres are spaced geometrically and shifted each frame (uGridF) so that, when the camera is
+// within the disk's radii, one of them passes right through it: a ray then starts on a sphere, and
+// turning rays are symmetric about their closest approach like every other.
+uniform float uGridF;
+float gridQ(){ return pow(uDiskOut / uDiskIn, 1.0 / float(NR - 2)); }
+float gridR(int j){ return uDiskIn * pow(gridQ(), float(j) - 1.0 + uGridF); }
+float gridJ(float r){ return log(r / uDiskIn) / log(gridQ()) + 1.0 - uGridF; }
 // sample i <-> ray angle α: half the samples on each side of the critical angle, bunched toward it
 float alphaOf(int i){
   if (i < LUT_K) { float t = float(i) / float(LUT_K - 1); float u = 1.0 - t; return uAlphaC * (1.0 - u * u); }
@@ -431,7 +437,11 @@ void main(){
   bool escaped = false;
   uint slots[4 * NR];
   for (int k = 0; k < 4 * NR; k++) slots[k] = 65535u;      // never crossed
-  float lr = log(uDiskOut / uDiskIn), jScale = float(NR - 1) / lr;
+  // the camera's own sphere: the ray starts on it, going in or out
+  float jc = gridJ(rOf(uL));
+  int jci = int(floor(jc + 0.5));
+  if (abs(jc - float(jci)) < 1e-3 && jci >= 0 && jci < NR)
+    slots[((uL > 0.0 ? 0 : 2) + ((uL > 0.0) == (cos(alpha) < 0.0) ? 0 : 1)) * NR + jci] = 0u;
   for (int k = 0; k < 6000; k++) {
     if (abs(y.x) > uLfar && y.y * y.x > 0.0) { escaped = true; break; }
     float r = rOf(y.x);
@@ -440,7 +450,7 @@ void main(){
     vec3 prev = y;
     y += ds / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
     // did this step cross any of the disk's spheres?
-    float r0 = rOf(prev.x), r1 = rOf(y.x), j0 = log(r0 / uDiskIn) * jScale, j1 = log(r1 / uDiskIn) * jScale;
+    float r0 = rOf(prev.x), r1 = rOf(y.x), j0 = gridJ(r0), j1 = gridJ(r1);
     int lo = max(int(ceil(min(j0, j1))), 0), hi = min(int(floor(max(j0, j1))), NR - 1);
     int branch = (y.x > 0.0 ? 0 : 2) + (r1 < r0 ? 0 : 1);
     for (int j = lo; j <= hi; j++) {
@@ -629,55 +639,56 @@ void addHit(inout vec3 H[6], inout int nh, vec3 hit){
   for (; k > 0 && H[k - 1].x > hit.x; k--) H[k] = H[k - 1];
   H[k] = hit; nh++;
 }
-// 1/r at angle tg on a segment of a ray between two of its crossings (pp, pr) and (ph, r). Between
-// crossings the ray is taken as the straight line through both, 1/r = a cos φ + b sin φ.
+// 1/r at angle tg between two of a ray's crossings (pp, pr) and (ph, r).
+// A ray that doesn't turn around: the straight line through both, 1/r = a cos φ + b sin φ.
 float lineInv(float pp, float pr, float ph, float r, float tg){
   float sp = sin(ph - pp);
   return abs(sp) > 1e-4 ? (sin(ph - tg) / pr + sin(tg - pp) / r) / sp : mix(1.0 / pr, 1.0 / r, (tg - pp) / max(ph - pp, 1e-6));
 }
-// ... and next to where it turns around at (pm, h), the line that is level there: 1/r ∝ cos(φ − pm)
-float turnInv(float pm, float h, float pj, float rj, float tg){
-  float den = 1.0 - cos(pj - pm);
-  return den > 1e-7 ? 1.0 / h + (1.0 / rj - 1.0 / h) * (1.0 - cos(tg - pm)) / den : 1.0 / rj;
+// A ray that turns around at angle pm, radius h: the straight line with that closest approach,
+// 1/r = cos(φ − pm)/h, plus the (small, curvature) difference from it, interpolated between
+// crossings. Every segment uses the same curve, so a sphere the ray starts or stops reaching
+// lands on it instead of changing the shape.
+float turnInv(float pm, float h, float pp, float pr, float ph, float r, float tg){
+  float gp = 1.0 / pr - cos(pp - pm) / h, g = 1.0 / r - cos(ph - pm) / h;
+  return cos(tg - pm) / h + mix(gp, g, clamp((tg - pp) / max(ph - pp, 1e-6), 0.0, 1.0));
 }
-// hits on one segment: wherever φ passes φ0 + mπ (kind 0: plain, 1: turn at its start, 2: at its end)
-void crossSeg(float phi0, float pp, float pr, float ph, float r, int kind, int side, inout vec3 H[6], inout int nh){
+// hits on one segment: wherever φ passes φ0 + mπ
+void crossSeg(float phi0, float pp, float pr, float ph, float r, float pm, float h, int side, inout vec3 H[6], inout int nh){
   float m = floor((pp - phi0) / PI) + 1.0;
   for (int g = 0; g < 3 && phi0 + m * PI <= ph; g++, m += 1.0) {
     float tg = phi0 + m * PI;
-    float inv = kind == 0 ? lineInv(pp, pr, ph, r, tg) : kind == 1 ? turnInv(pp, pr, ph, r, tg) : turnInv(ph, r, pp, pr, tg);
+    float inv = pm >= 0.0 ? turnInv(pm, h, pp, pr, ph, r, tg) : lineInv(pp, pr, ph, r, tg);
     addHit(H, nh, vec3(tg, 1.0 / inv, float(side)));
   }
 }
 // A ray's slice cuts a disk's plane along a line through the hole, so the ray is in that plane at
 // φ0, φ0 + π, ... Walk table ray i's crossings of the disk's spheres in order along the ray (in,
 // then out) and find where φ passes those angles. A ray that turns around does it at radius
-// h = r sin α (its closest approach), halfway between its last crossing in and first crossing out.
+// h = r sin α (its closest approach), halfway between its crossings of the innermost sphere it
+// reaches.
 void diskHits(int side, vec3 up, vec3 tn, int i, inout vec3 H[6], inout int nh){
   float phi0 = atan(-dot(uN, up), dot(tn, up));
   if (phi0 < 0.0) phi0 += PI;
-  bool camSide = (uCamL > 0.0) == (side == 0), lastIn = false, fromCam = false;
-  float pp = -1.0, pr = 0.0, camR = rOf(uCamL), alpha = alphaOf(i);
-  if (camSide && camR >= uDiskIn && camR <= uDiskOut) {
-    // starting inside the disk: the camera is the chain's first point (going in, if aimed inward)
-    pp = 0.0; pr = camR; fromCam = true;
-    lastIn = uCamL > 0.0 ? cos(alpha) < 0.0 : cos(alpha) > 0.0;
-  }
-  int kind = 0;
+  float h = rOf(uCamL) * abs(sin(alphaOf(i))), pm = -1.0;
+  if ((uCamL > 0.0) == (side == 0) && h > 1e-4)
+    for (int j = 0; j < NR; j++) {
+      float a = slotPhi(i, 2 * side * NR + j), b = slotPhi(i, (2 * side + 1) * NR + j);
+      if (a >= 0.0 && b >= 0.0) { pm = 0.5 * (a + b); break; }
+    }
+  float pp = -1.0, pr = 0.0;
+  bool lastIn = false;
   for (int c = 0; c < 2 * NR; c++) {
     int j = c < NR ? NR - 1 - c : c - NR;
     float phi = slotPhi(i, (2 * side + (c < NR ? 0 : 1)) * NR + j);
     if (phi < 0.0) continue;
     float r = gridR(j);
-    if (c >= NR && lastIn && camSide) {
-      float h = camR * sin(alpha);
-      // (from the camera, where a straight line from radius camR gets closest)
-      float pm = fromCam && pp == 0.0 ? acos(clamp(h / camR, -1.0, 1.0)) : 0.5 * (pp + phi);
-      crossSeg(phi0, pp, pr, pm, h, 2, side, H, nh);
-      pp = pm; pr = h; kind = 1;
+    if (c >= NR && lastIn && pm >= 0.0) {
+      crossSeg(phi0, pp, pr, pm, h, pm, h, side, H, nh);
+      pp = pm; pr = h;
     }
-    if (pp >= 0.0) crossSeg(phi0, pp, pr, phi, r, kind, side, H, nh);
-    kind = 0; lastIn = c < NR;
+    if (pp >= 0.0) crossSeg(phi0, pp, pr, phi, r, pm, h, side, H, nh);
+    lastIn = c < NR;
     pp = phi; pr = r;
   }
 }
@@ -783,6 +794,7 @@ function runLut(target, l) {
   gl.uniform1f(lutProg.u.uAlphaC, alphaCrit(l));
   gl.uniform1f(lutProg.u.uL, l);
   gl.uniform1f(lutProg.u.uDiskIn, DISK_IN * P.rho); gl.uniform1f(lutProg.u.uDiskOut, DISK_OUT * P.rho);
+  gl.uniform1f(lutProg.u.uGridF, gridF(l));
   gl.uniform1f(lutProg.u.uLfar, Math.max(P.a + 3000 * (P.rho + P.M), Math.abs(l) * 1.01));
   gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -799,6 +811,11 @@ gl.uniform1i(mainProg.u.uDisk, 1);
 // which takes +y to 2(y·n)n − y.
 const START_N = V3norm([0, Math.sin(0.14), Math.cos(0.14)]);
 const DISK_IN = 1.6, DISK_OUT = 5;
+// the sphere shift that puts one sphere through the camera (see uGridF in the shaders)
+function gridF(l) {
+  const lq = Math.log(DISK_OUT / DISK_IN) / (DISK_NR - 2), x = Math.log(rOf(l) / (DISK_IN * P.rho)) / lq;
+  return x > -1 && x < DISK_NR - 1 ? x - Math.floor(x) : 0;
+}
 const DISK_UP_A = [0, 1, 0], DISK_UP_B = V3norm([0, 2 * START_N[1] * START_N[1] - 1, 2 * START_N[1] * START_N[2]]);
 function V3norm(v) { const l = Math.hypot(...v); return v.map((x) => x / l); }
 const diskOn = { A: false, B: false };
@@ -1037,6 +1054,7 @@ function frame(now) {
   gl.uniform1f(mainProg.u.uTime, now / 1000);
   gl.uniform1f(mainProg.u.uDiskOnA, diskOn.A ? 1 : 0); gl.uniform1f(mainProg.u.uDiskOnB, diskOn.B ? 1 : 0);
   gl.uniform1f(mainProg.u.uDiskIn, DISK_IN * P.rho); gl.uniform1f(mainProg.u.uDiskOut, DISK_OUT * P.rho);
+  gl.uniform1f(mainProg.u.uGridF, gridF(cam.l));
   gl.uniform1f(mainProg.u.uCamL, cam.l);
   gl.uniform3fv(mainProg.u.uStartN, START_N);
   gl.uniform3fv(mainProg.u.uDiskUpA, DISK_UP_A); gl.uniform3fv(mainProg.u.uDiskUpB, DISK_UP_B); gl.uniform3fv(mainProg.u.uDiskX, [1, 0, 0]);
