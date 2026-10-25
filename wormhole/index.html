@@ -711,13 +711,13 @@ const keys = new Set();
 const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 window.addEventListener("keydown", (e) => {
   if (e.target.closest && e.target.closest("input, select, textarea")) return;
-  if (flyKeys.has(e.code)) { keys.add(e.code); e.preventDefault(); hideHint(); }
+  if (flyKeys.has(e.code)) { keys.add(e.code); e.preventDefault(); }
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 window.addEventListener("blur", () => keys.clear());
 const SENS = 0.0022;
 canvas.addEventListener("click", () => { if (matchMedia("(pointer: fine)").matches) canvas.requestPointerLock?.(); });
-document.addEventListener("pointerlockchange", () => { if (document.pointerLockElement === canvas) hideHint(); });
+document.addEventListener("pointerlockchange", () => (document.pointerLockElement === canvas ? hideHint() : showHint()));
 document.addEventListener("mousemove", (e) => {
   if (document.pointerLockElement === canvas) look(-e.movementX * SENS, -e.movementY * SENS);
 });
@@ -761,6 +761,8 @@ for (const [id, v] of [["upBtn", 1], ["downBtn", -1]]) {
 
 let hintShown = true;
 function hideHint() { if (hintShown) { hintShown = false; $("hint").classList.add("hidden"); } }
+// mouse: the hint is up whenever you aren't flying (pointer not locked); touch: gone after the first touch
+function showHint() { hintShown = true; $("hint").classList.remove("hidden"); }
 
 // ---------------------------------------------------------------- the funnel gauge
 const gauge = $("gauge"), gctx = gauge.getContext("2d");
