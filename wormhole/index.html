@@ -426,6 +426,7 @@ float alphaOf(int i){
 // State: ℓ, p = dℓ/ds, φ = angle swept round the hole. h = r² dφ/ds is conserved.
 const LUT_FRAG = COMMON + `
 uniform float uL, uLfar;
+uniform float uGridL[NR];   // |ℓ| of each disk sphere
 layout(location = 0) out vec4 o;
 ${DISK_OUTS}
 vec3 deriv(vec3 y, float h){ float r = rOf(y.x); return vec3(y.y, h * h * drOf(y.x) / (r * r * r), h / (r * r)); }
@@ -453,8 +454,21 @@ void main(){
     float r0 = rOf(prev.x), r1 = rOf(y.x), j0 = gridJ(r0), j1 = gridJ(r1);
     int lo = max(int(ceil(min(j0, j1))), 0), hi = min(int(floor(max(j0, j1))), NR - 1);
     int branch = (y.x > 0.0 ? 0 : 2) + (r1 < r0 ? 0 : 1);
+    // Where in the step: ℓ and φ as cubics fitted to their values and rates at both ends (rates
+    // dℓ/ds = p and dφ/ds = h/r²), solved for ℓ = the sphere's ℓ. A straight blend misplaces
+    // crossings near where the ray grazes a sphere, since r barely changes there.
     for (int j = lo; j <= hi; j++) {
-      float phi = mix(prev.z, y.z, (gridR(j) - r0) / (r1 - r0));
+      float tl = sign(y.x) * uGridL[j], dl = y.x - prev.x;
+      float t = clamp((tl - prev.x) / (abs(dl) > 1e-9 ? dl : 1e-9), 0.0, 1.0);
+      for (int it = 0; it < 4; it++) {
+        float t2 = t * t, t3 = t2 * t;
+        float H = (2.0 * t3 - 3.0 * t2 + 1.0) * prev.x + (t3 - 2.0 * t2 + t) * ds * prev.y + (3.0 * t2 - 2.0 * t3) * y.x + (t3 - t2) * ds * y.y;
+        float dH = (6.0 * t2 - 6.0 * t) * (prev.x - y.x) + (3.0 * t2 - 4.0 * t + 1.0) * ds * prev.y + (3.0 * t2 - 2.0 * t) * ds * y.y;
+        if (abs(dH) > 1e-9) t = clamp(t - (H - tl) / dH, 0.0, 1.0);
+      }
+      float t2 = t * t, t3 = t2 * t;
+      float phi = (2.0 * t3 - 3.0 * t2 + 1.0) * prev.z + (t3 - 2.0 * t2 + t) * ds * h / (r0 * r0)
+                + (3.0 * t2 - 2.0 * t3) * y.z + (t3 - t2) * ds * h / (r1 * r1);
       if (phi < PHI_MAX) slots[branch * NR + j] = uint(phi / PHI_MAX * 65534.0 + 0.5);
     }
   }
@@ -795,6 +809,7 @@ function runLut(target, l) {
   gl.uniform1f(lutProg.u.uL, l);
   gl.uniform1f(lutProg.u.uDiskIn, DISK_IN * P.rho); gl.uniform1f(lutProg.u.uDiskOut, DISK_OUT * P.rho);
   gl.uniform1f(lutProg.u.uGridF, gridF(l));
+  gl.uniform1fv(lutProg.u.uGridL, gridL(gridF(l)));
   gl.uniform1f(lutProg.u.uLfar, Math.max(P.a + 3000 * (P.rho + P.M), Math.abs(l) * 1.01));
   gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -812,6 +827,17 @@ gl.uniform1i(mainProg.u.uDisk, 1);
 const START_N = V3norm([0, Math.sin(0.14), Math.cos(0.14)]);
 const DISK_IN = 1.6, DISK_OUT = 5;
 // the sphere shift that puts one sphere through the camera (see uGridF in the shaders)
+// |ℓ| of each sphere (bisection on r(ℓ), which only grows past the tube)
+function gridL(f) {
+  const q = Math.pow(DISK_OUT / DISK_IN, 1 / (DISK_NR - 2)), out = [];
+  for (let j = 0; j < DISK_NR; j++) {
+    const r = DISK_IN * P.rho * Math.pow(q, j - 1 + f);
+    let lo = P.a, hi = P.a + r + 10 * (P.rho + P.M);
+    for (let k = 0; k < 50; k++) { const mid = 0.5 * (lo + hi); rOf(mid) < r ? (lo = mid) : (hi = mid); }
+    out.push(0.5 * (lo + hi));
+  }
+  return out;
+}
 function gridF(l) {
   const lq = Math.log(DISK_OUT / DISK_IN) / (DISK_NR - 2), x = Math.log(rOf(l) / (DISK_IN * P.rho)) / lq;
   return x > -1 && x < DISK_NR - 1 ? x - Math.floor(x) : 0;
