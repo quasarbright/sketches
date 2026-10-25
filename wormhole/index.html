@@ -710,26 +710,44 @@ void gatherHits(int i, vec3 tn, inout vec3 H[6], inout int nh){
   if (uDiskOnA > 0.5) diskHits(0, uDiskUpA, tn, i, H, nh);
   if (uDiskOnB > 0.5) diskHits(1, uDiskUpB, tn, i, H, nh);
 }
-// ray A's hits over col; ray B (the other neighbor) says how fast each hit's radius changes from
-// ray to ray, which times the angle a pixel covers is the radius a pixel spans
-vec3 composite(vec3 col, vec3 A[6], int na, vec3 B[6], int nb, float perRay, vec3 tn){
-  vec3 acc = vec3(0.0); float T = 1.0;
-  for (int k = 0; k < na; k++) {
-    float fw = (k < nb && A[k].z == B[k].z) ? abs(A[k].y - B[k].y) * perRay : 4.0 * (uDiskOut - uDiskIn);
-    vec3 up = A[k].z < 0.5 ? uDiskUpA : uDiskUpB;
-    vec4 dc = diskColor(A[k].y, cos(A[k].x) * uN + sin(A[k].x) * tn, up, A[k].z, fw);
-    acc += T * dc.rgb * dc.a; T *= 1.0 - dc.a;
-  }
-  return acc + T * col;
+// The pixel sits between two table rays. Both are tested against the same angles φ0 + mπ (they
+// come from the pixel's slice), so their hits pair up; the pixel takes the blend of each pair's
+// radius, so the gas slides smoothly from ray to ray. (Blending the two rays' colors instead
+// cross-fades two offset textures, which steps at every table ray.) A hit only one ray has fades
+// by the pixel's distance from that ray. How much a pair's radius differs from ray to ray, times
+// the angle a pixel covers, is the radius a pixel spans.
+void pushHit(inout vec4 M[12], inout float FW[12], inout int nm, vec4 m, float fw){
+  if (nm >= 12) return;
+  int k = nm;
+  for (; k > 0 && M[k - 1].x > m.x; k--) { M[k] = M[k - 1]; FW[k] = FW[k - 1]; }
+  M[k] = m; FW[k] = fw; nm++;
 }
-// each of the two nearest table rays on its own (their crossings don't line up slot for slot)
 vec3 withDisks(vec3 col, int i0, int i1, float t, vec3 tn){
   vec3 H0[6], H1[6]; int n0 = 0, n1 = 0;
   gatherHits(i0, tn, H0, n0);
-  if (i1 == i0) return composite(col, H0, n0, H0, n0, 0.0, tn);
-  gatherHits(i1, tn, H1, n1);
+  if (i1 != i0) gatherHits(i1, tn, H1, n1); else { H1 = H0; n1 = n0; }
   float perRay = (2.0 * uTanHalf / uRes.y) / max(abs(alphaOf(i1) - alphaOf(i0)), 1e-7);
-  return mix(composite(col, H0, n0, H1, n1, perRay, tn), composite(col, H1, n1, H0, n0, perRay, tn), t);
+  float far = 4.0 * (uDiskOut - uDiskIn);
+  vec4 M[12]; float FW[12]; int nm = 0;
+  bool used[6] = bool[6](false, false, false, false, false, false);
+  for (int k = 0; k < n0; k++) {
+    int found = -1;
+    for (int j = 0; j < n1; j++)
+      if (found < 0 && !used[j] && H1[j].z == H0[k].z && abs(H1[j].x - H0[k].x) < 1e-3) found = j;
+    if (found >= 0) {
+      used[found] = true;
+      pushHit(M, FW, nm, vec4(H0[k].x, mix(H0[k].y, H1[found].y, t), H0[k].z, 1.0), abs(H0[k].y - H1[found].y) * perRay);
+    } else pushHit(M, FW, nm, vec4(H0[k], 1.0 - t), far);
+  }
+  for (int j = 0; j < n1; j++) if (!used[j]) pushHit(M, FW, nm, vec4(H1[j], t), far);
+  vec3 acc = vec3(0.0); float T = 1.0;
+  for (int k = 0; k < nm; k++) {
+    vec3 up = M[k].z < 0.5 ? uDiskUpA : uDiskUpB;
+    vec4 dc = diskColor(M[k].y, cos(M[k].x) * uN + sin(M[k].x) * tn, up, M[k].z, FW[k]);
+    float a = dc.a * M[k].w;
+    acc += T * dc.rgb * a; T *= 1.0 - a;
+  }
+  return acc + T * col;
 }
 vec3 sky(int id, vec3 d, float pw){
   if (id == 0) return skyGrid(d, pw);
