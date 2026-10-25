@@ -606,7 +606,9 @@ float slotPhi(int i, int slot){
 }
 // glowing gas at radius r, at direction u from the hole: hot and white inside, dim at the rim,
 // streaked by noise that orbits faster nearer the middle. A's disk burns orange, B's blue.
-vec4 diskColor(float r, vec3 u, vec3 up, float side){
+// fw: how much radius one pixel spans here. Where the throat squeezes the disk that can be more
+// than the streaks or the whole disk, so detail fades to its average instead of sparkling.
+vec4 diskColor(float r, vec3 u, vec3 up, float side, float fw){
   float rr = (r - uDiskIn) / (uDiskOut - uDiskIn);
   float psi = atan(dot(u, cross(up, uDiskX)), dot(u, uDiskX));
   float a = psi + 0.9 * pow(uDiskIn / r, 1.5) * uTime;
@@ -614,9 +616,11 @@ vec4 diskColor(float r, vec3 u, vec3 up, float side){
   vec3 mid = side < 0.5 ? vec3(1.0, 0.62, 0.22) : vec3(0.35, 0.6, 1.0);
   vec3 rim = side < 0.5 ? vec3(0.55, 0.12, 0.05) : vec3(0.18, 0.1, 0.55);
   vec3 c = rr < 0.3 ? mix(vec3(1.0, 0.95, 0.88), mid, rr / 0.3) : mix(mid, rim, (rr - 0.3) / 0.7);
-  float edge = smoothstep(0.0, 0.05, rr) * smoothstep(1.0, 0.6, rr);
-  float k = smoothstep(0.25, 0.75, n);
-  return vec4(c * (1.7 - 1.2 * rr) * (0.45 + 0.9 * k), clamp(edge * (0.35 + 0.7 * k), 0.0, 1.0));
+  float w = uDiskOut - uDiskIn, fr = fw / w;
+  float edge = smoothstep(0.0, max(0.05, fr), rr) * smoothstep(1.0, 0.6, rr);
+  float k = mix(0.5, smoothstep(0.25, 0.75, n), clamp(1.5 - 7.0 * fw / uRho, 0.0, 1.0));
+  float cover = clamp(1.0 / max(fr, 1e-6), 0.0, 1.0);    // a ring thinner than a pixel dims
+  return vec4(c * (1.7 - 1.2 * rr) * (0.45 + 0.9 * k), clamp(cover * edge * (0.35 + 0.7 * k), 0.0, 1.0));
 }
 // hits along the ray, kept in order of φ (so nearest first): (φ, r, side)
 void addHit(inout vec3 H[6], inout int nh, vec3 hit){
@@ -677,21 +681,30 @@ void diskHits(int side, vec3 up, vec3 tn, int i, inout vec3 H[6], inout int nh){
     pp = phi; pr = r;
   }
 }
-vec3 withDisksFor(vec3 col, int i, vec3 tn){
-  vec3 H[6]; int nh = 0;
+void gatherHits(int i, vec3 tn, inout vec3 H[6], inout int nh){
   if (uDiskOnA > 0.5) diskHits(0, uDiskUpA, tn, i, H, nh);
   if (uDiskOnB > 0.5) diskHits(1, uDiskUpB, tn, i, H, nh);
+}
+// ray A's hits over col; ray B (the other neighbor) says how fast each hit's radius changes from
+// ray to ray, which times the angle a pixel covers is the radius a pixel spans
+vec3 composite(vec3 col, vec3 A[6], int na, vec3 B[6], int nb, float perRay, vec3 tn){
   vec3 acc = vec3(0.0); float T = 1.0;
-  for (int k = 0; k < nh; k++) {
-    vec3 up = H[k].z < 0.5 ? uDiskUpA : uDiskUpB;
-    vec4 dc = diskColor(H[k].y, cos(H[k].x) * uN + sin(H[k].x) * tn, up, H[k].z);
+  for (int k = 0; k < na; k++) {
+    float fw = (k < nb && A[k].z == B[k].z) ? abs(A[k].y - B[k].y) * perRay : 4.0 * (uDiskOut - uDiskIn);
+    vec3 up = A[k].z < 0.5 ? uDiskUpA : uDiskUpB;
+    vec4 dc = diskColor(A[k].y, cos(A[k].x) * uN + sin(A[k].x) * tn, up, A[k].z, fw);
     acc += T * dc.rgb * dc.a; T *= 1.0 - dc.a;
   }
   return acc + T * col;
 }
 // each of the two nearest table rays on its own (their crossings don't line up slot for slot)
 vec3 withDisks(vec3 col, int i0, int i1, float t, vec3 tn){
-  return mix(withDisksFor(col, i0, tn), withDisksFor(col, i1, tn), t);
+  vec3 H0[6], H1[6]; int n0 = 0, n1 = 0;
+  gatherHits(i0, tn, H0, n0);
+  if (i1 == i0) return composite(col, H0, n0, H0, n0, 0.0, tn);
+  gatherHits(i1, tn, H1, n1);
+  float perRay = (2.0 * uTanHalf / uRes.y) / max(abs(alphaOf(i1) - alphaOf(i0)), 1e-7);
+  return mix(composite(col, H0, n0, H1, n1, perRay, tn), composite(col, H1, n1, H0, n0, perRay, tn), t);
 }
 vec3 sky(int id, vec3 d, float pw){
   if (id == 0) return skyGrid(d, pw);
