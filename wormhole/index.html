@@ -805,10 +805,17 @@ function drawGauge() {
 }
 
 // ---------------------------------------------------------------- frame loop
-let last = performance.now(), fps = 60, lastL = NaN;
+let last = performance.now(), lastL = NaN;
+// fps counts frames the GPU has actually finished in the last second. requestAnimationFrame can
+// keep firing at the display rate while the GPU falls behind, so timing the callbacks overstates it.
+const fences = [], finished = [];
+function countFinished(now) {
+  while (fences.length && gl.getSyncParameter(fences[0], gl.SYNC_STATUS) === gl.SIGNALED) { gl.deleteSync(fences.shift()); finished.push(now); }
+  while (finished.length && finished[0] < now - 1000) finished.shift();
+}
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+  countFinished(now);
 
   // input → target velocity in the camera frame; velocity eases toward it and coasts straight
   const k = (c) => (keys.has(c) ? 1 : 0);
@@ -842,6 +849,8 @@ function frame(now) {
   gl.uniform1i(mainProg.u.uSkyA, +$("skyA").value); gl.uniform1i(mainProg.u.uSkyB, +$("skyB").value);
   gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+  if (fences.length < 8) fences.push(gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0));
+
   if (!(frameCount++ % 3)) {
     drawGauge();
     const side = cam.l >= 0 ? '<span class="a">A</span>' : '<span class="b">B</span>';
@@ -849,7 +858,7 @@ function frame(now) {
       `universe <b>${side}</b>\n` +
       `ℓ  <b>${(cam.l >= 0 ? "+" : "") + cam.l.toFixed(2)}</b>\n` +
       `r  <b>${rOf(cam.l).toFixed(2)}</b>\n` +
-      `v  <b>${Math.hypot(...cam.vel).toFixed(2)}</b>/s   <b>${Math.round(fps)}</b> fps`;
+      `v  <b>${Math.hypot(...cam.vel).toFixed(2)}</b>/s   <b>${finished.length}</b> fps`;
   }
   if (!window.__whNoLoop) requestAnimationFrame(frame);
 }
