@@ -169,8 +169,8 @@
       <input type="range" id="fov" min="40" max="120" step="1" value="80" title="How wide your view is, in degrees" />
     </div>
     <div class="control">
-      <div class="control-head"><span class="name" title="How fast you fly, in throat radii per second. The scroll wheel changes it too.">speed</span><span class="value" id="vSpeed"></span></div>
-      <input type="range" id="speed" min="0" max="100" step="1" value="40" title="How fast you fly, in throat radii per second. The scroll wheel changes it too." />
+      <div class="control-head"><span class="name" title="How fast you fly, in units per second. The scroll wheel changes it too.">speed</span><span class="value" id="vSpeed"></span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="40" title="How fast you fly, in units per second. The scroll wheel changes it too." />
     </div>
     <div class="control">
       <div class="control-head"><span class="name" title="Fraction of screen pixels drawn. Lower it if the frame rate drops.">resolution</span><span class="value" id="vRes"></span></div>
@@ -324,17 +324,32 @@ for (const k of PUZZLES) {
   puzOff.push(puzN.length / 3); puzCnt.push(SOLIDS[k].n.length);
   SOLIDS[k].n.forEach((v, i) => { puzN.push(...v); puzC.push(...hex(SOLIDS[k].c[i])); });
 }
-// Voronoi sites: a Fibonacci sphere, jittered with a fixed seed
+// Voronoi sites: a Fibonacci sphere, jittered with a fixed seed. Cells get Megaminx colors, no
+// two touching cells the same.
 const VOR = 48, vorP = [], vorC = [];
 {
   let s = 7; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  const pal = ["#3b2a6b", "#5b3f9e", "#2d4f8a", "#1f6f7a", "#6a2f5f", "#8a4a2a", "#2b3550", "#4a2b45", "#1d5a52", "#5d5a2a"];
+  const pts = [];
   for (let i = 0; i < VOR; i++) {
     const y = 1 - (2 * (i + 0.5)) / VOR, rr = Math.sqrt(1 - y * y), th = i * Math.PI * (3 - Math.sqrt(5));
-    let v = [Math.cos(th) * rr + 0.25 * (rnd() - 0.5), y + 0.25 * (rnd() - 0.5), Math.sin(th) * rr + 0.25 * (rnd() - 0.5)];
-    const l = Math.hypot(...v); vorP.push(...v.map((x) => x / l));
-    vorC.push(...hex(pal[Math.floor(rnd() * pal.length)]));
+    const v = [Math.cos(th) * rr + 0.25 * (rnd() - 0.5), y + 0.25 * (rnd() - 0.5), Math.sin(th) * rr + 0.25 * (rnd() - 0.5)];
+    const l = Math.hypot(...v); pts.push(v.map((x) => x / l));
   }
+  // neighbors: the two nearest sites to any sample point share an edge
+  const nb = pts.map(() => new Set());
+  for (let k = 0; k < 20000; k++) {
+    const y = 1 - (2 * (k + 0.5)) / 20000, rr = Math.sqrt(1 - y * y), th = k * Math.PI * (3 - Math.sqrt(5));
+    const d = [Math.cos(th) * rr, y, Math.sin(th) * rr];
+    const near = pts.map((p, i) => [p[0] * d[0] + p[1] * d[1] + p[2] * d[2], i]).sort((a, b) => b[0] - a[0]);
+    nb[near[0][1]].add(near[1][1]); nb[near[1][1]].add(near[0][1]);
+  }
+  const pal = SOLIDS.dodecahedron.c, col = [];
+  pts.forEach((p, i) => {
+    const used = new Set([...nb[i]].map((j) => col[j]));
+    const free = pal.filter((c) => !used.has(c));
+    col[i] = free.length ? free[Math.floor(rnd() * free.length)] : pal[Math.floor(rnd() * pal.length)];
+    vorP.push(...p); vorC.push(...hex(col[i]));
+  });
 }
 
 // ---------------------------------------------------------------- GL setup
@@ -512,8 +527,8 @@ vec3 skyVoronoi(vec3 d, float pw){
     if (q > b1) { b2 = b1; i2 = i1; b1 = q; i1 = j; } else if (q > b2) { b2 = q; i2 = j; }
   }
   float de = asin(clamp((b1 - b2) / length(uVP[i1] - uVP[i2]), 0.0, 1.0));
-  vec3 col = uVC[i1] * (0.75 + 0.5 * smoothstep(0.0, 0.25, de));
-  return mix(col, vec3(0.9, 0.88, 0.95), cover(de, 0.0025));
+  // solid cells, blended half-and-half right on the edge for antialiasing
+  return mix(uVC[i1], uVC[i2], 0.5 * (1.0 - clamp(de / max(fwidth(de), 1e-6), 0.0, 1.0)));
 }
 vec3 skyLoxo(vec3 d, float pw){
   float lat = asin(clamp(d.y, -0.999999, 0.999999)), lon = atan(d.z, d.x), cl = max(cos(lat), 1e-5);
@@ -809,7 +824,7 @@ function frame(now) {
   const st = k("KeyD") + k("ArrowRight") - k("KeyA") - k("ArrowLeft") + touch.mx;
   const up = k("Space") - k("KeyC") - k("ControlLeft") + touch.up;
   const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 5 : 1;
-  const sp = speedOf() * P.rho * boost;
+  const sp = speedOf() * boost;
   let target = V.add(V.add(V.scale(cam.F, fw), V.scale(cam.R, st)), V.scale(cam.U, up));
   const tl = Math.hypot(...target); if (tl > 1) target = V.scale(target, 1 / tl);
   target = V.scale(target, sp);
