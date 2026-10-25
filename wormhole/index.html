@@ -129,7 +129,7 @@
   <div class="wh-hint wh-shadow" id="hint">
     <span class="go"><span class="wh-mouse-only">click to fly</span><span class="wh-touch-only">drag to fly</span></span><br>
     <span class="wh-mouse-only"><kbd>W A S D</kbd> move · <kbd>mouse</kbd> look · <kbd>Q E</kbd> roll<br>
-    <kbd>space</kbd> / <kbd>C</kbd> up / down · <kbd>shift</kbd> boost · <kbd>scroll</kbd> speed · <kbd>esc</kbd> release</span>
+    <kbd>space</kbd> up · <kbd>ctrl</kbd> down · <kbd>shift</kbd> boost · <kbd>scroll</kbd> speed · <kbd>esc</kbd> release</span>
     <span class="wh-touch-only">left thumb moves · right thumb looks</span>
   </div>
 
@@ -708,7 +708,7 @@ window.addEventListener("resize", resize);
 
 // keyboard + mouse
 const keys = new Set();
-const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "KeyC", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 window.addEventListener("keydown", (e) => {
   if (e.target.closest && e.target.closest("input, select, textarea")) return;
   if (flyKeys.has(e.code)) { keys.add(e.code); e.preventDefault(); hideHint(); }
@@ -814,7 +814,7 @@ function frame(now) {
   const k = (c) => (keys.has(c) ? 1 : 0);
   const fw = k("KeyW") + k("ArrowUp") - k("KeyS") - k("ArrowDown") + touch.my;
   const st = k("KeyD") + k("ArrowRight") - k("KeyA") - k("ArrowLeft") + touch.mx;
-  const up = k("Space") - k("KeyC") - k("ControlLeft") + touch.up;
+  const up = k("Space") - (keys.has("ControlLeft") || keys.has("ControlRight") ? 1 : 0) + touch.up;
   const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 5 : 1;
   const sp = speedOf() * boost;
   let target = V.add(V.add(V.scale(cam.F, fw), V.scale(cam.R, st)), V.scale(cam.U, up));
