@@ -110,6 +110,8 @@
 
     .wh-about .a { color: var(--accent); }
     .wh-about .b { color: var(--side-b); }
+    .wh-viz { display: block; width: 100%; max-width: 440px; margin: 14px auto 4px; }
+    .wh-caption { text-align: center; font-family: var(--font-mono); font-size: .78rem; color: var(--muted); margin: 0 auto 16px; max-width: 440px; min-height: 2.6em; }
   </style>
 </head>
 <body>
@@ -181,54 +183,95 @@
     <about-modal label="about">
       <div class="wh-about">
         <h2 class="title">Wormhole</h2>
-        <p class="intro">Two universes joined by a tunnel. Each one here is just a sky: a pattern
-          painted on a sphere infinitely far away. Universe <span class="a">A</span> is where you
-          start; universe <span class="b">B</span> is through the hole.</p>
+        <p class="intro">Two universes joined by a tunnel. Each universe here is only a sky, a
+          pattern painted infinitely far away, so everything strange you see is the tunnel bending
+          light. Every pixel is a light ray traced through curved space, and it runs in real time
+          because one slice of rays answers every pixel.</p>
 
-        <div class="section-label">the shape of the space</div>
-        <p>Picture a funnel whose narrow end is glued to the narrow end of a second funnel. A
-          two-dimensional creature living on that surface could walk down one funnel, through the
-          ring where they meet, and up into the other, never leaving the surface. Far from the ring
-          each funnel flattens out into an ordinary plane.</p>
-        <p>The wormhole is the same thing one dimension up. Every sphere around the hole has some
-          area, and the closer you get the smaller those spheres are, down to a smallest one, the
-          <b>throat</b>. Past it, the spheres grow again, but now you're in the other universe.</p>
-        <p>The picture in the top-left corner is that funnel seen edge-on, with a dot for where you are.
-          Its horizontal width is the radius <code>r</code> of the sphere you're on; going down the
-          picture is going through.</p>
-        <p>To describe where you are you need one number for the distance <code>ℓ</code> along the
-          tunnel (positive in A, negative in B, zero at the throat) and a direction on the sphere.
-          The whole shape is set by how the sphere's radius depends on <code>ℓ</code>:</p>
+        <div class="section-label">a funnel glued to a funnel</div>
+        <p>Start one dimension down. Take a funnel and glue its narrow end to the narrow end of a
+          second funnel. An ant on that surface can walk down one funnel, through the ring where they
+          meet, and out across the other. Far from the ring each funnel opens out almost flat, so to
+          the ant there are two ordinary flat worlds with a hole connecting them.</p>
+        <canvas class="wh-viz wh-viz-walk" width="440" height="280"></canvas>
+        <p class="wh-caption wh-cap-walk"></p>
+        <p>The wormhole is that, one dimension up. Around the hole you can draw spheres, like the
+          rings on the funnel. Moving inward, each sphere is smaller than the last, until you reach the
+          smallest one, the <b>throat</b>. Keep going and the spheres grow again, but now you're in
+          the other universe. Universe <span class="a">A</span> is where you start;
+          <span class="b">B</span> is through the hole.</p>
+
+        <div class="section-label">the whole shape in one function</div>
+        <p>So two things say where you are: the distance <code>ℓ</code> along the tunnel (positive in
+          A, zero at the throat, negative in B) and a direction on the sphere. The shape comes entirely
+          from how big the sphere at distance <code>ℓ</code> is, its radius <code>r(ℓ)</code>:</p>
         <p>$$ ds^2 = d\ell^2 + r(\ell)^2\,(d\theta^2 + \sin^2\theta\, d\varphi^2) $$</p>
-        <p>This uses the <code>r(ℓ)</code> from the paper the <em>Interstellar</em> team published about
-          rendering their wormhole: a tube of radius <b>throat radius</b> and length <b>throat
-          length</b>, flaring out into flat space over a distance set by <b>flare</b>.</p>
+        <p>Read it as: a step of <code>dℓ</code> along the tunnel is that long, and a step across the
+          sphere is as long as it would be on an ordinary sphere of radius <code>r</code>. This page
+          uses the <code>r(ℓ)</code> from the paper the <em>Interstellar</em> effects team wrote about
+          rendering their wormhole: a straight tube with radius <b>throat radius</b> and length
+          <b>throat length</b>, opening into flat space over a distance set by <b>flare</b>. The funnels
+          in these diagrams, and the small one in the corner while you fly, are drawn from it with your
+          current settings.</p>
 
-        <div class="section-label">how light moves</div>
-        <p>Light goes as straight as it can, which on a curved surface means the shortest path. A
-          ray aimed straight at the hole goes through. A ray aimed off to the side bends around the
-          throat and comes back out into the universe it started in, in a different direction. A ray
-          aimed just past the edge of the throat circles it before escaping, and every other ray bends
-          somewhere in between.</p>
-        <p>So looking at the hole you see all of universe B squeezed into a disk, and around the disk
-          you see your own sky smeared into rings, including the part of it that's behind you.</p>
+        <div class="section-label">light goes as straight as it can</div>
+        <p>On a curved surface the straightest path is the one an ant walks if it never turns left or
+          right. Light does the same in curved space. Here are rays leaving one spot on the funnel in
+          every direction at once, all at the same speed, traced by the same code that moves you when
+          you fly. <span class="a">Violet</span> rays end up back in A; <span class="b">orange</span>
+          ones went through to B.</p>
+        <canvas class="wh-viz wh-viz-rays" width="440" height="300"></canvas>
+        <p class="wh-caption wh-cap-rays"></p>
+        <p>Rays aimed at the hole go through. Rays aimed off to the side bend around the throat and come
+          back out into A heading somewhere new. A ray aimed exactly at the edge of the throat would
+          circle it forever, and rays aimed close to that edge circle it a few times before escaping
+          to one side or the other.</p>
+        <p>That funnel is a slice through the real space: the slice containing a ray and the center of
+          the hole. The space looks the same in every direction around the hole, so a ray never leaves
+          its slice, and every ray in 3D behaves like one of these.</p>
 
-        <div class="section-label">how it runs in real time</div>
-        <p>The space is perfectly round, so any ray stays in the flat slice that contains it and the
-          center of the hole. Inside that slice, where the ray ends up depends on only two numbers:
-          where you are (<code>ℓ</code>) and the angle between the ray and the direction straight
-          away from the hole.</p>
-        <p>So once a frame, the GPU traces 4096 rays in a single slice at your <code>ℓ</code>, at
-          angles from straight out to straight in, each stepped through the curved space until it's
-          far enough out that space is flat again. It stores which universe each ray ended up in and
-          which direction it was heading. Then for each pixel it measures that one angle, looks up the
-          answer, and turns it back to the pixel's own slice. The skies are drawn from formulas
-          rather than images, so they stay sharp however much the throat magnifies them.</p>
+        <div class="section-label">what that looks like</div>
+        <p>Put your eye at that spot. Each pixel shows whatever part of the sky its ray ends up heading
+          toward. Look at the hole and the rays go through and fan out across all of B, so the whole
+          of B's sky is squeezed into a disk. Around the disk the rays bend back into A, so you see
+          your own sky warped into rings, including the parts behind you. Rays that circled the throat
+          make thinner and thinner copies packed against the edge of the disk.</p>
+        <p>The fat pinches where a line crosses a bright ring come from the bit of A's sky hidden
+          directly behind the hole. Light from it can bend around the throat on any side, so that one
+          point shows up as a whole circle, and a line passing through it gets stretched sideways
+          there.</p>
+
+        <div class="section-label">one slice answers every pixel</div>
+        <p>Tracing a curved path for each of a few million pixels every frame would be slow. But a
+          ray's fate depends on only two numbers: where you are along the tunnel (<code>ℓ</code>), and
+          the angle between the ray and the direction straight away from the hole. The rest is which
+          way round its slice faces, and turning a slice around doesn't change what happens in it.</p>
+        <p>So each frame the GPU traces 4096 rays at your <code>ℓ</code>, at angles from straight away
+          from the hole to straight at it, packed tightest near the edge of the throat where the answer
+          changes fastest. It steps each one until it's far enough out that space is flat again, and
+          stores which universe the ray ended in and which way it was heading. Then every pixel works
+          out its own angle, looks up the nearest rays in that table, and turns the answer back into
+          its own slice. This chart is that table, read back from the GPU while a camera moves in and
+          out:</p>
+        <canvas class="wh-viz wh-viz-table" width="440" height="300"></canvas>
+        <p class="wh-caption wh-cap-table"></p>
+        <p>The skies are formulas of a direction (its latitude and longitude, which face of a solid it
+          points at) rather than images, so they stay sharp however much the throat magnifies
+          them.</p>
 
         <div class="section-label">flying</div>
-        <p>You fly with the same rule light uses. When you coast, you move in the straightest
-          possible line through the curved space, and your view turns with the space so that flying
-          through the throat carries you into B the right way up.</p>
+        <p>You move by the same rule as light. Let go of the keys and you coast along the straightest
+          path, which can curve you around the hole. Your sense of up is carried along with you the
+          same way. Fly straight through the middle from the starting spot and B's sky comes out
+          upright. Cross near the rim of the throat, or loop around it first, and you come out tilted
+          against B's grid: no one direction is up in both universes from every crossing point, so up
+          depends on the path you took.</p>
+        <p class="muted" style="font-size:.85rem">Made after optozorax's video
+          <a href="https://www.youtube.com/watch?v=zA85gINcW1g" target="_blank" rel="noopener">What
+          would a wormhole look like in real life?</a> The wormhole's shape is from James, von
+          Tunzelmann, Franklin and Thorne,
+          <a href="https://arxiv.org/abs/1502.03809" target="_blank" rel="noopener">Visualizing
+          Interstellar's Wormhole</a> (2015).</p>
       </div>
     </about-modal>
   </div>
@@ -529,15 +572,31 @@ function program(fsrc) {
 const lutProg = program(LUT_FRAG), mainProg = program(MAIN_FRAG);
 const vao = gl.createVertexArray();
 
-const lutTex = gl.createTexture();
-gl.bindTexture(gl.TEXTURE_2D, lutTex);
-gl.texImage2D(gl.TEXTURE_2D, 0, f32 ? gl.RGBA32F : gl.RGBA16F, LUT_W, LUT_H, 0, gl.RGBA, f32 ? gl.FLOAT : gl.HALF_FLOAT, null);
-for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
-const lutFbo = gl.createFramebuffer();
-gl.bindFramebuffer(gl.FRAMEBUFFER, lutFbo);
-gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, lutTex, 0);
-if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) fail();
-gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+function makeLut() {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, f32 ? gl.RGBA32F : gl.RGBA16F, LUT_W, LUT_H, 0, gl.RGBA, f32 ? gl.FLOAT : gl.HALF_FLOAT, null);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) fail();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return { tex, fbo };
+}
+const lut = makeLut();
+// trace the table's rays for a camera at ℓ = l
+function runLut(target, l) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+  gl.viewport(0, 0, LUT_W, LUT_H);
+  gl.useProgram(lutProg.p);
+  gl.uniform1f(lutProg.u.uRho, P.rho); gl.uniform1f(lutProg.u.uA, P.a); gl.uniform1f(lutProg.u.uM, P.M);
+  gl.uniform1f(lutProg.u.uAlphaC, alphaCrit(l));
+  gl.uniform1f(lutProg.u.uL, l);
+  gl.uniform1f(lutProg.u.uLfar, Math.max(P.a + 3000 * (P.rho + P.M), Math.abs(l) * 1.01));
+  gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
 
 gl.useProgram(mainProg.p);
 gl.uniform3fv(mainProg.u.uPN, puzN); gl.uniform3fv(mainProg.u.uPC, puzC);
@@ -571,34 +630,34 @@ function resetCam() {
 resetCam();
 
 // move along a straight line of the curved space by displacement s, carrying the camera frame
-function move(s) {
+function move(s, c = cam) {
   const len = Math.hypot(...s);
   if (len === 0) return;
-  const steps = Math.max(1, Math.ceil(len / (0.02 * rOf(cam.l))));
+  const steps = Math.max(1, Math.ceil(len / (0.02 * rOf(c.l))));
   const ds = V.scale(s, 1 / steps);
   let d = ds;
   for (let i = 0; i < steps; i++) {
-    const vl = V.dot(d, cam.n), vt = V.sub(d, V.scale(cam.n, vl)), tl = Math.hypot(...vt);
-    const lMid = cam.l + 0.5 * vl;
-    cam.l += vl;
+    const vl = V.dot(d, c.n), vt = V.sub(d, V.scale(c.n, vl)), tl = Math.hypot(...vt);
+    const lMid = c.l + 0.5 * vl;
+    c.l += vl;
     if (tl > 1e-12) {
-      const axis = V.norm(V.cross(cam.n, vt)), th = tl / rOf(lMid), tf = (1 - drOf(lMid)) * th;
-      cam.n = V.rot(cam.n, axis, th);
-      for (const k of ["F", "R", "U", "up", "vel"]) cam[k] = V.rot(cam[k], axis, tf);
+      const axis = V.norm(V.cross(c.n, vt)), th = tl / rOf(lMid), tf = (1 - drOf(lMid)) * th;
+      c.n = V.rot(c.n, axis, th);
+      for (const k of ["F", "R", "U", "up", "vel"]) c[k] = V.rot(c[k], axis, tf);
       d = V.rot(d, axis, tf);
     }
   }
-  orthonormalize();
+  orthonormalize(c);
 }
 // No roll: the camera stays level with "up", a vector carried along with you like the rest of
 // the frame, so it means the same thing on both sides of the throat.
-function orthonormalize() {
-  cam.n = V.norm(cam.n);
-  cam.up = V.norm(cam.up);
-  cam.F = V.norm(cam.F);
-  const R = V.cross(cam.F, cam.up);
-  if (Math.hypot(...R) > 1e-6) cam.R = V.norm(R);
-  cam.U = V.cross(cam.R, cam.F);
+function orthonormalize(c = cam) {
+  c.n = V.norm(c.n);
+  c.up = V.norm(c.up);
+  c.F = V.norm(c.F);
+  const R = V.cross(c.F, c.up);
+  if (Math.hypot(...R) > 1e-6) c.R = V.norm(R);
+  c.U = V.cross(c.R, c.F);
 }
 const MAX_PITCH = Math.PI / 2 - 0.02;
 function look(yaw, pitch) {
@@ -759,20 +818,12 @@ function frame(now) {
 
   if (dirtyLut || cam.l !== lastL) {
     lastL = cam.l; dirtyLut = false;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, lutFbo);
-    gl.viewport(0, 0, LUT_W, LUT_H);
-    gl.useProgram(lutProg.p);
-    gl.uniform1f(lutProg.u.uRho, P.rho); gl.uniform1f(lutProg.u.uA, P.a); gl.uniform1f(lutProg.u.uM, P.M);
-    gl.uniform1f(lutProg.u.uAlphaC, alphaCrit(cam.l));
-    gl.uniform1f(lutProg.u.uL, cam.l);
-    gl.uniform1f(lutProg.u.uLfar, Math.max(P.a + 3000 * (P.rho + P.M), Math.abs(cam.l) * 1.01));
-    gl.bindVertexArray(vao); gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    runLut(lut, cam.l);
   }
 
   gl.viewport(0, 0, W, H);
   gl.useProgram(mainProg.p);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, lutTex);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, lut.tex);
   gl.uniform1f(mainProg.u.uRho, P.rho); gl.uniform1f(mainProg.u.uA, P.a); gl.uniform1f(mainProg.u.uM, P.M);
   gl.uniform1f(mainProg.u.uAlphaC, alphaCrit(cam.l));
   gl.uniform3fv(mainProg.u.uN, cam.n); gl.uniform3fv(mainProg.u.uF, cam.F);
@@ -796,6 +847,172 @@ function frame(now) {
 let frameCount = 0;
 syncUI();
 requestAnimationFrame(frame);
+
+// ---------------------------------------------------------------- about-modal diagrams
+// Each runs the page's own code: rOf/drOf for the shape, move() for the rays, the GPU ray table.
+const VIOLET = "#a58bff", ORANGE = "#ffb36b";
+
+// the funnel over ℓ ∈ [-L, L]: height z(ℓ) from dz/dℓ = √(1 − r'²), with the throat at z = 0
+function funnel(L, N = 400) {
+  const dl = (2 * L) / N, zs = [0];
+  for (let i = 1; i <= N; i++) zs[i] = zs[i - 1] + Math.sqrt(Math.max(0, 1 - drOf(-L + (i - 0.5) * dl) ** 2)) * dl;
+  const z0 = zs[N >> 1];
+  for (let i = 0; i <= N; i++) zs[i] -= z0;
+  const zOf = (l) => { const x = Math.max(0, Math.min(N, (l + L) / dl)), i = Math.min(N - 1, Math.floor(x)); return zs[i] + (zs[i + 1] - zs[i]) * (x - i); };
+  return { L, rMax: rOf(L), zMax: Math.max(...zs.map(Math.abs)), zOf };
+}
+const funnelExtent = () => P.a + 4 * P.rho + 2 * P.M;
+
+// a wireframe of the funnel seen from a little above; returns the projection of (ℓ, φ)
+function drawFunnel(ctx, w, h, F, spin) {
+  const tilt = 0.5, ct = Math.cos(tilt), st = Math.sin(tilt);
+  const s = Math.min((w / 2 - 10) / F.rMax, (h / 2 - 10) / (F.zMax * ct + F.rMax * st));
+  const proj = (l, phi) => { const r = rOf(l), a = phi + spin; return [w / 2 + r * Math.cos(a) * s, h / 2 - (F.zOf(l) * ct - r * Math.sin(a) * st) * s]; };
+  ctx.lineWidth = 1;
+  const stroke = (pts, col) => { ctx.strokeStyle = col; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke(); };
+  const side = (l, alpha) => (l >= 0 ? `rgba(165,139,255,${alpha})` : `rgba(255,179,107,${alpha})`);
+  for (let k = -6; k <= 6; k++) {
+    const l = (k / 6) * F.L, pts = [];
+    for (let j = 0; j <= 64; j++) pts.push(proj(l, (j / 64) * 2 * Math.PI));
+    stroke(pts, k === 0 ? "rgba(232,230,240,.55)" : side(l, 0.22));
+  }
+  for (let j = 0; j < 20; j++) {
+    const phi = (j / 20) * 2 * Math.PI;
+    for (const sign of [1, -1]) {
+      const pts = [];
+      for (let i = 0; i <= 60; i++) pts.push(proj((sign * i * F.L) / 60, phi));
+      stroke(pts, side(sign, 0.16));
+    }
+  }
+  return proj;
+}
+
+function sizeCanvas(cv) {
+  const dpr = Math.min(devicePixelRatio || 1, 2), w = cv.width / (cv._dpr || 1), h = cv.height / (cv._dpr || 1);
+  if (cv._dpr !== dpr) { cv.width = w * dpr; cv.height = h * dpr; cv._dpr = dpr; }
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  return [ctx, w, h];
+}
+const dot = (ctx, [x, y], col, r = 5) => {
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(x, y, r + 1.5, 0, 2 * Math.PI); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill();
+};
+
+// 1. an ant walking from A through the throat into B and back
+function drawWalk(cv, cap, t, F) {
+  const [ctx, w, h] = sizeCanvas(cv);
+  const spin = 0.12 * t, proj = drawFunnel(ctx, w, h, F, spin);
+  const T = 10, u = (t % T) / T, ease = (x) => 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, x)));
+  const go = u < 0.5 ? ease(u / 0.42) : 1 - ease((u - 0.5) / 0.42);
+  const l = F.L * 0.92 * (1 - 2 * go), phi = 0.35 - spin; // near the silhouette, so the path hugs the surface
+  const path = []; for (let i = 0; i <= 80; i++) path.push(proj(F.L * 0.92 * (1 - (2 * i) / 80), phi));
+  ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 1.5; ctx.beginPath();
+  path.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+  dot(ctx, proj(l, phi), l >= 0 ? VIOLET : ORANGE);
+  cap.textContent = Math.abs(l) <= P.a + 0.25 * P.rho ? `at the throat, the smallest ring (ℓ = ${l.toFixed(1)})`
+    : l > 0 ? `in universe A (ℓ = +${l.toFixed(1)}); far out, the funnel is nearly flat`
+    : `in universe B (ℓ = ${l.toFixed(1)}); same funnel, other side`;
+}
+
+// 2. rays in every direction from one spot, traced with move(), the flight code
+function traceRays(F) {
+  const l0 = P.a + 2.2 * P.rho, ac = alphaCrit(l0), rays = [];
+  const angles = [];
+  for (let i = 0; i < 48; i++) angles.push(-Math.PI + ((i + 0.5) / 48) * 2 * Math.PI);
+  for (const e of [0.003, 0.012, 0.04]) angles.push(ac - e, ac + e, -(ac - e), -(ac + e));
+  for (const al of angles) {
+    const c = { l: l0, n: [0, 0, 1], F: [Math.sin(al), 0, Math.cos(al)], R: [1, 0, 0], U: [0, 1, 0], up: [0, 1, 0], vel: [0, 0, 0] };
+    const pts = [[c.l, 0, 0]];
+    let phi = 0, sLen = 0;
+    for (let k = 0; k < 3000; k++) {
+      const ds = 0.04 * rOf(c.l);
+      move(V.scale(c.F, ds), c);
+      let p = Math.atan2(c.n[0], c.n[2]);
+      p += 2 * Math.PI * Math.round((phi - p) / (2 * Math.PI)); phi = p; sLen += ds;
+      pts.push([c.l, phi, sLen]);
+      if (Math.abs(c.l) > F.L && V.dot(c.F, c.n) * c.l > 0) break;
+    }
+    rays.push({ pts, side: c.l >= 0 ? "A" : "B" });
+  }
+  return { l0, rays, sMax: Math.max(...rays.map((r) => r.pts[r.pts.length - 1][2])) };
+}
+function drawRays(cv, cap, t, F, R) {
+  const [ctx, w, h] = sizeCanvas(cv);
+  const spin = -0.6 + 0.35 * Math.sin(0.15 * t), proj = drawFunnel(ctx, w, h, F, spin);
+  const T = 9, u = (t % T) / T, reach = R.sMax * Math.min(1, u / 0.7) * 0.55;
+  ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  for (const ray of R.rays) {
+    ctx.strokeStyle = ray.side === "A" ? VIOLET : ORANGE; ctx.beginPath();
+    for (let i = 0; i < ray.pts.length; i++) {
+      const [l, phi, sl] = ray.pts[i]; if (sl > reach) break;
+      const [x, y] = proj(l, phi); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+  }
+  dot(ctx, proj(R.l0, 0), VIOLET, 4);
+  const nB = R.rays.filter((r) => r.side === "B").length;
+  cap.textContent = u < 0.7 ? `rays leaving a spot at ℓ = ${R.l0.toFixed(1)}, all at the same speed`
+    : `${nB} of ${R.rays.length} rays went through to B; the rest bent back into A`;
+}
+
+// 3. the GPU's ray table, read back, for a camera moving in and out
+const vizLut = makeLut(), lutPixels = new Float32Array(LUT_N * 4);
+function alphaOfIndex(i, ac) { // the table's sample spacing (alphaOf in the shaders)
+  if (i < LUT_K) { const u = 1 - i / (LUT_K - 1); return ac * (1 - u * u); }
+  const t = (i - LUT_K) / (LUT_K - 1); return ac + (Math.PI - ac) * t * t;
+}
+function drawTable(cv, cap, t) {
+  const [ctx, w, h] = sizeCanvas(cv);
+  const l = P.a + P.rho * (1.3 + 8 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 14)));
+  runLut(vizLut, l);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, vizLut.fbo);
+  gl.readPixels(0, 0, LUT_W, LUT_H, gl.RGBA, gl.FLOAT, lutPixels);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const m = { l: 44, r: 10, t: 10, b: 34 }, pw = w - m.l - m.r, ph = h - m.t - m.b;
+  const X = (a) => m.l + (a / Math.PI) * pw, Y = (b) => m.t + (1 - (b + Math.PI) / (2 * Math.PI)) * ph;
+  const wrap = (x) => x - 2 * Math.PI * Math.round(x / (2 * Math.PI));
+  ctx.strokeStyle = "rgba(232,230,240,.18)"; ctx.lineWidth = 1; ctx.strokeRect(m.l, m.t, pw, ph);
+  // no bending at all
+  ctx.setLineDash([3, 4]); ctx.strokeStyle = "rgba(232,230,240,.35)";
+  ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(Math.PI), Y(0)); ctx.stroke();
+  const ac = alphaCrit(l);
+  ctx.strokeStyle = "rgba(232,230,240,.6)"; ctx.beginPath(); ctx.moveTo(X(ac), m.t); ctx.lineTo(X(ac), m.t + ph); ctx.stroke();
+  ctx.setLineDash([]);
+  for (let i = 0; i < LUT_N; i++) {
+    const [dx, dy, side, esc] = lutPixels.subarray(4 * i, 4 * i + 4);
+    if (esc < 0.5) continue;
+    // how far it turned: final heading minus starting angle (in B, against B's own axes, where
+    // a ray straight through the middle doesn't turn at all)
+    const a = alphaOfIndex(i, ac);
+    ctx.fillStyle = side > 0.5 ? VIOLET : ORANGE;
+    ctx.fillRect(X(a) - 1, Y(wrap(Math.atan2(dy, dx) - a)) - 1, 2, 2);
+  }
+  ctx.fillStyle = "#8e8ca3"; ctx.font = "10px 'JetBrains Mono', monospace";
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("0°", X(0), m.t + ph + 4); ctx.fillText("90°", X(Math.PI / 2), m.t + ph + 4); ctx.fillText("180°", X(Math.PI), m.t + ph + 4);
+  ctx.fillText("ray's angle from straight away from the hole", m.l + pw / 2, m.t + ph + 18);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const d of [-180, -90, 0, 90, 180]) ctx.fillText(d + "°", m.l - 4, Y((d * Math.PI) / 180));
+  ctx.save(); ctx.translate(10, m.t + ph / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center";
+  ctx.fillText("how far it turned", 0, 0); ctx.restore();
+  cap.textContent = `camera at ℓ = ${l.toFixed(2)}. Right of the solid line, rays go through to B. Dashed: no bending.`;
+}
+
+let vizRAF = 0;
+function startViz(el) {
+  const F = funnel(funnelExtent()), R = traceRays(F), t0 = performance.now();
+  const q = (c) => el.querySelector(c);
+  const step = (now) => {
+    const t = (now - t0) / 1000;
+    drawWalk(q(".wh-viz-walk"), q(".wh-cap-walk"), t, F);
+    drawRays(q(".wh-viz-rays"), q(".wh-cap-rays"), t, F, R);
+    drawTable(q(".wh-viz-table"), q(".wh-cap-table"), t);
+    vizRAF = requestAnimationFrame(step);
+  };
+  vizRAF = requestAnimationFrame(step);
+}
+document.addEventListener("cohesion-modal-open", (e) => { if (e.detail.className?.includes("cohesion-about")) startViz(e.detail.el); });
+document.addEventListener("cohesion-modal-close", (e) => { if (e.detail.className?.includes("cohesion-about")) cancelAnimationFrame(vizRAF); });
 
 // test hook
 window.wormhole = { cam, P, move, look, resetCam, rOf, drOf, frame: () => frame(performance.now()), gl };
