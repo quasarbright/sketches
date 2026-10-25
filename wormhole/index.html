@@ -153,6 +153,10 @@
       <select id="skyB" title="The sky of the universe on the far side of the throat"></select>
     </div>
     <div class="control">
+      <div class="control-head"><span class="name" title="A ring of glowing gas orbiting the throat in universe A">accretion disk</span></div>
+      <button class="btn" id="diskBtn" title="A ring of glowing gas orbiting the throat in universe A. The throat bends the disk's far side up over the top of the hole.">off</button>
+    </div>
+    <div class="control">
       <div class="control-head"><span class="name" title="Radius of the narrowest part of the wormhole, the circle you fly through">throat radius</span><span class="value" id="vRho"></span></div>
       <input type="range" id="rho" min="0.25" max="4" step="0.05" value="1" title="Radius of the narrowest part of the wormhole, the circle you fly through" />
     </div>
@@ -240,6 +244,19 @@
           directly behind the hole. Light from it can bend around the throat on any side, so that one
           point shows up as a whole circle, and a line passing through it gets stretched sideways
           there.</p>
+
+        <div class="section-label">the accretion disk</div>
+        <p>The <b>accretion disk</b> toggle puts a flat ring of glowing gas around the throat in A,
+          the kind that circles real black holes. You see it the same way, by following rays. A
+          ray's slice cuts the disk's plane along a line through the hole, so as the ray swings
+          around the hole it crosses that plane once every half turn. The first crossing is the disk
+          where you'd expect it. A ray aimed a little above the hole bends around and crosses the
+          plane again on the far side, so you see the back of the disk arched over the top of the
+          hole, and under the bottom too. That's the shape from <em>Interstellar</em>'s black hole,
+          and it comes from the same bending as everything else here.</p>
+        <p>To find those crossings, each ray in the table below also records where it is along the
+          tunnel at a range of angles around the hole, and every pixel looks up the angles where its
+          own slice meets the disk.</p>
 
         <div class="section-label">one slice answers every pixel</div>
         <p>Tracing a curved path for each of a few million pixels every frame would be slow. But a
@@ -362,6 +379,11 @@ const f16 = f32 ? null : gl.getExtension("EXT_color_buffer_half_float");
 if (!f32 && !f16) fail();
 
 const LUT_W = 1024, LUT_H = 4, LUT_N = LUT_W * LUT_H, LUT_K = LUT_N / 2;
+// the disk samples ride along as extra render targets, 4 per target
+const DISK_LAYERS = Math.min(gl.getParameter(gl.MAX_DRAW_BUFFERS), gl.getParameter(gl.MAX_COLOR_ATTACHMENTS), 8) - 1;
+const DISK_NS = 4 * DISK_LAYERS;
+const DISK_OUTS = Array.from({ length: DISK_LAYERS }, (_, j) => `layout(location = ${j + 1}) out vec4 o${j + 1};`).join("\n");
+const DISK_WRITES = Array.from({ length: DISK_LAYERS }, (_, j) => `  o${j + 1} = vec4(samp[${4 * j}], samp[${4 * j + 1}], samp[${4 * j + 2}], samp[${4 * j + 3}]);`).join("\n");
 
 const VERT = `#version 300 es
 void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;
@@ -372,6 +394,16 @@ precision highp int;
 const float PI = 3.14159265358979;
 const int LUT_W = ${LUT_W}, LUT_N = ${LUT_N}, LUT_K = ${LUT_K};
 uniform float uRho, uA, uM, uAlphaC;
+const int NS = ${DISK_NS};
+const float PHI_MAX = 4.0 * PI;
+float rOf(float l){ float al = abs(l); if (al <= uA) return uRho; float x = 2.0 * (al - uA) / (PI * uM); return uRho + uM * (x * atan(x) - 0.5 * log(1.0 + x * x)); }
+float drOf(float l){ float al = abs(l); if (al <= uA) return 0.0; float x = 2.0 * (al - uA) / (PI * uM); return sign(l) * (2.0 / PI) * atan(x); }
+// For the disk, each table ray also records ℓ at NS angles φ round the hole, bunched toward the
+// start of the ray. ℓ is squashed into (-1, 1) so it stays smooth as the ray runs off to infinity.
+float phiOf(int s){ float k = float(s) / float(NS - 1); return PHI_MAX * k * sqrt(k); }
+float sOfPhi(float phi){ return float(NS - 1) * pow(clamp(phi / PHI_MAX, 0.0, 1.0), 2.0 / 3.0); }
+float squash(float l){ return l / (abs(l) + uRho); }
+float unsquash(float x){ return uRho * x / (1.0 - abs(x)); }
 // sample i <-> ray angle α: half the samples on each side of the critical angle, bunched toward it
 float alphaOf(int i){
   if (i < LUT_K) { float t = float(i) / float(LUT_K - 1); float u = 1.0 - t; return uAlphaC * (1.0 - u * u); }
@@ -383,9 +415,8 @@ float alphaOf(int i){
 // State: ℓ, p = dℓ/ds, φ = angle swept round the hole. h = r² dφ/ds is conserved.
 const LUT_FRAG = COMMON + `
 uniform float uL, uLfar;
-out vec4 o;
-float rOf(float l){ float al = abs(l); if (al <= uA) return uRho; float x = 2.0 * (al - uA) / (PI * uM); return uRho + uM * (x * atan(x) - 0.5 * log(1.0 + x * x)); }
-float drOf(float l){ float al = abs(l); if (al <= uA) return 0.0; float x = 2.0 * (al - uA) / (PI * uM); return sign(l) * (2.0 / PI) * atan(x); }
+layout(location = 0) out vec4 o;
+${DISK_OUTS}
 vec3 deriv(vec3 y, float h){ float r = rOf(y.x); return vec3(y.y, h * h * drOf(y.x) / (r * r * r), h / (r * r)); }
 void main(){
   int i = int(gl_FragCoord.y) * LUT_W + int(gl_FragCoord.x);
@@ -393,13 +424,22 @@ void main(){
   vec3 y = vec3(uL, cos(alpha), 0.0);
   float h = rOf(uL) * sin(alpha);
   bool escaped = false;
+  float samp[NS];
+  samp[0] = squash(uL);
+  int next = 1;
   for (int k = 0; k < 6000; k++) {
     if (abs(y.x) > uLfar && y.y * y.x > 0.0) { escaped = true; break; }
     float r = rOf(y.x);
     float ds = min(0.03 * r, 0.2 * uM + 0.03 * max(abs(y.x) - uA, 0.0));
     vec3 k1 = deriv(y, h), k2 = deriv(y + 0.5 * ds * k1, h), k3 = deriv(y + 0.5 * ds * k2, h), k4 = deriv(y + ds * k3, h);
+    vec3 prev = y;
     y += ds / 6.0 * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+    for (; next < NS && y.z >= phiOf(next); next++)
+      samp[next] = mix(squash(prev.x), squash(y.x), (phiOf(next) - prev.z) / max(y.z - prev.z, 1e-9));
   }
+  float fill = escaped ? sign(y.x) : squash(y.x);    // angles the ray never reached
+  for (; next < NS; next++) samp[next] = fill;
+${DISK_WRITES}
   float r = rOf(y.x), phi = y.z;
   vec2 u = vec2(cos(phi), sin(phi)), e = vec2(-u.y, u.x);
   vec2 D = normalize(y.y * u + (h / r) * e);          // final heading, in (out, sideways) at the start
@@ -410,6 +450,9 @@ void main(){
 
 const MAIN_FRAG = COMMON + `
 uniform sampler2D uLut;
+uniform highp sampler2DArray uDisk;
+uniform float uTime, uDiskOn, uDiskIn, uDiskOut;
+uniform vec3 uDiskUp, uDiskX;
 uniform vec3 uN, uF, uR, uU;
 uniform vec2 uRes;
 uniform float uTanHalf;
@@ -420,13 +463,16 @@ uniform vec3 uVP[${VOR}], uVC[${VOR}];
 out vec4 o;
 
 vec4 lutFetch(int i){ return texelFetch(uLut, ivec2(i % LUT_W, i / LUT_W), 0); }
-vec4 lutAt(float alpha){
+// the two table rays either side of angle α, and how far between them it is
+void lutIndex(float alpha, out int i0, out int i1, out float t){
   float x;
   if (alpha < uAlphaC) x = (1.0 - sqrt(max(0.0, 1.0 - alpha / uAlphaC))) * float(LUT_K - 1);
   else x = float(LUT_K) + sqrt(clamp((alpha - uAlphaC) / max(PI - uAlphaC, 1e-6), 0.0, 1.0)) * float(LUT_K - 1);
-  int i0 = clamp(int(floor(x)), 0, LUT_N - 1);
-  int i1 = (i0 == LUT_K - 1) ? i0 : min(i0 + 1, LUT_N - 1);
-  float t = x - float(i0);
+  i0 = clamp(int(floor(x)), 0, LUT_N - 1);
+  i1 = (i0 == LUT_K - 1) ? i0 : min(i0 + 1, LUT_N - 1);
+  t = x - float(i0);
+}
+vec4 lutAt(int i0, int i1, float t){
   vec4 a = lutFetch(i0), b = lutFetch(i1);
   if (abs(a.z - b.z) > 0.5 || a.w < 0.5 || b.w < 0.5) return t < 0.5 ? a : b;
   vec2 m = mix(a.xy, b.xy, t);
@@ -543,6 +589,45 @@ vec3 skyLoxo(vec3 d, float pw){
   c = mix(c, vec3(1.0, 0.70, 0.42), cover(d2, 0.003));
   return c;
 }
+// squashed ℓ of table ray i when it has swept angle φ round the hole (Catmull-Rom between samples)
+float diskSample(int i, int s){ s = clamp(s, 0, NS - 1); return texelFetch(uDisk, ivec3(i % LUT_W, i / LUT_W, s / 4), 0)[s % 4]; }
+float diskXAt(int i, float phi){
+  float sf = sOfPhi(phi); int s = int(floor(sf)); float t = sf - float(s);
+  float p0 = diskSample(i, s - 1), p1 = diskSample(i, s), p2 = diskSample(i, s + 1), p3 = diskSample(i, s + 2);
+  return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)));
+}
+// glowing gas at radius r, at direction u from the hole: hot and white inside, dim red outside,
+// streaked by noise that orbits faster nearer the middle
+vec4 diskColor(float r, vec3 u){
+  float rr = (r - uDiskIn) / (uDiskOut - uDiskIn);
+  float psi = atan(dot(u, cross(uDiskUp, uDiskX)), dot(u, uDiskX));
+  float a = psi + 0.9 * pow(uDiskIn / r, 1.5) * uTime;
+  float n = fbm(vec3(1.6 * cos(a), 1.6 * sin(a), 7.0 * r / uRho));
+  vec3 c = rr < 0.3 ? mix(vec3(1.0, 0.95, 0.85), vec3(1.0, 0.62, 0.22), rr / 0.3)
+                    : mix(vec3(1.0, 0.62, 0.22), vec3(0.55, 0.12, 0.05), (rr - 0.3) / 0.7);
+  float edge = smoothstep(0.0, 0.05, rr) * smoothstep(1.0, 0.6, rr);
+  float k = smoothstep(0.25, 0.75, n);
+  return vec4(c * (1.7 - 1.2 * rr) * (0.45 + 0.9 * k), clamp(edge * (0.35 + 0.7 * k), 0.0, 1.0));
+}
+// A ray's slice cuts the disk's plane along a line through the hole, so the ray crosses that plane
+// every half turn: at φ0, φ0 + π, ... The first crossing is the disk itself; the second is the far
+// side of the disk seen over the top (or under the bottom) of the hole.
+vec3 withDisk(vec3 col, int i0, int i1, float ti, vec3 tn){
+  float phi0 = atan(-dot(uN, uDiskUp), dot(tn, uDiskUp));
+  if (phi0 < 0.0) phi0 += PI;
+  vec3 acc = vec3(0.0); float T = 1.0;
+  for (int k = 0; k < 4; k++) {
+    float phi = phi0 + float(k) * PI;
+    if (phi > PHI_MAX) break;
+    float x = mix(diskXAt(i0, phi), diskXAt(i1, phi), ti);
+    if (x <= 0.0) continue;                              // the disk is in universe A only
+    float r = rOf(unsquash(min(x, 0.999999)));
+    if (r < uDiskIn || r > uDiskOut) continue;
+    vec4 dc = diskColor(r, cos(phi) * uN + sin(phi) * tn);
+    acc += T * dc.rgb * dc.a; T *= 1.0 - dc.a;
+  }
+  return acc + T * col;
+}
 vec3 sky(int id, vec3 d, float pw){
   if (id == 0) return skyGrid(d, pw);
   if (id == 1) return skyChecker(d, pw);
@@ -559,7 +644,9 @@ void main(){
   float c = dot(d, uN);
   vec3 t = d - c * uN; float s = length(t);
   vec3 tn = s > 1e-6 ? t / s : normalize(cross(uN, abs(uN.x) < 0.9 ? vec3(1,0,0) : vec3(0,1,0)));
-  vec4 L = lutAt(atan(s, c));
+  int i0, i1; float ti;
+  lutIndex(atan(s, c), i0, i1, ti);
+  vec4 L = lutAt(i0, i1, ti);
   vec3 D = L.x * uN + L.y * tn;
   // B's sky is turned half a turn about z, so flying straight through from the start keeps it upright
   if (L.z < 0.5) D.xy = -D.xy;
@@ -567,6 +654,7 @@ void main(){
   // one call, so derivatives inside the skies only break on the A/B boundary itself
   vec3 col = sky(L.z > 0.5 ? uSkyA : uSkyB, D, pw);
   if (L.w < 0.5) col = vec3(0.0);
+  if (uDiskOn > 0.5) col = withDisk(col, i0, i1, ti, tn);
   o = vec4(col, 1.0);
 }`;
 
@@ -592,12 +680,18 @@ function makeLut() {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, f32 ? gl.RGBA32F : gl.RGBA16F, LUT_W, LUT_H, 0, gl.RGBA, f32 ? gl.FLOAT : gl.HALF_FLOAT, null);
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  const disk = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, disk);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, f32 ? gl.RGBA32F : gl.RGBA16F, LUT_W, LUT_H, DISK_LAYERS, 0, gl.RGBA, f32 ? gl.FLOAT : gl.HALF_FLOAT, null);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D_ARRAY, k, v);
   const fbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  for (let j = 0; j < DISK_LAYERS; j++) gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1 + j, disk, 0, j);
+  gl.drawBuffers(Array.from({ length: DISK_LAYERS + 1 }, (_, j) => gl.COLOR_ATTACHMENT0 + j));
   if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) fail();
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  return { tex, fbo };
+  return { tex, disk, fbo };
 }
 const lut = makeLut();
 // trace the table's rays for a camera at ℓ = l
@@ -618,6 +712,10 @@ gl.uniform3fv(mainProg.u.uPN, puzN); gl.uniform3fv(mainProg.u.uPC, puzC);
 gl.uniform1iv(mainProg.u.uPOff, puzOff); gl.uniform1iv(mainProg.u.uPCnt, puzCnt);
 gl.uniform3fv(mainProg.u.uVP, vorP); gl.uniform3fv(mainProg.u.uVC, vorC);
 gl.uniform1i(mainProg.u.uLut, 0);
+gl.uniform1i(mainProg.u.uDisk, 1);
+// the disk lies in universe A, tilted a little so you start just above it
+const DISK_UP = (() => { const v = [0, 1, 0.25], l = Math.hypot(...v); return v.map((x) => x / l); })();
+let diskOn = false;
 
 // ---------------------------------------------------------------- camera
 // Vectors live in the tangent space at the camera: the component along n is the ℓ direction
@@ -694,6 +792,11 @@ function syncUI() {
 }
 let dirtyLut = true;
 document.querySelectorAll("control-panel input, control-panel select").forEach((el) => el.addEventListener("input", syncUI));
+$("diskBtn").addEventListener("click", () => {
+  diskOn = !diskOn;
+  $("diskBtn").textContent = diskOn ? "on" : "off";
+  $("diskBtn").classList.toggle("btn-primary", diskOn);
+});
 $("reset").addEventListener("click", () => { resetCam(); dirtyLut = true; });
 
 let W = 0, H = 0;
@@ -842,6 +945,11 @@ function frame(now) {
   gl.viewport(0, 0, W, H);
   gl.useProgram(mainProg.p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, lut.tex);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D_ARRAY, lut.disk);
+  gl.uniform1f(mainProg.u.uTime, now / 1000);
+  gl.uniform1f(mainProg.u.uDiskOn, diskOn ? 1 : 0);
+  gl.uniform1f(mainProg.u.uDiskIn, 1.6 * P.rho); gl.uniform1f(mainProg.u.uDiskOut, 5 * P.rho);
+  gl.uniform3fv(mainProg.u.uDiskUp, DISK_UP); gl.uniform3fv(mainProg.u.uDiskX, [1, 0, 0]);
   gl.uniform1f(mainProg.u.uRho, P.rho); gl.uniform1f(mainProg.u.uA, P.a); gl.uniform1f(mainProg.u.uM, P.M);
   gl.uniform1f(mainProg.u.uAlphaC, alphaCrit(cam.l));
   gl.uniform3fv(mainProg.u.uN, cam.n); gl.uniform3fv(mainProg.u.uF, cam.F);
