@@ -604,10 +604,6 @@ float slotPhi(int i, int slot){
   uint q = (slot % 2 == 0) ? (w & 65535u) : (w >> 16);
   return q == 65535u ? -1.0 : float(q) / 65534.0 * PHI_MAX;
 }
-float phiAt(int i0, int i1, float t, int slot){
-  float a = slotPhi(i0, slot), b = slotPhi(i1, slot);
-  return (a < 0.0 || b < 0.0) ? (t < 0.5 ? a : b) : mix(a, b, t);
-}
 // glowing gas at radius r, at direction u from the hole: hot and white inside, dim at the rim,
 // streaked by noise that orbits faster nearer the middle. A's disk burns orange, B's blue.
 vec4 diskColor(float r, vec3 u, vec3 up, float side){
@@ -629,34 +625,62 @@ void addHit(inout vec3 H[6], inout int nh, vec3 hit){
   for (; k > 0 && H[k - 1].x > hit.x; k--) H[k] = H[k - 1];
   H[k] = hit; nh++;
 }
+// 1/r at angle tg on a segment of a ray between two of its crossings (pp, pr) and (ph, r). Between
+// crossings the ray is taken as the straight line through both, 1/r = a cos φ + b sin φ.
+float lineInv(float pp, float pr, float ph, float r, float tg){
+  float sp = sin(ph - pp);
+  return abs(sp) > 1e-4 ? (sin(ph - tg) / pr + sin(tg - pp) / r) / sp : mix(1.0 / pr, 1.0 / r, (tg - pp) / max(ph - pp, 1e-6));
+}
+// ... and next to where it turns around at (pm, h), the line that is level there: 1/r ∝ cos(φ − pm)
+float turnInv(float pm, float h, float pj, float rj, float tg){
+  float den = 1.0 - cos(pj - pm);
+  return den > 1e-7 ? 1.0 / h + (1.0 / rj - 1.0 / h) * (1.0 - cos(tg - pm)) / den : 1.0 / rj;
+}
+// hits on one segment: wherever φ passes φ0 + mπ (kind 0: plain, 1: turn at its start, 2: at its end)
+void crossSeg(float phi0, float pp, float pr, float ph, float r, int kind, int side, inout vec3 H[6], inout int nh){
+  float m = floor((pp - phi0) / PI) + 1.0;
+  for (int g = 0; g < 3 && phi0 + m * PI <= ph; g++, m += 1.0) {
+    float tg = phi0 + m * PI;
+    float inv = kind == 0 ? lineInv(pp, pr, ph, r, tg) : kind == 1 ? turnInv(pp, pr, ph, r, tg) : turnInv(ph, r, pp, pr, tg);
+    addHit(H, nh, vec3(tg, 1.0 / inv, float(side)));
+  }
+}
 // A ray's slice cuts a disk's plane along a line through the hole, so the ray is in that plane at
-// φ0, φ0 + π, ... Walk the ray's crossings of the disk's spheres in order along the ray (in, then
-// out); wherever φ passes one of those angles between two spheres, the ray hits the disk there.
-void diskHits(int side, vec3 up, vec3 tn, int i0, int i1, float t, inout vec3 H[6], inout int nh){
+// φ0, φ0 + π, ... Walk table ray i's crossings of the disk's spheres in order along the ray (in,
+// then out) and find where φ passes those angles. A ray that turns around does it at radius
+// h = r sin α (its closest approach), halfway between its last crossing in and first crossing out.
+void diskHits(int side, vec3 up, vec3 tn, int i, inout vec3 H[6], inout int nh){
   float phi0 = atan(-dot(uN, up), dot(tn, up));
   if (phi0 < 0.0) phi0 += PI;
-  float pp = -1.0, pr = 0.0, camR = rOf(uCamL);
-  if ((uCamL > 0.0) == (side == 0) && camR >= uDiskIn && camR <= uDiskOut) { pp = 0.0; pr = camR; }
+  bool camSide = (uCamL > 0.0) == (side == 0), lastIn = false, fromCam = false;
+  float pp = -1.0, pr = 0.0, camR = rOf(uCamL), alpha = alphaOf(i);
+  if (camSide && camR >= uDiskIn && camR <= uDiskOut) {
+    // starting inside the disk: the camera is the chain's first point (going in, if aimed inward)
+    pp = 0.0; pr = camR; fromCam = true;
+    lastIn = uCamL > 0.0 ? cos(alpha) < 0.0 : cos(alpha) > 0.0;
+  }
+  int kind = 0;
   for (int c = 0; c < 2 * NR; c++) {
     int j = c < NR ? NR - 1 - c : c - NR;
-    float phi = phiAt(i0, i1, t, (2 * side + (c < NR ? 0 : 1)) * NR + j);
+    float phi = slotPhi(i, (2 * side + (c < NR ? 0 : 1)) * NR + j);
     if (phi < 0.0) continue;
     float r = gridR(j);
-    if (pp >= 0.0) {
-      float m = floor((pp - phi0) / PI) + 1.0;
-      for (int g = 0; g < 3 && phi0 + m * PI <= phi; g++, m += 1.0) {
-        float tg = phi0 + m * PI;
-        // 1/r, not r: along a straight line 1/r goes like a sine of φ, so it interpolates smoothly
-        addHit(H, nh, vec3(tg, 1.0 / mix(1.0 / pr, 1.0 / r, (tg - pp) / max(phi - pp, 1e-6)), float(side)));
-      }
+    if (c >= NR && lastIn && camSide) {
+      float h = camR * sin(alpha);
+      // (from the camera, where a straight line from radius camR gets closest)
+      float pm = fromCam && pp == 0.0 ? acos(clamp(h / camR, -1.0, 1.0)) : 0.5 * (pp + phi);
+      crossSeg(phi0, pp, pr, pm, h, 2, side, H, nh);
+      pp = pm; pr = h; kind = 1;
     }
+    if (pp >= 0.0) crossSeg(phi0, pp, pr, phi, r, kind, side, H, nh);
+    kind = 0; lastIn = c < NR;
     pp = phi; pr = r;
   }
 }
-vec3 withDisks(vec3 col, int i0, int i1, float t, vec3 tn){
+vec3 withDisksFor(vec3 col, int i, vec3 tn){
   vec3 H[6]; int nh = 0;
-  if (uDiskOnA > 0.5) diskHits(0, uDiskUpA, tn, i0, i1, t, H, nh);
-  if (uDiskOnB > 0.5) diskHits(1, uDiskUpB, tn, i0, i1, t, H, nh);
+  if (uDiskOnA > 0.5) diskHits(0, uDiskUpA, tn, i, H, nh);
+  if (uDiskOnB > 0.5) diskHits(1, uDiskUpB, tn, i, H, nh);
   vec3 acc = vec3(0.0); float T = 1.0;
   for (int k = 0; k < nh; k++) {
     vec3 up = H[k].z < 0.5 ? uDiskUpA : uDiskUpB;
@@ -664,6 +688,10 @@ vec3 withDisks(vec3 col, int i0, int i1, float t, vec3 tn){
     acc += T * dc.rgb * dc.a; T *= 1.0 - dc.a;
   }
   return acc + T * col;
+}
+// each of the two nearest table rays on its own (their crossings don't line up slot for slot)
+vec3 withDisks(vec3 col, int i0, int i1, float t, vec3 tn){
+  return mix(withDisksFor(col, i0, tn), withDisksFor(col, i1, tn), t);
 }
 vec3 sky(int id, vec3 d, float pw){
   if (id == 0) return skyGrid(d, pw);
@@ -1187,7 +1215,7 @@ document.addEventListener("cohesion-modal-open", (e) => { if (e.detail.className
 document.addEventListener("cohesion-modal-close", (e) => { if (e.detail.className?.includes("cohesion-about")) cancelAnimationFrame(vizRAF); });
 
 // test hook
-window.wormhole = { cam, P, move, look, resetCam, rOf, drOf, frame: () => frame(performance.now()), gl };
+window.wormhole = { cam, P, move, look, resetCam, rOf, drOf, frame: () => frame(performance.now()), gl, lut, alphaCrit, DISK_NR, DISK_LAYERS, DISK_IN, DISK_OUT, DISK_UP_A, LUT_W, LUT_N, LUT_K };
 </script>
 </body>
 </html>
