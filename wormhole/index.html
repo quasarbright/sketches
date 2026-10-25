@@ -462,7 +462,7 @@ uniform sampler2D uLut;
 uniform highp usampler2DArray uDisk;
 uniform float uTime, uDiskOnA, uDiskOnB, uCamL;
 uniform vec3 uDiskUpA, uDiskUpB, uDiskX;
-uniform vec3 uN, uF, uR, uU;
+uniform vec3 uN, uF, uR, uU, uStartN;
 uniform vec2 uRes;
 uniform float uTanHalf;
 uniform int uSkyA, uSkyB;
@@ -714,8 +714,9 @@ void main(){
   lutIndex(atan(s, c), i0, i1, ti);
   vec4 L = lutAt(i0, i1, ti);
   vec3 D = L.x * uN + L.y * tn;
-  // B's sky is turned half a turn about z, so flying straight through from the start keeps it upright
-  if (L.z < 0.5) D.xy = -D.xy;
+  // B's sky is turned half a turn about the starting direction, so flying straight through from
+  // the start keeps it upright
+  if (L.z < 0.5) D = 2.0 * dot(D, uStartN) * uStartN - D;
   float pw = max(max(length(dFdx(D)), length(dFdy(D))), 1e-5);
   // one call, so derivatives inside the skies only break on the A/B boundary itself
   vec3 col = sky(L.z > 0.5 ? uSkyA : uSkyB, D, pw);
@@ -780,10 +781,12 @@ gl.uniform1iv(mainProg.u.uPOff, puzOff); gl.uniform1iv(mainProg.u.uPCnt, puzCnt)
 gl.uniform3fv(mainProg.u.uVP, vorP); gl.uniform3fv(mainProg.u.uVC, vorC);
 gl.uniform1i(mainProg.u.uLut, 0);
 gl.uniform1i(mainProg.u.uDisk, 1);
-// Each universe's disk is tilted a little so you start just above A's. B's is the mirror image:
-// in B's own axes (see the sky's half-turn) it's tilted the same way.
+// You start a little above A's disk, looking at the throat. Both disks are level in their own
+// universe's axes; B's axes are the starting half-turn of the camera's (see the B sky in the shader),
+// which takes +y to 2(y·n)n − y.
+const START_N = V3norm([0, Math.sin(0.14), Math.cos(0.14)]);
 const DISK_IN = 1.6, DISK_OUT = 5;
-const DISK_UP_A = V3norm([0, 1, 0.25]), DISK_UP_B = V3norm([0, 1, -0.25]);
+const DISK_UP_A = [0, 1, 0], DISK_UP_B = V3norm([0, 2 * START_N[1] * START_N[1] - 1, 2 * START_N[1] * START_N[2]]);
 function V3norm(v) { const l = Math.hypot(...v); return v.map((x) => x / l); }
 const diskOn = { A: false, B: false };
 
@@ -808,7 +811,8 @@ const V = {
 const START_L = 7;
 const cam = {};
 function resetCam() {
-  Object.assign(cam, { l: START_L * P.rho + P.a, n: [0, 0, 1], F: [0, 0, -1], R: [1, 0, 0], U: [0, 1, 0], vel: [0, 0, 0] });
+  Object.assign(cam, { l: START_L * P.rho + P.a, n: [...START_N], F: START_N.map((x) => -x), R: [1, 0, 0], U: [0, 1, 0], vel: [0, 0, 0] });
+  orthonormalize();
 }
 resetCam();
 
@@ -1021,6 +1025,7 @@ function frame(now) {
   gl.uniform1f(mainProg.u.uDiskOnA, diskOn.A ? 1 : 0); gl.uniform1f(mainProg.u.uDiskOnB, diskOn.B ? 1 : 0);
   gl.uniform1f(mainProg.u.uDiskIn, DISK_IN * P.rho); gl.uniform1f(mainProg.u.uDiskOut, DISK_OUT * P.rho);
   gl.uniform1f(mainProg.u.uCamL, cam.l);
+  gl.uniform3fv(mainProg.u.uStartN, START_N);
   gl.uniform3fv(mainProg.u.uDiskUpA, DISK_UP_A); gl.uniform3fv(mainProg.u.uDiskUpB, DISK_UP_B); gl.uniform3fv(mainProg.u.uDiskX, [1, 0, 0]);
   gl.uniform1f(mainProg.u.uRho, P.rho); gl.uniform1f(mainProg.u.uA, P.a); gl.uniform1f(mainProg.u.uM, P.M);
   gl.uniform1f(mainProg.u.uAlphaC, alphaCrit(cam.l));
