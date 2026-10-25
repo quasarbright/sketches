@@ -128,7 +128,7 @@
 
   <div class="wh-hint wh-shadow" id="hint">
     <span class="go"><span class="wh-mouse-only">click to fly</span><span class="wh-touch-only">drag to fly</span></span><br>
-    <span class="wh-mouse-only"><kbd>W A S D</kbd> move · <kbd>mouse</kbd> look<br>
+    <span class="wh-mouse-only"><kbd>W A S D</kbd> move · <kbd>mouse</kbd> look · <kbd>Q E</kbd> roll<br>
     <kbd>space</kbd> / <kbd>C</kbd> up / down · <kbd>shift</kbd> boost · <kbd>scroll</kbd> speed · <kbd>esc</kbd> release</span>
     <span class="wh-touch-only">left thumb moves · right thumb looks</span>
   </div>
@@ -261,12 +261,11 @@
 
         <div class="section-label">flying</div>
         <p>You move by the same rule as light. Let go of the keys and you coast along the straightest
-          path, which can curve you around the hole. Your sense of up is carried along with you the
-          same way, and near the throat that's not as simple as it sounds: carry an arrow around a
-          loop on a curved surface, never turning it, and it comes back pointing somewhere else. So
-          a loop close to the hole can leave you tilted. Once you're out where space is flat again,
-          your view slowly levels back to that universe's own up. Flying straight through the middle
-          from the starting spot, B's sky comes out upright with nothing to fix.</p>
+          path, which can curve you around the hole. Your view turns with the space as you go, so
+          flying straight through the middle from the starting spot, B's sky comes out upright. Loop
+          close around the hole and you come back rolled a little: carry an arrow around a loop on a
+          curved surface, never turning it, and it comes back pointing somewhere else. <kbd>Q</kbd>
+          and <kbd>E</kbd> roll you back.</p>
         <p class="muted" style="font-size:.85rem">Made after optozorax's video
           <a href="https://www.youtube.com/watch?v=zA85gINcW1g" target="_blank" rel="noopener">What
           would a wormhole look like in real life?</a> The wormhole's shape is from James, von
@@ -641,7 +640,7 @@ const V = {
 const START_L = 7;
 const cam = {};
 function resetCam() {
-  Object.assign(cam, { l: START_L * P.rho + P.a, n: [0, 0, 1], F: [0, 0, -1], R: [1, 0, 0], U: [0, 1, 0], up: [0, 1, 0], vel: [0, 0, 0] });
+  Object.assign(cam, { l: START_L * P.rho + P.a, n: [0, 0, 1], F: [0, 0, -1], R: [1, 0, 0], U: [0, 1, 0], vel: [0, 0, 0] });
 }
 resetCam();
 
@@ -659,46 +658,22 @@ function move(s, c = cam) {
     if (tl > 1e-12) {
       const axis = V.norm(V.cross(c.n, vt)), th = tl / rOf(lMid), tf = (1 - drOf(lMid)) * th;
       c.n = V.rot(c.n, axis, th);
-      for (const k of ["F", "R", "U", "up", "vel"]) c[k] = V.rot(c[k], axis, tf);
+      for (const k of ["F", "R", "U", "vel"]) c[k] = V.rot(c[k], axis, tf);
       d = V.rot(d, axis, tf);
     }
   }
   orthonormalize(c);
 }
-// No roll: the camera stays level with "up", a vector carried along with you like the rest of
-// the frame, so it means the same thing on both sides of the throat.
 function orthonormalize(c = cam) {
   c.n = V.norm(c.n);
-  c.up = V.norm(c.up);
   c.F = V.norm(c.F);
-  const R = V.cross(c.F, c.up);
-  if (Math.hypot(...R) > 1e-6) c.R = V.norm(R);
+  c.R = V.norm(V.sub(c.R, V.scale(c.F, V.dot(c.R, c.F))));
   c.U = V.cross(c.R, c.F);
 }
-// Carrying up along a path that bends near the throat tilts it (a loop there can turn it by 90°),
-// so away from the throat it eases back to the local universe's up: +y in A, and in B the vector
-// that B's (half-turned) sky draws as +y.
-function upTarget(c) {
-  if (c.l >= 0) return [0, 1, 0];
-  const d = c.n[1];
-  return [-2 * d * c.n[0], 1 - 2 * d * c.n[1], -2 * d * c.n[2]];
-}
-function levelUp(dt) {
-  const t = upTarget(cam), f = 1 - Math.exp(-2 * drOf(cam.l) ** 2 * dt); // 0 in the throat, fastest in flat space
-  const ang = Math.acos(Math.max(-1, Math.min(1, V.dot(cam.up, t))));
-  if (f === 0 || ang < 1e-5) return;
-  const ax = V.cross(cam.up, t);
-  cam.up = V.rot(cam.up, Math.hypot(...ax) > 1e-6 ? V.norm(ax) : cam.F, ang * f);
-  orthonormalize();
-}
-const MAX_PITCH = Math.PI / 2 - 0.02;
-function look(yaw, pitch) {
-  if (yaw) cam.F = V.rot(cam.F, cam.up, yaw);
-  if (pitch) {
-    const cur = Math.asin(Math.max(-1, Math.min(1, V.dot(cam.F, cam.up))));
-    const next = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, cur + pitch));
-    cam.F = V.rot(cam.F, V.norm(V.cross(cam.F, cam.up)), next - cur);
-  }
+function look(yaw, pitch, roll) {
+  if (yaw) { cam.F = V.rot(cam.F, cam.U, yaw); cam.R = V.rot(cam.R, cam.U, yaw); }
+  if (pitch) { cam.F = V.rot(cam.F, cam.R, pitch); cam.U = V.rot(cam.U, cam.R, pitch); }
+  if (roll) { cam.R = V.rot(cam.R, cam.F, roll); cam.U = V.rot(cam.U, cam.F, roll); }
   orthonormalize();
 }
 
@@ -733,7 +708,7 @@ window.addEventListener("resize", resize);
 
 // keyboard + mouse
 const keys = new Set();
-const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyC", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+const flyKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "KeyC", "Space", "ShiftLeft", "ShiftRight", "ControlLeft", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 window.addEventListener("keydown", (e) => {
   if (e.target.closest && e.target.closest("input, select, textarea")) return;
   if (flyKeys.has(e.code)) { keys.add(e.code); e.preventDefault(); hideHint(); }
@@ -847,7 +822,8 @@ function frame(now) {
   target = V.scale(target, sp);
   cam.vel = V.add(cam.vel, V.scale(V.sub(target, cam.vel), 1 - Math.exp(-5 * dt)));
   move(V.scale(cam.vel, dt));
-  levelUp(dt);
+  const roll = (k("KeyE") - k("KeyQ")) * 1.6 * dt;
+  if (roll) look(0, 0, roll);
 
   if (dirtyLut || cam.l !== lastL) {
     lastL = cam.l; dirtyLut = false;
@@ -954,7 +930,7 @@ function traceRays(F) {
   for (let i = 0; i < 48; i++) angles.push(-Math.PI + ((i + 0.5) / 48) * 2 * Math.PI);
   for (const e of [0.003, 0.012, 0.04]) angles.push(ac - e, ac + e, -(ac - e), -(ac + e));
   for (const al of angles) {
-    const c = { l: l0, n: [0, 0, 1], F: [Math.sin(al), 0, Math.cos(al)], R: [1, 0, 0], U: [0, 1, 0], up: [0, 1, 0], vel: [0, 0, 0] };
+    const c = { l: l0, n: [0, 0, 1], F: [Math.sin(al), 0, Math.cos(al)], R: [Math.cos(al), 0, -Math.sin(al)], U: [0, 1, 0], vel: [0, 0, 0] };
     const pts = [[c.l, 0, 0]];
     let phi = 0, sLen = 0;
     for (let k = 0; k < 3000; k++) {
