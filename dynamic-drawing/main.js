@@ -1,8 +1,8 @@
 import { openModal } from "../shared/cohesion.js";
-import { compile, isPlainNumber, renameIdent, fmt } from "./expr.js";
+import { compile, isPlainNumber, renameIdent, fmt, evalSrc } from "./expr.js";
 import {
   W, H, V, run, magnets, segments, edgeList, nearestOnEdge, intersect, refTo, nextName,
-  findStep, walk, isBlock, magnetName, edgeName, DEFAULT_PROPS,
+  findStep, walk, isBlock, magnetName, edgeName, DEFAULT_PROPS, center,
 } from "./engine.js";
 import { EXAMPLES } from "./examples.js";
 
@@ -34,6 +34,8 @@ let previewAt = null;      // a run with a step that is still being drawn
 let hover = null;          // { p, snap } under the pointer
 let drag = null;
 let pathDraft = null;
+let dataDrag = null;       // the expression on a data chip being dragged
+let dropPlan = null;       // what dropping it here would do
 
 let saved, undoStack = [], redoStack = [];
 
@@ -137,12 +139,13 @@ function previewRun(step) {
   return run(copy, p, { stopAt: idx < 0 ? cursorIdx : idx });
 }
 
-function addStep(step) {
+function addStep(step, { quiet = false } = {}) {
   const iters = curEvent()?.iters || [];
   insertInto(project, step);
   cursorKey = { stepId: step.id, iters };
   insertAfter = step.id;
   sel = new Set([step.id]);
+  if (quiet) return;
   commit();
   refresh();
 }
@@ -361,8 +364,10 @@ function draw() {
     c.save(); c.strokeStyle = C.accent; c.globalAlpha = 0.45; c.lineWidth = 1.2 / k; c.stroke(pathOf(s)); c.restore();
   }
 
+  if (dataDrag && dropPlan?.act) drawDropTargets(c, dropPlan);
+
   // magnets near the pointer
-  if (DRAW_TOOLS.has(tool) && hover) {
+  if (DRAW_TOOLS.has(tool) && hover && !dataDrag) {
     const near = 46 / k;
     c.fillStyle = C.magnet;
     for (const s of [at.page, ...at.shapes]) {
@@ -390,6 +395,50 @@ function draw() {
     c.restore();
   }
   c.restore();
+}
+
+function drawDropTargets(c, plan) {
+  const { act, targets, target } = plan;
+  c.save();
+  // the shape being worked on, as it is before the drop
+  c.strokeStyle = C.magnet; c.lineWidth = 1.5 / k; c.setLineDash([4 / k, 3 / k]); c.globalAlpha = 0.9;
+  c.stroke(pathOf(act.s));
+  c.setLineDash([]);
+  for (const t of targets) {
+    const on = t === target;
+    if (t.kind === "handle") {
+      c.fillStyle = C.magnet;
+      c.beginPath(); c.arc(t.p[0], t.p[1], (on ? 5 : 3.2) / k, 0, 2 * Math.PI); c.fill();
+      if (on) { c.strokeStyle = C.magnet; c.lineWidth = 2 / k; c.beginPath(); c.arc(t.p[0], t.p[1], 10 / k, 0, 2 * Math.PI); c.stroke(); }
+    } else if (t.kind === "x" || t.kind === "y") {
+      const w = PILL_W / k, hh = PILL_H / k;
+      c.fillStyle = on ? C.magnet : "rgba(13,16,22,.92)";
+      c.strokeStyle = C.magnet; c.lineWidth = 1.5 / k;
+      c.beginPath(); c.roundRect(t.p[0] - w / 2, t.p[1] - hh / 2, w, hh, hh / 2); c.fill(); c.stroke();
+      c.fillStyle = on ? "#0d1016" : C.magnet;
+      c.font = `600 ${11 / k}px ${FONT}`; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillText(t.text, t.p[0], t.p[1] + 0.5 / k);
+    }
+  }
+  // what the drop will do: an arrow from the fixed point, and the shape where it lands
+  if (target && previewAt) {
+    const after = previewAt.trace[previewAt.trace.length - 1]?.inst;
+    if (after) {
+      c.fillStyle = "rgba(245,208,74,.18)"; c.strokeStyle = C.magnet; c.lineWidth = 2 / k;
+      c.fill(pathOf(after)); c.stroke(pathOf(after));
+      if (target.kind === "x" || target.kind === "y") {
+        const a = center(act.s), b = center(after);
+        if (Math.hypot(...V.sub(b, a)) > 2 / k) { c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); c.fillStyle = C.magnet; arrowHead(c, a, b, 1.5 / k); }
+      }
+    }
+    if (plan.originP) {
+      c.fillStyle = C.accent;
+      c.beginPath(); c.arc(plan.originP[0], plan.originP[1], 4 / k, 0, 2 * Math.PI); c.fill();
+    }
+  }
+  c.restore();
+  if (target) label(c, target.p, plan.desc);
+  else label(c, hover.p, "drop on a handle, ↔ x or ↕ y");
 }
 
 function label(c, p, text) {
@@ -477,6 +526,199 @@ function refFor(snap, p, base) {
 const pointOf = (snap, p) => snap ? snap.p : [round(p[0]), round(p[1])];
 
 const OPP = { tl: "br", br: "tl", tr: "bl", bl: "tr", t: "b_", b_: "t", l: "r", r: "l", a: "b", b: "a" };
+
+/* ================================================================ dropping data on shapes
+ * Like dragging an LFO onto a synth's knob. While a data chip is dragged over the canvas, the shape
+ * under it shows where data can go:
+ *   its handles     scale it along that handle's direction, about the opposite one
+ *   ↔ x / ↕ y       sockets beside it that move it across or up the page, from where it was drawn
+ *   a label's text  shows the value
+ * An array is divided by its largest element, so the biggest value fills the shape (or the page),
+ * and inside a loop each copy gets its own element. If the step you're on already does that kind of
+ * thing to that shape, the drop rewrites it; otherwise it adds a step right after it. The result is
+ * previewed live before you let go.
+ */
+
+const isArrayExpr = (src) => {
+  try { return Array.isArray(evalSrc(src, { lookup: (n) => full.data.vals.get(n) })); } catch { return false; }
+};
+const norm = (src) => isArrayExpr(src) ? `${src} / max(${src})` : src;
+
+function bounds(s) {
+  const pts = s.kind === "line" ? [s.a, s.b] : s.kind === "path" ? s.pts : s.kind === "text" ? textBox(s) : Object.values(magnets(s));
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+
+// The shape the pointer is working with (near enough to reach the ↔ x and ↕ y sockets beside it):
+// the one the current step drew if the pointer is over it, else the smallest one around, and on a
+// tie a real shape before a guide and the topmost before the rest. A guide is often exactly the
+// size of the shape drawn into it.
+function activeShape(p) {
+  const pad = 58 / k;
+  const curInst = at.trace[at.trace.length - 1]?.inst;
+  let best = null;
+  at.shapes.forEach((s, idx) => {
+    if (s.stepId == null) return;
+    const B = bounds(s);
+    if (p[0] < B.x0 - pad || p[0] > B.x1 + pad || p[1] < B.y0 - pad || p[1] > B.y1 + pad) return;
+    const inside = p[0] >= B.x0 - 12 / k && p[0] <= B.x1 + 12 / k && p[1] >= B.y0 - 12 / k && p[1] <= B.y1 + 12 / k;
+    const key = [s === curInst && inside ? 0 : 1, Math.round((B.x1 - B.x0 + 1) * (B.y1 - B.y0 + 1)), s.props.guide ? 1 : 0, -idx];
+    if (!best || cmp(key, best.key) < 0) best = { s, B, key };
+  });
+  return best;
+}
+const cmp = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+
+// Everything data can be dropped on for the active shape, in world coordinates.
+function dropTargets(act) {
+  if (!act) return [];
+  const { s, B } = act, out = [];
+  const mid = [(B.x0 + B.x1) / 2, (B.y0 + B.y1) / 2];
+  // under and to the left of the shape, unless that is off the visible page area (behind the tool
+  // rail or the step navigator): then above or to the right
+  const sx = (x) => ox + x * k, sy = (y) => oy + y * k;
+  const below = sy(B.y1) + 26 + PILL_H < sh - 100;
+  const left = sx(B.x0) - 30 - PILL_W / 2 > (sw < 700 ? 8 : 84);
+  out.push({ kind: "x", p: [mid[0], below ? B.y1 + 26 / k : B.y0 - 26 / k], text: "↔ x" });
+  out.push({ kind: "y", p: [left ? B.x0 - 30 / k : B.x1 + 30 / k, mid[1]], text: "↕ y" });
+  if (s.kind === "text") out.push({ kind: "text", p: mid, text: "text" });
+  else if (s.kind !== "path") {
+    const M = magnets(s);
+    for (const m in M) {
+      if (s.kind === "line" && m === "mid") continue;
+      out.push({ kind: "handle", m, p: M[m] });
+    }
+  }
+  return out;
+}
+
+const PILL_W = 38, PILL_H = 20;
+function hitTarget(t, p) {
+  if (t.kind === "x" || t.kind === "y") return Math.abs(p[0] - t.p[0]) <= (PILL_W / 2 + 4) / k && Math.abs(p[1] - t.p[1]) <= (PILL_H / 2 + 4) / k;
+  if (t.kind === "text") return false;   // handled by hitting the text itself
+  return Math.hypot(p[0] - t.p[0], p[1] - t.p[1]) <= 14 / k;
+}
+
+function planDrop(p, src) {
+  const act = activeShape(p);
+  if (!act) return null;
+  const s = act.s, targets = dropTargets(act);
+  let t = targets.find((x) => (x.kind === "x" || x.kind === "y") && hitTarget(x, p))
+    || targets.filter((x) => x.kind === "handle" && hitTarget(x, p)).sort((u, v) => Math.hypot(...V.sub(u.p, p)) - Math.hypot(...V.sub(v.p, p)))[0];
+  if (!t && s.kind === "text" && hitShape(p) === s) t = targets.find((x) => x.kind === "text");
+  const plan = { act, targets, target: t, s };
+  if (!t) return plan;
+  const name = s.name;
+  const curStep = (proj) => {
+    const ev = curEvent();
+    return ev && findStep(proj.pictures.find((q) => q.id === picId), ev.stepId)?.step;
+  };
+  const insert = (proj, step) => { insertInto(proj, step); return step.id; };
+
+  if (t.kind === "text") {
+    plan.desc = `${name} shows ${src}`;
+    plan.edit = (proj) => {
+      const st = findStep(proj.pictures.find((q) => q.id === picId), s.stepId)?.step;
+      if (!st) return null;
+      st.props ||= {};
+      st.props.text = `{${src}}`;
+      return st.id;
+    };
+    plan.lands = "edit";
+    return plan;
+  }
+  if (t.kind === "x" || t.kind === "y") {
+    // a move from the shape's own anchor point, by a share of the page
+    const M = magnets(s);
+    const anchor = M.c ? "c" : M.mid ? "mid" : M.a ? "a" : Object.keys(M)[0];
+    const f = norm(src);
+    const off = t.kind === "x" ? `${f} * width(page)` : `-${/^[\w.]+( \/ max\([\w.]+\))?$/.test(f) ? f : `(${f})`} * height(page)`;
+    plan.desc = t.kind === "x" ? `move ${name} right by ${f} of the page` : `move ${name} up by ${f} of the page`;
+    plan.edit = (proj) => {
+      const cur = curStep(proj);
+      const same = cur && cur.type === "move" && cur.target === name && cur.from?.k === "mag" && cur.from.shape === name && cur.to?.k === "rel";
+      const st = same ? cur : { id: pendingId(), type: "move", target: name, from: { k: "mag", shape: name, back: 0, m: anchor }, to: { k: "rel", dx: "0", dy: "0" } };
+      st.to[t.kind === "x" ? "dx" : "dy"] = off;
+      return same ? st.id : insert(proj, st);
+    };
+    return plan;
+  }
+  // a handle: scale along its direction
+  const m = t.m;
+  const box = s.kind === "rect" || s.kind === "pic";
+  const axis = !box ? "both" : m === "t" || m === "b_" ? "y" : m === "l" || m === "r" ? "x" : "both";
+  const originM = s.kind === "circle" || m === "c" ? "c" : OPP[m];
+  const word = s.kind === "line" ? "length" : axis === "y" ? "height" : axis === "x" ? "width" : "size";
+  const f = norm(src);
+  plan.desc = `${name}'s ${word} × ${f}`;
+  plan.originP = magnets(s)[originM];
+  plan.edit = (proj) => {
+    const cur = curStep(proj);
+    const same = cur && cur.type === "scale" && cur.target === name && cur.origin?.k === "mag" && cur.origin.shape === name && cur.origin.m === originM;
+    const st = same ? cur : { id: pendingId(), type: "scale", target: name, origin: { k: "mag", shape: name, back: 0, m: originM }, sx: "1", sy: "1" };
+    if (axis !== "y") st.sx = f;
+    if (axis !== "x") st.sy = f;
+    return same ? st.id : insert(proj, st);
+  };
+  return plan;
+}
+
+// One id for whatever step a drop would add, kept while the chip is dragged so the preview and
+// the real thing agree.
+let pendingDropId = null;
+const pendingId = () => pendingDropId ??= newId();
+
+function previewDrop(plan) {
+  if (!plan?.edit) return null;
+  const copy = structuredClone(project);
+  const id = plan.edit(copy);
+  if (id == null) return null;
+  const P = copy.pictures.find((q) => q.id === picId);
+  const f = run(copy, P);
+  const idx = bestEvent(f.trace, id, curEvent()?.iters || []);
+  return run(copy, P, { stopAt: idx < 0 ? cursorIdx : idx });
+}
+
+function endDataDrag() {
+  dataDrag = null; dropPlan = null; hover = null; previewAt = null; pendingDropId = null;
+}
+
+cv.addEventListener("dragover", (e) => {
+  if (!dataDrag || previewMode) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  const p = toWorld(e);
+  hover = { p, snap: null };
+  const plan = planDrop(p, dataDrag);
+  const key = plan?.target ? `${plan.s.uid}|${plan.target.kind}|${plan.target.m}` : null;
+  if (key !== dropPlan?.key) previewAt = plan?.target ? previewDrop(plan) : null;
+  dropPlan = plan && { ...plan, key };
+  draw();
+});
+cv.addEventListener("dragleave", (e) => {
+  if (!dataDrag || cv.contains(e.relatedTarget)) return;
+  dropPlan = null; previewAt = null; hover = null; draw();
+});
+cv.addEventListener("drop", (e) => {
+  if (!dataDrag) return;
+  e.preventDefault();
+  const src = dataDrag, plan = dropPlan;
+  const iters = curEvent()?.iters || [];
+  if (!plan?.target) { endDataDrag(); toast("Drop it on a yellow handle, on ↔ x or ↕ y beside a shape, or on a label."); draw(); return; }
+  const id = plan.edit(project);
+  endDataDrag();
+  if (id != null) {
+    if (plan.lands !== "edit") { cursorKey = { stepId: id, iters }; insertAfter = id; }
+    sel = new Set([id]);
+  }
+  commit(); refresh();
+  // an array outside a loop can't pick one element: say how to fix it
+  const ev = full.trace.find((x) => x.stepId === id && x.err);
+  if (ev && /array outside a loop/.test(ev.err)) toast(`${src} is a list: select the steps that draw this shape and press Loop, to get one per element.`);
+  else if (ev) toast(ev.err);
+});
+
 
 /* ================================================================ pointer */
 
@@ -704,8 +946,9 @@ function ex(obj, key, { title, placeholder, wide, onLive, check = exprErr } = {}
 
 function chip(text, alt) {
   return h("span", {
-    class: "chip" + (alt ? " alt" : ""), draggable: "true", title: `Drag into any field to use ${text}`,
-    ondragstart: (e) => { e.dataTransfer.setData("text/plain", text); e.dataTransfer.effectAllowed = "copy"; },
+    class: "chip" + (alt ? " alt" : ""), draggable: "true", title: `Drag onto a shape's handle on the canvas, or into any field, to use ${text}`,
+    ondragstart: (e) => { e.dataTransfer.setData("text/plain", text); e.dataTransfer.effectAllowed = "copy"; dataDrag = text; },
+    ondragend: () => { if (dataDrag) { endDataDrag(); draw(); } },
   }, text);
 }
 

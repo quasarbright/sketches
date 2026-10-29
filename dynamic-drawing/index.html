@@ -197,6 +197,11 @@
           element by element, so <code>powerKw * sunHours</code> is an array too. Reductions like
           <code>max(a)</code>, <code>sum(a)</code>, <code>count(a)</code> turn an array into a number. Drag a chip
           from under a variable into any field to use it.</p>
+        <p>Or drag a chip onto a shape on the canvas, like routing an LFO to a knob. Dropped on a rectangle's top or
+          bottom handle it scales the height about the opposite edge, on a side handle the width, on a corner both, on
+          a circle its size, on a line's end its length, on a label its text. An array is divided by its largest
+          element, so the biggest value fills the shape and, in a loop, each copy gets its own. If the step you're on
+          already scales that shape about that point, the drop rewrites it.</p>
         <p class="section-label">Steps</p>
         <p>Every drawing action records a step. Every number in a step is an expression you can edit, or drag
           sideways to scrub. Inside a loop, an array means its element for this time round, and <code>i</code>
