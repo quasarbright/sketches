@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mathematiciandle</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- a lecture-hall blackboard: each guess is written up like a theorem in a paper, in Computer
+       Modern (TeX's typeface), with results in colored chalk. IBM Plex Sans for the interface. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    @font-face { font-family: "CMU Serif"; font-style: normal; font-weight: 500; font-display: swap;
+      src: url("https://cdn.jsdelivr.net/npm/computer-modern@0.1.2/fonts/cmu-serif-500-roman.woff2") format("woff2"); }
+    @font-face { font-family: "CMU Serif"; font-style: italic; font-weight: 500; font-display: swap;
+      src: url("https://cdn.jsdelivr.net/npm/computer-modern@0.1.2/fonts/cmu-serif-500-italic.woff2") format("woff2"); }
+    @font-face { font-family: "CMU Serif"; font-style: normal; font-weight: 700; font-display: swap;
+      src: url("https://cdn.jsdelivr.net/npm/computer-modern@0.1.2/fonts/cmu-serif-700-roman.woff2") format("woff2"); }
+    @font-face { font-family: "CMU Serif"; font-style: italic; font-weight: 700; font-display: swap;
+      src: url("https://cdn.jsdelivr.net/npm/computer-modern@0.1.2/fonts/cmu-serif-700-italic.woff2") format("woff2"); }
+
+    :root {
+      --bg:        #1b2420;   /* board slate */
+      --panel:     #24302b;
+      --panel-2:   #2e3c36;
+      --border:    #3b4a43;
+      --text:      #e8e6dc;   /* chalk */
+      --muted:     #8f9a92;   /* chalk dust */
+      --faint:     #5f6c65;
+      --accent:    #8cc8f0;   /* blue chalk */
+      --accent-hi: #b0daf6;
+      --on-accent: #17201c;
+      --hit:       #8fd19e;   /* green chalk */
+      --near:      #f2d675;   /* yellow chalk */
+      --miss:      #ef8f9f;   /* pink chalk */
+      --font-ui:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    ui-monospace, Menlo, monospace;
+      --font-display: "CMU Serif", "Latin Modern Roman", Georgia, serif;
+      --font-tex:     "CMU Serif", "Latin Modern Roman", Georgia, serif;
+      /* chalk grain: dark specks from fractal noise, laid over each colored tile */
+      --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.3' numOctaves='1' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.4 0 0 0 -.55'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    body {
+      margin: 0; color: var(--text); font-family: var(--font-ui); min-height: 100vh; display: flex; flex-direction: column;
+      background: var(--bg);
+      /* old eraser sweeps */
+      background-image: radial-gradient(60% 40% at 20% 15%, rgba(232,230,220,.035), transparent 70%),
+                        radial-gradient(50% 35% at 85% 60%, rgba(232,230,220,.03), transparent 70%);
+      background-attachment: fixed;
+    }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+
+    .md-page { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: 18px 16px 24px; box-sizing: border-box; }
+
+    /* chunky pressable buttons (pancakes' game chrome), in board colors */
+    .md-btn {
+      --lip: #111814;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font: 600 .95rem var(--font-ui); color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer;
+      box-shadow: 0 3px 0 var(--lip), 0 6px 14px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s;
+    }
+    .md-btn:hover { background: #374840; }
+    .md-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--lip), 0 3px 8px rgba(0,0,0,.3); }
+    .md-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .md-btn.is-primary { background: var(--accent); color: var(--on-accent); --lip: #4d86ad; }
+    .md-btn.is-primary:hover { background: var(--accent-hi); }
+
+    /* ---------- top bar ---------- */
+    .md-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .md-logo { margin: 0; font: 700 2.1rem/1 var(--font-tex); letter-spacing: -.005em; }
+    .md-logo i { font-weight: 500; color: var(--muted); }
+    .md-modes { display: flex; background: var(--panel); border-radius: 12px; padding: 4px; gap: 4px; }
+    .md-mode {
+      font: 600 .88rem var(--font-ui); color: var(--muted); background: none; border: 0; border-radius: 9px;
+      padding: 8px 12px; cursor: pointer; white-space: nowrap;
+    }
+    .md-mode:hover { color: var(--text); }
+    .md-mode.is-active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+    .md-mode:focus-visible { outline: 2px solid var(--accent-hi); }
+
+    /* ---------- guesses, each written up like a theorem ---------- */
+    .md-board { display: flex; flex-direction: column; gap: 18px; margin-top: 26px; }
+    .md-row-head { font: 500 1.2rem var(--font-tex); margin: 0 0 8px 2px; display: flex; align-items: baseline; gap: .35em; }
+    .md-row-head b { font-weight: 700; }
+    .md-row-note { color: var(--muted); font: italic 500 1rem var(--font-tex); margin-left: .3em; }
+    .md-fields { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .md-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .md-key { align-self: flex-start; font: 500 .74rem var(--font-ui); color: var(--muted); padding-left: 2px; white-space: nowrap; cursor: help; }
+    .md-key:hover { color: var(--text); text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+    .md-val {
+      position: relative; flex: 1; min-height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      border-radius: 6px; padding: 7px 6px; text-align: center; color: var(--on-accent);
+      font: 500 .95rem/1.2 var(--font-tex); overflow-wrap: anywhere; isolation: isolate;
+    }
+    .md-val::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--grain); opacity: .16; mix-blend-mode: multiply; z-index: -1; pointer-events: none; }
+    .md-val.is-hit  { background-color: var(--hit); }
+    .md-val.is-near { background-color: var(--near); }
+    .md-val.is-miss { background-color: var(--miss); }
+    .md-val.is-ghost { background: none; border: 1.5px dashed var(--border); color: var(--faint); font-style: italic; }
+    .md-val.is-ghost::after { display: none; }
+    .md-val.is-born { font-size: 1.15rem; }
+    .md-val .md-arrow { font-size: 1.15rem; line-height: 1; font-weight: 700; font-family: var(--font-ui); }
+    .md-val .md-set { font-size: .9rem; line-height: 1.15; overflow-wrap: normal; hyphens: auto; padding: 1px 5px; border-radius: 4px; }
+    .md-val.is-near .md-set { opacity: .55; }
+    .md-val.is-near .md-set.is-shared { opacity: 1; background: var(--hit); box-shadow: 0 1px 0 rgba(0,0,0,.18); }
+    .md-row.is-new .md-val { animation: md-chalk .45s ease-out both; animation-delay: calc(var(--i) * 110ms); }
+    @keyframes md-chalk { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+    .md-hint { text-align: center; color: var(--muted); font-size: .95rem; line-height: 1.5; max-width: 520px; margin: 14px auto 0; }
+    .md-hint b { font-weight: 600; }
+    .md-hint .is-hit { color: var(--hit); } .md-hint .is-near { color: var(--near); } .md-hint .is-miss { color: var(--miss); }
+
+    /* ---------- the guess box ---------- */
+    .md-entry { position: relative; margin: 24px auto 8px; max-width: 520px; }
+    .md-input-wrap {
+      display: flex; align-items: center; gap: 10px; background: var(--panel); border: 2px solid var(--border);
+      border-radius: 14px; padding: 0 8px 0 16px; transition: border-color .15s;
+    }
+    .md-input-wrap:focus-within { border-color: var(--accent); }
+    .md-input-wrap .md-input, .md-input-wrap .md-input:focus {
+      flex: 1; min-width: 0; width: auto; background: none; border: 0; outline: 0; box-shadow: none; border-radius: 0;
+      color: var(--text); font: 500 1.15rem var(--font-tex); padding: 14px 0;
+    }
+    .md-input::placeholder { color: var(--faint); font-style: italic; }
+    .md-suggest {
+      position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; max-height: 300px; overflow: auto;
+      box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    }
+    /* with the input low on the screen the list opens upward, over the newest guesses */
+    .md-suggest.is-up { top: auto; bottom: calc(100% + 6px); box-shadow: 0 -16px 40px rgba(0,0,0,.5); }
+    .md-suggest li {
+      display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      font: 500 1.02rem var(--font-tex);
+    }
+    .md-suggest li .md-alias { color: var(--faint); font-style: italic; font-size: .9rem; }
+    .md-suggest li.is-hl { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+    .md-suggest .md-none { color: var(--muted); cursor: default; font-family: var(--font-ui); font-size: .92rem; }
+
+    .md-status { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px; margin: 14px 0 8px; min-height: 40px; }
+    .md-status > * { white-space: nowrap; }
+    .md-count { text-align: center; }
+    .md-count-label { display: block; font: 600 .7rem var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+    .md-count-value { font: 700 1.7rem/1.05 var(--font-tex); color: var(--accent); font-variant-numeric: tabular-nums; }
+    .md-giveup { font: 600 .84rem var(--font-ui); color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    .md-giveup:hover { color: var(--text); border-color: var(--muted); }
+    .md-gaveup { font: 600 .84rem var(--font-ui); color: var(--miss); border: 1px solid color-mix(in srgb, var(--miss) 55%, transparent); border-radius: 8px; padding: 6px 10px; }
+    /* share, as Permutle's: a pill in the hit color with the system share icon */
+    .md-share { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 18px 0 14px; border: 0; border-radius: 19px;
+      background: var(--hit); color: var(--on-accent); font: 600 .95rem var(--font-ui); cursor: pointer; touch-action: manipulation; }
+    .md-share:hover { filter: brightness(1.06); }
+    .md-share:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    .md-share svg { width: 18px; height: 18px; margin-top: -2px; }
+
+    /* ---------- result card ---------- */
+    .md-result { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: rgba(10,14,12,.6); }
+    .md-card {
+      width: min(400px, 100%); text-align: center; padding: 28px 24px 24px; box-sizing: border-box;
+      background: var(--panel); border-radius: 18px; box-shadow: 0 5px 0 #111814, 0 24px 60px rgba(0,0,0,.6);
+      animation: md-pop .4s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes md-pop { from { transform: scale(.7) translateY(24px); opacity: 0; } }
+    .md-card-kicker { margin: 0; color: var(--muted); font: italic 500 1.1rem var(--font-tex); }
+    .md-card h2 { margin: 6px 0 4px; font: 700 2.2rem/1.1 var(--font-tex); color: var(--accent); overflow-wrap: anywhere; }
+    .md-card-sub { margin: 0 0 18px; font: italic 500 1.05rem var(--font-tex); color: var(--muted); }
+    .md-squares { font-size: 1rem; line-height: 1.2; letter-spacing: 1px; margin: 0 auto 20px; max-height: 160px; overflow: auto; white-space: pre; }
+    .md-card-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .md-card-note { margin: 14px 0 0; font-size: .82rem; color: var(--faint); }
+
+    @media (max-width: 640px) {
+      .md-logo { font-size: 1.65rem; }
+      .md-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .md-val { min-height: 54px; font-size: .88rem; padding: 6px 3px; }
+      .md-val .md-set { font-size: .8rem; }
+      .md-row-head { font-size: 1.1rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { .md-row.is-new .md-val, .md-card { animation: none; } }
+  </style>
+</head>
+<body>
+  <main class="md-page">
+    <header class="md-top">
+      <h1 class="md-logo">Mathematiciandle</h1>
+      <div class="md-modes" role="tablist">
+        <button class="md-mode is-active" id="modeDaily" role="tab" title="the same mathematician for everyone today">Daily</button>
+        <button class="md-mode" id="modePractice" role="tab" title="a random mathematician, as many rounds as you like">Unlimited</button>
+      </div>
+    </header>
+
+    <!-- oldest guess at the top, newest just above the input -->
+    <div class="md-board" id="board"></div>
+    <p class="md-hint" id="hint">Guess any mathematician to start. Facts turn <b class="is-hit">green</b> when they match
+      the answer, <b class="is-near">yellow</b> when they're close, and <b class="is-miss">red</b> when they're off.
+      Hover a label to see what it means.</p>
+
+    <div class="md-entry" id="entry">
+      <div class="md-input-wrap">
+        <input class="md-input" id="input" type="text" placeholder="guess a mathematician" autocomplete="off" spellcheck="false"
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest" aria-label="guess a mathematician" />
+      </div>
+      <ul class="md-suggest" id="suggest" role="listbox" hidden></ul>
+    </div>
+
+    <div class="md-status">
+      <div class="md-count"><span class="md-count-label">Guesses</span><span class="md-count-value" id="count">0</span></div>
+      <button class="md-giveup" id="giveup" title="show the answer and end this round" hidden>Give up</button>
+      <span class="md-gaveup" id="gaveup" hidden>🏳️ gave up</span>
+      <button class="md-share" id="share" title="share your result: the colors as emoji, your guesses, and a link" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M8 10.5H6.5A1.5 1.5 0 0 0 5 12v7.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span>share</span></button>
+      <button class="md-btn is-primary" id="again" hidden>New mathematician</button>
+    </div>
+  </main>
+
+  <div class="md-result" id="result" hidden>
+    <div class="md-card" role="dialog" aria-labelledby="resultName">
+      <p class="md-card-kicker" id="resultKicker"></p>
+      <h2 id="resultName"></h2>
+      <p class="md-card-sub" id="resultSub"></p>
+      <div class="md-squares" id="resultSquares"></div>
+      <div class="md-card-actions">
+        <button class="md-btn" id="resultClose">See the board</button>
+        <button class="md-share" id="resultShare" title="share your result: the colors as emoji, your guesses, and a link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M8 10.5H6.5A1.5 1.5 0 0 0 5 12v7.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span>share</span></button>
+        <button class="md-btn is-primary" id="resultNext"></button>
+      </div>
+      <p class="md-card-note" id="resultNote"></p>
+    </div>
+  </div>
+
+  <mike-footer></mike-footer>
+
+  <script type="module">
+    import { ATTRS, LABELS, COUNTRIES, MATHEMATICIANS, byName, bornLabel, compareAttr, search, sortKey, dayNumber, dailyAnswer, randomAnswer, shareText, shareRows } from "./mathematiciandle.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+    // ---------------------------------------------------------------- rendering a guess
+
+    const CONTINENTS = { europe: "Europe", asia: "Asia", africa: "Africa", namerica: "North America", oceania: "Oceania" };
+
+    function valueText(key, m) {
+      if (key === "born") return bornLabel(m);
+      if (key === "country") return COUNTRIES[m.country][0];
+      return m[key].map((v) => LABELS[key][v]).join(", ");
+    }
+
+    function tipFor(key, m, answer, r) {
+      const attr = ATTRS.find((a) => a.key === key);
+      if (!answer) return attr.help;
+      if (key === "born") return r.status === "hit" ? "Same year." :
+        `The answer was born ${r.arrow === "up" ? "later" : "earlier"}${r.status === "near" ? ", within 20 years" : ""}.`;
+      if (r.status === "hit") return "Exact match.";
+      if (key === "country") return r.status === "near" ? `Same continent: ${CONTINENTS[r.continent]}.` : "Different continent.";
+      if (r.shared) return `Shared (marked green): ${r.shared.map((v) => LABELS[key][v]).join(", ")}.`;
+      return "No match.";
+    }
+
+    function fieldEl(key, m, answer, i) {
+      const r = answer ? compareAttr(key, m, answer) : null;
+      const f = h("div", "md-field");
+      const attr = ATTRS.find((a) => a.key === key), label = h("span", "md-key", attr.field);
+      label.title = `${attr.title}: ${attr.help}`;
+      f.appendChild(label);
+      const v = h("div", `md-val is-${key} ` + (r ? `is-${r.status}` : "is-ghost"));
+      v.style.setProperty("--i", i);
+      if (m) {
+        if (key === "born" || key === "country") v.appendChild(h("span", null, valueText(key, m)));
+        // one value per line; on a yellow tile the values the answer also has are marked green
+        else for (const x of m[key]) v.appendChild(h("span", "md-set" + (r?.shared?.includes(x) ? " is-shared" : ""), LABELS[key][x]));
+        if (r?.arrow) v.appendChild(h("span", "md-arrow", r.arrow === "up" ? "↑" : "↓"));
+      } else v.textContent = "?";
+      v.title = m ? tipFor(key, m, answer, r) : attr.help;
+      f.appendChild(v);
+      return f;
+    }
+
+    // "Guess 3 (Carl Friedrich Gauss)." as a paper would head a theorem
+    function rowEl(m, answer, { n = 1, label = "Guess", fresh = false, note = "" } = {}) {
+      const row = h("div", "md-row" + (fresh ? " is-new" : ""));
+      const head = h("div", "md-row-head");
+      head.append(h("b", null, label === "Guess" ? `Guess ${n}` : label), ` (${m ? m.name : "?"}).`);
+      if (note) head.appendChild(h("span", "md-row-note", note));
+      const fields = h("div", "md-fields");
+      ATTRS.forEach(({ key }, i) => fields.appendChild(fieldEl(key, m, answer, i)));
+      row.append(head, fields);
+      return row;
+    }
+
+    // ---------------------------------------------------------------- game state
+
+    const today = dayNumber();
+    const STORE = `mathematiciandle-day-${today}`;
+    const load = () => { try { return JSON.parse(localStorage.getItem(STORE)) || null; } catch { return null; } };
+    const save = () => {
+      if (state.mode !== "daily") return;
+      try { localStorage.setItem(STORE, JSON.stringify({ guesses: state.guesses.map((g) => g.name), done: state.done })); } catch {}
+    };
+
+    const state = { mode: "daily", answer: null, guesses: [], done: null };   // done: null | "won" | "gave-up"
+    let practice = null;   // the unlimited round, kept while you look at the daily one
+
+    function startDaily() {
+      const saved = load();
+      state.mode = "daily"; state.answer = dailyAnswer(today);
+      state.guesses = (saved?.guesses || []).map(byName).filter(Boolean);
+      state.done = saved?.done || null;
+    }
+    function startPractice(fresh) {
+      if (fresh || !practice) practice = { answer: randomAnswer(Math.random, state.answer), guesses: [], done: null };
+      state.mode = "practice"; Object.assign(state, { answer: practice.answer, guesses: practice.guesses, done: practice.done });
+    }
+    function syncPractice() { if (state.mode === "practice") Object.assign(practice, { guesses: state.guesses, done: state.done }); }
+
+    // ---------------------------------------------------------------- drawing the page
+
+    function render({ freshLast = false } = {}) {
+      $("modeDaily").classList.toggle("is-active", state.mode === "daily");
+      $("modePractice").classList.toggle("is-active", state.mode === "practice");
+      $("count").textContent = state.guesses.length;
+
+      const board = $("board"); board.innerHTML = "";
+      const shown = state.guesses, last = shown.length - 1;
+      shown.forEach((g, i) => board.appendChild(rowEl(g, state.answer,
+        { n: i + 1, fresh: freshLast && i === last })));
+      if (state.done === "gave-up") board.appendChild(rowEl(state.answer, state.answer, { label: "Answer", note: "(you gave up)" }));
+      if (!shown.length && !state.done) board.appendChild(rowEl(null, null));
+      $("hint").hidden = shown.length > 0;
+
+      const playing = !state.done;
+      $("input").disabled = !playing;
+      $("input").placeholder = playing ? "guess a mathematician" : `${state.answer.name}`;
+      $("giveup").hidden = !playing || state.guesses.length === 0;
+      $("gaveup").hidden = state.done !== "gave-up";
+      $("share").hidden = playing;
+      $("again").hidden = playing || state.mode !== "practice";
+      // the input sits under the newest guess, so keep it (and the status row under it) on screen
+      document.querySelector(".md-status").scrollIntoView({ block: "nearest" });
+    }
+
+    function showResult() {
+      const won = state.done === "won", n = state.guesses.length;
+      $("resultKicker").textContent = won ? "You got it" : "🏳️ You gave up. It was";
+      $("resultName").textContent = state.answer.name;
+      $("resultSub").textContent = `${won ? "in" : "after"} ${n} ${n === 1 ? "guess" : "guesses"}`;
+      $("resultSquares").textContent = shareRows(shareArgs());
+      $("resultNext").textContent = state.mode === "daily" ? "Play unlimited" : "New mathematician";
+      $("resultNote").textContent = state.mode === "daily" ? "A new mathematician at midnight." : "";
+      $("result").hidden = false;
+      $("resultNext").focus();
+    }
+    const shareArgs = () => ({ label: state.mode === "daily" ? "" : "unlimited", guesses: state.guesses, answer: state.answer,
+      gaveUp: state.done === "gave-up", link: `${location.origin}${location.pathname}` });
+
+    function guess(m) {
+      if (state.done || state.guesses.includes(m)) return;
+      state.guesses.push(m);
+      if (m === state.answer) state.done = "won";
+      syncPractice(); save();
+      closeSuggest(); $("input").value = "";
+      render({ freshLast: true });
+      if (state.done) setTimeout(showResult, matchMedia("(prefers-reduced-motion: reduce)").matches ? 100 : ATTRS.length * 110 + 750);
+      else $("input").focus();
+    }
+
+    function giveUp() {
+      if (state.done) return;
+      state.done = "gave-up"; syncPractice(); save(); render(); showResult();
+    }
+
+    // ---------------------------------------------------------------- the suggestion list
+
+    // With an empty input the list shows everyone not yet guessed, by family name, with nothing
+    // highlighted so a stray Enter doesn't guess. Typing narrows it to the best 8 matches.
+    const ALPHA = MATHEMATICIANS.slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    let matches = [], hl = 0;
+    function updateSuggest() {
+      const q = $("input").value, guessed = new Set(state.guesses.map((g) => g.name));
+      const empty = !q.trim();
+      matches = empty ? ALPHA.filter((m) => !guessed.has(m.name)) : search(q, guessed).slice(0, 8);
+      hl = empty ? -1 : 0;
+      const ul = $("suggest"); ul.innerHTML = "";
+      ul.scrollTop = 0;
+      if (!matches.length) ul.appendChild(h("li", "md-none", "Nobody by that name in the list."));
+      // show the alias that matched only when the name itself doesn't (so "perlman" shows, "erdos" doesn't)
+      const plain = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      const qa = plain(q.trim());
+      matches.forEach((m, i) => {
+        const li = h("li"); li.id = `opt-${i}`; li.setAttribute("role", "option");
+        li.appendChild(h("span", null, m.name));
+        const alias = qa && !plain(m.name).includes(qa) && m.aliases.find((a) => plain(a).startsWith(qa));
+        if (alias) li.appendChild(h("span", "md-alias", alias));
+        li.addEventListener("mousedown", (e) => { e.preventDefault(); guess(m); });
+        ul.appendChild(li);
+      });
+      ul.hidden = false; $("input").setAttribute("aria-expanded", "true");
+      placeSuggest();
+      paintHl();
+    }
+    // Open toward whichever side of the input has more room (the visual viewport leaves out a
+    // phone's keyboard), and no taller than that room.
+    function placeSuggest() {
+      const ul = $("suggest"), r = $("entry").getBoundingClientRect();
+      const vh = window.visualViewport?.height ?? innerHeight, above = r.top - 12, below = vh - r.bottom - 12;
+      const up = above > below;
+      ul.classList.toggle("is-up", up);
+      ul.style.maxHeight = `${Math.max(120, Math.min(300, up ? above : below))}px`;
+    }
+    function paintHl() {
+      [...$("suggest").querySelectorAll("li[role=option]")].forEach((li, i) => li.classList.toggle("is-hl", i === hl));
+      const cur = hl >= 0 && $(`opt-${hl}`);
+      if (cur) { cur.scrollIntoView({ block: "nearest" }); $("input").setAttribute("aria-activedescendant", cur.id); }
+      else $("input").removeAttribute("aria-activedescendant");
+    }
+    function closeSuggest() { $("suggest").hidden = true; $("input").setAttribute("aria-expanded", "false"); $("input").removeAttribute("aria-activedescendant"); }
+
+    $("input").addEventListener("input", updateSuggest);
+    $("input").addEventListener("focus", () => $("input").value && updateSuggest());
+    // Clicking or tapping the input opens the list; the page's own focus() calls don't, so it never
+    // covers the board on load or right after a guess.
+    $("input").addEventListener("click", () => { if ($("suggest").hidden) updateSuggest(); });
+    $("input").addEventListener("blur", closeSuggest);
+    $("input").addEventListener("keydown", (e) => {
+      const open = !$("suggest").hidden;
+      if (e.key === "ArrowDown" && !open) { e.preventDefault(); updateSuggest(); if (hl < 0) { hl = 0; paintHl(); } }
+      else if (e.key === "ArrowDown" && matches.length) { e.preventDefault(); hl = (hl + 1) % matches.length; paintHl(); }
+      else if (e.key === "ArrowUp" && open && matches.length) { e.preventDefault(); hl = hl <= 0 ? matches.length - 1 : hl - 1; paintHl(); }
+      else if (e.key === "Enter" && open && matches[hl]) { e.preventDefault(); guess(matches[hl]); }
+      else if (e.key === "Escape") closeSuggest();
+    });
+
+    // ---------------------------------------------------------------- buttons
+
+    $("giveup").addEventListener("click", giveUp);
+    $("again").addEventListener("click", () => { startPractice(true); render(); $("input").focus(); });
+    $("modeDaily").addEventListener("click", () => { if (state.mode !== "daily") { startDaily(); render(); } });
+    $("modePractice").addEventListener("click", () => { if (state.mode !== "practice") { startPractice(false); render(); $("input").focus(); } });
+
+    const closeResult = () => { $("result").hidden = true; };
+    $("resultClose").addEventListener("click", closeResult);
+    $("result").addEventListener("click", (e) => { if (e.target === $("result")) closeResult(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("result").hidden) closeResult(); });
+    $("resultNext").addEventListener("click", () => { closeResult(); startPractice(true); render(); $("input").focus(); });
+    // As Permutle shares: the system share sheet where there is one, with the link inside the text
+    // so every app keeps it. Elsewhere, or if the sheet can't open, the clipboard.
+    for (const id of ["share", "resultShare"]) $(id).addEventListener("click", async () => {
+      const text = shareText(shareArgs()), b = $(id), label = b.querySelector("span");
+      const say = (s) => { label.textContent = s; clearTimeout(b.reset); b.reset = setTimeout(() => { label.textContent = "share"; }, 1500); };
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ text }))) {
+        try { await navigator.share({ text }); return; }
+        catch (e) { if (e.name === "AbortError") return; }
+      }
+      try { await navigator.clipboard.writeText(text); say("copied"); }
+      catch { say("couldn't copy"); }
+    });
+
+    startDaily(); render();
+    if (!state.done) $("input").focus();
+
+    window.mathematiciandle = { state, guess, giveUp, MATHEMATICIANS };
+  </script>
+</body>
+</html>
