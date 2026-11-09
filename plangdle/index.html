@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plangdle</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- an editor at night: each guess prints as a struct literal, its fields lit like test results.
+       JetBrains Mono for the code, Space Grotesk for the title and buttons. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0f1117;   /* editor background */
+      --panel:     #171a22;
+      --panel-2:   #1f2330;
+      --border:    #2a2f3d;
+      --text:      #e3e6ee;
+      --muted:     #8a90a2;
+      --faint:     #575d70;
+      --accent:    #5ec8e0;   /* cursor cyan */
+      --accent-hi: #8adcef;
+      --on-accent: #0f1117;
+      --hit:       #4fbf7a;
+      --near:      #e0b04a;
+      --miss:      #d0566b;
+      --font-ui:      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, Menlo, monospace;
+      --font-display: "Space Grotesk", var(--font-ui);
+    }
+
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; display: flex; flex-direction: column; }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+
+    .pl-page { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 18px 16px 24px; box-sizing: border-box; }
+
+    /* chunky pressable buttons (pancakes' game chrome) */
+    .pl-btn {
+      --lip: #0a0b10;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font: 700 .95rem var(--font-display); color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer;
+      box-shadow: 0 3px 0 var(--lip), 0 6px 14px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s;
+    }
+    .pl-btn:hover { background: #292e3d; }
+    .pl-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--lip), 0 3px 8px rgba(0,0,0,.3); }
+    .pl-btn:disabled { opacity: .4; cursor: default; }
+    .pl-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .pl-btn.is-primary { background: var(--accent); color: var(--on-accent); --lip: #2c7f93; }
+    .pl-btn.is-primary:hover { background: var(--accent-hi); }
+
+    /* ---------- top bar ---------- */
+    .pl-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .pl-logo { margin: 0; font: 700 2.1rem/1 var(--font-display); letter-spacing: -.02em; display: flex; align-items: center; }
+    .pl-logo::after {
+      content: ""; width: .5em; height: .95em; margin-left: .08em; background: var(--accent);
+      animation: pl-blink 1.1s steps(1) infinite;
+    }
+    @keyframes pl-blink { 50% { opacity: 0; } }
+    .pl-top-right { display: flex; align-items: center; gap: 10px; }
+    .pl-modes { display: flex; background: var(--panel); border-radius: 12px; padding: 4px; gap: 4px; }
+    .pl-mode {
+      font: 700 .88rem var(--font-display); color: var(--muted); background: none; border: 0; border-radius: 9px;
+      padding: 8px 12px; cursor: pointer; white-space: nowrap;
+    }
+    .pl-mode:hover { color: var(--text); }
+    .pl-mode.is-active { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+    .pl-mode:focus-visible { outline: 2px solid var(--accent-hi); }
+
+    /* ---------- the guess box ---------- */
+    .pl-entry { position: relative; margin: 22px auto 8px; max-width: 520px; }
+    .pl-input-wrap {
+      display: flex; align-items: center; gap: 10px; background: var(--panel); border: 2px solid var(--border);
+      border-radius: 14px; padding: 0 8px 0 16px; transition: border-color .15s;
+    }
+    .pl-input-wrap:focus-within { border-color: var(--accent); }
+    .pl-prompt { font: 700 1.05rem var(--font-mono); color: var(--accent); }
+    .pl-input-wrap .pl-input, .pl-input-wrap .pl-input:focus {
+      flex: 1; min-width: 0; width: auto; background: none; border: 0; outline: 0; box-shadow: none; border-radius: 0;
+      color: var(--text); font: 500 1.05rem var(--font-mono); padding: 14px 0;
+    }
+    .pl-input::placeholder { color: var(--faint); }
+    .pl-suggest {
+      position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; max-height: 300px; overflow: auto;
+      box-shadow: 0 16px 40px rgba(0,0,0,.5);
+    }
+    /* with the input low on the screen the list opens upward, over the newest guesses */
+    .pl-suggest.is-up { top: auto; bottom: calc(100% + 6px); box-shadow: 0 -16px 40px rgba(0,0,0,.5); }
+    .pl-suggest li {
+      display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      font: 500 .98rem var(--font-mono);
+    }
+    .pl-suggest li .pl-alias { color: var(--faint); font-size: .82rem; }
+    .pl-suggest li.is-hl { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+    .pl-suggest .pl-none { color: var(--muted); cursor: default; font-family: var(--font-ui); }
+
+    .pl-status { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px; margin: 14px 0 8px; min-height: 40px; }
+    .pl-status > * { white-space: nowrap; }
+    .pl-count { text-align: center; }
+    .pl-count-label { display: block; font: 700 .7rem var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .pl-count-value { font: 700 1.6rem/1.1 var(--font-display); color: var(--accent); font-variant-numeric: tabular-nums; }
+    .pl-giveup { font: 600 .82rem var(--font-ui); color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    .pl-giveup:hover { color: var(--text); border-color: var(--muted); }
+    .pl-gaveup { font: 600 .82rem var(--font-mono); color: var(--miss); border: 1px solid color-mix(in srgb, var(--miss) 55%, transparent);
+      border-radius: 8px; padding: 6px 10px; }
+    /* share, as Permutle's: a pill in the hit color with the system share icon */
+    .pl-share { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 18px 0 14px; border: 0; border-radius: 19px;
+      background: var(--hit); color: var(--on-accent); font: 600 .95rem var(--font-display); cursor: pointer; touch-action: manipulation; }
+    .pl-share:hover { filter: brightness(1.08); }
+    .pl-share:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+    .pl-share svg { width: 18px; height: 18px; margin-top: -2px; }
+    .pl-share[hidden], .pl-gaveup[hidden] { display: none; }
+
+    /* ---------- guess rows, printed as struct literals ---------- */
+    .pl-board { display: flex; flex-direction: column; gap: 14px; margin-top: 26px; }
+    .pl-row { font-family: var(--font-mono); }
+    .pl-row-head { font: 600 1.05rem var(--font-mono); margin: 0 0 6px 2px; }
+    .pl-row-head .pl-brace, .pl-row-tail { color: var(--faint); font-weight: 400; }
+    .pl-row-tail { margin: 6px 0 0 2px; font-size: 1.05rem; }
+    .pl-fields { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; padding-left: 18px; }
+    .pl-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .pl-key { align-self: flex-start; font-size: .72rem; color: var(--muted); padding-left: 2px; white-space: nowrap; cursor: help; }
+    .pl-key:hover { color: var(--text); text-decoration: underline dotted var(--faint); text-underline-offset: 3px; }
+    .pl-key::after { content: ":"; color: var(--faint); }
+    .pl-val {
+      flex: 1; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+      border-radius: 8px; padding: 6px 4px; text-align: center; color: var(--on-accent);
+      font: 600 .8rem/1.2 var(--font-mono); overflow-wrap: anywhere;
+    }
+    .pl-val.is-hit  { background: var(--hit); }
+    .pl-val.is-near { background: var(--near); }
+    .pl-val.is-miss { background: var(--miss); }
+    .pl-val.is-ghost { background: none; border: 1.5px dashed var(--border); color: var(--faint); }
+    .pl-val .pl-arrow { font-size: 1.15rem; line-height: 1; font-weight: 700; }
+    .pl-val.is-year { font-size: 1rem; }
+    .pl-val.is-comment { font-size: 1.05rem; }
+    .pl-val.is-ghost { font-size: .9rem; }
+    .pl-row.is-new .pl-val { animation: pl-flip .42s ease-out both; animation-delay: calc(var(--i) * 85ms); }
+    @keyframes pl-flip { from { transform: rotateX(90deg); opacity: .2; } }
+    .pl-hint { text-align: center; color: var(--muted); font-size: .92rem; line-height: 1.5; max-width: 520px; margin: 10px auto 0; }
+    .pl-hint b { color: var(--text); font-weight: 600; }
+    .pl-hint .is-hit { color: var(--hit); } .pl-hint .is-near { color: var(--near); } .pl-hint .is-miss { color: var(--miss); }
+
+    /* ---------- result card ---------- */
+    .pl-result {
+      position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: rgba(8,9,13,.6);
+    }
+    .pl-card {
+      width: min(400px, 100%); text-align: center; padding: 28px 24px 24px; box-sizing: border-box;
+      background: var(--panel); border-radius: 22px; box-shadow: 0 5px 0 #0a0b10, 0 24px 60px rgba(0,0,0,.6);
+      animation: pl-pop .4s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes pl-pop { from { transform: scale(.7) translateY(24px); opacity: 0; } }
+    .pl-card-kicker { margin: 0; color: var(--muted); font-size: .95rem; }
+    .pl-card h2 { margin: 6px 0 4px; font: 700 2.4rem/1.05 var(--font-display); color: var(--accent); overflow-wrap: anywhere; }
+    .pl-card-sub { margin: 0 0 18px; font: 500 .9rem var(--font-mono); color: var(--muted); }
+    .pl-squares { font-size: 1rem; line-height: 1.2; letter-spacing: 1px; margin: 0 auto 20px; max-height: 160px; overflow: auto; white-space: pre; }
+    .pl-card-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .pl-card-note { margin: 14px 0 0; font-size: .8rem; color: var(--faint); }
+
+    .pl-row-note { color: var(--faint); font-weight: 400; margin-left: .6em; }
+
+    @media (max-width: 700px) {
+      .pl-logo { font-size: 1.7rem; }
+      .pl-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); padding-left: 8px; }
+      .pl-val { min-height: 50px; font-size: .7rem; padding: 6px 2px; letter-spacing: -.02em; }
+      .pl-entry { margin-top: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pl-row.is-new .pl-val, .pl-card, .pl-logo::after { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="pl-page">
+    <header class="pl-top">
+      <h1 class="pl-logo">plangdle</h1>
+      <div class="pl-top-right">
+        <div class="pl-modes" role="tablist">
+          <button class="pl-mode is-active" id="modeDaily" role="tab" title="the same language for everyone today">Daily</button>
+          <button class="pl-mode" id="modePractice" role="tab" title="a random language, as many rounds as you like">Unlimited</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- oldest guess at the top, newest just above the input, like lines printed to a terminal -->
+    <div class="pl-board" id="board"></div>
+    <p class="pl-hint" id="hint">Guess any language to start. Fields turn <b class="is-hit">green</b> when they match the
+      answer, <b class="is-near">yellow</b> when they're close, and <b class="is-miss">red</b> when they're off.</p>
+
+    <div class="pl-entry" id="entry">
+      <div class="pl-input-wrap">
+        <span class="pl-prompt" aria-hidden="true">&gt;</span>
+        <input class="pl-input" id="input" type="text" placeholder="guess a language" autocomplete="off" spellcheck="false"
+          role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggest" />
+      </div>
+      <ul class="pl-suggest" id="suggest" role="listbox" hidden></ul>
+    </div>
+
+    <div class="pl-status">
+      <div class="pl-count"><span class="pl-count-label">Guesses</span><span class="pl-count-value" id="count">0</span></div>
+      <button class="pl-giveup" id="giveup" title="show the answer and end this round" hidden>Give up</button>
+      <span class="pl-gaveup" id="gaveup" hidden>🏳️ gave up</span>
+      <button class="pl-share" id="share" title="share your result: the colors as emoji, your guesses, and a link" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M8 10.5H6.5A1.5 1.5 0 0 0 5 12v7.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span>share</span></button>
+      <button class="pl-btn is-primary" id="again" hidden>New language</button>
+    </div>
+  </main>
+
+  <div class="pl-result" id="result" hidden>
+    <div class="pl-card" role="dialog" aria-labelledby="resultName">
+      <p class="pl-card-kicker" id="resultKicker"></p>
+      <h2 id="resultName"></h2>
+      <p class="pl-card-sub" id="resultSub"></p>
+      <div class="pl-squares" id="resultSquares"></div>
+      <div class="pl-card-actions">
+        <button class="pl-btn" id="resultClose">See the board</button>
+        <button class="pl-share" id="resultShare" title="share your result: the colors as emoji, your guesses, and a link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5M8 10.5H6.5A1.5 1.5 0 0 0 5 12v7.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V12a1.5 1.5 0 0 0-1.5-1.5H16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg><span>share</span></button>
+        <button class="pl-btn is-primary" id="resultNext"></button>
+      </div>
+      <p class="pl-card-note" id="resultNote"></p>
+    </div>
+  </div>
+
+  <mike-footer></mike-footer>
+
+  <script type="module">
+    import { ATTRS, LABELS, LANGUAGES, byName, compare, compareAttr, search, dayNumber, dailyAnswer, randomAnswer, shareText, shareRows } from "./plangdle.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+    // ---------------------------------------------------------------- rendering a guess
+
+    function valueLines(key, lang, result) {
+      if (key === "year") return [String(lang.year)];
+      if (key === "index") return lang.index.map((v) => v === "declared" ? "declared" : `from ${v}`);
+      if (key === "comment") return [lang.comment.join(" ")];
+      return lang[key].map((v) => LABELS[key][v]);
+    }
+
+    function tipFor(key, lang, answer, r) {
+      const attr = ATTRS.find((a) => a.key === key);
+      if (!answer) return attr.help;
+      if (key === "year") return r.status === "hit" ? "Same year." :
+        `The answer came out ${r.arrow === "up" ? "later" : "earlier"}${r.status === "near" ? ", within 5 years" : ""}.`;
+      if (r.status === "hit") return "Exact match.";
+      if (r.shared) return `Shared: ${r.shared.map((v) => LABELS[key]?.[v] ?? v).join(", ")}.`;
+      if (key === "index" && r.status === "near") return "Declared bounds are close to both 0 and 1.";
+      return "No match.";
+    }
+
+    function fieldEl(key, lang, answer, i) {
+      const r = answer ? compareAttr(key, lang, answer) : null;
+      const f = h("div", "pl-field");
+      const attr = ATTRS.find((a) => a.key === key), label = h("span", "pl-key", attr.field);
+      label.title = `${attr.title}: ${attr.help}`;
+      f.appendChild(label);
+      const v = h("div", `pl-val is-${key} ` + (r ? `is-${r.status}` : "is-ghost"));
+      v.style.setProperty("--i", i);
+      if (lang) {
+        for (const line of valueLines(key, lang, r)) v.appendChild(h("span", null, line));
+        if (r?.arrow) v.appendChild(h("span", "pl-arrow", r.arrow === "up" ? "↑" : "↓"));
+      } else v.textContent = "?";
+      v.title = lang ? tipFor(key, lang, answer, r) : ATTRS.find((a) => a.key === key).help;
+      f.appendChild(v);
+      return f;
+    }
+
+    function rowEl(lang, answer, { fresh = false, note = "" } = {}) {
+      const row = h("div", "pl-row" + (fresh ? " is-new" : ""));
+      const head = h("div", "pl-row-head");
+      head.append(lang ? lang.name : "?", h("span", "pl-brace", " {"));
+      if (note) head.appendChild(h("span", "pl-row-note", `// ${note}`));
+      const fields = h("div", "pl-fields");
+      ATTRS.forEach(({ key }, i) => fields.appendChild(fieldEl(key, lang, answer, i)));
+      row.append(head, fields, h("div", "pl-row-tail", "}"));
+      return row;
+    }
+
+    // ---------------------------------------------------------------- game state
+
+    const today = dayNumber();
+    const STORE = `plangdle-day-${today}`;
+    const load = () => { try { return JSON.parse(localStorage.getItem(STORE)) || null; } catch { return null; } };
+    const save = () => {
+      if (state.mode !== "daily") return;
+      try { localStorage.setItem(STORE, JSON.stringify({ guesses: state.guesses.map((g) => g.name), done: state.done })); } catch {}
+    };
+
+    const state = { mode: "daily", answer: null, guesses: [], done: null };   // done: null | "won" | "gave-up"
+    let practice = null;   // the practice round, kept while you look at the daily one
+
+    function startDaily() {
+      const saved = load();
+      state.mode = "daily"; state.answer = dailyAnswer(today);
+      state.guesses = (saved?.guesses || []).map(byName).filter(Boolean);
+      state.done = saved?.done || null;
+    }
+    function startPractice(fresh) {
+      if (fresh || !practice) practice = { answer: randomAnswer(Math.random, state.answer), guesses: [], done: null };
+      state.mode = "practice"; Object.assign(state, { answer: practice.answer, guesses: practice.guesses, done: practice.done });
+    }
+    function syncPractice() { if (state.mode === "practice") Object.assign(practice, { guesses: state.guesses, done: state.done }); }
+
+    // ---------------------------------------------------------------- drawing the page
+
+    function render({ freshLast = false } = {}) {
+      $("modeDaily").classList.toggle("is-active", state.mode === "daily");
+      $("modePractice").classList.toggle("is-active", state.mode === "practice");
+      $("count").textContent = state.guesses.length;
+
+      const board = $("board"); board.innerHTML = "";
+      const shown = state.guesses, last = shown.length - 1;
+      shown.forEach((g, i) => board.appendChild(rowEl(g, state.answer, { fresh: freshLast && i === last })));
+      if (state.done === "gave-up") board.appendChild(rowEl(state.answer, state.answer, { note: "gave up" }));
+      if (!shown.length && !state.done) board.appendChild(rowEl(null, null));
+      $("hint").hidden = shown.length > 0;
+
+      const playing = !state.done;
+      $("input").disabled = !playing;
+      $("input").placeholder = playing ? "guess a language" : state.done === "won" ? `it was ${state.answer.name}` : `the answer was ${state.answer.name}`;
+      $("giveup").hidden = !playing || state.guesses.length === 0;
+      $("gaveup").hidden = state.done !== "gave-up";
+      $("share").hidden = playing;
+      $("again").hidden = playing || state.mode !== "practice";
+      // the input sits under the newest guess, so keep it (and the status row under it) on screen
+      document.querySelector(".pl-status").scrollIntoView({ block: "nearest" });
+    }
+
+    function showResult() {
+      const won = state.done === "won", n = state.guesses.length;
+      $("resultKicker").textContent = won ? "You got it" : "🏳️ You gave up. It was";
+      $("resultName").textContent = state.answer.name;
+      $("resultSub").textContent = won ? `in ${n} ${n === 1 ? "guess" : "guesses"}` : `after ${n} ${n === 1 ? "guess" : "guesses"}`;
+      $("resultSquares").textContent = shareRows(shareArgs());
+      $("resultNext").textContent = state.mode === "daily" ? "Play unlimited" : "New language";
+      $("resultNote").textContent = state.mode === "daily" ? "A new language at midnight." : "";
+      $("result").hidden = false;
+      $("resultNext").focus();
+    }
+    const shareArgs = () => ({ label: state.mode === "daily" ? "" : "unlimited", guesses: state.guesses, answer: state.answer,
+      gaveUp: state.done === "gave-up", link: `${location.origin}${location.pathname}` });
+
+    function guess(lang) {
+      if (state.done || state.guesses.includes(lang)) return;
+      state.guesses.push(lang);
+      if (lang === state.answer) state.done = "won";
+      syncPractice(); save();
+      closeSuggest(); $("input").value = "";
+      render({ freshLast: true });
+      if (state.done) setTimeout(showResult, matchMedia("(prefers-reduced-motion: reduce)").matches ? 100 : ATTRS.length * 85 + 650);
+      else $("input").focus();
+    }
+
+    function giveUp() {
+      if (state.done) return;
+      state.done = "gave-up"; syncPractice(); save(); render(); showResult();
+    }
+
+    // ---------------------------------------------------------------- the suggestion list
+
+    // With an empty input the list shows every language not yet guessed, alphabetically, with nothing
+    // highlighted so a stray Enter doesn't guess. Typing narrows it to the best 8 matches.
+    let matches = [], hl = 0;
+    function updateSuggest() {
+      const q = $("input").value, guessed = new Set(state.guesses.map((g) => g.name));
+      const empty = !q.trim();
+      matches = empty
+        ? LANGUAGES.filter((l) => !guessed.has(l.name)).sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }))
+        : search(q, guessed).slice(0, 8);
+      hl = empty ? -1 : 0;
+      const ul = $("suggest"); ul.innerHTML = "";
+      ul.scrollTop = 0;
+      if (!matches.length) { ul.appendChild(h("li", "pl-none", "No language by that name in the list.")); }
+      matches.forEach((l, i) => {
+        const li = h("li"); li.id = `opt-${i}`; li.setAttribute("role", "option");
+        li.appendChild(h("span", null, l.name));
+        const qa = q.trim().toLowerCase(), alias = l.aliases.find((a) => a.toLowerCase().startsWith(qa) && !l.name.toLowerCase().startsWith(qa));
+        if (alias) li.appendChild(h("span", "pl-alias", alias));
+        li.addEventListener("mousedown", (e) => { e.preventDefault(); guess(l); });
+        ul.appendChild(li);
+      });
+      ul.hidden = false; $("input").setAttribute("aria-expanded", "true");
+      placeSuggest();
+      paintHl();
+    }
+    // Open toward whichever side of the input has more room (the visual viewport leaves out a phone's
+    // keyboard), and no taller than that room.
+    function placeSuggest() {
+      const ul = $("suggest"), r = $("entry").getBoundingClientRect();
+      const vh = window.visualViewport?.height ?? innerHeight, above = r.top - 12, below = vh - r.bottom - 12;
+      const up = above > below;
+      ul.classList.toggle("is-up", up);
+      ul.style.maxHeight = `${Math.max(120, Math.min(300, up ? above : below))}px`;
+    }
+    function paintHl() {
+      [...$("suggest").querySelectorAll("li[role=option]")].forEach((li, i) => li.classList.toggle("is-hl", i === hl));
+      const cur = hl >= 0 && $(`opt-${hl}`);
+      if (cur) { cur.scrollIntoView({ block: "nearest" }); $("input").setAttribute("aria-activedescendant", cur.id); }
+      else $("input").removeAttribute("aria-activedescendant");
+    }
+    function closeSuggest() { $("suggest").hidden = true; $("input").setAttribute("aria-expanded", "false"); $("input").removeAttribute("aria-activedescendant"); }
+
+    $("input").addEventListener("input", updateSuggest);
+    $("input").addEventListener("focus", () => $("input").value && updateSuggest());
+    // Clicking or tapping the input opens the list; the page's own focus() calls don't, so it never
+    // covers the board on load or right after a guess.
+    $("input").addEventListener("click", () => { if ($("suggest").hidden) updateSuggest(); });
+    $("input").addEventListener("blur", closeSuggest);
+    $("input").addEventListener("keydown", (e) => {
+      const open = !$("suggest").hidden;
+      if (e.key === "ArrowDown" && !open) { e.preventDefault(); updateSuggest(); if (hl < 0) { hl = 0; paintHl(); } }
+      else if (e.key === "ArrowDown" && matches.length) { e.preventDefault(); hl = (hl + 1) % matches.length; paintHl(); }
+      else if (e.key === "ArrowUp" && open && matches.length) { e.preventDefault(); hl = hl <= 0 ? matches.length - 1 : hl - 1; paintHl(); }
+      else if (e.key === "Enter" && open && matches[hl]) { e.preventDefault(); guess(matches[hl]); }
+      else if (e.key === "Escape") closeSuggest();
+    });
+
+    // ---------------------------------------------------------------- buttons
+
+    $("giveup").addEventListener("click", giveUp);
+    $("again").addEventListener("click", () => { startPractice(true); render(); $("input").focus(); });
+    $("modeDaily").addEventListener("click", () => { if (state.mode !== "daily") { startDaily(); render(); } });
+    $("modePractice").addEventListener("click", () => { if (state.mode !== "practice") { startPractice(false); render(); $("input").focus(); } });
+
+    const closeResult = () => { $("result").hidden = true; };
+    $("resultClose").addEventListener("click", closeResult);
+    $("result").addEventListener("click", (e) => { if (e.target === $("result")) closeResult(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("result").hidden) closeResult(); });
+    $("resultNext").addEventListener("click", () => { closeResult(); startPractice(true); render(); $("input").focus(); });
+    // As Permutle shares: the system share sheet where there is one (phones, Safari, Chrome on a Mac or
+    // Windows), with the link inside the text so every app keeps it. Elsewhere, or if the sheet can't
+    // open, the clipboard.
+    for (const id of ["share", "resultShare"]) $(id).addEventListener("click", async () => {
+      const text = shareText(shareArgs()), b = $(id), label = b.querySelector("span");
+      const say = (s) => { label.textContent = s; clearTimeout(b.reset); b.reset = setTimeout(() => { label.textContent = "share"; }, 1500); };
+      if (navigator.share && (!navigator.canShare || navigator.canShare({ text }))) {
+        try { await navigator.share({ text }); return; }
+        catch (e) { if (e.name === "AbortError") return; }
+      }
+      try { await navigator.clipboard.writeText(text); say("copied"); }
+      catch { say("couldn't copy"); }
+    });
+
+    startDaily(); render();
+    if (!state.done) $("input").focus();
+
+    window.plangdle = { state, guess, giveUp, LANGUAGES };
+  </script>
+</body>
+</html>
