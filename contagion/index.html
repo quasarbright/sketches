@@ -581,19 +581,32 @@
       });
     }
     glCanvas.style.touchAction = "none";
-    glCanvas.addEventListener("pointerdown", (e) => {
-      pointerActive = true;
-      updatePointer(e); updateBrushIndicator(e);
-      glCanvas.setPointerCapture(e.pointerId);
-    });
-    glCanvas.addEventListener("pointermove", (e) => {
-      if (pointerActive) updatePointer(e);
-      updateBrushIndicator(e);
-    });
-    glCanvas.addEventListener("pointerup", () => { pointerActive = false; });
-    glCanvas.addEventListener("pointercancel", () => { pointerActive = false; });
-    glCanvas.addEventListener("pointerleave", () => { brushIndicator.style.display = "none"; });
-    glCanvas.addEventListener("pointerenter", updateBrushIndicator);
+    if (isBackgroundMode) {
+      // as a backdrop there's no brush ring and no click: fire just follows the pointer.
+      // Listens on window (not the canvas) and doesn't check isTrusted, because the home page
+      // forwards synthetic moves into this iframe while the cursor is over its links.
+      const follow = (e) => { pointerActive = true; updatePointer(e); };
+      const stop = () => { pointerActive = false; };
+      window.addEventListener("pointermove", follow);
+      window.addEventListener("mousemove", follow);
+      document.documentElement.addEventListener("mouseleave", stop);
+      window.addEventListener("pointerout", (e) => { if (!e.relatedTarget) stop(); });
+      window.addEventListener("blur", stop);
+    } else {
+      glCanvas.addEventListener("pointerdown", (e) => {
+        pointerActive = true;
+        updatePointer(e); updateBrushIndicator(e);
+        glCanvas.setPointerCapture(e.pointerId);
+      });
+      glCanvas.addEventListener("pointermove", (e) => {
+        if (pointerActive) updatePointer(e);
+        updateBrushIndicator(e);
+      });
+      glCanvas.addEventListener("pointerup", () => { pointerActive = false; });
+      glCanvas.addEventListener("pointercancel", () => { pointerActive = false; });
+      glCanvas.addEventListener("pointerleave", () => { brushIndicator.style.display = "none"; });
+      glCanvas.addEventListener("pointerenter", updateBrushIndicator);
+    }
 
     // a turbulent random-phase start is the classic way to get self-sustaining spiral wave
     // chaos in an excitable-media automaton like this one — many asynchronous fronts collide
