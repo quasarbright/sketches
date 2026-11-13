@@ -7,6 +7,18 @@ export async function open(page, { init } = {}) {
   page.on("console", (m) => { if (m.type() === "error" && !/net::|Failed to load resource/.test(m.text())) errors.push(m.text()); });
   // web fonts only change how text looks; skip them so a slow CDN can't stall a test
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  // silence the game's sound effects: everything it plays goes into a gain set to 0
+  // (the browsers are also launched muted, in playwright.config.mjs)
+  await page.addInitScript(() => {
+    const AC = window.AudioContext;
+    if (!AC) return;
+    window.AudioContext = class extends AC {
+      get destination() {
+        if (!this._silent) { this._silent = this.createGain(); this._silent.gain.value = 0; this._silent.connect(super.destination); }
+        return this._silent;
+      }
+    };
+  });
   if (init) await page.addInitScript(init);
   await page.goto("index.html", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.game2048);

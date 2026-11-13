@@ -11,8 +11,9 @@ export default defineConfig({
   reporter: [["list"]],
   use: { baseURL: `http://localhost:${PORT}/2048/` },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1100, height: 800 } } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"], viewport: { width: 1100, height: 800 } } },
+    // muted: the game plays sound effects, and headless browsers still play them out loud
+    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1100, height: 800 }, launchOptions: { args: ["--mute-audio"] } } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"], viewport: { width: 1100, height: 800 }, launchOptions: { firefoxUserPrefs: { "media.volume_scale": "0.0" } } } },
   ],
   webServer: {
     command: `python3 e2e/serve.py ${PORT} ..`,
