@@ -64,11 +64,13 @@
   animation: g-slide2 85s linear infinite reverse;
 }
 
-/* 65536: a black hole, as in the Interstellar pictures. art/blackhole.webp is ray-traced
-   (art/blackhole-render.mjs), so the accretion disk bends around the shadow the way gravity bends
-   it: the far side arcs over the top and under the bottom, the near side crosses in front. Behind
-   it, clouds of orange gas (art/blackhole-sky.svg) breathe and sway; over it, a blurred copy of
-   its light pulses, and the hole itself drifts very slightly. */
+/* 65536: a black hole, as in the Interstellar pictures. It's ray-traced (art/blackhole-render.mjs),
+   so the accretion disk bends around the shadow the way gravity bends it: the far side arcs over
+   the top and under the bottom, the near side crosses in front. art/blackhole-spin.webp is 24
+   frames of the disk turning, in a 6 × 4 grid; the tile slides the grid one frame at a time
+   (steps() on transforms, so no redraw): .g-rows steps down a row while .g-strip steps
+   across its six frames. Behind it, clouds of orange gas (art/blackhole-sky.svg)
+   breathe and sway; over it, a blurred copy of its light pulses. */
 .g-face[data-tier="blackhole"] { background: #050201; color: #ffffff;
   text-shadow: 0 0 calc(var(--cell) * .035) #000, 0 0 calc(var(--cell) * .035) #000, 0 0 calc(var(--cell) * .14) #ff9a3a; }
 .g-face[data-tier="blackhole"]::after {
@@ -76,13 +78,18 @@
   background: url(art/blackhole-sky.svg) center / cover;
   animation: g-sway 20s ease-in-out infinite alternate, g-clouds 4.5s ease-in-out infinite alternate;
 }
-.g-face[data-tier="blackhole"]::before {
-  inset: -4%; border-radius: 0;
-  background: url(art/blackhole.webp) center / contain no-repeat;
-  animation: g-hover 9s ease-in-out infinite alternate;
+.g-face[data-tier="blackhole"] .g-fx { position: absolute; inset: -4%; z-index: -1; pointer-events: none; }
+.g-face[data-tier="blackhole"] .g-fx[data-fx="spin"] { overflow: hidden; animation: g-hover 9s ease-in-out infinite alternate; }
+.g-face[data-tier="blackhole"] .g-rows {
+  position: absolute; left: 0; top: 0; width: 100%; height: 400%;
+  animation: g-rows 2.6s steps(4) infinite;
 }
-.g-face[data-tier="blackhole"] .g-fx {
-  position: absolute; inset: -4%; z-index: -1; pointer-events: none;
+.g-face[data-tier="blackhole"] .g-strip {
+  position: absolute; left: 0; top: 0; width: 600%; height: 100%;
+  background: url(art/blackhole-spin.webp) 0 0 / 100% 100% no-repeat;
+  animation: g-frames .65s steps(6) infinite;
+}
+.g-face[data-tier="blackhole"] .g-fx[data-fx="glow"] {
   background: url(art/blackhole-glow.webp) center / contain no-repeat;
   mix-blend-mode: screen;
   animation: g-hover 9s ease-in-out infinite alternate, g-halo 2.8s ease-in-out infinite alternate;
@@ -117,10 +124,12 @@
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
 @keyframes g-halo { from { opacity: .35; } to { opacity: 1; } }
+@keyframes g-frames { to { transform: translateX(-100%); } }
+@keyframes g-rows { to { transform: translateY(-100%); } }
 @keyframes g-hover { from { transform: translate(-1%, .5%) rotate(-1.5deg) scale(.99); } to { transform: translate(1%, -.5%) rotate(1.5deg) scale(1.02); } }
 @keyframes g-sway { from { transform: rotate(-4deg) scale(1.02); } to { transform: rotate(4deg) scale(1.1); } }
 @keyframes g-clouds { from { opacity: .6; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }
+  .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx, .g-rows, .g-strip { animation: none !important; }
 }
