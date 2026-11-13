@@ -6,17 +6,17 @@ export const TILE = {
   128: ["#ffd23f", "#3a2600"], 256: ["#ff9f2e", "#3a1600"], 512: ["#ff5b5b", "#ffffff"],
   1024: ["#ff3d9a", "#ffffff"], 2048: ["#b04dff", "#ffffff"], 4096: ["#fff6dc", "#4a1f8a"],
   // past 4096 each tile is drawn by its tier in tiles.css; these are its glow and spark colors
-  8192: ["#c79bff", "#3a1670"], 16384: ["#ff6a1f", "#fff8e0"], 32768: ["#2de2c6", "#f2fffd"],
-  65536: ["#ff5ad0", "#ffffff"],
+  8192: ["#c79bff", "#3a1670"], 16384: ["#ff6a1f", "#fff8e0"], 32768: ["#39ff9e", "#f2fff6"],
+  65536: ["#8a7dff", "#ffffff"],
 };
-const BEYOND = ["#7df9ff", "#ffffff"]; // 131072, the largest possible
+const BEYOND = ["#4de8ff", "#ffffff"]; // 131072, the largest possible
 export const tileColors = (v) => TILE[v] || BEYOND;
 export const tileColor = (v) => tileColors(v)[0];
 // font size for a numeral, as a fraction of the tile's width
 export const numeralScale = (v) => [0, 0.46, 0.46, 0.37, 0.29, 0.235, 0.2][String(v).length] || 0.17;
 
 // the special tiles past 4096, each with its own look in tiles.css
-const TIERS = { 8192: "foil", 16384: "molten", 32768: "aurora", 65536: "nebula" };
+const TIERS = { 8192: "foil", 16384: "molten", 32768: "aurora", 65536: "galaxy" };
 export const tier = (v) => (v <= 4096 ? null : TIERS[v] || "web");
 
 // style a tile face (a .g-face from tiles.css) for value v at a cell width in px

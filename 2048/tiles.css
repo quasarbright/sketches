@@ -37,57 +37,69 @@
 }
 .g-face[data-tier="molten"]::after { box-shadow: inset 0 0 calc(var(--cell) * .2) rgba(30, 0, 0, .85); z-index: 0; }
 
-/* 32768: aurora, colored light drifting across a dark tile */
+/* 32768: aurora, curtains of green light rippling over a night sky, their tops fading to violet.
+   art/aurora.svg is one curtain, periodic across its width; two copies scroll at different
+   speeds, and a blurred third adds the glow. */
 .g-face[data-tier="aurora"] {
-  background: #070a18; color: #f2fffd; text-shadow: 0 0 calc(var(--cell) * .1) #2de2c6;
+  background: radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 82% 12%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 64% 30%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 30% 40%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 90% 46%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 46% 8%, #fff 99%, transparent),
+    linear-gradient(to bottom, #040818, #071430 55%, #0a2a2c);
+  color: #f2fff6;
+  text-shadow: 0 0 calc(var(--cell) * .03) #031a10, 0 0 calc(var(--cell) * .03) #031a10, 0 0 calc(var(--cell) * .14) #39ff9e;
 }
-.g-face[data-tier="aurora"]::before {
-  inset: -30%;
+.g-face[data-tier="aurora"]::before, .g-face[data-tier="aurora"]::after {
   background:
-    radial-gradient(35% 45% at 30% 35%, #2de2c6, transparent 70%),
-    radial-gradient(40% 40% at 70% 60%, #8a5cff, transparent 70%),
-    radial-gradient(30% 35% at 45% 85%, #4dff8a, transparent 70%);
-  filter: blur(calc(var(--cell) * .06)); opacity: .9;
-  animation: g-aurora 7s ease-in-out infinite alternate;
+    url(art/aurora.svg) 0 0 / calc(var(--cell) * 2) 100% repeat-x,
+    url(art/aurora.svg) 0 -12% / calc(var(--cell) * 2.7) 88% repeat-x;
+  animation: g-curtain 10s linear infinite, g-flicker 3.1s ease-in-out infinite alternate;
+}
+.g-face[data-tier="aurora"]::before { opacity: .95; }
+.g-face[data-tier="aurora"]::after {
+  filter: blur(calc(var(--cell) * .07)) saturate(1.4); mix-blend-mode: screen; z-index: 0; opacity: .9;
 }
 
-/* 65536: nebula, clouds of colored gas slowly turning in deep space */
-.g-face[data-tier="nebula"] {
-  background: #06031a; color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #06031a, 0 0 calc(var(--cell) * .12) #ff6fd8;
-}
-.g-face[data-tier="nebula"]::before {
-  inset: -35%;
-  background:
-    radial-gradient(1.2px 1.2px at 22% 30%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 76% 22%, #fff 99%, transparent),
-    radial-gradient(1.4px 1.4px at 64% 78%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 34% 70%, #fff 99%, transparent),
-    radial-gradient(28% 22% at 35% 40%, rgba(255, 90, 200, .85), transparent 70%),
-    radial-gradient(30% 26% at 65% 55%, rgba(80, 120, 255, .85), transparent 70%),
-    radial-gradient(22% 30% at 50% 30%, rgba(60, 230, 210, .6), transparent 70%),
-    radial-gradient(35% 30% at 45% 68%, rgba(150, 60, 255, .7), transparent 70%);
-  filter: blur(calc(var(--cell) * .025));
-  animation: g-swirl 18s linear infinite;
-}
-
-/* 131072, the biggest tile the game can make: the cosmic web, glowing filaments of galaxies
-   drifting and pulsing inside a turning rainbow rim. (Anything past it can't happen, but would
-   look the same.) */
-.g-face[data-tier="web"] {
-  background: radial-gradient(circle at 50% 50%, #1a0b3a, #05020f 75%);
+/* 65536: a spiral galaxy, tilted and slowly turning, in front of a star field */
+.g-face[data-tier="galaxy"] {
+  background: radial-gradient(circle at 50% 50%, #120a33, #04020e 75%);
   color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #05020f, 0 0 calc(var(--cell) * .03) #05020f,
-    calc(var(--cell) * -.012) 0 calc(var(--cell) * .08) #7df9ff, calc(var(--cell) * .012) 0 calc(var(--cell) * .08) #ff7ae0;
+  text-shadow: 0 0 calc(var(--cell) * .03) #04020e, 0 0 calc(var(--cell) * .03) #04020e, 0 0 calc(var(--cell) * .14) #8a7dff;
+}
+.g-face[data-tier="galaxy"]::before {
+  inset: -14%; border-radius: 0;
+  background: url(art/galaxy.svg) center / contain no-repeat;
+  animation: g-galaxy 40s linear infinite;
+}
+.g-face[data-tier="galaxy"]::after {
+  z-index: -2;
+  background: radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 82% 12%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 64% 30%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 30% 40%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 90% 46%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 46% 8%, #fff 99%, transparent);
+}
+
+/* 131072, the biggest tile the game can make: the cosmic web. Filaments join glowing clusters,
+   light flows along the threads and the clusters pulse (art/web.svg animates itself), inside a
+   turning rainbow rim. */
+.g-face[data-tier="web"] {
+  background: radial-gradient(circle at 50% 50%, #140828, #020108 80%);
+  color: #ffffff;
+  text-shadow: 0 0 calc(var(--cell) * .03) #020108, 0 0 calc(var(--cell) * .03) #020108,
+    calc(var(--cell) * -.015) 0 calc(var(--cell) * .09) #4de8ff, calc(var(--cell) * .015) 0 calc(var(--cell) * .09) #ff5fc8;
 }
 .g-face[data-tier="web"]::before {
-  inset: -25%;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237df9ff'/%3E%3Cstop offset='.5' stop-color='%23ff7ae0'/%3E%3Cstop offset='1' stop-color='%23ffe27a'/%3E%3C/linearGradient%3E%3Cfilter id='b'%3E%3CfeGaussianBlur stdDeviation='1.6'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23g)' stroke-linecap='round'%3E%3Cpath d='M6.0 87.0Q25.2 77.3 35.0 72.2M6.0 87.0Q6.5 66.3 16.8 51.1M6.0 87.0Q21.5 74.8 38.9 68.3M31.5 24.5Q41.2 30.8 38.8 35.5M31.5 24.5Q27.3 43.1 16.8 51.1M31.5 24.5Q43.3 14.5 67.4 10.7M70.2 52.9Q72.2 53.4 72.4 53.8M70.2 52.9Q67.1 45.7 66.2 47.2M70.2 52.9Q72.1 48.6 62.7 56.8M35.0 72.2Q35.1 68.1 38.9 68.3M35.0 72.2Q28.2 67.6 16.8 51.1M35.0 72.2Q49.0 59.8 62.7 56.8M72.4 53.8Q68.0 47.4 66.2 47.2M72.4 53.8Q65.7 54.2 62.7 56.8M66.2 62.0Q62.1 59.8 62.7 56.8M70.2 52.9Q69.8 53.7 66.2 62.0M72.4 53.8Q75.0 57.3 66.2 62.0M77.9 27.3Q77.7 20.9 67.4 10.7M77.9 27.3Q73.9 37.5 66.2 47.2M70.2 52.9Q74.1 42.7 77.9 27.3M38.9 68.3Q56.9 61.1 62.7 56.8M38.9 68.3Q30.8 56.2 16.8 51.1M67.4 10.7Q68.0 26.9 66.2 47.2M67.4 10.7Q50.7 21.6 38.8 35.5M66.2 47.2Q68.5 57.3 62.7 56.8M87.2 77.1Q81.3 86.0 86.3 85.9M87.2 77.1Q81.3 70.5 87.2 66.6M66.2 62.0Q71.9 63.6 87.2 77.1M16.8 51.1Q34.7 39.4 38.8 35.5M87.2 66.6Q88.6 71.3 86.3 85.9M72.4 53.8Q79.2 61.5 87.2 66.6M66.2 62.0Q71.2 79.9 86.3 85.9M66.2 47.2Q57.9 46.8 38.8 35.5' stroke-width='3' opacity='.55' filter='url(%23b)'/%3E%3Cpath d='M6.0 87.0Q25.2 77.3 35.0 72.2M6.0 87.0Q6.5 66.3 16.8 51.1M6.0 87.0Q21.5 74.8 38.9 68.3M31.5 24.5Q41.2 30.8 38.8 35.5M31.5 24.5Q27.3 43.1 16.8 51.1M31.5 24.5Q43.3 14.5 67.4 10.7M70.2 52.9Q72.2 53.4 72.4 53.8M70.2 52.9Q67.1 45.7 66.2 47.2M70.2 52.9Q72.1 48.6 62.7 56.8M35.0 72.2Q35.1 68.1 38.9 68.3M35.0 72.2Q28.2 67.6 16.8 51.1M35.0 72.2Q49.0 59.8 62.7 56.8M72.4 53.8Q68.0 47.4 66.2 47.2M72.4 53.8Q65.7 54.2 62.7 56.8M66.2 62.0Q62.1 59.8 62.7 56.8M70.2 52.9Q69.8 53.7 66.2 62.0M72.4 53.8Q75.0 57.3 66.2 62.0M77.9 27.3Q77.7 20.9 67.4 10.7M77.9 27.3Q73.9 37.5 66.2 47.2M70.2 52.9Q74.1 42.7 77.9 27.3M38.9 68.3Q56.9 61.1 62.7 56.8M38.9 68.3Q30.8 56.2 16.8 51.1M67.4 10.7Q68.0 26.9 66.2 47.2M67.4 10.7Q50.7 21.6 38.8 35.5M66.2 47.2Q68.5 57.3 62.7 56.8M87.2 77.1Q81.3 86.0 86.3 85.9M87.2 77.1Q81.3 70.5 87.2 66.6M66.2 62.0Q71.9 63.6 87.2 77.1M16.8 51.1Q34.7 39.4 38.8 35.5M87.2 66.6Q88.6 71.3 86.3 85.9M72.4 53.8Q79.2 61.5 87.2 66.6M66.2 62.0Q71.2 79.9 86.3 85.9M66.2 47.2Q57.9 46.8 38.8 35.5' stroke-width='.7'/%3E%3C/g%3E%3Cg fill='%23fff'%3E%3Ccircle cx='6.0' cy='87.0' r='2.1'/%3E%3Ccircle cx='31.5' cy='24.5' r='2.1'/%3E%3Ccircle cx='70.2' cy='52.9' r='1.9'/%3E%3Ccircle cx='35.0' cy='72.2' r='1.3'/%3E%3Ccircle cx='72.4' cy='53.8' r='0.9'/%3E%3Ccircle cx='66.2' cy='62.0' r='1.2'/%3E%3Ccircle cx='77.9' cy='27.3' r='1.0'/%3E%3Ccircle cx='38.9' cy='68.3' r='0.9'/%3E%3Ccircle cx='67.4' cy='10.7' r='1.7'/%3E%3Ccircle cx='66.2' cy='47.2' r='1.2'/%3E%3Ccircle cx='87.2' cy='77.1' r='1.9'/%3E%3Ccircle cx='16.8' cy='51.1' r='1.5'/%3E%3Ccircle cx='87.2' cy='66.6' r='1.8'/%3E%3Ccircle cx='62.7' cy='56.8' r='1.2'/%3E%3Ccircle cx='86.3' cy='85.9' r='2.0'/%3E%3Ccircle cx='38.8' cy='35.5' r='1.2'/%3E%3C/g%3E%3C/svg%3E") center / 100% 100% no-repeat;
-  animation: g-drift 14s ease-in-out infinite alternate, g-pulse 2.2s ease-in-out infinite alternate, g-hue 9s linear infinite;
+  inset: -12%;
+  background: url(art/web.svg) center / 100% 100% no-repeat;
+  animation: g-drift 16s ease-in-out infinite alternate, g-shimmer 8s linear infinite;
 }
 .g-face[data-tier="web"]::after {
   padding: calc(var(--cell) * .045);
-  background: conic-gradient(from var(--spin, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #7df9ff, #c79bff, #ff8fd1);
+  background: conic-gradient(from var(--spin, 0deg), #4de8ff, #a46bff, #ff5fc8, #ffe27a, #8ff7c8, #4de8ff);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
@@ -97,13 +109,12 @@
 
 @property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes g-spin { to { --spin: 360deg; } }
-@keyframes g-sheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
-@keyframes g-aurora { from { transform: translate(-8%, 4%) rotate(-8deg); } to { transform: translate(8%, -6%) rotate(10deg); } }
 @keyframes g-churn { from { transform: translate(-6%, 5%) rotate(0deg) scale(1); } to { transform: translate(6%, -5%) rotate(25deg) scale(1.1); } }
-@keyframes g-swirl { to { transform: rotate(360deg); } }
-@keyframes g-drift { from { transform: rotate(-12deg) scale(1.05); } to { transform: rotate(14deg) scale(1.25) translate(4%, -3%); } }
-@keyframes g-pulse { from { opacity: .7; } to { opacity: 1; } }
-@keyframes g-hue { to { filter: hue-rotate(360deg); } }
+@keyframes g-curtain { to { background-position: calc(var(--cell) * -2) 0, calc(var(--cell) * 2.7) -12%; } }
+@keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
+@keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
+@keyframes g-shimmer { to { filter: hue-rotate(360deg); } }
+@keyframes g-drift { from { transform: rotate(-6deg) scale(1.02); } to { transform: rotate(8deg) scale(1.14); } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after { animation: none !important; }

@@ -22,17 +22,21 @@
 <body>
   <main>
     <h1>2048 tiles</h1>
-    <p>Every tile the game can make, 2 through 131072, drawn by the same code and CSS as the board. From 128 up they glow; past 4096 each one gets its own look: foil, molten, aurora, nebula, and the cosmic web.</p>
+    <p>Every tile the game can make, 2 through 131072, drawn by the same code and CSS as the board. From 128 up they glow; past 4096 each one gets its own look: foil, molten, aurora, a galaxy, and the cosmic web.</p>
     <div class="grid" id="grid"></div>
   </main>
   <script type="module">
     import { tileColors, paintFace, tier } from "./palette.mjs";
     const grid = document.getElementById("grid");
-    for (let v = 2; v <= 131072; v *= 2) {
+    // ?size=240 draws them bigger, ?from=8192 skips the small ones
+    const q = new URLSearchParams(location.search), size = +q.get("size") || 96, from = +q.get("from") || 2;
+    grid.style.gridTemplateColumns = `repeat(auto-fill, minmax(${size + 8}px, 1fr))`;
+    for (let v = from; v <= 131072; v *= 2) {
       const fig = document.createElement("figure"), box = document.createElement("div"), face = document.createElement("div");
       box.className = "tile";
+      box.style.width = box.style.height = size + "px";
       face.className = "g-face";
-      paintFace(face, v, 96); // the same function the board uses
+      paintFace(face, v, size); // the same function the board uses
       box.append(face);
       const cap = document.createElement("figcaption");
       cap.textContent = `2^${Math.log2(v)} · ${tier(v) || tileColors(v)[0]}`;
