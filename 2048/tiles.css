@@ -94,7 +94,17 @@
 .g-face[data-tier="web"]::before {
   inset: -12%;
   background: url(art/web.webp) center / cover no-repeat;
-  animation: g-drift 16s ease-in-out infinite alternate, g-breathe 2.4s ease-in-out infinite alternate;
+  animation: g-webdrift 12s ease-in-out infinite alternate, g-breathe 2.4s ease-in-out infinite alternate;
+}
+/* sparkles on the clusters and strands, in two halves fading out of step; they drift with the web */
+.g-face[data-tier="web"] .g-fx {
+  position: absolute; inset: -12%; z-index: -1; pointer-events: none; mix-blend-mode: screen;
+  background: url(art/web-sparks-a.webp) center / cover no-repeat;
+  animation: g-webdrift 12s ease-in-out infinite alternate, g-twinkle 1.7s ease-in-out infinite alternate;
+}
+.g-face[data-tier="web"] .g-fx[data-fx="b"] {
+  background-image: url(art/web-sparks-b.webp);
+  animation: g-webdrift 12s ease-in-out infinite alternate, g-twinkle 2.3s ease-in-out infinite alternate-reverse;
 }
 .g-face[data-tier="web"]::after { box-shadow: inset 0 0 calc(var(--cell) * .12) rgba(18, 4, 31, .8); z-index: 0; }
 
@@ -105,7 +115,12 @@
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-drift { from { transform: rotate(-6deg) scale(1.02); } to { transform: rotate(8deg) scale(1.14); } }
 @keyframes g-breathe { from { opacity: .72; } to { opacity: 1; } }
+@keyframes g-webdrift {
+  from { transform: translate(-2%, 1.5%) rotate(-8deg) scale(1.04); }
+  to { transform: translate(2%, -2%) rotate(9deg) scale(1.2); }
+}
+@keyframes g-twinkle { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after { animation: none !important; }
+  .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }
 }

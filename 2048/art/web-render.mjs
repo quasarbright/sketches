@@ -59,6 +59,9 @@ function draw(SIZE) {
   g.globalCompositeOperation = "lighter";
   g.lineCap = "round"; g.lineJoin = "round";
 
+  // points to twinkle, kept from the drawing so they sit exactly on the web: [x, y, radius]
+  const sparks = [];
+  let keepEvery = 0;
   function wavy([x1, y1], [x2, y2], amp) {
     const len = Math.hypot(x2 - x1, y2 - y1), nx = -(y2 - y1) / len, ny = (x2 - x1) / len;
     const n = Math.max(4, Math.round(len / 5)), p1 = rnd() * 6.28, p2 = rnd() * 6.28;
@@ -67,6 +70,7 @@ function draw(SIZE) {
       const t = i / n, w = Math.sin(t * Math.PI) * (Math.sin(t * 7 + p1) * 0.65 + Math.sin(t * 19 + p2) * 0.35) * len * amp;
       const x = x1 + (x2 - x1) * t + nx * w, y = y1 + (y2 - y1) * t + ny * w;
       i ? g.lineTo(x, y) : g.moveTo(x, y);
+      if (keepEvery && i % keepEvery === 0 && i && i < n) sparks.push([x, y, SIZE * 0.005]);
     }
   }
   function blob(x, y, r, a) {
@@ -89,13 +93,16 @@ function draw(SIZE) {
       // a strand is a loose bundle of fibers, each with its own wobble
       const spread = fibers > 1 ? SIZE * 0.006 * fibers : 0;
       for (let f = 0; f < fibers; f++) {
+        keepEvery = fibers > 1 && f === 0 ? (fibers > 2 ? 3 : 6) : 0;
         const j = () => [(rnd() - 0.5) * spread, (rnd() - 0.5) * spread];
         const [dx1, dy1] = j(), [dx2, dy2] = j();
         g.strokeStyle = `rgba(255,255,255,${(a * (fibers > 1 ? 1.7 : 1)) / Math.sqrt(fibers)})`; g.lineWidth = w;
         wavy([p[0] + dx1, p[1] + dy1], [q[0] + dx2, q[1] + dy2], wave * (1 + rnd() * 0.8)); g.stroke();
       }
     }
+    keepEvery = 0;
     for (const [x, y] of corners) blob(x, y, cr * (0.7 + rnd() * 0.5), ca);
+    if (fibers > 1) for (const [x, y] of corners) sparks.push([x, y, cr * 0.6]);
     if (cells === 16) big.push(...corners);
   }
   // matter piles up toward the big clusters: a broad glow around each
@@ -119,12 +126,36 @@ function draw(SIZE) {
   for (let i = 0; i < d.length; i += 4) { const c = lut[d[i]]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
   g.globalCompositeOperation = "source-over";
   g.putImageData(img, 0, 0);
-  return cv.toDataURL("image/webp", 0.88);
+  const web = cv.toDataURL("image/webp", 0.88);
+
+  // two layers of sparkles on the clusters and along the strands, split at random between them;
+  // the tile fades the two in and out of step, so the web glitters
+  let s2 = 7;
+  const r2 = () => ((s2 = (s2 * 16807) % 2147483647) / 2147483647);
+  const layers = [[], []];
+  for (const sp of sparks) layers[r2() < 0.5 ? 0 : 1].push(sp);
+  const out = layers.map((list) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = SIZE;
+    const h = c.getContext("2d");
+    h.globalCompositeOperation = "lighter";
+    for (const [x, y, r0] of list) {
+      const r = r0 * (0.8 + r2() * 0.9);
+      const grad = h.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(255,252,232,1)"); grad.addColorStop(0.25, "rgba(255,206,110,.75)");
+      grad.addColorStop(0.6, "rgba(255,120,90,.22)"); grad.addColorStop(1, "rgba(200,60,200,0)");
+      h.fillStyle = grad; h.beginPath(); h.arc(x, y, r, 0, 6.283); h.fill();
+    }
+    return c.toDataURL("image/webp", 0.9);
+  });
+  return [web, ...out];
 }
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
-const url = await page.evaluate(draw, SIZE);
+const urls = await page.evaluate(draw, SIZE);
 await browser.close();
-writeFileSync(new URL("./web.webp", import.meta.url), Buffer.from(url.split(",")[1], "base64"));
-console.log("wrote art/web.webp", Math.round((url.length * 3) / 4 / 1024) + " KB");
+["web.webp", "web-sparks-a.webp", "web-sparks-b.webp"].forEach((name, i) => {
+  writeFileSync(new URL(`./${name}`, import.meta.url), Buffer.from(urls[i].split(",")[1], "base64"));
+  console.log(`wrote art/${name}`, Math.round((urls[i].length * 3) / 4 / 1024) + " KB");
+});
