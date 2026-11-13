@@ -572,6 +572,17 @@
           if (m == 6) base = mix(uFireHot, uFireCool, sqrt(max(0.0, 1.0 - float(s.b) / ${FIRE_LIFE}.0)));
           if (m == 9) base = mix(uLavaHot, uLavaCool, sqrt(max(0.0, 1.0 - float(s.b) / ${LAVA_LIFE}.0)));
           col = base * (1.0 + (float(s.g) / 255.0 * 2.0 - 1.0) * uShade[m]);
+          // stone and wood never move, so they get a texture tied to the grid itself, like the
+          // rail swatches: stone in courses of 8x4 bricks, wood with broken grain lines
+          if (m == 4) {
+            int course = p.y / 4;
+            bool joint = p.y % 4 == 0 || (p.x + (course % 2) * 4) % 8 == 0;
+            if (joint) col *= 0.62;
+          } else if (m == 5) {
+            uint seg = uint(p.x / 5) * 73856093u ^ uint(p.y) * 19349663u;
+            seg = (seg ^ (seg >> 13u)) * 0x5bd1e995u;
+            if (p.y % 4 == 1 && ((seg >> 15u) & 3u) != 0u) col *= 0.68;
+          }
         }
       }
       if (uOverlay == 1) {
