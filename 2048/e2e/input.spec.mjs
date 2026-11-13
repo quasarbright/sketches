@@ -57,7 +57,8 @@ test("the bot button toggles with a click, and a key press takes over from the b
   await page.evaluate(() => window.game2048.setSpeedPos(100));
   await page.locator("#botBtn").click();
   await expect(page.locator("#botLabel")).toHaveText("Take over");
-  await expect(page.locator("#snake")).toHaveClass(/is-on/);
+  await expect(page.locator("#botBadge")).toBeVisible();
+  await expect(page.locator("#botBtn")).toHaveClass(/is-teal/);
   await expect(page.locator("#think")).toBeVisible();
   await page.waitForFunction(() => window.game2048.state.botMoves >= 2);
   // a human move stops the bot and is made as well
@@ -71,7 +72,8 @@ test("the bot button toggles with a click, and a key press takes over from the b
   expect(after.bot).toBe(false);
   expect(after.moves - after.botMoves).toBe(before.moves - before.botMoves + 1);
   await expect(page.locator("#botLabel")).toHaveText("Let the bot play");
-  await expect(page.locator("#snake")).not.toHaveClass(/is-on/);
+  await expect(page.locator("#botBadge")).toBeHidden();
+  await expect(page.locator("#botBtn")).toHaveClass(/is-gold/);
   // and it stays stopped
   const n = after.moves;
   await page.waitForTimeout(300);
@@ -101,4 +103,26 @@ test("the start screen ignores arrows; Play with a real click starts input", asy
   await load(page, CORNER);
   await page.keyboard.press("ArrowRight");
   expect((await state(page)).moves).toBe(1);
+});
+
+test("the sound button and M mute and unmute, and the choice survives a reload", async ({ page }) => {
+  const errors = await open(page, { menu: "play" });
+  expect(await page.evaluate(() => window.game2048.muted)).toBe(false);
+  await expect(page.locator("#soundBtn")).toHaveAttribute("aria-pressed", "true");
+  await page.locator("#soundBtn").click();
+  expect(await page.evaluate(() => window.game2048.muted)).toBe(true);
+  await expect(page.locator("#soundBtn")).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await page.waitForFunction(() => !!window.game2048);
+  expect(await page.evaluate(() => window.game2048.muted)).toBe(true);
+  await page.evaluate(() => { document.getElementById("menu").hidden = true; });
+  await page.keyboard.press("m");
+  expect(await page.evaluate(() => window.game2048.muted)).toBe(false);
+  // moves, merges and a blocked move all play without errors
+  await page.evaluate(() => window.game2048.load([2, 2, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0.5));
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(200);
+  expect(errors).toEqual([]);
 });

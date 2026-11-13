@@ -204,6 +204,13 @@ test.describe("phone", () => {
           if (!b.width || el.closest("[hidden]")) continue;
           if (b.left < -0.5 || b.right > W + 0.5 || b.top < -0.5 || b.bottom > H + 0.5) out.push(`${el.className} ${b.left},${b.top},${b.right},${b.bottom}`);
         }
+        // the top bar's pieces don't run into each other
+        const top = [".g-logo", "#botBadge", "#soundBtn", ".g-score"].map((q) => document.querySelector(q))
+          .filter((el) => el && !el.closest("[hidden]")).map((el) => [el.id || el.className, el.getBoundingClientRect()]);
+        for (let i = 0; i < top.length; i++) for (let j = i + 1; j < top.length; j++) {
+          const [na, a] = top[i], [nb, b] = top[j];
+          if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(`${na} overlaps ${nb}`);
+        }
         return { out, scroll: document.documentElement.scrollWidth - W };
       });
       expect(r.out, label).toEqual([]);
