@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Sand</title>
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- same identity as p5js/sand2: a dusk-colored room, a near-black box, sand gold.
+       Silkscreen (a pixel face, like the grain grid) for the title only; Rubik for the UI. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Rubik:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0e0d12;
+      --panel: #24202b;
+      --panel-2: #2e2937;
+      --border: #3b3545;
+      --text: #f0e9de;
+      --muted: #a69dac;
+      --faint: #6c6474;
+      --accent: #e6b870;
+      --accent-hi: #f3cf8f;
+      --on-accent: #1a1720;
+      --font-ui: "Rubik", system-ui, sans-serif;
+      --font-mono: "DM Mono", ui-monospace, monospace;
+      --font-display: "Silkscreen", ui-monospace, monospace;
+    }
+    html, body { height: 100%; overflow: hidden; }
+    body { background: var(--bg); }
+    [hidden] { display: none !important; }
+
+    #sand { position: absolute; top: 0; left: 0; display: block; touch-action: none; cursor: crosshair; }
+
+    .sd-head { position: fixed; top: 14px; left: 18px; z-index: 3; pointer-events: none; }
+    .sd-title {
+      margin: 0; font: 400 2rem/1 var(--font-display); color: var(--accent);
+      text-shadow: 0 3px 0 #7d5a28;
+    }
+    .sd-hint {
+      margin-top: 8px; font-size: .9rem; color: var(--text); max-width: 32ch;
+      text-shadow: 0 1px 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg);
+    }
+
+    /* the rail is the shared .tool-rail; tools show a heap of their material */
+    .tool-rail { z-index: 4; }
+    .tool canvas { width: 28px; height: 20px; image-rendering: pixelated; display: block; }
+    .tool.is-active { background: var(--panel-2); box-shadow: inset 0 0 0 2px var(--mat, var(--accent)); }
+    .tool .sd-play { display: none; }
+    .tool.is-paused .sd-play { display: block; }
+    .tool.is-paused .sd-pause { display: none; }
+    .tool .sd-play path { fill: currentColor; }
+
+    .sd-empty {
+      position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 2;
+      pointer-events: none; white-space: nowrap;
+      padding: 9px 18px; border-radius: 999px; font-size: 1rem;
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    }
+    #brushRing {
+      position: fixed; z-index: 2; pointer-events: none; border-radius: 50%;
+      transform: translate(-50%, -50%); border: 1.5px solid rgba(240, 233, 222, .5);
+    }
+
+    .sd-bar {
+      position: fixed; left: 50%; bottom: 38px; transform: translateX(-50%); z-index: 4;
+      display: flex; align-items: center; gap: 14px; padding: 6px 6px 6px 14px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35); white-space: nowrap;
+    }
+    .sd-slider { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .9rem; }
+    .sd-slider input { width: 110px; }
+    .sd-num { font-family: var(--font-mono); font-size: .8rem; color: var(--text); min-width: 5ch; }
+    .sd-bar { padding-right: 14px; }
+    .sd-corner { position: fixed; top: 16px; right: 16px; z-index: 4; }
+    .sd-corner .btn { border-radius: 999px; padding: 6px 14px; }
+
+    mike-footer[overlay] { opacity: 1 !important; text-shadow: 0 1px 2px var(--bg), 0 0 8px var(--bg); }
+
+    /* about-modal diagrams */
+    .sd-viz { display: block; width: 100%; max-width: 460px; margin: 14px auto 4px; border-radius: 8px; }
+    .sd-viz-caption { font-size: .8rem; color: var(--muted); text-align: center; margin: 2px 0 0; }
+    .cohesion-about ol, .cohesion-about ul { padding-left: 1.3em; }
+    .cohesion-about li { margin: .35em 0; }
+    .m-sand { color: #e6b870; } .m-water { color: #5e9cf0; } .m-acid { color: #86dc50; }
+    .m-wood { color: #c08a5c; } .m-fire { color: #ffb347; } .m-lava { color: #ff7a2e; }
+    .m-stone { color: #b4b6bd; }
+
+    .sd-nogl {
+      position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
+      color: var(--muted); text-align: center;
+    }
+
+    @media (max-width: 700px) {
+      .sd-head { top: 12px; left: 14px; }
+      .sd-title { font-size: 1.6rem; }
+      .sd-hint { font-size: .8rem; max-width: 26ch; }
+      .tool-rail .tool-group { padding: 4px; gap: 1px; }
+      .tool { width: 34px; height: 34px; }
+      .tool canvas { width: 24px; height: 17px; }
+      .sd-bar { bottom: 34px; gap: 12px; padding: 8px 12px; }
+      .sd-slider { gap: 6px; font-size: .8rem; }
+      .sd-slider input { width: 60px; }
+      .sd-corner { top: 12px; right: 12px; }
+      .sd-num { min-width: 4ch; font-size: .72rem; }
+    }
+    @media (max-height: 640px) {
+      .tool { width: 32px; height: 30px; }
+      .tool canvas { width: 22px; height: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="sand"></canvas>
+  <div id="brushRing" hidden></div>
+  <div class="sd-empty" id="emptyHint">Drag anywhere to pour sand</div>
+
+  <div class="sd-head">
+    <h1 class="sd-title">Sand</h1>
+    <div class="sd-hint" id="hint"></div>
+  </div>
+
+  <div class="tool-rail">
+    <div class="tool-group" id="materials"></div>
+    <div class="tool-group">
+      <button class="tool" id="playBtn" aria-label="Pause">
+        <svg class="sd-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" /></svg>
+        <svg class="sd-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" /></svg>
+      </button>
+      <button class="tool" id="stepBtn" title="Step (.): advance one step while paused" aria-label="Step">
+        <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z" /><path d="M18 5v14" /></svg>
+      </button>
+      <button class="tool" id="clearBtn" title="Clear: empty the whole box" aria-label="Clear">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="sd-bar">
+    <label class="sd-slider" title="Brush size ([ and ]): the radius of one dab, in grains">
+      <span>brush</span>
+      <input type="range" id="brush" min="1" max="40" step="1" value="6" title="Brush size ([ and ]): the radius of one dab, in grains" />
+      <span class="sd-num" id="brushNum"></span>
+    </label>
+    <label class="sd-slider" title="How many steps the simulation runs per second. Each step, every grain gets one chance to move and react.">
+      <span>speed</span>
+      <input type="range" id="speed" min="0" max="100" step="1" value="60" title="How many steps the simulation runs per second. Each step, every grain gets one chance to move and react." />
+      <span class="sd-num" id="speedNum"></span>
+    </label>
+  </div>
+
+  <div class="sd-corner">
+    <about-modal label="about">
+      <h2 class="title">Sand</h2>
+      <p class="intro">Paint materials and watch them fall, flow, burn and dissolve. The screen is a
+        grid of cells, each holding at most one grain, and every step each grain follows a few rules
+        about the cells right next to it. Everything else, from slopes to puddles to a forest fire,
+        comes out of those rules.</p>
+
+      <div class="section-label">everything at once</div>
+      <p>The obvious way to run this is one grain at a time: sand looks below itself and moves down
+        if the cell is empty. That's how the older version worked, 10,000 cells in a loop. This one
+        runs on the graphics card, which computes every cell of the next step at the same time,
+        each from a snapshot of the last step. That's fast enough for a whole screen of grains, but
+        it breaks the obvious rule. Two grains can both see the same empty cell and both move into
+        it, and one of them disappears. And an empty cell can't tell whether a grain is about to
+        arrive from above or from the side.</p>
+
+      <div class="section-label">moving in 2×2 blocks</div>
+      <p>The fix is to give every possible move a single owner. Each step, the grid is cut into
+        blocks of 2×2 cells. A grain only ever moves within its own block, and all four cells of a
+        block work out the same rearrangement together, then each keeps its own share. Nothing can
+        be claimed twice, because no other block touches those four cells. Within a block, in order:</p>
+      <ol>
+        <li>A grain in the top row falls straight down if the cell below is empty, or if it's
+          <span class="m-sand">sand</span> and the cell below is a liquid (the two swap, so sand sinks).</li>
+        <li>If nothing fell, a top grain slides diagonally down into an empty cell. That's what
+          gives piles their slopes.</li>
+        <li>If nothing moved yet, a <span class="m-water">liquid</span> that's resting on something
+          slides sideways into an empty cell. That's what flattens a puddle. Lava is thick, so it
+          only spreads one time in five.</li>
+      </ol>
+      <p>Grains in the bottom row of a block could never fall, so on the next step the blocks shift
+        one cell down and right, and on the step after that they shift back. The outlines in this
+        diagram are the blocks for the step about to run. Each block is also flipped left-to-right
+        at random, so a grain has no favorite side to slide toward.</p>
+      <canvas class="sd-viz" data-viz="blocks"></canvas>
+      <p class="sd-viz-caption">the real simulation, at 4 steps a second, with the next step's blocks outlined</p>
+
+      <div class="section-label">reacting to neighbors</div>
+      <p>Reactions are a second pass, and they need no blocks. A cell never changes another cell,
+        only itself: it looks at its 8 neighbors and decides what it becomes. For every burning
+        neighbor, <span class="m-wood">wood</span> has a 1% chance of catching fire, and gasoline
+        and gunpowder 10%. For every <span class="m-acid">acid</span> neighbor, wood has a 10%
+        chance of dissolving, sand 5% and stone 1%. Stone next to <span class="m-lava">lava</span>
+        melts into more lava at 0.3% per neighbor.</p>
+      <p><span class="m-fire">Fire</span> and lava also carry a countdown. Fire loses one tick for
+        every neighbor that's empty or won't burn, so it lasts as long as there's fuel around it
+        and dies in a few dozen steps in open air. Water puts it out at once. Lava counts down
+        against everything that isn't fire or lava, except while it's falling, and turns to <span class="m-stone">stone</span>
+        when it runs out, or the moment it touches water. Both get yellower as they run down.</p>
+      <canvas class="sd-viz" data-viz="react"></canvas>
+      <p class="sd-viz-caption">fire eating along a plank, acid on a sand pile, and lava landing in water</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    // ------------------------------------------------------------------ materials
+    // ids are what the shaders store; colors and shade amounts are shared by the shaders and
+    // the rail swatches. Probabilities and lifetimes match p5js/sand2.
+    const MAT = { EMPTY: 0, SAND: 1, WATER: 2, ACID: 3, STONE: 4, WOOD: 5, FIRE: 6, GASOLINE: 7, GUNPOWDER: 8, LAVA: 9 }
+    const FIRE_LIFE = 240, LAVA_LIFE = 1200
+    const BOX = [14, 13, 18]
+    const COLORS = {
+      [MAT.SAND]: [230, 184, 112], [MAT.WATER]: [52, 128, 232], [MAT.ACID]: [118, 214, 58],
+      [MAT.STONE]: [138, 140, 148], [MAT.WOOD]: [128, 82, 46], [MAT.GASOLINE]: [242, 214, 76],
+      [MAT.GUNPOWDER]: [92, 88, 100], [MAT.FIRE]: [255, 196, 64], [MAT.LAVA]: [255, 124, 30],
+    }
+    const FIRE_HOT = [255, 72, 28], FIRE_COOL = [255, 196, 64]
+    const LAVA_HOT = [226, 52, 16], LAVA_COOL = [255, 124, 30]
+    const SHADE = { [MAT.SAND]: .09, [MAT.WATER]: .06, [MAT.ACID]: .07, [MAT.STONE]: .14, [MAT.WOOD]: .14,
+      [MAT.FIRE]: .08, [MAT.GASOLINE]: .05, [MAT.GUNPOWDER]: .22, [MAT.LAVA]: .08 }
+
+    const TOOLS = [
+      { id: MAT.SAND, name: 'Sand', tip: 'falls and piles up, and sinks through liquids' },
+      { id: MAT.WATER, name: 'Water', tip: 'flows and spreads, puts out fire, and turns lava to stone' },
+      { id: MAT.ACID, name: 'Acid', tip: 'flows like water and dissolves wood, sand and stone' },
+      { id: MAT.STONE, name: 'Stone', tip: 'stays where you put it; lava can melt it' },
+      { id: MAT.WOOD, name: 'Wood', tip: 'stays where you put it and burns slowly' },
+      { id: MAT.FIRE, name: 'Fire', tip: 'spreads to things that burn and dies out without fuel' },
+      { id: MAT.GASOLINE, name: 'Gasoline', tip: 'flows like water and catches fire fast' },
+      { id: MAT.GUNPOWDER, name: 'Gunpowder', tip: 'piles like sand and catches fire fast' },
+      { id: MAT.LAVA, name: 'Lava', tip: 'a thick liquid that melts stone, lights fires, and cools into stone' },
+      { id: MAT.EMPTY, name: 'Eraser', tip: 'removes grains' },
+    ]
+
+    // ------------------------------------------------------------------ shaders
+    const VERT = `#version 300 es
+    void main() {
+      vec2 v = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+      gl_Position = vec4(v * 2.0 - 1.0, 0.0, 1.0);
+    }`
+
+    // Cells are RGBA16UI: r = material, g = shade (0-255, picked once per grain), b = life.
+    // Row 0 is the top of the screen; gravity points toward increasing rows.
+    const COMMON = `#version 300 es
+    precision highp float;
+    precision highp int;
+    precision highp usampler2D;
+    uniform usampler2D uState;
+    uniform ivec2 uSize;
+    uniform uint uStep;
+    uniform uint uSeed;
+    out uvec4 outCell;
+
+    const uint EMPTY = 0u, SAND = 1u, WATER = 2u, ACID = 3u, STONE = 4u, WOOD = 5u, FIRE = 6u,
+               GASOLINE = 7u, GUNPOWDER = 8u, LAVA = 9u, WALL = 255u;
+    const uint FIRE_LIFE = ${FIRE_LIFE}u, LAVA_LIFE = ${LAVA_LIFE}u;
+
+    // pcg3d (Jarzynski & Olano): mixes all three inputs, good enough for small probabilities
+    uvec3 pcg3d(uvec3 v) {
+      v = v * 1664525u + 1013904223u;
+      v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+      v ^= v >> 16u;
+      v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+      return v;
+    }
+    float u01(uint h) { return float(h >> 8u) / 16777216.0; }
+
+    // outside the grid is a wall: never moves, never gets moved into
+    uvec4 cellAt(ivec2 p) {
+      if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, uSize))) return uvec4(WALL, 0u, 0u, 0u);
+      return texelFetch(uState, p, 0);
+    }
+    bool isPowder(uint m) { return m == SAND || m == GUNPOWDER; }
+    bool isLiquid(uint m) { return m == WATER || m == ACID || m == GASOLINE || m == LAVA; }
+    `
+
+    // movement: 2x2 blocks, offset by one cell on alternate steps. All four fragments of a block
+    // compute the same rearrangement (same inputs, same random numbers) and keep their own cell.
+    const MOVE = COMMON + `
+    bool falls(uint m) { return isPowder(m) || isLiquid(m) || m == FIRE; }
+    // can a grain of mover go into a cell holding target? (sand sinks by swapping with liquid)
+    bool canDisplace(uint mover, uint target) {
+      if (target == EMPTY) return falls(mover);
+      return isPowder(mover) && isLiquid(target);
+    }
+    // probability of NOT spreading sideways/diagonally on a turn
+    float viscosity(uint m) { return m == LAVA ? 0.8 : 0.0; }
+    // probability that two different liquids touching swap places
+    float mixChance(uint m) { return m == LAVA ? 0.002 : 0.01; }
+    void swapCells(inout uvec4 x, inout uvec4 y) { uvec4 t = x; x = y; y = t; }
+
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      int off = int(uStep & 1u);
+      ivec2 o = (((p + off) >> 1) << 1) - off;   // this block's top-left cell
+      ivec2 l = p - o;                           // which of the four this fragment is
+
+      uvec3 h = pcg3d(uvec3(uvec2(o + 2), uStep ^ uSeed));
+      uvec3 h2 = pcg3d(h + uvec3(0x9e3779b9u));
+      bool mirror = (h.x & 1u) == 1u;
+      int dx = mirror ? 1 : 0;
+
+      // a b   (top row)       after the random mirror, a and c are on the "first" side
+      // c d   (bottom row)
+      uvec4 a = cellAt(o + ivec2(dx, 0)), b = cellAt(o + ivec2(1 - dx, 0));
+      uvec4 c = cellAt(o + ivec2(dx, 1)), d = cellAt(o + ivec2(1 - dx, 1));
+      // the cells under the block are only read, to tell whether c and d are resting on something
+      uint underC = cellAt(o + ivec2(dx, 2)).r, underD = cellAt(o + ivec2(1 - dx, 2)).r;
+      float r1 = u01(h.y), r2 = u01(h.z), r3 = u01(h2.x), r4 = u01(h2.y);
+
+      // Each grain moves at most once per step. ma..md say whether the grain now in that slot
+      // has already moved; a grain can only move into an empty slot or an unmoved liquid.
+      bool ma = false, mb = false, mc = false, md = false;
+      #define FREE(x, mx) (x.r == EMPTY || !mx)
+
+      // 1. fall straight down
+      if (canDisplace(a.r, c.r)) { swapCells(a, c); ma = mc = true; }
+      if (canDisplace(b.r, d.r)) { swapCells(b, d); mb = md = true; }
+
+      // 2. slide diagonally down
+      bool aSlides = !ma && a.r != EMPTY && (isPowder(a.r) || (isLiquid(a.r) && r1 >= viscosity(a.r)));
+      bool bSlides = !mb && b.r != EMPTY && (isPowder(b.r) || (isLiquid(b.r) && r1 >= viscosity(b.r)));
+      if (aSlides && FREE(d, md) && canDisplace(a.r, d.r)) { swapCells(a, d); ma = md = true; }
+      else if (bSlides && FREE(c, mc) && canDisplace(b.r, c.r)) { swapCells(b, c); mb = mc = true; }
+
+      // 3. liquids resting on something spread sideways (the top row always rests: it didn't fall)
+      if (!ma && isLiquid(a.r) && b.r == EMPTY && r3 >= viscosity(a.r)) { swapCells(a, b); ma = mb = true; }
+      else if (!mb && isLiquid(b.r) && a.r == EMPTY && r3 >= viscosity(b.r)) { swapCells(a, b); ma = mb = true; }
+      bool cRests = !canDisplace(c.r, underC), dRests = !canDisplace(d.r, underD);
+      if (!mc && isLiquid(c.r) && d.r == EMPTY && cRests && r2 >= viscosity(c.r)) { swapCells(c, d); mc = md = true; }
+      else if (!md && isLiquid(d.r) && c.r == EMPTY && dRests && r2 >= viscosity(d.r)) { swapCells(c, d); mc = md = true; }
+
+      // different liquids slowly mix
+      if (!mc && !md && isLiquid(c.r) && isLiquid(d.r) && c.r != d.r && r4 < min(mixChance(c.r), mixChance(d.r))) swapCells(c, d);
+      else if (!ma && !mc && isLiquid(a.r) && isLiquid(c.r) && a.r != c.r && r4 < min(mixChance(a.r), mixChance(c.r))) swapCells(a, c);
+
+      int lx = mirror ? 1 - l.x : l.x;
+      outCell = l.y == 0 ? (lx == 0 ? a : b) : (lx == 0 ? c : d);
+    }`
+
+    // reactions: each cell looks at its 8 neighbors and decides what it becomes
+    const REACT = COMMON + `
+    const ivec2 NB[8] = ivec2[8](ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1), ivec2(-1, 0),
+                                 ivec2(1, 0), ivec2(-1, 1), ivec2(0, 1), ivec2(1, 1));
+    float flammability(uint m) { return m == WOOD ? 0.01 : (m == GASOLINE || m == GUNPOWDER) ? 0.1 : 0.0; }
+    float acidVulnerability(uint m) { return m == WOOD ? 0.1 : m == SAND ? 0.05 : m == STONE ? 0.01 : 0.0; }
+    // chance that at least one of n neighbors succeeds, each with probability p
+    float chance(float p, int n) { return 1.0 - pow(1.0 - p, float(n)); }
+
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      uvec4 s = texelFetch(uState, p, 0);
+      uint m = s.r;
+      if (m == EMPTY || m == WATER || m == ACID) { outCell = s; return; }
+
+      int nAcid = 0, nBurning = 0, nLava = 0, nWater = 0, fireDrain = 0, lavaDrain = 0;
+      uint lavaLife = 0u;
+      for (int i = 0; i < 8; i++) {
+        uvec4 n = cellAt(p + NB[i]);
+        uint k = n.r == WALL ? EMPTY : n.r;
+        if (k == ACID) nAcid++;
+        if (k == WATER) nWater++;
+        if (k == FIRE || k == LAVA) nBurning++;
+        if (k == LAVA) { nLava++; lavaLife = max(lavaLife, n.b); }
+        // fire burns down next to empty space and things that won't burn
+        if (k != FIRE && k != LAVA && flammability(k) == 0.0) fireDrain++;
+        // lava cools next to anything that isn't fire or lava
+        if (k != FIRE && k != LAVA) lavaDrain++;
+      }
+
+      uvec3 h = pcg3d(uvec3(uvec2(p), (uStep ^ uSeed) + 0x51ed27u));
+      float rAcid = u01(h.x), rHeat = u01(h.y);
+      uint shade = h.z & 255u;
+
+      if (nAcid > 0 && rAcid < chance(acidVulnerability(m), nAcid)) { outCell = uvec4(EMPTY, 0u, 0u, 0u); return; }
+      if (m == STONE && nLava > 0 && rHeat < chance(0.003, nLava)) { outCell = uvec4(LAVA, shade, lavaLife, 0u); return; }
+      float f = flammability(m);
+      if (f > 0.0 && nBurning > 0 && rHeat < chance(f, nBurning)) { outCell = uvec4(FIRE, shade, FIRE_LIFE, 0u); return; }
+
+      if (m == FIRE) {
+        if (s.b == 0u) { outCell = uvec4(EMPTY, 0u, 0u, 0u); return; }
+        uint life = nWater > 0 ? 0u : s.b - min(s.b, uint(fireDrain));
+        outCell = uvec4(FIRE, s.g, life, 0u);
+        return;
+      }
+      if (m == LAVA) {
+        if (s.b == 0u) { outCell = uvec4(STONE, shade, 0u, 0u); return; }
+        // falling lava doesn't cool, or a long drop would freeze it into stone in midair
+        bool falling = cellAt(p + ivec2(0, 1)).r == EMPTY;
+        uint life = nWater > 0 ? 0u : falling ? s.b : s.b - min(s.b, uint(lavaDrain));
+        outCell = uvec4(LAVA, s.g, life, 0u);
+        return;
+      }
+      outCell = s;
+    }`
+
+    // painting: every cell within uRadius of the segment uFrom-uTo gets a fresh grain (or is erased)
+    const PAINT = COMMON + `
+    uniform vec2 uFrom, uTo;
+    uniform float uRadius;
+    uniform uint uMat;
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      uvec4 s = texelFetch(uState, p, 0);
+      vec2 q = vec2(p), ab = uTo - uFrom;
+      float len2 = dot(ab, ab);
+      float t = len2 > 0.0 ? clamp(dot(q - uFrom, ab) / len2, 0.0, 1.0) : 0.0;
+      if (length(q - (uFrom + ab * t)) > uRadius + 0.001) { outCell = s; return; }
+      if (uMat == EMPTY) { outCell = uvec4(0u); return; }
+      uvec3 h = pcg3d(uvec3(uvec2(p), (uStep ^ uSeed) + 0x2545f491u));
+      uint life = uMat == FIRE ? FIRE_LIFE : uMat == LAVA ? LAVA_LIFE : 0u;
+      outCell = uvec4(uMat, h.x & 255u, life, 0u);
+    }`
+
+    // resizing: keep the old grains, lined up along the bottom edge
+    const COPY = COMMON + `
+    uniform ivec2 uOldSize;
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      ivec2 q = p - ivec2(0, uSize.y - uOldSize.y);
+      if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, uOldSize))) { outCell = uvec4(0u); return; }
+      outCell = texelFetch(uState, q, 0);
+    }`
+
+    const RENDER = `#version 300 es
+    precision highp float;
+    precision highp usampler2D;
+    uniform usampler2D uState;
+    uniform ivec2 uSize;
+    uniform float uCellPx, uViewH;
+    uniform vec3 uColors[10];
+    uniform float uShade[10];
+    uniform vec3 uBox, uFireHot, uFireCool, uLavaHot, uLavaCool;
+    uniform int uOverlay, uBlockOff;   // about-modal diagram: cell grid + the next step's blocks
+    uniform vec3 uOverlayColor;
+    out vec4 frag;
+    void main() {
+      vec2 cf = vec2(gl_FragCoord.x, uViewH - gl_FragCoord.y) / uCellPx;
+      ivec2 p = ivec2(floor(cf));
+      vec3 col = uBox;
+      if (p.x < uSize.x && p.y < uSize.y) {
+        uvec4 s = texelFetch(uState, p, 0);
+        if (s.r != 0u) {
+          int m = int(min(s.r, 9u));
+          vec3 base = uColors[m];
+          if (m == 6) base = mix(uFireHot, uFireCool, sqrt(max(0.0, 1.0 - float(s.b) / ${FIRE_LIFE}.0)));
+          if (m == 9) base = mix(uLavaHot, uLavaCool, sqrt(max(0.0, 1.0 - float(s.b) / ${LAVA_LIFE}.0)));
+          col = base * (1.0 + (float(s.g) / 255.0 * 2.0 - 1.0) * uShade[m]);
+        }
+      }
+      if (uOverlay == 1) {
+        vec2 f = fract(cf) * uCellPx;
+        if (min(f.x, f.y) < 1.0) col = mix(col, vec3(0.0), 0.45);
+        bool bx = ((p.x + uBlockOff) & 1) == 0 && f.x < 2.0;
+        bool by = ((p.y + uBlockOff) & 1) == 0 && f.y < 2.0;
+        if (bx || by) col = mix(col, uOverlayColor, 0.8);
+      }
+      frag = vec4(col, 1.0);
+    }`
+
+    // ------------------------------------------------------------------ the simulation
+    class SandSim {
+      constructor(canvas) {
+        this.canvas = canvas
+        const gl = canvas.getContext('webgl2', { antialias: false, alpha: false })
+        if (!gl) throw new Error('no webgl2')
+        this.gl = gl
+        this.vao = gl.createVertexArray()
+        this.progs = {
+          move: this.program(MOVE), react: this.program(REACT), paint: this.program(PAINT),
+          copy: this.program(COPY), render: this.program(RENDER),
+        }
+        this.cols = 0; this.rows = 0
+        this.tex = []; this.fbo = []; this.cur = 0
+        this.stepN = 0
+        this.seed = (Math.random() * 2 ** 32) >>> 0
+        this.cellPx = 1
+      }
+
+      program(fragSrc) {
+        const gl = this.gl
+        const compile = (type, src) => {
+          const sh = gl.createShader(type)
+          gl.shaderSource(sh, src); gl.compileShader(sh)
+          if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh))
+          return sh
+        }
+        const p = gl.createProgram()
+        gl.attachShader(p, compile(gl.VERTEX_SHADER, VERT))
+        gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fragSrc))
+        gl.linkProgram(p)
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p))
+        const u = {}
+        const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS)
+        for (let i = 0; i < n; i++) {
+          const name = gl.getActiveUniform(p, i).name.replace(/\[0\]$/, '')
+          u[name] = gl.getUniformLocation(p, name)
+        }
+        return { p, u }
+      }
+
+      makeTarget(cols, rows) {
+        const gl = this.gl
+        const tex = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16UI, cols, rows, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, null)
+        for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.NEAREST)
+        for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE)
+        const fbo = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+        return { tex, fbo }
+      }
+
+      // (re)allocate the grid; existing grains are kept, aligned to the bottom edge
+      setSize(cols, rows) {
+        if (cols === this.cols && rows === this.rows) return
+        const gl = this.gl
+        const t0 = this.makeTarget(cols, rows), t1 = this.makeTarget(cols, rows)
+        const old = this.tex.length ? { tex: this.tex[this.cur], cols: this.cols, rows: this.rows } : null
+        this.cols = cols; this.rows = rows
+        if (old) {
+          this.pass(this.progs.copy, t0.fbo, old.tex, (u) => gl.uniform2i(u.uOldSize, old.cols, old.rows))
+        } else {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, t0.fbo)
+          gl.clearBufferuiv(gl.COLOR, 0, new Uint32Array(4))
+        }
+        for (const t of this.tex) gl.deleteTexture(t)
+        for (const f of this.fbo) gl.deleteFramebuffer(f)
+        this.tex = [t0.tex, t1.tex]; this.fbo = [t0.fbo, t1.fbo]; this.cur = 0
+      }
+
+      pass(prog, fbo, srcTex, setUniforms) {
+        const gl = this.gl
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+        gl.viewport(0, 0, this.cols, this.rows)
+        gl.useProgram(prog.p)
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, srcTex)
+        gl.uniform1i(prog.u.uState, 0)
+        gl.uniform2i(prog.u.uSize, this.cols, this.rows)
+        if (prog.u.uStep) gl.uniform1ui(prog.u.uStep, this.stepN >>> 0)
+        if (prog.u.uSeed) gl.uniform1ui(prog.u.uSeed, this.seed)
+        if (setUniforms) setUniforms(prog.u)
+        gl.bindVertexArray(this.vao)
+        gl.drawArrays(gl.TRIANGLES, 0, 3)
+      }
+
+      // run a pass from the current grid into the other one, then make that one current
+      flip(prog, setUniforms) {
+        this.pass(prog, this.fbo[1 - this.cur], this.tex[this.cur], setUniforms)
+        this.cur = 1 - this.cur
+      }
+
+      step() {
+        this.flip(this.progs.move)
+        this.flip(this.progs.react)
+        this.stepN++
+      }
+
+      paint(from, to, radius, mat) {
+        const gl = this.gl
+        this.flip(this.progs.paint, (u) => {
+          gl.uniform2f(u.uFrom, from.col, from.row)
+          gl.uniform2f(u.uTo, to.col, to.row)
+          gl.uniform1f(u.uRadius, radius)
+          gl.uniform1ui(u.uMat, mat)
+        })
+        this.seed = (this.seed + 0x9e3779b9) >>> 0   // fresh shades for every dab
+      }
+
+      clear() {
+        const gl = this.gl
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[this.cur])
+        gl.clearBufferuiv(gl.COLOR, 0, new Uint32Array(4))
+      }
+
+      // fill the grid from fn(col, row) -> material (used by the diagrams and tests)
+      load(fn) {
+        const gl = this.gl
+        const data = new Uint16Array(this.cols * this.rows * 4)
+        for (let r = 0; r < this.rows; r++) for (let c = 0; c < this.cols; c++) {
+          const m = fn(c, r) || 0, i = 4 * (r * this.cols + c)
+          data[i] = m; data[i + 1] = (Math.random() * 256) | 0
+          data[i + 2] = m === MAT.FIRE ? FIRE_LIFE : m === MAT.LAVA ? LAVA_LIFE : 0
+        }
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[this.cur])
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, data)
+      }
+
+      // the grid as a Uint32Array of [material, shade, life, 0] per cell, row 0 at the top
+      read() {
+        const gl = this.gl
+        const out = new Uint32Array(this.cols * this.rows * 4)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo[this.cur])
+        gl.readPixels(0, 0, this.cols, this.rows, gl.RGBA_INTEGER, gl.UNSIGNED_INT, out)
+        return out
+      }
+
+      render({ overlay = false } = {}) {
+        const gl = this.gl, { u } = this.progs.render
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        gl.viewport(0, 0, this.canvas.width, this.canvas.height)
+        gl.useProgram(this.progs.render.p)
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[this.cur])
+        gl.uniform1i(u.uState, 0)
+        gl.uniform2i(u.uSize, this.cols, this.rows)
+        gl.uniform1f(u.uCellPx, this.cellPx)
+        gl.uniform1f(u.uViewH, this.canvas.height)
+        gl.uniform3fv(u.uColors, PALETTE)
+        gl.uniform1fv(u.uShade, SHADES)
+        gl.uniform3fv(u.uBox, BOX.map((v) => v / 255))
+        gl.uniform3fv(u.uFireHot, FIRE_HOT.map((v) => v / 255))
+        gl.uniform3fv(u.uFireCool, FIRE_COOL.map((v) => v / 255))
+        gl.uniform3fv(u.uLavaHot, LAVA_HOT.map((v) => v / 255))
+        gl.uniform3fv(u.uLavaCool, LAVA_COOL.map((v) => v / 255))
+        gl.uniform1i(u.uOverlay, overlay ? 1 : 0)
+        gl.uniform1i(u.uBlockOff, this.stepN & 1)
+        gl.uniform3fv(u.uOverlayColor, [0.9, 0.72, 0.44])
+        gl.bindVertexArray(this.vao)
+        gl.drawArrays(gl.TRIANGLES, 0, 3)
+      }
+
+      dispose() {
+        this.gl.getExtension('WEBGL_lose_context')?.loseContext()
+      }
+    }
+
+    const PALETTE = new Float32Array(30), SHADES = new Float32Array(10)
+    for (let m = 1; m < 10; m++) {
+      PALETTE.set(COLORS[m].map((v) => v / 255), 3 * m)
+      SHADES[m] = SHADE[m]
+    }
+
+    // ------------------------------------------------------------------ page
+    const CELL_CSS = 3   // a grain is about 3 CSS pixels
+    const canvas = document.getElementById('sand')
+    let sim
+    try {
+      sim = new SandSim(canvas)
+    } catch (err) {
+      document.body.insertAdjacentHTML('beforeend', '<div class="sd-nogl">Sand needs WebGL2, which this browser doesn\'t have turned on.</div>')
+      throw err
+    }
+
+    let dpr = 1
+    function fit() {
+      const w = document.documentElement.clientWidth, h = document.documentElement.clientHeight
+      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
+      sim.cellPx = Math.max(1, Math.round(CELL_CSS * dpr))   // whole device pixels per cell
+      sim.setSize(Math.ceil(canvas.width / sim.cellPx), Math.ceil(canvas.height / sim.cellPx))
+    }
+    fit()
+    addEventListener('resize', fit)
+
+    // ---------- tools ----------
+    const hintEl = document.getElementById('hint')
+    const emptyHint = document.getElementById('emptyHint')
+    const matGroup = document.getElementById('materials')
+    let tool = TOOLS[0]
+
+    // CPU copy of the shader's coloring, for the rail swatches
+    function grainRGB(m, rand, life) {
+      let base = COLORS[m]
+      const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t)
+      if (m === MAT.FIRE) base = lerp(FIRE_HOT, FIRE_COOL, Math.sqrt(Math.max(0, 1 - life / FIRE_LIFE)))
+      if (m === MAT.LAVA) base = lerp(LAVA_HOT, LAVA_COOL, Math.sqrt(Math.max(0, 1 - life / LAVA_LIFE)))
+      const k = 1 + (rand * 2 - 1) * SHADE[m]
+      return base.map((v) => Math.min(255, v * k))
+    }
+
+    // a little heap of grains of this material
+    function drawSwatch(cv, m) {
+      const w = 14, h = 10
+      cv.width = w; cv.height = h
+      const g = cv.getContext('2d'), img = g.createImageData(w, h)
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const top = h - Math.round((h - 1) * (1 - Math.pow(Math.abs(x - (w - 1) / 2) / (w / 2), 2)))
+        if (y < top) continue
+        const age = Math.min(1, 0.1 + (h - 1 - y) / h + Math.random() * 0.3)
+        const life = m === MAT.FIRE ? FIRE_LIFE * (1 - age) : LAVA_LIFE * (1 - age)
+        const c = grainRGB(m, Math.random(), life), i = 4 * (y * w + x)
+        img.data.set([c[0], c[1], c[2], 255], i)
+      }
+      g.putImageData(img, 0, 0)
+    }
+
+    const ERASER_SVG = '<svg viewBox="0 0 24 24"><path d="M7 21h10"/><path d="M5.5 14.5 14 6a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11.5 18.5a2 2 0 0 1-2.8 0L5.5 15.3a.6.6 0 0 1 0-.8z"/><path d="m9 11 5 5"/></svg>'
+
+    TOOLS.forEach((t, i) => {
+      t.key = String((i + 1) % 10)
+      const btn = document.createElement('button')
+      btn.className = 'tool'
+      btn.title = `${t.name} (${t.key}): ${t.tip}`
+      btn.setAttribute('aria-label', t.name)
+      if (t.id === MAT.EMPTY) {
+        btn.innerHTML = ERASER_SVG
+        btn.style.setProperty('--mat', 'var(--muted)')
+      } else {
+        const cv = document.createElement('canvas')
+        drawSwatch(cv, t.id)
+        btn.appendChild(cv)
+        btn.style.setProperty('--mat', `rgb(${COLORS[t.id].join(',')})`)
+      }
+      btn.addEventListener('click', () => selectTool(t))
+      matGroup.appendChild(btn)
+      t.btn = btn
+    })
+
+    function selectTool(t) {
+      tool = t
+      for (const x of TOOLS) x.btn.classList.toggle('is-active', x === t)
+      hintEl.textContent = `${t.name} ${t.tip}`
+    }
+    selectTool(tool)
+
+    // ---------- playback ----------
+    let playing = true
+    const playBtn = document.getElementById('playBtn'), stepBtn = document.getElementById('stepBtn')
+    function syncPlay() {
+      playBtn.classList.toggle('is-paused', !playing)
+      playBtn.title = playing ? 'Pause (space): freeze the simulation; you can still paint' : 'Play (space): resume the simulation'
+      playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play')
+      stepBtn.disabled = playing
+    }
+    function togglePlay() { playing = !playing; syncPlay() }
+    playBtn.addEventListener('click', togglePlay)
+    stepBtn.addEventListener('click', () => sim.step())
+    document.getElementById('clearBtn').addEventListener('click', () => sim.clear())
+    syncPlay()
+
+    // ---------- sliders ----------
+    const brushEl = document.getElementById('brush'), brushNum = document.getElementById('brushNum')
+    const speedEl = document.getElementById('speed'), speedNum = document.getElementById('speedNum')
+    const SPEED_MIN = 10, SPEED_MAX = 2000
+    let brush = 6, stepsPerSec = 240
+    function syncSliders() {
+      brush = Number(brushEl.value)
+      brushNum.textContent = brush
+      stepsPerSec = Math.round(SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (speedEl.value / 100))
+      speedNum.textContent = stepsPerSec + '/s'
+    }
+    brushEl.addEventListener('input', syncSliders)
+    speedEl.addEventListener('input', syncSliders)
+    syncSliders()
+
+    // ---------- painting ----------
+    const ringEl = document.getElementById('brushRing')
+    let pointer = null, lastPainted = null, down = false
+    const toCell = (e) => ({ col: Math.floor(e.clientX * dpr / sim.cellPx), row: Math.floor(e.clientY * dpr / sim.cellPx) })
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      canvas.setPointerCapture(e.pointerId)
+      down = true; pointer = toCell(e); lastPainted = null
+      emptyHint.hidden = true
+    })
+    canvas.addEventListener('pointermove', (e) => {
+      if (down) pointer = toCell(e)
+      if (e.pointerType === 'touch') { ringEl.hidden = true; return }
+      const size = (2 * brush + 1) * sim.cellPx / dpr
+      ringEl.hidden = false
+      ringEl.style.width = ringEl.style.height = size + 'px'
+      ringEl.style.left = e.clientX + 'px'; ringEl.style.top = e.clientY + 'px'
+    })
+    canvas.addEventListener('pointerleave', () => { ringEl.hidden = true })
+    for (const type of ['pointerup', 'pointercancel']) {
+      canvas.addEventListener(type, () => { down = false; pointer = null; lastPainted = null })
+    }
+
+    // one dab per frame: a capsule from where the stroke was last frame to where it is now,
+    // so fast strokes leave no gaps and holding still keeps pouring
+    function paintStroke() {
+      if (!down || !pointer) return
+      sim.paint(lastPainted ?? pointer, pointer, brush, tool.id)
+      lastPainted = pointer
+    }
+
+    // ---------- loop ----------
+    let acc = 0, last = performance.now()
+    function frame(now) {
+      const dt = Math.min(0.1, (now - last) / 1000)
+      last = now
+      if (playing) {
+        acc = Math.min(acc + dt * stepsPerSec, 60)
+        while (acc >= 1) { acc -= 1; sim.step() }
+      }
+      paintStroke()
+      sim.render()
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+
+    // ---------- keys ----------
+    document.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (document.querySelector('.cohesion-modal-backdrop')) return
+      const t = TOOLS.find((x) => x.key === e.key)
+      if (t) selectTool(t)
+      else if (e.key === ' ') { e.preventDefault(); togglePlay() }
+      else if (e.key === '.' && !playing) sim.step()
+      else if (e.key === '[' || e.key === ']') {
+        brushEl.value = Number(brushEl.value) + (e.key === ']' ? 1 : -1)
+        syncSliders()
+      }
+    })
+
+    // ------------------------------------------------------------------ about-modal diagrams
+    // Each diagram is a small SandSim running the same shaders on its own canvas.
+    const VIZ = {
+      blocks: {
+        cols: 16, rows: 10, rate: 4, overlay: true, reset: 90,
+        scene: (c, r) => (r === 9 && c >= 9) || (r === 8 && c >= 12) ? MAT.STONE
+          : (r <= 2 && c >= 2 && c <= 5) ? MAT.SAND : (r <= 1 && c >= 10 && c <= 13) ? MAT.WATER : 0,
+        // keep a trickle of sand coming
+        every: (sim) => { if (sim.stepN % 3 === 0) sim.paint({ col: 4, row: 0 }, { col: 4, row: 0 }, 0, MAT.SAND) },
+      },
+      react: {
+        cols: 36, rows: 18, rate: 30, overlay: false, reset: 420,
+        scene: (c, r) => {
+          if (r === 11 && c >= 1 && c <= 11) return MAT.WOOD
+          if (r === 10 && c >= 1 && c <= 3) return MAT.FIRE
+          if (r >= 12 && c <= 12 && c >= 1 && r <= 12) return MAT.STONE
+          if (r >= 13 && c >= 13 && c <= 22 && r - 13 >= Math.abs(c - 17.5) - 1) return MAT.SAND
+          if (r >= 2 && r <= 4 && c >= 16 && c <= 19) return MAT.ACID
+          if (r >= 14 && c >= 25) return MAT.WATER
+          if (r >= 1 && r <= 4 && c >= 28 && c <= 32) return MAT.LAVA
+          return 0
+        },
+      },
+    }
+    let vizRunning = []
+    function startViz(el) {
+      for (const cv of el.querySelectorAll('canvas[data-viz]')) {
+        const spec = VIZ[cv.dataset.viz]
+        const w = cv.clientWidth
+        if (!w) continue
+        const d = Math.min(window.devicePixelRatio || 1, 2)
+        const cell = Math.floor(w * d / spec.cols)
+        cv.width = cell * spec.cols; cv.height = cell * spec.rows
+        cv.style.height = (cv.height / d) + 'px'
+        const s = new SandSim(cv)
+        s.cellPx = cell
+        s.setSize(spec.cols, spec.rows)
+        const reset = () => { s.load(spec.scene); s.stepN = 0 }
+        reset()
+        const run = { s, raf: 0, acc: 0, last: performance.now() }
+        const tick = (now) => {
+          run.acc = Math.min(run.acc + (now - run.last) / 1000 * spec.rate, 10)
+          run.last = now
+          while (run.acc >= 1) {
+            run.acc -= 1
+            if (s.stepN >= spec.reset) reset()
+            spec.every?.(s)
+            s.step()
+          }
+          s.render({ overlay: spec.overlay })
+          run.raf = requestAnimationFrame(tick)
+        }
+        run.raf = requestAnimationFrame(tick)
+        vizRunning.push(run)
+      }
+    }
+    function stopViz() {
+      for (const r of vizRunning) { cancelAnimationFrame(r.raf); r.s.dispose() }
+      vizRunning = []
+    }
+    document.addEventListener('cohesion-modal-open', (e) => {
+      if (e.detail.className?.includes('cohesion-about')) requestAnimationFrame(() => startViz(e.detail.el))
+    })
+    document.addEventListener('cohesion-modal-close', (e) => {
+      if (e.detail.className?.includes('cohesion-about')) stopViz()
+    })
+
+    // test hook
+    window.sand = { sim, MAT, selectTool: (id) => selectTool(TOOLS.find((t) => t.id === id)),
+      setPlaying: (p) => { playing = p; syncPlay() }, get tool() { return tool } }
+  </script>
+</body>
+</html>
