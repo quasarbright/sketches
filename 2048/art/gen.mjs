@@ -62,8 +62,8 @@ function galaxy() {
   return uri(svg);
 }
 
-// ---- cosmic web: a fine web of filaments between clusters of galaxies, over faint gas. Comets
-// of light run along the threads (SMIL stroke-dashoffset) and the clusters breathe.
+// ---- cosmic web: a fine web of filaments between clusters of galaxies, over faint gas. Static:
+// the tile moves it with transforms, which don't make the browser redraw the image.
 function web() {
   // clusters spread evenly over the tile (and a little past its edges), so the web fills it
   const nodes = [];
@@ -77,21 +77,16 @@ function web() {
     if (i < j && Math.hypot(a[0] - b[0], a[1] - b[1]) < 12.5 && rnd() < 0.85) { edges.add(`${i}-${j}`); degree[i]++; degree[j]++; }
   }));
   nodes.forEach((n, i) => { n[2] = 0.25 + Math.max(0, degree[i] - 3) * 0.4 + rnd() * 0.3; });
-  let soft = "", comets = "";
+  let soft = "";
   for (const e of edges) {
     const [i, j] = e.split("-").map(Number), [ax, ay] = nodes[i], [bx, by] = nodes[j];
     const mx = (ax + bx) / 2 + (rnd() - 0.5) * 7, my = (ay + by) / 2 + (rnd() - 0.5) * 7;
     const d = `M${f(ax)} ${f(ay)}Q${f(mx)} ${f(my)} ${f(bx)} ${f(by)}`;
     soft += d;
-    if (rnd() < 0.4) {
-      const dur = f(1.6 + rnd() * 2.4), to = (rnd() < 0.5 ? 1 : -1) * 30, begin = f(-rnd() * 4);
-      comets += `<path d='${d}' stroke-dasharray='2.2 28'><animate attributeName='stroke-dashoffset' from='0' to='${to}' dur='${dur}s' begin='${begin}s' repeatCount='indefinite'/></path>`;
-    }
   }
   let clusters = "";
   nodes.forEach(([x, y, r]) => {
-    const d = f(1.6 + rnd() * 2.4), b = f(-rnd() * 3);
-    clusters += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(r * 2.4)}' fill='url(#n)'><animate attributeName='opacity' values='.4;1;.4' dur='${d}s' begin='${b}s' repeatCount='indefinite'/></circle><circle cx='${f(x)}' cy='${f(y)}' r='${f(0.25 + r * 0.3)}' fill='#fff'/>`;
+    clusters += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(r * 2.4)}' fill='url(#n)' opacity='${f(0.55 + rnd() * 0.45)}'/><circle cx='${f(x)}' cy='${f(y)}' r='${f(0.25 + r * 0.3)}' fill='#fff'/>`;
   });
   let gasClouds = "";
   for (let i = 0; i < 9; i++) gasClouds += `<circle cx='${f(rnd() * 100)}' cy='${f(rnd() * 100)}' r='${f(14 + rnd() * 16)}' fill='${["#5a2bd0", "#1a6bd0", "#c02b9a"][i % 3]}'/>`;
@@ -106,10 +101,85 @@ function web() {
     <g fill='none' stroke='url(#g)' stroke-linecap='round'>
       <path d='${soft}' stroke-width='4' opacity='.6' filter='url(#b)'/>
       <path d='${soft}' stroke-width='.45'/>
-      <g stroke='#ffffff' stroke-width='.9'>${comets}</g></g>
+</g>
     ${clusters}</svg>`;
   return uri(svg);
 }
 
+
+// ---- lava: plates of dark cooled crust split by glowing cracks. The cracks are the edges of a
+// Voronoi diagram (from a Bowyer-Watson Delaunay triangulation), made jagged. lava-glow.svg is
+// the same cracks blurred, for the tile to pulse.
+function delaunay(pts) {
+  const big = [[-1e3, -1e3], [1e3, -1e3], [0, 1e3]];
+  const P = [...pts, ...big], n = pts.length;
+  const circ = (a, b, c) => {
+    const [ax, ay] = P[a], [bx, by] = P[b], [cx, cy] = P[c];
+    const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+    const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+    const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+    return [ux, uy, (ax - ux) ** 2 + (ay - uy) ** 2];
+  };
+  let tris = [[n, n + 1, n + 2, ...circ(n, n + 1, n + 2)]];
+  for (let i = 0; i < n; i++) {
+    const [x, y] = P[i], bad = tris.filter((t) => (x - t[3]) ** 2 + (y - t[4]) ** 2 < t[5]);
+    const edges = new Map();
+    for (const t of bad) for (const [a, b] of [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]]) {
+      const k = a < b ? `${a},${b}` : `${b},${a}`; edges.set(k, edges.has(k) ? null : [a, b]);
+    }
+    tris = tris.filter((t) => !bad.includes(t));
+    for (const e of edges.values()) if (e) tris.push([e[0], e[1], i, ...circ(e[0], e[1], i)]);
+  }
+  return tris;
+}
+function cracks() {
+  const pts = [];
+  for (let tries = 0; tries < 6000 && pts.length < 30; tries++) {
+    const x = -15 + rnd() * 130, y = -15 + rnd() * 130;
+    if (pts.every(([u, v]) => Math.hypot(u - x, v - y) > 22)) pts.push([x, y]);
+  }
+  const tris = delaunay(pts);
+  // Voronoi edge = the two circumcenters of the triangles sharing a Delaunay edge
+  const byEdge = new Map();
+  for (const t of tris) for (const [a, b] of [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]]) {
+    const k = a < b ? `${a},${b}` : `${b},${a}`;
+    (byEdge.get(k) || byEdge.set(k, []).get(k)).push([t[3], t[4]]);
+  }
+  let d = "";
+  for (const cs of byEdge.values()) {
+    if (cs.length !== 2) continue;
+    const [[x1, y1], [x2, y2]] = cs;
+    if (Math.max(Math.abs(x1 - 50), Math.abs(y1 - 50), Math.abs(x2 - 50), Math.abs(y2 - 50)) > 70) continue;
+    // jagged: split into a few segments pushed sideways at random
+    const len = Math.hypot(x2 - x1, y2 - y1), nx = -(y2 - y1) / len, ny = (x2 - x1) / len, k = Math.max(2, Math.round(len / 4));
+    d += `M${f(x1)} ${f(y1)}`;
+    for (let i = 1; i <= k; i++) {
+      const t = i / k, j = i === k ? 0 : (rnd() - 0.5) * 2.4;
+      d += `L${f(x1 + (x2 - x1) * t + nx * j)} ${f(y1 + (y2 - y1) * t + ny * j)}`;
+    }
+  }
+  return { pts, d };
+}
+function lava() {
+  const { pts, d } = cracks();
+  const plates = pts.map(([x, y]) => `<circle cx='${f(x)}' cy='${f(y)}' r='${f(5 + rnd() * 6)}' fill='${["#2a0805", "#1a0503", "#33100a"][Math.floor(rnd() * 3)]}'/>`).join("");
+  const art = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='xMidYMid slice'>
+    <defs><filter id='soft' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='4'/></filter>
+      <filter id='g' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='1.1'/></filter></defs>
+    <rect width='100' height='100' fill='#0e0302'/>
+    <g filter='url(#soft)'>${plates}</g>
+    <g fill='none' stroke-linecap='round' stroke-linejoin='round'>
+      <path d='${d}' stroke='#e02800' stroke-width='3.4' opacity='.6' filter='url(#g)'/>
+      <path d='${d}' stroke='#ff5a0a' stroke-width='1.2'/>
+      <path d='${d}' stroke='#ffc65a' stroke-width='.4'/></g></svg>`;
+  const glow = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='xMidYMid slice'>
+    <defs><filter id='g' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='2.6'/></filter></defs>
+    <path d='${d}' fill='none' stroke='#ff4a10' stroke-width='4' stroke-linecap='round' filter='url(#g)'/></svg>`;
+  return [uri(art), uri(glow)];
+}
+
 const out = process.argv[2];
 for (const [name, fn] of Object.entries({ aurora, galaxy, web })) writeFileSync(`${out}/${name}.svg`, fn());
+const [lavaArt, lavaGlow] = lava();
+writeFileSync(`${out}/lava.svg`, lavaArt);
+writeFileSync(`${out}/lava-glow.svg`, lavaGlow);

@@ -12,34 +12,35 @@
   content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none;
 }
 
-/* 8192: foil, a slowly turning rainbow */
-.g-face[data-tier="foil"] {
-  background: conic-gradient(from var(--spin, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
-  color: #3a1670;
-  animation: g-spin 6s linear infinite;
+/* Every special tile animates only transform and opacity, which the GPU does without
+   redrawing. Animating backgrounds, filters, conic angles or self-animating SVG made the
+   gallery use 20-40% CPU per tile and lag. */
+
+/* 8192: foil, a slowly turning rainbow (a big conic disc spinning under the tile) */
+.g-face[data-tier="foil"] { background: #c79bff; color: #3a1670; }
+.g-face[data-tier="foil"]::before {
+  inset: -50%; border-radius: 0;
+  background: conic-gradient(#ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
+  animation: g-turn 6s linear infinite;
 }
 
-/* 16384: molten, glowing metal churning under a white-hot numeral; dark enough at the edges
-   that the number reads */
+/* 16384: lava, plates of dark crust split by glowing cracks that throb with heat.
+   art/lava.svg is the crust and cracks; art/lava-glow.svg is the cracks blurred. */
 .g-face[data-tier="molten"] {
-  background: #4a0806; color: #fff8e0;
-  text-shadow: 0 0 calc(var(--cell) * .03) #2a0200, 0 0 calc(var(--cell) * .03) #2a0200, 0 0 calc(var(--cell) * .14) #ff7a1a;
+  background: #0e0302 url(art/lava.svg) center / cover;
+  color: #fff4d6;
+  text-shadow: 0 0 calc(var(--cell) * .03) #1c0603, 0 0 calc(var(--cell) * .03) #1c0603, 0 0 calc(var(--cell) * .12) #ff7a1a;
 }
 .g-face[data-tier="molten"]::before {
-  inset: -40%;
-  background:
-    radial-gradient(25% 25% at 30% 70%, rgba(255, 220, 120, .8), transparent 70%),
-    radial-gradient(32% 32% at 70% 40%, #e8901c, transparent 70%),
-    radial-gradient(45% 45% at 50% 55%, #c8400f, transparent 75%),
-    radial-gradient(50% 50% at 20% 25%, #a8200f, transparent 75%);
-  filter: blur(calc(var(--cell) * .04));
-  animation: g-churn 4s ease-in-out infinite alternate;
+  background: url(art/lava-glow.svg) center / cover;
+  mix-blend-mode: screen;
+  animation: g-heat 2.6s ease-in-out infinite alternate;
 }
-.g-face[data-tier="molten"]::after { box-shadow: inset 0 0 calc(var(--cell) * .2) rgba(30, 0, 0, .85); z-index: 0; }
+.g-face[data-tier="molten"]::after { box-shadow: inset 0 0 calc(var(--cell) * .16) rgba(0, 0, 0, .6); z-index: 0; }
 
 /* 32768: aurora, curtains of green light rippling over a night sky, their tops fading to violet.
-   art/aurora.svg is one curtain, periodic across its width; two copies scroll at different
-   speeds, and a blurred third adds the glow. */
+   art/aurora.svg is one curtain, periodic across its width. Two strips of it slide sideways at
+   different speeds (the back one blurred, for the glow). */
 .g-face[data-tier="aurora"] {
   background: radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent),
     radial-gradient(1px 1px at 82% 12%, #fff 99%, transparent),
@@ -52,14 +53,14 @@
   text-shadow: 0 0 calc(var(--cell) * .03) #031a10, 0 0 calc(var(--cell) * .03) #031a10, 0 0 calc(var(--cell) * .14) #39ff9e;
 }
 .g-face[data-tier="aurora"]::before, .g-face[data-tier="aurora"]::after {
-  background:
-    url(art/aurora.svg) 0 0 / calc(var(--cell) * 2) 100% repeat-x,
-    url(art/aurora.svg) 0 -12% / calc(var(--cell) * 2.7) 88% repeat-x;
-  animation: g-curtain 10s linear infinite, g-flicker 3.1s ease-in-out infinite alternate;
+  inset: 0 auto 0 0; width: calc(var(--cell) * 6); border-radius: 0;
+  background: url(art/aurora.svg) 0 0 / calc(var(--cell) * 2) 100% repeat-x;
 }
-.g-face[data-tier="aurora"]::before { opacity: .95; }
+.g-face[data-tier="aurora"]::before { animation: g-slide2 11s linear infinite, g-flicker 3.1s ease-in-out infinite alternate; }
 .g-face[data-tier="aurora"]::after {
-  filter: blur(calc(var(--cell) * .07)) saturate(1.4); mix-blend-mode: screen; z-index: 0; opacity: .9;
+  background-size: calc(var(--cell) * 2) 92%; background-position: 0 -8%;
+  filter: blur(calc(var(--cell) * .07)) saturate(1.4); mix-blend-mode: screen; z-index: 0; opacity: .85;
+  animation: g-slide2 17s linear infinite reverse;
 }
 
 /* 65536: a spiral galaxy, tilted and slowly turning, in front of a star field */
@@ -83,9 +84,8 @@
     radial-gradient(1px 1px at 46% 8%, #fff 99%, transparent);
 }
 
-/* 131072, the biggest tile the game can make: the cosmic web. Filaments join glowing clusters,
-   light flows along the threads and the clusters pulse (art/web.svg animates itself), inside a
-   turning rainbow rim. */
+/* 131072, the biggest tile the game can make: the cosmic web. Filaments join glowing clusters
+   of galaxies over faint gas, drifting and breathing inside a rainbow rim. */
 .g-face[data-tier="web"] {
   background: radial-gradient(circle at 50% 50%, #140828, #020108 80%);
   color: #ffffff;
@@ -95,26 +95,25 @@
 .g-face[data-tier="web"]::before {
   inset: -12%;
   background: url(art/web.svg) center / 100% 100% no-repeat;
-  animation: g-drift 16s ease-in-out infinite alternate, g-shimmer 8s linear infinite;
+  animation: g-drift 16s ease-in-out infinite alternate, g-breathe 2.4s ease-in-out infinite alternate;
 }
 .g-face[data-tier="web"]::after {
   padding: calc(var(--cell) * .045);
-  background: conic-gradient(from var(--spin, 0deg), #4de8ff, #a46bff, #ff5fc8, #ffe27a, #8ff7c8, #4de8ff);
+  background: conic-gradient(from 210deg, #4de8ff, #a46bff, #ff5fc8, #ffe27a, #8ff7c8, #4de8ff);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   z-index: 1;
-  animation: g-spin 3s linear infinite;
+  animation: g-breathe 2.4s ease-in-out infinite alternate-reverse;
 }
 
-@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-@keyframes g-spin { to { --spin: 360deg; } }
-@keyframes g-churn { from { transform: translate(-6%, 5%) rotate(0deg) scale(1); } to { transform: translate(6%, -5%) rotate(25deg) scale(1.1); } }
-@keyframes g-curtain { to { background-position: calc(var(--cell) * -2) 0, calc(var(--cell) * 2.7) -12%; } }
+@keyframes g-turn { to { transform: rotate(360deg); } }
+@keyframes g-heat { 0% { opacity: .2; } 100% { opacity: .85; } }
+@keyframes g-slide2 { to { transform: translateX(calc(var(--cell) * -2)); } }
 @keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
-@keyframes g-shimmer { to { filter: hue-rotate(360deg); } }
 @keyframes g-drift { from { transform: rotate(-6deg) scale(1.02); } to { transform: rotate(8deg) scale(1.14); } }
+@keyframes g-breathe { from { opacity: .72; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after { animation: none !important; }
