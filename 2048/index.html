@@ -6,6 +6,7 @@
   <title>2048</title>
 
   <link rel="stylesheet" href="../shared/cohesion.css" />
+  <link rel="stylesheet" href="tiles.css" />
   <script type="module" src="../shared/cohesion.js"></script>
 
   <!-- an arcade cabinet at night: violet-ink glass, tiles that climb the spectrum as they double,
@@ -125,26 +126,12 @@
     }
     .g-tile.is-dying { z-index: 1; }
     .g-tile.is-new { z-index: 3; }
-    .g-face {
-      width: 100%; height: 100%; display: grid; place-items: center; border-radius: calc(var(--cell) * .14);
-      background: var(--tbg); color: var(--tfg);
-      font: 400 var(--fs) / 1 var(--font-display); letter-spacing: -.02em;
-      box-shadow: inset 0 calc(var(--cell) * -.07) 0 rgba(0,0,0,.26), inset 0 2px 0 rgba(255,255,255,.22), 0 0 var(--glowR, 0) var(--tglow, transparent);
-      user-select: none;
-    }
     .g-tile.is-spawn .g-face { animation: g-spawn .22s cubic-bezier(.2, 1.6, .4, 1) var(--slide) both; }
     .g-tile.is-merge .g-face { animation: g-merge .24s cubic-bezier(.2, 1.4, .4, 1) var(--slide) both; }
     .g-tile.is-merge.is-big .g-face { animation: g-merge .24s cubic-bezier(.2, 1.4, .4, 1) var(--slide) both, g-flash .6s ease-out var(--slide) both; }
     @keyframes g-spawn { from { transform: scale(0); opacity: 0; } }
     @keyframes g-merge { 0% { transform: scale(.7); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
     @keyframes g-flash { 0% { filter: brightness(1.9) saturate(1.2); } 100% { filter: none; } }
-    /* past 4096: a slowly turning foil */
-    .g-face.is-foil {
-      background: conic-gradient(from var(--foil, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
-      animation: g-foil 6s linear infinite;
-    }
-    @property --foil { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-    @keyframes g-foil { to { --foil: 360deg; } }
 
     /* big-tile banner across the board */
     .g-banner {
@@ -264,7 +251,7 @@
     }
     @media (max-width: 360px) { .g-bot-btn { width: 150px; } .g-ctl:has(.is-round) { width: 70px; } }
     @media (prefers-reduced-motion: reduce) {
-      .g-card, .g-menu-logo span, .g-board-wrap.is-shake, .g-face.is-foil { animation: none !important; }
+      .g-card, .g-menu-logo span, .g-board-wrap.is-shake { animation: none !important; }
       .g-tile .g-face { animation: none !important; }
     }
   </style>
@@ -381,7 +368,7 @@
     import { openModal } from "../shared/cohesion.js";
     import { setupAbout } from "./about.mjs";
     import * as audio from "./audio.mjs";
-    import { TILE, tileColors, tileColor, numeralScale } from "./palette.mjs";
+    import { TILE, tileColor, paintFace } from "./palette.mjs";
 
     const $ = (id) => document.getElementById(id);
     const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -390,19 +377,6 @@
       set(k, v) { try { localStorage.setItem(k, v); } catch {} },
     };
     const BEST_KEY = "quasarbright:2048-best", GAME_KEY = "quasarbright:2048-game", MUTE_KEY = "quasarbright:2048-muted";
-
-    // ---------- tile colors (palette.mjs) ----------
-    function paintFace(face, v, cell) {
-      const [bg, fg] = tileColors(v);
-      face.textContent = v;
-      face.style.setProperty("--tbg", bg);
-      face.style.setProperty("--tfg", fg);
-      face.style.setProperty("--fs", (cell * numeralScale(v)).toFixed(1) + "px");
-      const lv = Math.log2(v);
-      face.style.setProperty("--tglow", lv >= 7 ? bg : "transparent");
-      face.style.setProperty("--glowR", lv >= 7 ? Math.min(34, (lv - 6) * 5) + "px" : "0px");
-      face.classList.toggle("is-foil", v > 4096);
-    }
 
     // ---------- state ----------
     let game;            // { board, seed }

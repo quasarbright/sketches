@@ -1,0 +1,101 @@
+/* Tile faces, shared by the game (index.html) and the gallery (tiles.html). paintFace in
+   palette.mjs sets the custom properties and, past 4096, a data-tier for the special tiles. */
+.g-face {
+  position: relative; width: 100%; height: 100%; display: grid; place-items: center;
+  border-radius: calc(var(--cell) * .14); overflow: hidden; isolation: isolate;
+  background: var(--tbg); color: var(--tfg);
+  font: 400 var(--fs) / 1 var(--font-display, Bungee, "Arial Black", sans-serif); letter-spacing: -.02em;
+  box-shadow: inset 0 calc(var(--cell) * -.07) 0 rgba(0,0,0,.26), inset 0 2px 0 rgba(255,255,255,.22), 0 0 var(--glowR, 0) var(--tglow, transparent);
+  user-select: none;
+}
+.g-face[data-tier]::before, .g-face[data-tier]::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none;
+}
+
+/* 8192: foil, a slowly turning rainbow */
+.g-face[data-tier="foil"] {
+  background: conic-gradient(from var(--spin, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
+  color: #3a1670;
+  animation: g-spin 6s linear infinite;
+}
+
+/* 16384: gilt, a night-blue tile with a gold rim and numeral, a sheen passing over it */
+.g-face[data-tier="gilt"] {
+  background: linear-gradient(150deg, #2c2670, #13113a);
+  color: #ffd36b; text-shadow: 0 0 calc(var(--cell) * .08) rgba(255, 196, 70, .7);
+  box-shadow: inset 0 0 0 calc(var(--cell) * .04) #e8b64a, inset 0 calc(var(--cell) * -.07) 0 rgba(0,0,0,.3), 0 0 var(--glowR, 0) var(--tglow, transparent);
+}
+.g-face[data-tier="gilt"]::before {
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 228, 150, .5) 50%, transparent 62%) no-repeat;
+  background-size: 300% 100%; z-index: 1; mix-blend-mode: screen;
+  animation: g-sheen 3.2s ease-in-out infinite;
+}
+
+/* 32768: aurora, colored light drifting across a dark tile */
+.g-face[data-tier="aurora"] {
+  background: #070a18; color: #f2fffd; text-shadow: 0 0 calc(var(--cell) * .1) #2de2c6;
+}
+.g-face[data-tier="aurora"]::before {
+  inset: -30%;
+  background:
+    radial-gradient(35% 45% at 30% 35%, #2de2c6, transparent 70%),
+    radial-gradient(40% 40% at 70% 60%, #8a5cff, transparent 70%),
+    radial-gradient(30% 35% at 45% 85%, #4dff8a, transparent 70%);
+  filter: blur(calc(var(--cell) * .06)); opacity: .9;
+  animation: g-aurora 7s ease-in-out infinite alternate;
+}
+
+/* 65536: molten, glowing metal churning under a white-hot numeral */
+.g-face[data-tier="molten"] {
+  background: #7a120f; color: #fffbe8;
+  text-shadow: 0 0 calc(var(--cell) * .06) #fff1a8, 0 0 calc(var(--cell) * .16) #ff8a1f;
+}
+.g-face[data-tier="molten"]::before {
+  inset: -40%;
+  background:
+    radial-gradient(30% 30% at 30% 70%, #fff1a8, transparent 70%),
+    radial-gradient(35% 35% at 70% 40%, #ffc12e, transparent 70%),
+    radial-gradient(45% 45% at 50% 55%, #ff6a1f, transparent 75%),
+    radial-gradient(50% 50% at 20% 25%, #ff3b1f, transparent 75%);
+  filter: blur(calc(var(--cell) * .04));
+  animation: g-churn 4s ease-in-out infinite alternate;
+}
+.g-face[data-tier="molten"]::after { box-shadow: inset 0 0 calc(var(--cell) * .14) rgba(60, 0, 0, .7); z-index: 0; }
+
+/* 131072 and up: cosmos, a galaxy with twinkling stars inside a turning rainbow rim */
+.g-face[data-tier="cosmos"] {
+  background: radial-gradient(circle at 50% 42%, #4a2290, #170838 58%, #05020f);
+  color: #ffffff; text-shadow: 0 0 calc(var(--cell) * .1) #c79bff, 0 0 calc(var(--cell) * .2) #8fd3ff;
+}
+.g-face[data-tier="cosmos"]::before {
+  background:
+    radial-gradient(1.4px 1.4px at 18% 22%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 72% 18%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 84% 64%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 30% 78%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 58% 88%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 10% 55%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 92% 32%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 44% 10%, #fff 99%, transparent);
+  animation: g-twinkle 2.4s ease-in-out infinite alternate;
+}
+.g-face[data-tier="cosmos"]::after {
+  padding: calc(var(--cell) * .045);
+  background: conic-gradient(from var(--spin, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  z-index: 1;
+  animation: g-spin 4s linear infinite;
+}
+
+@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes g-spin { to { --spin: 360deg; } }
+@keyframes g-sheen { 0% { background-position: 100% 0; } 60%, 100% { background-position: 0% 0; } }
+@keyframes g-aurora { from { transform: translate(-8%, 4%) rotate(-8deg); } to { transform: translate(8%, -6%) rotate(10deg); } }
+@keyframes g-churn { from { transform: translate(-6%, 5%) rotate(0deg) scale(1); } to { transform: translate(6%, -5%) rotate(25deg) scale(1.1); } }
+@keyframes g-twinkle { from { opacity: .45; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after { animation: none !important; }
+}

@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tiles.css" />
   <style>
     body { margin: 0; padding: 28px 16px 60px; background: #120f24; color: #f0ecff; font: 500 15px/1.4 Outfit, system-ui, sans-serif; }
     main { max-width: 760px; margin: 0 auto; }
@@ -15,45 +16,27 @@
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 18px; padding: 18px; background: #0b0918; border-radius: 20px; box-shadow: inset 0 0 0 2px #241e48; }
     figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
     figcaption { font: 500 .72rem ui-monospace, monospace; color: #6d6499; }
-    /* the same face as the board's tiles (index.html .g-face) */
-    .g-face {
-      --cell: 96px;
-      width: var(--cell); height: var(--cell); display: grid; place-items: center; border-radius: calc(var(--cell) * .14);
-      background: var(--tbg); color: var(--tfg);
-      font: 400 var(--fs) / 1 Bungee, "Arial Black", sans-serif; letter-spacing: -.02em;
-      box-shadow: inset 0 calc(var(--cell) * -.07) 0 rgba(0,0,0,.26), inset 0 2px 0 rgba(255,255,255,.22), 0 0 var(--glowR, 0) var(--tglow, transparent);
-    }
-    .g-face.is-foil {
-      background: conic-gradient(from var(--foil, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
-      animation: g-foil 6s linear infinite;
-    }
-    @property --foil { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-    @keyframes g-foil { to { --foil: 360deg; } }
+    .tile { width: 96px; height: 96px; }
   </style>
 </head>
 <body>
   <main>
     <h1>2048 tiles</h1>
-    <p>Every tile, 2 through 131072, drawn the way the board draws them. From 128 up they glow in their own color; past 4096 they turn to foil.</p>
+    <p>Every tile, 2 through 262144, drawn by the same code and CSS as the board. From 128 up they glow; past 4096 each one gets its own look: foil, gilt, aurora, molten, and cosmos from 131072 on.</p>
     <div class="grid" id="grid"></div>
   </main>
   <script type="module">
-    import { tileColors, numeralScale } from "./palette.mjs";
+    import { tileColors, paintFace, tier } from "./palette.mjs";
     const grid = document.getElementById("grid");
-    for (let v = 2; v <= 131072; v *= 2) {
-      // same styling as paintFace in index.html
-      const [bg, fg] = tileColors(v), lv = Math.log2(v), cell = 96;
-      const fig = document.createElement("figure"), face = document.createElement("div");
-      face.className = "g-face" + (v > 4096 ? " is-foil" : "");
-      face.textContent = v;
-      face.style.setProperty("--tbg", bg);
-      face.style.setProperty("--tfg", fg);
-      face.style.setProperty("--fs", (cell * numeralScale(v)).toFixed(1) + "px");
-      face.style.setProperty("--tglow", lv >= 7 ? bg : "transparent");
-      face.style.setProperty("--glowR", lv >= 7 ? Math.min(34, (lv - 6) * 5) + "px" : "0px");
+    for (let v = 2; v <= 262144; v *= 2) {
+      const fig = document.createElement("figure"), box = document.createElement("div"), face = document.createElement("div");
+      box.className = "tile";
+      face.className = "g-face";
+      paintFace(face, v, 96); // the same function the board uses
+      box.append(face);
       const cap = document.createElement("figcaption");
-      cap.textContent = `2^${lv} · ${v > 4096 ? "foil" : bg}`;
-      fig.append(face, cap);
+      cap.textContent = `2^${Math.log2(v)} · ${tier(v) || tileColors(v)[0]}`;
+      fig.append(box, cap);
       grid.append(fig);
     }
   </script>
