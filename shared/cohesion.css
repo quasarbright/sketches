@@ -224,6 +224,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
   .tool-rail.phone-split > .tool-group:not(:first-child) .tool svg { width: 19px; height: 19px; }
 }
 
+/* ---- instant tooltip (cohesion.js shows it for any [data-tooltip]) ---- */
+.cohesion-tip {
+  position: fixed; z-index: 60; pointer-events: none; max-width: 240px;
+  padding: 7px 10px; border-radius: 10px;
+  background: var(--panel); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  font-family: var(--font-ui); font-size: .82rem; line-height: 1.35; color: var(--muted);
+}
+.cohesion-tip[hidden] { display: none; }
+.cohesion-tip-head { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.cohesion-tip-head:not(:only-child) { margin-bottom: 2px; }
+.cohesion-tip kbd {
+  font: 500 .72rem var(--font-mono); color: var(--text);
+  padding: 1px 6px; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--border);
+}
+
 /* ---- stats readout (top-left of sims) ---- */
 .readout {
   position: fixed; top: 12px; left: 14px; z-index: 5;

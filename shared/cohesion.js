@@ -7,6 +7,7 @@
  *   AI runtime      getOpenRouterKey / setOpenRouterKey / clearOpenRouterKey /
  *                   requireOpenRouterKey / openrouterChat
  *   helpers         isBackground() / onAboutModalToggle()
+ *   tooltips        data-tooltip="Name (key): what it does" on any control (instant, styled)
  * Conventions handled automatically on load: ?api-key ingest+strip, ?background chrome-hiding.
  */
 
@@ -292,6 +293,79 @@ customElements.define("mike-footer", MikeFooter);
 customElements.define("about-modal", AboutModal);
 customElements.define("openrouter-key", OpenRouterKey);
 customElements.define("control-panel", ControlPanel);
+
+/* ------------------------------------------------------------------ *
+ * instant tooltips
+ * Any element with data-tooltip="Name (key): what it does" shows a styled tip the moment the
+ * pointer is over it (the native title tip waits about a second). The name is bold, each key
+ * becomes a <kbd> chip ("[ and ]" makes two), and the text after the colon goes underneath.
+ * "(key)" and ": …" are both optional. Tips sit to the right of .tool-rail buttons and above
+ * everything else (below if there's no room). Mouse and keyboard focus only; touch has no hover.
+ * ------------------------------------------------------------------ */
+let tipEl = null, tipTarget = null;
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+function showTip(el) {
+  if (!tipEl) {
+    tipEl = document.createElement("div");
+    tipEl.className = "cohesion-tip";
+    tipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(tipEl);
+  }
+  tipTarget = el;
+  const text = el.dataset.tooltip;
+  const m = text.match(/^([^:(]+?)(?: \((.+?)\))?(?:: (.+))?$/s);
+  const [name, keys, desc] = m ? [m[1], m[2], m[3]] : [text, null, null];
+  const head = document.createElement("div");
+  head.className = "cohesion-tip-head";
+  head.append(capitalize(name));
+  if (keys) for (const k of keys.split(" and ")) {
+    const kbd = document.createElement("kbd");
+    kbd.textContent = k;
+    head.append(kbd);
+  }
+  tipEl.replaceChildren(head);
+  if (desc) {
+    const d = document.createElement("div");
+    d.textContent = capitalize(desc);
+    tipEl.append(d);
+  }
+  tipEl.hidden = false;
+  const r = el.getBoundingClientRect(), t = tipEl.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+  let x, y;
+  if (el.closest(".tool-rail") && r.right + 10 + t.width <= vw - 8) {
+    x = r.right + 10; y = r.top + r.height / 2 - t.height / 2;
+  } else {
+    x = r.left + r.width / 2 - t.width / 2;
+    y = r.top - t.height - 8 >= 8 ? r.top - t.height - 8 : r.bottom + 8;
+  }
+  tipEl.style.left = Math.max(8, Math.min(vw - t.width - 8, x)) + "px";
+  tipEl.style.top = Math.max(8, Math.min(vh - t.height - 8, y)) + "px";
+}
+function hideTip() {
+  tipTarget = null;
+  if (tipEl) tipEl.hidden = true;
+}
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType === "touch") return;
+  const el = e.target.closest?.("[data-tooltip]");
+  if (el && el !== tipTarget) showTip(el);
+  else if (!el && tipTarget) hideTip();
+});
+document.documentElement.addEventListener("pointerleave", hideTip);
+document.addEventListener("pointerdown", (e) => { if (e.pointerType === "touch") hideTip(); });
+document.addEventListener("focusin", (e) => {
+  const el = e.target.closest?.("[data-tooltip]");
+  if (el && e.target.matches(":focus-visible")) showTip(el);
+});
+document.addEventListener("focusout", hideTip);
+document.addEventListener("cohesion-modal-open", hideTip);
+// Re-read the current tip after its text changes (e.g. a play button that becomes pause).
+new MutationObserver(() => {
+  if (!tipTarget) return;
+  if (!tipTarget.isConnected || !tipTarget.dataset.tooltip) hideTip();
+  else showTip(tipTarget);
+}).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["data-tooltip"] });
 
 /* ------------------------------------------------------------------ *
  * KaTeX lazy-loader (for about-modal math)

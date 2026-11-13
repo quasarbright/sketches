@@ -81,21 +81,6 @@
     .sd-corner .btn { border-radius: 999px; padding: 6px 14px; }
 
     mike-footer[overlay] { opacity: 1 !important; text-shadow: 0 1px 2px var(--bg), 0 0 8px var(--bg); }
-
-    /* tooltips: shown the moment the pointer is over a control (native title tips wait ~1 s) */
-    .sd-tip {
-      position: fixed; z-index: 20; pointer-events: none; max-width: 240px;
-      padding: 7px 10px; border-radius: 10px;
-      background: var(--panel); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.45);
-      font-size: .82rem; line-height: 1.35; color: var(--muted);
-    }
-    .sd-tip-head { display: flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
-    .sd-tip-head:not(:only-child) { margin-bottom: 2px; }
-    .sd-tip kbd {
-      font: 500 .72rem var(--font-mono); color: var(--text);
-      padding: 1px 6px; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--border);
-    }
-
     /* about-modal diagrams */
     .sd-viz { display: block; width: 100%; max-width: 460px; margin: 14px auto 4px; border-radius: 8px; }
     .sd-viz-caption { font-size: .8rem; color: var(--muted); text-align: center; margin: 2px 0 0; }
@@ -132,7 +117,6 @@
 <body>
   <canvas id="sand"></canvas>
   <div id="brushRing" hidden></div>
-  <div class="sd-tip" id="tip" role="tooltip" hidden></div>
   <div class="sd-empty" id="emptyHint">Drag anywhere to pour sand</div>
 
   <div class="sd-head">
@@ -147,22 +131,22 @@
         <svg class="sd-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" /></svg>
         <svg class="sd-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z" /></svg>
       </button>
-      <button class="tool" id="stepBtn" data-tip="Step (.): advance one step while paused" aria-label="Step">
+      <button class="tool" id="stepBtn" data-tooltip="Step (.): advance one step while paused" aria-label="Step">
         <svg viewBox="0 0 24 24"><path d="M6 5v14l9-7z" /><path d="M18 5v14" /></svg>
       </button>
-      <button class="tool" id="clearBtn" data-tip="Clear: empty the whole box" aria-label="Clear">
+      <button class="tool" id="clearBtn" data-tooltip="Clear: empty the whole box" aria-label="Clear">
         <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
       </button>
     </div>
   </div>
 
   <div class="sd-bar">
-    <label class="sd-slider" data-tip="Brush size ([ and ]): the radius of one dab, in grains">
+    <label class="sd-slider" data-tooltip="Brush size ([ and ]): the radius of one dab, in grains">
       <span>brush</span>
       <input type="range" id="brush" min="1" max="40" step="1" value="6" aria-label="Brush size" />
       <span class="sd-num" id="brushNum"></span>
     </label>
-    <label class="sd-slider" data-tip="Speed: how many steps the simulation runs per second. Each step, every grain gets one chance to move and react.">
+    <label class="sd-slider" data-tooltip="Speed: how many steps the simulation runs per second. Each step, every grain gets one chance to move and react.">
       <span>speed</span>
       <input type="range" id="speed" min="0" max="100" step="1" value="60" aria-label="Speed" />
       <span class="sd-num" id="speedNum"></span>
@@ -1004,7 +988,7 @@
       t.key = String((i + 1) % 10)
       const btn = document.createElement('button')
       btn.className = 'tool'
-      btn.dataset.tip = `${t.name} (${t.key}): ${t.tip}`
+      btn.dataset.tooltip = `${t.name} (${t.key}): ${t.tip}`
       btn.setAttribute('aria-label', t.name)
       if (t.id === MAT.EMPTY) {
         btn.innerHTML = ERASER_SVG
@@ -1035,10 +1019,9 @@
     const playBtn = document.getElementById('playBtn'), stepBtn = document.getElementById('stepBtn')
     function syncPlay() {
       playBtn.classList.toggle('is-paused', !playing)
-      playBtn.dataset.tip = playing ? 'Pause (space): freeze the simulation; you can still paint' : 'Play (space): resume the simulation'
+      playBtn.dataset.tooltip = playing ? 'Pause (space): freeze the simulation; you can still paint' : 'Play (space): resume the simulation'
       playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play')
       stepBtn.disabled = playing
-      refreshTip()   // the pause/play tooltip changes while you're hovering it
     }
     function togglePlay() { playing = !playing; syncPlay() }
     playBtn.addEventListener('click', togglePlay)
@@ -1108,49 +1091,6 @@
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
-
-    // ---------- tooltips ----------
-    // Any element with data-tip="Name (key): what it does" gets an instant tooltip: to the right
-    // of rail buttons, above everything else. Mouse and keyboard focus only; touch has no hover.
-    var tipTarget = null
-    const tipEl = document.getElementById('tip')
-    function showTip(el) {
-      tipTarget = el
-      const m = el.dataset.tip.match(/^([^:(]+?)(?: \((.+?)\))?: (.+)$/)
-      const [name, key, desc] = m ? [m[1], m[2], m[3]] : [el.dataset.tip, null, null]
-      tipEl.replaceChildren()
-      const head = document.createElement('div')
-      head.className = 'sd-tip-head'
-      head.append(name.charAt(0).toUpperCase() + name.slice(1))
-      if (key) for (const k of key.split(' and ')) {
-        const kbd = document.createElement('kbd'); kbd.textContent = k; head.append(kbd)
-      }
-      tipEl.append(head)
-      if (desc) { const d = document.createElement('div'); d.textContent = desc.charAt(0).toUpperCase() + desc.slice(1); tipEl.append(d) }
-      tipEl.hidden = false
-      const r = el.getBoundingClientRect(), t = tipEl.getBoundingClientRect()
-      const vw = document.documentElement.clientWidth
-      let x, y
-      if (el.closest('.tool-rail')) { x = r.right + 10; y = r.top + r.height / 2 - t.height / 2 }
-      else { x = r.left + r.width / 2 - t.width / 2; y = r.top - t.height - 8 }
-      tipEl.style.left = Math.max(8, Math.min(vw - t.width - 8, x)) + 'px'
-      tipEl.style.top = Math.max(8, y) + 'px'
-    }
-    function hideTip() { tipTarget = null; tipEl.hidden = true }
-    function refreshTip() { if (tipTarget) showTip(tipTarget) }
-    document.addEventListener('pointerover', (e) => {
-      if (e.pointerType === 'touch') return
-      const el = e.target.closest('[data-tip]')
-      if (el && el !== tipTarget) showTip(el)
-      else if (!el && tipTarget) hideTip()
-    })
-    document.addEventListener('pointerleave', hideTip)
-    document.addEventListener('focusin', (e) => {
-      const el = e.target.closest('[data-tip]')
-      if (el && e.target.matches(':focus-visible')) showTip(el)
-    })
-    document.addEventListener('focusout', hideTip)
-    document.addEventListener('cohesion-modal-open', hideTip)
 
     // ---------- keys ----------
     document.addEventListener('keydown', (e) => {
