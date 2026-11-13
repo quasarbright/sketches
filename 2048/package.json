@@ -1,0 +1,13 @@
+{
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test && playwright test",
+    "test:unit": "node --test",
+    "test:e2e": "playwright test",
+    "reference": "python3 reference/make_reference.py \"$PY2048\" > reference/reference.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

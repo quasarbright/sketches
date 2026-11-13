@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>2048</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- an arcade cabinet at night: violet-ink glass, tiles that climb the spectrum as they double,
+       gold for the player's buttons and teal for everything the bot does. Bungee is the marquee
+       and the tile numerals, Outfit the cabinet labels, JetBrains Mono the bot's numbers. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #120f24;   /* violet ink */
+      --panel:     #1d1838;
+      --panel-2:   #2a2350;
+      --border:    #3a3168;
+      --text:      #f0ecff;
+      --muted:     #a69ed0;
+      --faint:     #6d6499;
+      --accent:    #ffcf4d;   /* the player's gold */
+      --accent-hi: #ffe08a;
+      --on-accent: #241a00;
+      --bot:       #57e3dc;   /* the bot's teal */
+      --bot-hi:    #9ef3ee;
+      --font-ui:      "Outfit", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Bungee", "Arial Black", sans-serif;
+      --glow: #3b3470;        /* the biggest tile's color, behind the board */
+      --slide: 110ms;         /* tile slide time (shortened when the bot plays fast) */
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+    body { font-family: var(--font-ui); color: var(--text); touch-action: none; overscroll-behavior: none; }
+    body::before { /* the biggest tile's color, glowing up from behind the board */
+      content: ""; position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(55% 45% at 50% 48%, color-mix(in srgb, var(--glow) 26%, transparent), transparent 70%);
+      transition: background 1.2s;
+    }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+    svg.g-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* chunky pressable buttons with a darker lip underneath (pancakes) */
+    .g-btn {
+      --lip: #0c0a19;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      font: 800 1rem var(--font-ui); letter-spacing: .01em; color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 16px; padding: 12px 20px; cursor: pointer;
+      box-shadow: 0 4px 0 var(--lip), 0 8px 18px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s, color .15s, opacity .15s;
+    }
+    .g-btn:hover { background: #352c62; }
+    .g-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lip), 0 4px 10px rgba(0,0,0,.3); }
+    .g-btn:disabled { opacity: .35; cursor: default; }
+    .g-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .g-btn.is-gold { background: var(--accent); color: var(--on-accent); --lip: #a87a10; }
+    .g-btn.is-gold:hover { background: #ffd968; }
+    .g-btn.is-teal { background: var(--bot); color: #062624; --lip: #1d8f89; }
+    .g-btn.is-teal:hover { background: #74ebe5; }
+
+    /* ---------- layout: a column, board in the middle ---------- */
+    .g-stage {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+      padding: max(14px, env(safe-area-inset-top)) 16px 34px;
+    }
+    .g-top { position: relative; width: 100%; max-width: 560px; height: 62px; flex: none; }
+    .g-logo {
+      position: absolute; left: 0; top: 8px; margin: 0;
+      font: 400 1.9rem/1 var(--font-display); color: var(--accent); transform: rotate(-4deg);
+      text-shadow: 0 3px 0 #a87a10, 0 8px 18px rgba(0,0,0,.5);
+    }
+    .g-score {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+      display: flex; align-items: stretch; background: var(--panel); border-radius: 20px; padding: 8px 6px;
+      box-shadow: 0 4px 0 #0c0a19, 0 10px 24px rgba(0,0,0,.4);
+    }
+    .g-stat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 18px; min-width: 88px; }
+    .g-stat + .g-stat { border-left: 2px solid var(--border); }
+    .g-stat-label { font: 800 .66rem var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .g-stat-value { font: 800 1.45rem/1.15 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text); }
+    .g-stat.is-score .g-stat-value { font: 400 1.5rem/1.15 var(--font-display); color: var(--accent); }
+    .g-stat.is-score.is-bot .g-stat-value { color: var(--bot); }
+    /* +points floating up out of the score */
+    .g-plus {
+      position: absolute; left: 50%; top: 18px; transform: translateX(-50%); pointer-events: none;
+      font: 400 1.05rem var(--font-display); color: var(--accent); white-space: nowrap;
+      text-shadow: 0 0 6px var(--panel), 0 0 3px var(--panel);
+      animation: g-plus .7s ease-out forwards;
+    }
+    .g-plus.is-bot { color: var(--bot); }
+    @keyframes g-plus { from { opacity: 1; transform: translate(-50%, 0); } 60% { opacity: .9; } to { opacity: 0; transform: translate(-50%, -22px); } }
+
+    .g-mid { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; }
+    .g-board-wrap { position: relative; }
+    .g-board-wrap.is-shake { animation: g-shake .32s; }
+    @keyframes g-shake {
+      20% { transform: translate(-5px, 2px); } 40% { transform: translate(4px, -3px); }
+      60% { transform: translate(-3px, 1px); } 80% { transform: translate(2px, -1px); }
+    }
+    .g-board {
+      --step: calc(var(--cell) + var(--gap));
+      position: relative; width: var(--size); height: var(--size); border-radius: calc(var(--gap) * 1.6);
+      background: #0b0918; box-shadow: inset 0 0 0 2px #241e48, 0 6px 0 #07060f, 0 30px 60px rgba(0,0,0,.5);
+    }
+    .g-cell, .g-tile { position: absolute; left: var(--gap); top: var(--gap); width: var(--cell); height: var(--cell); }
+    .g-cell { border-radius: calc(var(--cell) * .14); background: #1a1534; box-shadow: inset 0 3px 0 rgba(0,0,0,.35); }
+    .g-tile {
+      transform: translate(calc(var(--x) * var(--step)), calc(var(--y) * var(--step)));
+      transition: transform var(--slide) cubic-bezier(.3, .7, .4, 1);
+      z-index: 2;
+    }
+    .g-tile.is-dying { z-index: 1; }
+    .g-tile.is-new { z-index: 3; }
+    .g-face {
+      width: 100%; height: 100%; display: grid; place-items: center; border-radius: calc(var(--cell) * .14);
+      background: var(--tbg); color: var(--tfg);
+      font: 400 var(--fs) / 1 var(--font-display); letter-spacing: -.02em;
+      box-shadow: inset 0 calc(var(--cell) * -.07) 0 rgba(0,0,0,.26), inset 0 2px 0 rgba(255,255,255,.22), 0 0 var(--glowR, 0) var(--tglow, transparent);
+      user-select: none;
+    }
+    .g-tile.is-spawn .g-face { animation: g-spawn .22s cubic-bezier(.2, 1.6, .4, 1) var(--slide) both; }
+    .g-tile.is-merge .g-face { animation: g-merge .24s cubic-bezier(.2, 1.4, .4, 1) var(--slide) both; }
+    .g-tile.is-merge.is-big .g-face { animation: g-merge .24s cubic-bezier(.2, 1.4, .4, 1) var(--slide) both, g-flash .6s ease-out var(--slide) both; }
+    @keyframes g-spawn { from { transform: scale(0); opacity: 0; } }
+    @keyframes g-merge { 0% { transform: scale(.7); } 55% { transform: scale(1.2); } 100% { transform: scale(1); } }
+    @keyframes g-flash { 0% { filter: brightness(1.9) saturate(1.2); } 100% { filter: none; } }
+    /* past 4096: a slowly turning foil */
+    .g-face.is-foil {
+      background: conic-gradient(from var(--foil, 0deg), #ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
+      animation: g-foil 6s linear infinite;
+    }
+    @property --foil { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+    @keyframes g-foil { to { --foil: 360deg; } }
+
+    /* the bot's snake, over the tiles */
+    .g-snake { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: visible; opacity: 0; transition: opacity .3s; }
+    .g-snake.is-on { opacity: 1; }
+    .g-snake line { stroke: var(--bot); stroke-linecap: round; }
+    .g-snake circle { fill: var(--bot); }
+
+    /* big-tile banner across the board */
+    .g-banner {
+      position: absolute; left: 50%; top: 50%; z-index: 6; pointer-events: none; white-space: nowrap;
+      font: 400 calc(var(--size) * .22) / 1 var(--font-display); color: #fff;
+      text-shadow: 0 5px 0 var(--bc, #fff), 0 10px 0 rgba(0,0,0,.4), 0 0 44px var(--bc, #fff);
+      transform: translate(-50%, -50%) rotate(-6deg); animation: g-banner 1.8s cubic-bezier(.2, 1.4, .4, 1) forwards;
+    }
+    @keyframes g-banner {
+      0% { opacity: 0; transform: translate(-50%, -50%) rotate(-6deg) scale(.3); }
+      18% { opacity: 1; transform: translate(-50%, -50%) rotate(-6deg) scale(1.08); }
+      28% { transform: translate(-50%, -50%) rotate(-6deg) scale(1); }
+      80% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -62%) rotate(-6deg) scale(1); }
+    }
+
+    /* under the board: how to play, or what the bot thought */
+    .g-strip { height: 66px; flex: none; display: grid; place-items: center; width: 100%; }
+    .g-hint { font: 600 .92rem var(--font-ui); color: var(--muted); text-align: center; transition: opacity .3s; }
+    .g-hint kbd { font: 600 .8rem var(--font-mono); background: var(--panel-2); border-radius: 6px; padding: 2px 6px; box-shadow: 0 2px 0 #0c0a19; color: var(--text); }
+    .g-think { display: flex; gap: 8px; align-items: flex-end; }
+    .g-think-move { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 62px; }
+    .g-think-bar { width: 100%; height: 26px; background: var(--panel); border-radius: 8px; position: relative; overflow: hidden; }
+    .g-think-fill { position: absolute; left: 0; bottom: 0; width: 100%; height: 0; background: var(--border); border-radius: 8px; transition: height .12s; }
+    .g-think-arrow { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+    .g-think-arrow svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .g-think-val { font: 400 .7rem var(--font-mono); color: var(--faint); font-variant-numeric: tabular-nums; min-width: 6ch; text-align: center; }
+    .g-think-move.is-best .g-think-fill { background: var(--bot); }
+    .g-think-move.is-best .g-think-arrow { color: #062624; }
+    .g-think-move.is-best .g-think-val { color: var(--bot); }
+    .g-think-move.is-illegal { opacity: .3; }
+    .g-think-ahead { font: 600 .75rem var(--font-ui); color: var(--muted); align-self: center; max-width: 80px; line-height: 1.25; }
+
+    /* bottom: round buttons with a label under each, the bot button between them */
+    .g-controls { flex: none; display: flex; gap: 18px; align-items: flex-start; justify-content: center; }
+    .g-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+    .g-ctl .g-btn.is-round { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
+    .g-ctl > span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+    .g-bot-btn { min-width: 210px; height: 54px; border-radius: 27px; font-size: 1.05rem; }
+    .g-bot-btn .g-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; display: none; }
+    .g-bot-btn.is-teal .g-dot { display: block; animation: g-dot 1s ease-in-out infinite; }
+    @keyframes g-dot { 50% { opacity: .25; } }
+    /* the speed slider, under the bot button while it plays */
+    .g-speed { display: flex; align-items: center; gap: 10px; height: 20px; font: 700 .75rem var(--font-ui); color: var(--muted); transition: opacity .2s; }
+    .g-speed.is-off { opacity: 0; pointer-events: none; }
+    .g-speed input { width: 120px; accent-color: var(--bot); margin: 0; }
+    .g-speed output { font: 600 .75rem var(--font-mono); color: var(--bot); width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---------- start screen ---------- */
+    .g-menu {
+      position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px 16px 60px;
+      background: radial-gradient(120% 80% at 50% 30%, rgba(18,15,36,.55), rgba(18,15,36,.92));
+      backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+    }
+    .g-menu-inner { text-align: center; max-width: 640px; }
+    .g-menu-logo {
+      margin: 0; font: 400 clamp(4rem, 24vw, 8.5rem)/1 var(--font-display); color: var(--accent);
+      text-shadow: 0 7px 0 #a87a10, 0 18px 40px rgba(0,0,0,.55); transform: rotate(-4deg);
+    }
+    .g-menu-logo span { display: inline-block; animation: g-hop 2.4s ease-in-out infinite; }
+    .g-menu-logo span:nth-child(2) { animation-delay: .12s; color: #ff9f2e; text-shadow: 0 7px 0 #a8580f, 0 18px 40px rgba(0,0,0,.55); }
+    .g-menu-logo span:nth-child(3) { animation-delay: .24s; color: #ff5b5b; text-shadow: 0 7px 0 #a02a2a, 0 18px 40px rgba(0,0,0,.55); }
+    .g-menu-logo span:nth-child(4) { animation-delay: .36s; color: #b04dff; text-shadow: 0 7px 0 #6720a8, 0 18px 40px rgba(0,0,0,.55); }
+    @keyframes g-hop { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-10px); } }
+    .g-pitch {
+      margin: 22px auto 30px; max-width: 430px; font-size: 1.05rem; line-height: 1.5; color: #d6cff5;
+      text-shadow: 0 1px 2px rgba(10,8,20,.9);
+    }
+    .g-pitch b { color: var(--text); }
+    .g-modes { display: flex; gap: 16px; justify-content: center; }
+    .g-mode { flex-direction: column; gap: 8px; width: 196px; padding: 20px 14px 18px; border-radius: 22px; }
+    .g-mode svg { width: 92px; height: 70px; }
+    .g-mode > div { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .g-mode-name { font: 400 1.35rem/1 var(--font-display); }
+    .g-mode-sub { font-weight: 600; font-size: .88rem; opacity: .75; }
+
+    /* ---------- game over ---------- */
+    .g-over { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: rgba(10,8,20,.55); }
+    .g-card {
+      width: min(380px, 100%); text-align: center; padding: 30px 26px 26px;
+      background: var(--panel); border-radius: 26px; box-shadow: 0 6px 0 #0c0a19, 0 24px 60px rgba(0,0,0,.6);
+      animation: g-pop .45s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes g-pop { from { transform: scale(.6) translateY(30px); opacity: 0; } }
+    .g-card h2 { margin: 0; font: 400 2.5rem/1 var(--font-display); color: var(--accent); transform: rotate(-3deg); }
+    .g-card-who { margin: 12px 0 0; font-weight: 600; color: var(--muted); }
+    .g-results { display: flex; justify-content: center; margin: 22px 0 26px; }
+    .g-results .g-stat { min-width: 0; padding: 0 14px; }
+    .g-results .g-best-tile { width: 46px; height: 46px; --cell: 46px; margin-top: 4px; }
+    .g-results .g-best-tile .g-face { --fs: 15px; }
+
+    mike-footer[overlay] { z-index: 11 !important; }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+
+    /* about modal */
+    .cohesion-about .g-dia { display: block; margin: 14px auto 6px; max-width: 100%; }
+    .cohesion-about .g-cap { font-size: .85rem; color: var(--muted); text-align: center; margin: 0 0 1.2em; }
+    .cohesion-about .bot { color: var(--bot); }
+    .cohesion-about .gold { color: var(--accent); }
+
+    @media (max-width: 600px) {
+      .g-logo { font-size: 1.35rem; top: 14px; }
+      .g-score { left: auto; right: 0; transform: none; }
+      .g-stat { min-width: 76px; padding: 0 12px; }
+      .g-modes { flex-direction: column; align-items: center; gap: 12px; }
+      .g-mode { flex-direction: row; width: 100%; max-width: 320px; padding: 14px 18px; gap: 16px; text-align: left; justify-content: flex-start; }
+      .g-mode svg { width: 64px; height: 50px; flex: none; }
+      .g-mode > div { display: flex; flex-direction: column; gap: 4px; }
+      .g-controls { gap: 8px; }
+      .g-ctl:has(.is-round) { width: 78px; }
+      .g-ctl .g-btn.is-round { width: 50px; height: 50px; }
+      .g-bot-btn { min-width: 0; width: 176px; height: 50px; font-size: 1rem; }
+      .g-speed { gap: 6px; }
+      .g-speed input { width: 70px; }
+      .g-speed output { width: 5.5ch; }
+      .g-think { gap: 6px; }
+      .g-think-move { width: 54px; }
+    }
+    @media (max-width: 360px) { .g-bot-btn { width: 150px; } .g-ctl:has(.is-round) { width: 70px; } }
+    @media (prefers-reduced-motion: reduce) {
+      .g-card, .g-menu-logo span, .g-board-wrap.is-shake, .g-face.is-foil { animation: none !important; }
+      .g-tile .g-face { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="fx" style="position:fixed;inset:0;pointer-events:none;z-index:7"></canvas>
+
+  <div class="g-stage" id="stage">
+    <div class="g-top">
+      <h1 class="g-logo" aria-label="2048">2048</h1>
+      <div class="g-score" id="scoreboard">
+        <div class="g-stat is-score" id="statScore" title="points from merges in this game: each merge adds the new tile's value">
+          <span class="g-stat-label">Score</span><span class="g-stat-value" id="score">0</span>
+        </div>
+        <div class="g-stat" title="your best score on this device">
+          <span class="g-stat-label">Best</span><span class="g-stat-value" id="best">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="g-mid" id="mid">
+      <div class="g-board-wrap" id="boardWrap">
+        <div class="g-board" id="board">
+          <svg class="g-snake" id="snake" aria-hidden="true"></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="g-strip">
+      <div class="g-hint" id="hint">Slide with <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>, <kbd>WASD</kbd> or a swipe</div>
+      <div class="g-think" id="think" hidden></div>
+    </div>
+
+    <div class="g-controls">
+      <div class="g-ctl">
+        <button class="g-btn is-round" id="newGame" title="start a new game (N)">
+          <svg class="g-ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button><span>New game</span>
+      </div>
+      <div class="g-ctl">
+        <button class="g-btn is-gold g-bot-btn" id="botBtn" title="hand the board to the bot from here; press it again, or slide a tile yourself, to take over (B)">
+          <span class="g-dot"></span><span id="botLabel">Let the bot play</span>
+        </button>
+        <label class="g-speed is-off" id="speedRow" title="how many moves the bot makes per second (at the top end it's limited by how fast it can think)">
+          speed <input type="range" id="speed" min="0" max="100" step="1" title="how many moves the bot makes per second (at the top end it's limited by how fast it can think)"><output id="speedOut"></output>
+        </label>
+      </div>
+      <div class="g-ctl">
+        <button class="g-btn is-round" id="about" title="how the bot decides where to slide">
+          <svg class="g-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.6h.01"/></svg>
+        </button><span>How it thinks</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- start screen -->
+  <div class="g-menu" id="menu">
+    <div class="g-menu-inner">
+      <h1 class="g-menu-logo" aria-label="2048"><span>2</span><span>0</span><span>4</span><span>8</span></h1>
+      <p class="g-pitch">Slide the tiles. Two equal tiles <b>merge into their sum</b>. Get to 2048, or hand
+        the board to the <b>bot</b> and watch it plan six moves ahead.</p>
+      <div class="g-modes">
+        <button class="g-btn is-gold g-mode" id="playBtn" title="play it yourself with the arrow keys, WASD or swipes">
+          <svg viewBox="0 0 92 70" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="33" y="4" width="26" height="26" rx="6"/><rect x="4" y="38" width="26" height="26" rx="6"/><rect x="33" y="38" width="26" height="26" rx="6"/><rect x="62" y="38" width="26" height="26" rx="6"/><path d="M46 22v-10m-4 4 4-4 4 4"/></g></svg>
+          <div><span class="g-mode-name" id="playName">Play</span><span class="g-mode-sub" id="playSub">arrow keys or swipe</span></div>
+        </button>
+        <button class="g-btn is-teal g-mode" id="watchBtn" title="the bot plays from the start; take over whenever you like">
+          <svg viewBox="0 0 92 70" aria-hidden="true"><path d="M8 8h76v18H8v18h76v18H8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="62" r="7" fill="currentColor"/></svg>
+          <div><span class="g-mode-name">Watch the bot</span><span class="g-mode-sub">take over any time</span></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- game over -->
+  <div class="g-over" id="over" hidden>
+    <div class="g-card" role="dialog" aria-labelledby="overTitle">
+      <h2 id="overTitle">Game over</h2>
+      <p class="g-card-who" id="overWho"></p>
+      <div class="g-results">
+        <div class="g-stat is-score"><span class="g-stat-label">Score</span><span class="g-stat-value" id="overScore"></span></div>
+        <div class="g-stat"><span class="g-stat-label">Biggest</span><div class="g-best-tile" id="overTile"></div></div>
+        <div class="g-stat"><span class="g-stat-label">Moves</span><span class="g-stat-value" id="overMoves"></span></div>
+      </div>
+      <button class="g-btn is-gold" id="overNew" title="start a new game">New game</button>
+    </div>
+  </div>
+
+  <template id="aboutTpl">
+    <h2 class="title">How the bot thinks</h2>
+    <p class="intro">The bot is Mike's 2048 AI from 2020, ported from Python. Before each move it
+      plays out every sequence of six moves, scores the board each one ends on, and makes the first
+      move of the best sequence. It can do that because the new tiles in this game aren't really
+      random.</p>
+
+    <div class="section-label">the tiles aren't random</div>
+    <p>After every move a 2 or a 4 appears in an empty cell. Where it lands comes from a random
+      number generator, but the generator is restarted before every spawn from a number the game
+      keeps, its <b>seed</b>, and every move that changes the board adds 1 to the seed. So the board
+      and the seed decide every tile that will ever appear. Anyone with a copy of the game can try a
+      move and see exactly where the next tile goes. These are the four boards your current game
+      would turn into, new tile ringed:</p>
+    <canvas class="g-dia" data-dia="next"></canvas>
+    <p class="g-cap" data-cap="next">&nbsp;</p>
+    <p>A bot that couldn't see this would have to average over every cell the tile might land in.
+      This one plans with the real future, which is a big advantage over a human, and over most
+      other 2048 bots.</p>
+
+    <div class="section-label">what a good board looks like</div>
+    <p>Strong players keep their biggest tile in a corner and line the rest up in decreasing order,
+      back and forth along the rows, like a snake. Each tile then sits beside the one it will merge
+      into next, and a chain of merges can roll all the way up to the corner.</p>
+    <p>The bot measures this. Pick a snake path through all 16 cells and walk it, halving the
+      running total and then adding the next tile. The last cell on the path counts fully, the one
+      before it half, the one before that a quarter, so the walk scores highest when the tiles shrink
+      away from the end. A square can be rotated or flipped 8 ways, so there are 8 snakes, and the
+      board gets the best of the 8 scores. Here are the 8 on your board, with the line brightening
+      the way the weights grow:</p>
+    <canvas class="g-dia" data-dia="snakes"></canvas>
+    <p class="g-cap" data-cap="snakes">&nbsp;</p>
+    <p>The <span class="bot">teal line</span> over the board while the bot plays is this best
+      snake, redrawn after every move.</p>
+
+    <div class="section-label">one number per board</div>
+    <p>The snake score grows with the tiles, so on its own it can't compare a board of small tiles
+      with a board of big ones. It gets divided by the best any snake could do with these tiles
+      (the same halving walk over the tiles sorted smallest to largest), which gives 1 for a board
+      in perfect order. Then it's multiplied by the square root of the fraction of cells that are
+      empty, since room to move matters too, and a full board scores 0. A board with no moves left
+      is divided by 10 on top of that.</p>
+    <p class="g-cap" style="font: 600 1rem var(--font-mono); color: var(--text)">score = √(empty ÷ 16) × snake ÷ best possible snake</p>
+    <div data-dia="parts"></div>
+
+    <div class="section-label">looking six moves ahead</div>
+    <p>For each move it could make, the bot tries all four next moves after it, then all four after
+      each of those, and so on, six moves deep: 4,096 sequences per decision. It scores the board at
+      the end of each, gives each move the best score reachable after it, and picks the move with the
+      best value. Here is the same search cut to two moves deep, on your board:</p>
+    <canvas class="g-dia" data-dia="tree"></canvas>
+    <p class="g-cap" data-cap="tree">&nbsp;</p>
+    <p>The four bars under the board while the bot plays are these values from the full six-move
+      search. Two details from the original: moves that change nothing are allowed partway down a
+      sequence, so "stay put" is one of the options it considers after the first move, and a
+      board reached by two different sequences is only scored once.</p>
+
+    <div class="section-label">the port</div>
+    <p>The Python is at <a href="https://github.com/quasarbright/2048" target="_blank" rel="noopener">quasarbright/2048</a>.
+      This page runs a line-by-line JavaScript port of it, Python's random number generator
+      included, so for the same seed the same tiles appear and the bot chooses the same moves. That's
+      checked against the Python's own output. The search runs in a background thread and takes
+      about 30&nbsp;ms per move. In six test games it reached 2048 in all six and 4096 in four,
+      lasting between 1,700 and 3,600 moves.</p>
+    <p>One quirk came along with it: merges always pair up from the left or top of a line, whichever
+      way you slide. Slide <code>2 2 2</code> right and you get <code>4 2</code>, where most versions
+      of 2048 give <code>2 4</code>. The bot's model of the game has the same rule, so it's kept.</p>
+  </template>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { newGame, move, slideTrace, isDead, bestSnake, DIRECTIONS, UP, DOWN, LEFT, RIGHT } from "./game.mjs";
+    import { DEFAULT_DEPTH, chooseAction } from "./minimax.mjs";
+    import { openModal } from "../shared/cohesion.js";
+    import { setupAbout } from "./about.mjs";
+    import { TILE, tileColors, tileColor, numeralScale } from "./palette.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const store = {
+      get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    };
+    const BEST_KEY = "quasarbright:2048-best", GAME_KEY = "quasarbright:2048-game";
+
+    // ---------- tile colors (palette.mjs) ----------
+    function paintFace(face, v, cell) {
+      const [bg, fg] = tileColors(v);
+      face.textContent = v;
+      face.style.setProperty("--tbg", bg);
+      face.style.setProperty("--tfg", fg);
+      face.style.setProperty("--fs", (cell * numeralScale(v)).toFixed(1) + "px");
+      const lv = Math.log2(v);
+      face.style.setProperty("--tglow", lv >= 7 ? bg : "transparent");
+      face.style.setProperty("--glowR", lv >= 7 ? Math.min(34, (lv - 6) * 5) + "px" : "0px");
+      face.classList.toggle("is-foil", v > 4096);
+    }
+
+    // ---------- state ----------
+    let game;            // { board, seed }
+    let points = 0, moves = 0, best = +store.get(BEST_KEY) || 0;
+    let botMoves = 0;    // how many of this game's moves the bot made
+    let maxTile = 0, celebrated = 0;
+    let over = false;
+
+    // ---------- layout ----------
+    const boardEl = $("board"), wrap = $("boardWrap");
+    let size = 0, gap = 0, cell = 0;
+    function layout() {
+      const mid = $("mid").getBoundingClientRect();
+      const W = document.documentElement.clientWidth;
+      size = Math.floor(Math.max(200, Math.min(W - 32, 470, mid.height - 12)));
+      gap = Math.round(size * 0.03);
+      cell = (size - 5 * gap) / 4;
+      boardEl.style.setProperty("--size", size + "px");
+      boardEl.style.setProperty("--gap", gap + "px");
+      boardEl.style.setProperty("--cell", cell + "px");
+      for (const t of tiles.values()) paintFace(t.face, t.value, cell);
+      drawSnake();
+    }
+
+    // empty cells
+    for (let i = 0; i < 16; i++) {
+      const c = document.createElement("div");
+      c.className = "g-cell";
+      c.style.transform = `translate(calc(${i % 4} * var(--step)), calc(${Math.floor(i / 4)} * var(--step)))`;
+      boardEl.prepend(c);
+    }
+
+    // ---------- tiles on screen ----------
+    // tiles: cell index -> { el, face, value }; dying tiles slide into a merge and are removed
+    const tiles = new Map();
+    let dying = [], settleTimer = 0;
+    function makeTile(at, value, cls) {
+      const el = document.createElement("div");
+      el.className = "g-tile" + (cls ? " " + cls : "");
+      const face = document.createElement("div");
+      face.className = "g-face";
+      el.append(face);
+      place(el, at);
+      paintFace(face, value, cell);
+      boardEl.append(el);
+      return { el, face, value };
+    }
+    function place(el, at) { el.style.setProperty("--x", at % 4); el.style.setProperty("--y", Math.floor(at / 4)); }
+    function settle() {
+      clearTimeout(settleTimer);
+      for (const el of dying) el.remove();
+      dying = [];
+    }
+    function renderAll() {
+      settle();
+      for (const t of tiles.values()) t.el.remove();
+      tiles.clear();
+      game.board.forEach((v, i) => { if (v) tiles.set(i, makeTile(i, v)); });
+    }
+
+    // ---------- moving ----------
+    let slideMs = 110;
+    function setSlide(ms) { slideMs = reduceMotion ? 0 : ms; document.documentElement.style.setProperty("--slide", slideMs + "ms"); }
+    setSlide(110);
+
+    // who: "human" or "bot". Returns whether anything moved.
+    function doMove(dir, who = "human") {
+      if (over) return false;
+      const trace = slideTrace(game.board, dir);
+      const next = move(game, dir);
+      if (next.seed === game.seed) return false; // nothing moved
+      settle();
+      // slide every tile to where it goes; merging pairs both slide in, then a new tile pops
+      const old = new Map(tiles);
+      tiles.clear();
+      for (const m of trace.moves) {
+        const t = old.get(m.from);
+        place(t.el, m.to);
+        t.el.classList.remove("is-spawn", "is-merge", "is-big", "is-new");
+        if (m.merged) { t.el.classList.add("is-dying"); dying.push(t.el); }
+        else tiles.set(m.to, t);
+      }
+      for (const mg of trace.merges) {
+        const big = mg.value >= 128;
+        tiles.set(mg.at, makeTile(mg.at, mg.value, "is-merge is-new" + (big ? " is-big" : "")));
+      }
+      // the spawn: the one cell that's filled in `next` but not in the slid board
+      const at = next.board.findIndex((v, i) => v && !trace.board[i]);
+      if (at >= 0) tiles.set(at, makeTile(at, next.board[at], "is-spawn"));
+      settleTimer = setTimeout(settle, slideMs + 20);
+
+      game = next;
+      moves++;
+      if (who === "bot") botMoves++;
+      if (trace.points) addPoints(trace.points, who);
+      celebrate(trace.merges);
+      if (bot.on) drawSnake();
+      saveGame();
+      if (isDead(game.board)) gameOver();
+      return true;
+    }
+
+    function addPoints(p, who) {
+      points += p;
+      $("score").textContent = points;
+      if (points > best) { best = points; store.set(BEST_KEY, best); }
+      $("best").textContent = best;
+      if (reduceMotion || slideMs < 80) return; // at bot speed they'd stack up over the score
+      const plus = document.createElement("span");
+      plus.className = "g-plus" + (who === "bot" ? " is-bot" : "");
+      plus.textContent = "+" + p;
+      $("statScore").append(plus);
+      setTimeout(() => plus.remove(), 820);
+    }
+    function renderHud() {
+      $("score").textContent = points;
+      $("best").textContent = best;
+      $("statScore").classList.toggle("is-bot", bot.on);
+    }
+
+    // ---------- big-tile moments ----------
+    const fx = $("fx"), fctx = fx.getContext("2d");
+    let parts = [], rings = [], fxRaf = 0;
+    function cellCenter(at) {
+      const r = boardEl.getBoundingClientRect();
+      return [r.left + gap + (at % 4) * (cell + gap) + cell / 2, r.top + gap + Math.floor(at / 4) * (cell + gap) + cell / 2];
+    }
+    function celebrate(merges) {
+      const newMax = Math.max(...game.board);
+      const grewMax = newMax > maxTile;
+      maxTile = Math.max(maxTile, newMax);
+      document.documentElement.style.setProperty("--glow", tileColor(maxTile));
+      if (reduceMotion || document.hidden) return; // a hidden tab doesn't draw, so bursts would pile up
+      const delay = slideMs;
+      // sparks from 128 up; when the bot is fast, only from 512 up, or it never stops sparkling
+      const from = slideMs < 70 ? 9 : 7;
+      for (const mg of merges) {
+        const lv = Math.log2(mg.value);
+        if (lv < from) continue;
+        setTimeout(() => burst(mg.at, mg.value, lv), delay);
+      }
+      // a new biggest tile from 512 up shakes the board; 2048 and up get a banner
+      if (grewMax && maxTile >= 512) setTimeout(() => {
+        wrap.classList.remove("is-shake"); void wrap.offsetWidth; wrap.classList.add("is-shake");
+      }, delay);
+      if (grewMax && maxTile >= 2048 && maxTile > celebrated) {
+        celebrated = maxTile;
+        setTimeout(() => banner(maxTile), delay);
+      }
+    }
+    function burst(at, value, lv) {
+      if (document.hidden || parts.length > 600) return;
+      const [x, y] = cellCenter(at), col = tileColor(value);
+      const n = Math.min(80, 10 + (lv - 7) * 12);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2, s = (0.6 + Math.random()) * (2 + (lv - 7) * 0.8);
+        parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1, life: 1, decay: 0.012 + Math.random() * 0.02,
+          r: 2 + Math.random() * (2 + lv / 4), col: Math.random() < 0.25 ? "#ffffff" : col });
+      }
+      if (lv >= 8) rings.push({ x, y, r: cell * 0.4, max: cell * (1 + (lv - 8) * 0.35), life: 1, col });
+      startFx();
+    }
+    function banner(v) {
+      const b = document.createElement("div");
+      b.className = "g-banner";
+      b.textContent = v + "!";
+      b.style.setProperty("--bc", tileColor(v) === "#fff6dc" ? "#fff6dc" : tileColor(v));
+      boardEl.append(b);
+      setTimeout(() => b.remove(), 1900);
+      // confetti from the top of the board
+      const r = boardEl.getBoundingClientRect();
+      const cols = Object.values(TILE).map((c) => c[0]).slice(5);
+      for (let i = 0; i < 140; i++) {
+        parts.push({ x: r.left + Math.random() * r.width, y: r.top - 20 - Math.random() * 120, vx: (Math.random() - .5) * 2,
+          vy: Math.random() * 2, life: 1, decay: 0.005 + Math.random() * 0.006, r: 3 + Math.random() * 3,
+          col: cols[i % cols.length], spin: Math.random() * 6, confetti: true });
+      }
+      startFx();
+    }
+    function startFx() { if (!fxRaf) fxRaf = requestAnimationFrame(fxTick); }
+    function sizeFx() {
+      const dpr = Math.max(1, devicePixelRatio || 1), W = document.documentElement.clientWidth, H = document.documentElement.clientHeight;
+      fx.width = Math.round(W * dpr); fx.height = Math.round(H * dpr);
+      fx.style.width = W + "px"; fx.style.height = H + "px";
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function fxTick() {
+      fctx.clearRect(0, 0, fx.width, fx.height);
+      for (const g of rings) {
+        g.life -= 0.035; g.r += (g.max - g.r) * 0.16;
+        fctx.globalAlpha = Math.max(0, g.life);
+        fctx.strokeStyle = g.col; fctx.lineWidth = 4 * g.life + 1;
+        fctx.beginPath(); fctx.arc(g.x, g.y, g.r, 0, Math.PI * 2); fctx.stroke();
+      }
+      for (const p of parts) {
+        p.life -= p.decay; p.x += p.vx; p.y += p.vy;
+        if (p.confetti) { p.vy = Math.min(p.vy + 0.06, 3); p.vx *= 0.99; p.spin += 0.15; }
+        else { p.vy += 0.09; p.vx *= 0.97; }
+        fctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.4));
+        fctx.fillStyle = p.col;
+        if (p.confetti) {
+          fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.spin);
+          fctx.fillRect(-p.r, -p.r * 0.45 * Math.abs(Math.cos(p.spin * 1.3)), p.r * 2, p.r * 0.9 * Math.abs(Math.cos(p.spin * 1.3)) + 0.5);
+          fctx.restore();
+        } else { fctx.beginPath(); fctx.arc(p.x, p.y, p.r * Math.max(0.2, p.life), 0, Math.PI * 2); fctx.fill(); }
+      }
+      fctx.globalAlpha = 1;
+      parts = parts.filter((p) => p.life > 0);
+      rings = rings.filter((g) => g.life > 0);
+      fxRaf = parts.length || rings.length ? requestAnimationFrame(fxTick) : 0;
+      if (!fxRaf) fctx.clearRect(0, 0, fx.width, fx.height);
+    }
+
+    // ---------- the snake: the heuristic's best path through this board, while the bot plays ----------
+    // Each step along it counts twice the one before, so the line brightens toward its head,
+    // the cell the score wants the biggest tile in.
+    const SVGNS = "http://www.w3.org/2000/svg";
+    function drawSnake() {
+      const svg = $("snake");
+      svg.classList.toggle("is-on", bot.on);
+      if (!bot.on || !game) return;
+      const { path } = bestSnake(game.board);
+      const c = (i) => [gap + (i % 4) * (cell + gap) + cell / 2, gap + Math.floor(i / 4) * (cell + gap) + cell / 2];
+      svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
+      svg.textContent = "";
+      const w = Math.max(3, cell * 0.07);
+      for (let k = 1; k < 16; k++) {
+        const [x1, y1] = c(path[k - 1]), [x2, y2] = c(path[k]);
+        const l = document.createElementNS(SVGNS, "line");
+        Object.entries({ x1, y1, x2, y2 }).forEach(([a, v]) => l.setAttribute(a, v));
+        l.setAttribute("stroke-width", w);
+        l.setAttribute("opacity", (0.12 + 0.78 * Math.pow(0.5, 15 - k) ** 0.25).toFixed(3));
+        svg.append(l);
+      }
+      const [hx, hy] = c(path[15]);
+      const dot = document.createElementNS(SVGNS, "circle");
+      dot.setAttribute("cx", hx); dot.setAttribute("cy", hy); dot.setAttribute("r", w * 1.6);
+      svg.append(dot);
+    }
+
+    // ---------- the bot ----------
+    const SPEED_MIN = 1, SPEED_MAX = 30;
+    const posToSpeed = (p) => SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (p / 100);
+    const speedToPos = (s) => (100 * Math.log(s / SPEED_MIN)) / Math.log(SPEED_MAX / SPEED_MIN);
+    const bot = { on: false, speed: 4, depth: DEFAULT_DEPTH, reqId: 0, timer: 0, lastAt: 0, lastThink: null };
+    $("speed").value = Math.round(speedToPos(bot.speed));
+    function showSpeed() {
+      bot.speed = posToSpeed(+$("speed").value);
+      $("speedOut").textContent = (bot.speed < 10 ? bot.speed.toFixed(1) : Math.round(bot.speed)) + "/s";
+      setSlide(Math.min(110, Math.round(0.8 * 1000 / bot.speed)));
+    }
+    $("speed").addEventListener("input", showSpeed);
+
+    let worker = null;
+    try {
+      worker = new Worker(new URL("./bot-worker.mjs", import.meta.url), { type: "module" });
+      worker.onmessage = (e) => onThought(e.data);
+      worker.onerror = () => { worker = null; };
+    } catch { worker = null; }
+
+    function think() {
+      const id = ++bot.reqId;
+      const req = { id, board: game.board.slice(), seed: game.seed, depth: bot.depth };
+      if (worker) worker.postMessage(req);
+      else setTimeout(() => { const r = chooseAction(req, bot.depth); onThought({ ...req, ...r }); }, 0);
+    }
+    function onThought(r) {
+      if (!bot.on || r.id !== bot.reqId) return; // stale: the board changed since it was asked
+      const wait = Math.max(0, bot.lastAt + 1000 / bot.speed - performance.now());
+      clearTimeout(bot.timer);
+      bot.timer = setTimeout(() => {
+        if (!bot.on || r.id !== bot.reqId || !r.move) return;
+        bot.lastAt = performance.now();
+        showThought(r);
+        doMove(r.move, "bot");
+        if (bot.on && !over) think();
+      }, wait);
+    }
+    function setBot(on) {
+      if (on && over) return;
+      bot.on = on;
+      bot.reqId++;
+      clearTimeout(bot.timer);
+      $("botBtn").classList.toggle("is-gold", !on);
+      $("botBtn").classList.toggle("is-teal", on);
+      $("botLabel").textContent = on ? "Take over" : "Let the bot play";
+      $("speedRow").classList.toggle("is-off", !on);
+      $("hint").hidden = on; $("think").hidden = !on;
+      if (on) { showSpeed(); bot.lastAt = performance.now() - 1000 / bot.speed; buildThink(); think(); }
+      else setSlide(110);
+      drawSnake();
+      renderHud();
+    }
+    $("botBtn").onclick = () => setBot(!bot.on);
+
+    // what it thought: the value of each move, the chosen one lit
+    const ARROW = { UP: "M12 19V5m-6 6 6-6 6 6", DOWN: "M12 5v14m-6-6 6 6 6-6", LEFT: "M19 12H5m6-6-6 6 6 6", RIGHT: "M5 12h14m-6-6 6 6-6 6" };
+    function buildThink() {
+      const el = $("think");
+      if (el.childElementCount) return;
+      el.innerHTML = DIRECTIONS.map((d) => `<div class="g-think-move" data-dir="${d}" title="how good the bot thinks ${d.toLowerCase()} is: the best board score it can reach in six moves, starting with this one">
+        <div class="g-think-bar"><div class="g-think-fill"></div><div class="g-think-arrow"><svg viewBox="0 0 24 24"><path d="${ARROW[d]}"/></svg></div></div>
+        <span class="g-think-val">–</span></div>`).join("");
+    }
+    function showThought(r) {
+      bot.lastThink = r;
+      const vals = Object.values(r.values), top = Math.max(...vals), low = Math.min(...vals, 0);
+      for (const m of $("think").children) {
+        const d = m.dataset.dir, v = r.values[d];
+        m.classList.toggle("is-illegal", v === undefined);
+        m.classList.toggle("is-best", d === r.move);
+        m.querySelector(".g-think-fill").style.height = v === undefined || top <= low ? "0%" : (8 + 92 * (v - low) / (top - low)).toFixed(0) + "%";
+        m.querySelector(".g-think-val").textContent = v === undefined ? "–" : v.toFixed(3);
+      }
+    }
+
+    // ---------- game flow ----------
+    function startGame(g) {
+      game = { board: g.board.slice(), seed: g.seed };
+      points = g.points || 0; moves = g.moves || 0; botMoves = g.botMoves || 0;
+      maxTile = Math.max(...game.board); celebrated = g.celebrated || (maxTile >= 2048 ? maxTile : 0);
+      over = false;
+      $("over").hidden = true;
+      document.documentElement.style.setProperty("--glow", tileColor(maxTile));
+      renderAll();
+      renderHud();
+      drawSnake();
+      if (bot.on) { bot.reqId++; think(); }
+      if (isDead(game.board)) gameOver();
+    }
+    function freshGame() { // the bot keeps playing if it was
+      startGame(newGame());
+      saveGame();
+    }
+    function saveGame() {
+      store.set(GAME_KEY, JSON.stringify({ board: game.board, seed: game.seed, points, moves, botMoves, celebrated }));
+    }
+    function loadGame() {
+      try {
+        const g = JSON.parse(store.get(GAME_KEY));
+        if (g && Array.isArray(g.board) && g.board.length === 16 && typeof g.seed === "number") return g;
+      } catch {}
+      return null;
+    }
+    function gameOver() {
+      over = true;
+      setBot(false);
+      store.set(GAME_KEY, "");
+      setTimeout(() => {
+        if (!over) return;
+        $("overScore").textContent = points;
+        $("overMoves").textContent = moves;
+        const t = $("overTile"); t.textContent = "";
+        t.style.position = "relative";
+        const face = document.createElement("div"); face.className = "g-face"; paintFace(face, maxTile, 46);
+        t.append(face);
+        $("overWho").textContent = botMoves === 0 ? "No moves left." : botMoves === moves ? "The bot played every move." : `The bot played ${botMoves} of ${moves} moves.`;
+        $("over").hidden = false;
+        $("overNew").focus({ preventScroll: true });
+      }, reduceMotion ? 0 : 700);
+    }
+    $("overNew").onclick = $("newGame").onclick = freshGame;
+
+    // ---------- start screen ----------
+    const saved = loadGame();
+    if (saved) { $("playName").textContent = "Continue"; $("playSub").textContent = "pick up where you left off"; }
+    function leaveMenu(withBot) {
+      $("menu").hidden = true;
+      if (withBot) setBot(true);
+    }
+    $("playBtn").onclick = () => leaveMenu(false);
+    $("watchBtn").onclick = () => leaveMenu(true);
+
+    // ---------- input ----------
+    const KEYS = { ArrowUp: UP, ArrowDown: DOWN, ArrowLeft: LEFT, ArrowRight: RIGHT, w: UP, s: DOWN, a: LEFT, d: RIGHT, W: UP, S: DOWN, A: LEFT, D: RIGHT };
+    const modalOpen = () => !!document.querySelector(".cohesion-modal-backdrop");
+    function humanMove(dir) {
+      if (!$("menu").hidden || modalOpen() || over) return;
+      if (bot.on) setBot(false); // sliding a tile yourself takes over from the bot
+      doMove(dir, "human");
+    }
+    addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const dir = KEYS[e.key];
+      if (dir) {
+        if (e.target.matches?.("input")) e.target.blur();
+        e.preventDefault(); humanMove(dir); return;
+      }
+      if (!$("menu").hidden || modalOpen()) {
+        if (!$("menu").hidden && e.key === "Enter" && !e.target.matches?.("button")) leaveMenu(false);
+        return;
+      }
+      if (e.key === "b" || e.key === "B") $("botBtn").click();
+      else if ((e.key === "n" || e.key === "N")) freshGame();
+    });
+    // swipes, anywhere outside the buttons
+    let swipe = null;
+    addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button, input, label, a, .cohesion-modal-backdrop, .g-menu")) return;
+      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    addEventListener("pointerup", (e) => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+      swipe = null;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      humanMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : (dy > 0 ? DOWN : UP));
+    });
+    addEventListener("pointercancel", () => { swipe = null; });
+
+    // ---------- about ----------
+    $("about").onclick = () => {
+      const { el } = openModal($("aboutTpl").innerHTML, { className: "cohesion-about" });
+      const stop = setupAbout(el, { board: game.board.slice(), seed: game.seed });
+      document.addEventListener("cohesion-modal-close", stop, { once: true });
+    };
+
+    // ---------- go ----------
+    addEventListener("resize", () => { sizeFx(); layout(); });
+    sizeFx();
+    layout();
+    startGame(saved || newGame());
+    if (!saved) saveGame();
+    requestAnimationFrame(layout); // after webfonts/scrollbars settle
+
+    // for tests: drive the game the same way input does, and read its state
+    window.game2048 = {
+      get state() { return { board: game.board.slice(), seed: game.seed, points, moves, botMoves, over, bot: bot.on, maxTile }; },
+      move: (dir) => humanMove(dir),
+      load(board, seed, extra = {}) { startGame({ board, seed, ...extra }); saveGame(); },
+      setBot, get bot() { return bot; },
+      setSpeedPos(p) { $("speed").value = p; showSpeed(); },
+      tileAt(i) { const t = tiles.get(i); return t ? { value: t.value, text: t.face.textContent } : null; },
+      tileCount: () => boardEl.querySelectorAll(".g-tile:not(.is-dying)").length,
+      settle,
+      layout: () => ({ size, gap, cell }),
+    };
+  </script>
+</body>
+</html>
