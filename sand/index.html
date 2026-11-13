@@ -181,8 +181,8 @@
 
       <div class="section-label">flowing</div>
       <p>Every grain of <span class="m-water">liquid</span> carries a direction, left or right. When
-        it's held up, it moves one cell that way into an empty cell, and turns around when it bumps
-        into something. Keeping a direction is what levels a puddle: a grain on top of a mound walks
+        it's held up, it moves one cell that way into an empty cell that has something under it,
+        and turns around when it bumps into something. (Going over an edge is a slide, below.) Keeping a direction is what levels a puddle: a grain on top of a mound walks
         straight to the edge and falls off, where one that picked a new direction every time would
         wander back and forth. An empty cell between two grains heading toward it picks one of them
         at random, and both grains compute the same pick. Lava is thick, so it only flows one time
@@ -293,19 +293,37 @@
     bool isLiquid(uint m) { return m == WATER || m == ACID || m == GASOLINE || m == LAVA; }
     bool faller(uint m) { return isPowder(m) || isLiquid(m) || m == FIRE; }
 
-    // Is the grain at p held up? Look down through the grains under it: if they end on stone,
-    // wood or the floor it's held up; if they end on an empty cell the whole stack is falling.
-    // (Stacks taller than REACH count as held up.)
-    const int REACH = 32;
+    // Is the grain at p held up? That is, do the grains under it end on stone, wood or the floor
+    // (held up) or on an empty cell (the whole stack is falling)? Worked out for every cell by
+    // the SUPPORT passes; .b of uSupport is 1 when held up.
+    uniform usampler2D uSupport;
     bool supported(ivec2 p) {
-      for (int i = 1; i <= REACH; i++) {
-        uint n = cellAt(p + ivec2(0, i)).r;
-        if (n == EMPTY) return false;
-        if (!faller(n)) return true;
-      }
-      return true;
+      if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, uSize))) return true;
+      return texelFetch(uSupport, p, 0).b == 1u;
     }
     `
+
+    // Support, by pointer jumping. Each cell stores (distance down it has looked, done, held up).
+    // A cell that isn't a falling kind of grain is done right away: empty means "not held up",
+    // anything else "held up". A grain starts out looking 1 cell down. Each JUMP pass, a grain
+    // that isn't done adds on what the cell it's looking at has already found, so the distance
+    // doubles every pass and a stack of any height is settled in about log2(rows) passes.
+    const SUPPORT_INIT = COMMON + `
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      uint m = texelFetch(uState, p, 0).r;
+      outCell = faller(m) ? uvec4(1u, 0u, 0u, 0u) : uvec4(0u, 1u, m == EMPTY ? 0u : 1u, 0u);
+    }`
+    const SUPPORT_JUMP = COMMON + `
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      uvec4 s = texelFetch(uSupport, p, 0);
+      if (s.g == 1u) { outCell = s; return; }
+      ivec2 q = p + ivec2(0, int(s.r));
+      if (q.y >= uSize.y) { outCell = uvec4(s.r, 1u, 1u, 0u); return; }   // the floor
+      uvec4 t = texelFetch(uSupport, q, 0);
+      outCell = uvec4(s.r + t.r, t.g, t.b, 0u);
+    }`
 
     // movement: 2x2 blocks, offset by one cell on alternate steps. All four fragments of a block
     // compute the same rearrangement (same inputs, same random numbers) and keep their own cell.
@@ -390,6 +408,9 @@
     bool wantsInto(ivec2 p, ivec2 t) {
       uvec4 s = cellAt(p);
       if (!isLiquid(s.r) || p.x + dirOf(s) != t.x || cellAt(t).r != EMPTY) return false;
+      // only onto a spot with something under it (going over an edge is a diagonal slide).
+      // Otherwise a thin standing thread of water would shift sideways as a whole, never falling.
+      if (cellAt(t + ivec2(0, 1)).r == EMPTY) return false;
       // lava is thick: it only flows one time in five
       if (s.r == LAVA && u01(pcg3d(uvec3(uvec2(p), passSeed())).x) < 0.8) return false;
       return supported(p);
@@ -549,7 +570,9 @@
           fall: this.program(FALL), spread: this.program(SPREAD),
           move: this.program(MOVE), react: this.program(REACT), paint: this.program(PAINT),
           copy: this.program(COPY), render: this.program(RENDER),
+          supportInit: this.program(SUPPORT_INIT), supportJump: this.program(SUPPORT_JUMP),
         }
+        this.sup = []; this.supCur = 0   // support field, ping-ponged like the grid
         this.cols = 0; this.rows = 0
         this.tex = []; this.fbo = []; this.cur = 0
         this.stepN = 0
@@ -608,6 +631,19 @@
         for (const t of this.tex) gl.deleteTexture(t)
         for (const f of this.fbo) gl.deleteFramebuffer(f)
         this.tex = [t0.tex, t1.tex]; this.fbo = [t0.fbo, t1.fbo]; this.cur = 0
+        for (const s of this.sup) { gl.deleteTexture(s.tex); gl.deleteFramebuffer(s.fbo) }
+        this.sup = [this.makeTarget(cols, rows), this.makeTarget(cols, rows)]; this.supCur = 0
+        this.jumps = Math.ceil(Math.log2(rows)) + 1
+      }
+
+      // work out which grains are held up (see SUPPORT_INIT / SUPPORT_JUMP)
+      computeSupport() {
+        const run = (prog) => {
+          this.pass(prog, this.sup[1 - this.supCur].fbo, this.tex[this.cur])
+          this.supCur = 1 - this.supCur
+        }
+        run(this.progs.supportInit)
+        for (let i = 0; i < this.jumps; i++) run(this.progs.supportJump)
       }
 
       pass(prog, fbo, srcTex, setUniforms) {
@@ -618,6 +654,11 @@
         gl.activeTexture(gl.TEXTURE0)
         gl.bindTexture(gl.TEXTURE_2D, srcTex)
         gl.uniform1i(prog.u.uState, 0)
+        if (prog.u.uSupport && this.sup.length) {
+          gl.activeTexture(gl.TEXTURE1)
+          gl.bindTexture(gl.TEXTURE_2D, this.sup[this.supCur].tex)
+          gl.uniform1i(prog.u.uSupport, 1)
+        }
         gl.uniform2i(prog.u.uSize, this.cols, this.rows)
         if (prog.u.uStep) gl.uniform1ui(prog.u.uStep, this.stepN >>> 0)
         if (prog.u.uSeed) gl.uniform1ui(prog.u.uSeed, this.seed)
@@ -634,6 +675,10 @@
 
       step() {
         const gl = this.gl
+        // One support field per step, shared by every pass. Falling only moves stacks that aren't
+        // held up, so "held up" stays true through the step; a stack that lands, or a grain whose
+        // support flows away, finds out on the next step.
+        this.computeSupport()
         this.flip(this.progs.fall)
         // six flow passes per step, so puddles level out faster than grains fall
         for (let k = 0; k < 6; k++) this.flip(this.progs.spread, (u) => gl.uniform1ui(u.uPass, k))
