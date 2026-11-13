@@ -134,8 +134,35 @@ function lava() {
   return [uri(art), uri(glow)];
 }
 
+// ---- constellation: Orion, as on a star chart. Lines between the stars, each star a bright
+// point with a glow sized by its brightness, and four-point spikes on the brightest.
+function constellation() {
+  const S = {
+    meissa: [50, 13, 1.0, "#dfe8ff"], betelgeuse: [30, 29, 2.1, "#ffb27a"], bellatrix: [69, 32, 1.4, "#dfe8ff"],
+    alnitak: [42, 55, 1.4, "#dfe8ff"], alnilam: [50, 53, 1.5, "#e8f0ff"], mintaka: [58, 51, 1.3, "#dfe8ff"],
+    saiph: [37, 85, 1.3, "#dfe8ff"], rigel: [70, 81, 2.0, "#bcd4ff"],
+  };
+  const lines = [["meissa", "betelgeuse"], ["meissa", "bellatrix"], ["betelgeuse", "alnitak"], ["bellatrix", "mintaka"],
+    ["alnitak", "alnilam"], ["alnilam", "mintaka"], ["alnitak", "saiph"], ["mintaka", "rigel"], ["betelgeuse", "bellatrix"]];
+  const d = lines.map(([a, b]) => `M${S[a][0]} ${S[a][1]}L${S[b][0]} ${S[b][1]}`).join("");
+  let stars = "";
+  for (const [x, y, m, c] of Object.values(S)) {
+    stars += `<circle cx='${x}' cy='${y}' r='${f(m * 3.2)}' fill='url(#halo)' opacity='.8'/>`;
+    if (m >= 1.4) stars += `<path d='M${x - m * 4.5} ${y}H${x + m * 4.5}M${x} ${y - m * 4.5}V${y + m * 4.5}' stroke='${c}' stroke-width='.35' opacity='.7' stroke-linecap='round'/>`;
+    stars += `<circle cx='${x}' cy='${y}' r='${f(0.5 + m * 0.55)}' fill='${c}'/>`;
+  }
+  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+    <defs><radialGradient id='halo'><stop offset='0' stop-color='#fff' stop-opacity='.9'/><stop offset='.25' stop-color='#cfe0ff' stop-opacity='.35'/>
+      <stop offset='1' stop-color='#9fb8ff' stop-opacity='0'/></radialGradient>
+      <filter id='b' x='-10%' y='-10%' width='120%' height='120%'><feGaussianBlur stdDeviation='1.2'/></filter></defs>
+    <g fill='none' stroke='#9fd0ff' stroke-linecap='round'>
+      <path d='${d}' stroke-width='2.6' opacity='.45' filter='url(#b)'/>
+      <path d='${d}' stroke-width='.7' opacity='.85'/></g>
+    ${stars}</svg>`);
+}
+
 const out = process.argv[2];
-for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${out}/${name}.svg`, fn());
+for (const [name, fn] of Object.entries({ aurora, galaxy, constellation })) writeFileSync(`${out}/${name}.svg`, fn());
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);

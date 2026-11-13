@@ -63,16 +63,18 @@
   animation: g-slide2 17s linear infinite reverse;
 }
 
-/* 65536: cosmos, deep violet space full of stars inside a turning rainbow rim. Two star
-   fields turn slowly in opposite directions and twinkle out of step, over drifting nebula glow.
-   The rim's layers are .g-fx elements that paintFace adds. */
-.g-face[data-tier="cosmos"] {
-  background: radial-gradient(circle at 50% 42%, #4a2290, #170838 58%, #05020f);
+/* 65536: a constellation (Orion) on a night sky. The chart (art/constellation.svg, in a .g-fx
+   element paintFace adds) turns very slowly with one star field and its lines glow brighter and
+   dimmer; a second star field twinkles out of step. */
+.g-face[data-tier="constellation"] {
+  background:
+    linear-gradient(125deg, transparent 30%, rgba(150, 170, 255, .1) 45%, rgba(190, 160, 255, .08) 55%, transparent 70%),
+    radial-gradient(circle at 50% 45%, #1a2656, #0a1030 60%, #03050f);
   color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #05020f, 0 0 calc(var(--cell) * .1) #c79bff, 0 0 calc(var(--cell) * .2) #8fd3ff;
+  text-shadow: 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .14) #9fd0ff;
 }
-.g-face[data-tier="cosmos"]::before, .g-face[data-tier="cosmos"]::after { inset: -30%; border-radius: 50%; }
-.g-face[data-tier="cosmos"]::before {
+.g-face[data-tier="constellation"]::before, .g-face[data-tier="constellation"]::after { inset: -30%; border-radius: 50%; }
+.g-face[data-tier="constellation"]::before {
   background:
     radial-gradient(2px 2px at 42% 90%, #fff 99%, transparent),
     radial-gradient(1px 1px at 11% 13%, #fff 99%, transparent),
@@ -99,12 +101,11 @@
     radial-gradient(1px 1px at 72% 39%, #fff 99%, transparent),
     radial-gradient(1.3px 1.3px at 42% 44%, #fff 99%, transparent),
     radial-gradient(1px 1px at 70% 24%, #fff 99%, transparent),
-    radial-gradient(2.2px 2.2px at 16% 89%, #fff 99%, transparent),
-    radial-gradient(30% 22% at 35% 40%, rgba(255, 110, 210, .22), transparent 70%),
-    radial-gradient(28% 24% at 66% 62%, rgba(110, 160, 255, .22), transparent 70%);
-  animation: g-turn 70s linear infinite, g-twinkle 2.2s ease-in-out infinite alternate;
+    radial-gradient(2.2px 2.2px at 16% 89%, #fff 99%, transparent);
+  opacity: .7;
+  animation: g-turn 160s linear infinite;
 }
-.g-face[data-tier="cosmos"]::after {
+.g-face[data-tier="constellation"]::after {
   background:
     radial-gradient(1.6px 1.6px at 41% 22%, #fff 99%, transparent),
     radial-gradient(1.2px 1.2px at 29% 9%, #fff 99%, transparent),
@@ -132,19 +133,12 @@
     radial-gradient(1px 1px at 35% 28%, #fff 99%, transparent),
     radial-gradient(1px 1px at 54% 40%, #fff 99%, transparent),
     radial-gradient(1.3px 1.3px at 51% 42%, #fff 99%, transparent);
-  animation: g-turn 100s linear infinite reverse, g-twinkle 3.1s ease-in-out infinite alternate-reverse;
+  animation: g-twinkle 2.6s ease-in-out infinite alternate;
 }
-/* the rim: a big rainbow disc spinning at the bottom (clipped to the tile), covered by a panel
-   of night sky one rim-width in from the edge; the stars sit over both */
-.g-face[data-tier="cosmos"] .g-fx { position: absolute; pointer-events: none; }
-.g-face[data-tier="cosmos"] .g-fx[data-fx="disc"] {
-  inset: -50%; z-index: -3;
-  background: conic-gradient(#ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
-  animation: g-turn 4s linear infinite;
-}
-.g-face[data-tier="cosmos"] .g-fx[data-fx="sky"] {
-  inset: calc(var(--cell) * .045); z-index: -2; border-radius: calc(var(--cell) * .1);
-  background: radial-gradient(circle at 50% 42%, #4a2290, #170838 58%, #05020f);
+.g-face[data-tier="constellation"] .g-fx {
+  position: absolute; inset: 4%; z-index: -1; pointer-events: none;
+  background: url(art/constellation.svg) center / contain no-repeat;
+  animation: g-turn 160s linear infinite, g-chart 3.2s ease-in-out infinite alternate;
 }
 
 /* 131072, the biggest tile the game can make: a spiral galaxy, tilted and slowly turning, in
@@ -175,6 +169,7 @@
 @keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
+@keyframes g-chart { from { opacity: .7; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }
