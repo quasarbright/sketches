@@ -137,12 +137,6 @@ export function pathScore(board, path) {
   for (const c of path) { score *= 0.5; score += board[c]; }
   return score;
 }
-// the same fold over the tiles sorted ascending: the best any path could do with these tiles
-export function clusteriness(board) {
-  let s = 0;
-  for (const v of board.slice().sort((a, b) => a - b)) { s *= 0.5; s += v; }
-  return s;
-}
 export function bestSnake(board) {
   let best = -Infinity, path = null;
   for (const p of SNAKE_PATHS) {
@@ -151,25 +145,21 @@ export function bestSnake(board) {
   }
   return { score: best, path };
 }
+// The heuristic from 278d7fa, the version the README describes and measured ("always gets the
+// 16k tile"): the best of the 8 snake scores, divided by 10 if no moves are left. The repo's
+// last commit (ba4a3a2, "monte carlo (bad)") changed it to
+// sqrt(empty / 16) * best snake / (the same fold over the sorted tiles); that version only
+// reached 2048-4096 in six test games, against 16384 for this one.
 export function scoreParts(board) {
   const snake = bestSnake(board);
-  const snakiness = snake.score / clusteriness(board);
-  const empty = board.filter((v) => v === 0).length;
-  const emptiness = empty / 16;
-  let score = Math.sqrt(emptiness) * snakiness;
   const dead = isDead(board);
-  if (dead) score /= 10;
-  return { score, snakiness, emptiness, empty, dead, path: snake.path };
+  return { score: dead ? snake.score / 10 : snake.score, snake: snake.score, dead, path: snake.path };
 }
 export function score(board) {
   let best = -Infinity;
   for (const p of SNAKE_PATHS) { const s = pathScore(board, p); if (s > best) best = s; }
-  const snakiness = best / clusteriness(board);
-  let empty = 0;
-  for (const v of board) if (v === 0) empty++;
-  let s = Math.sqrt(empty / 16) * snakiness;
-  if (isDead(board)) s /= 10;
-  return s;
+  if (isDead(board)) best /= 10;
+  return best;
 }
 
 // Python: userScore, the sum of the tiles (what the text view printed at game over)

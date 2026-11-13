@@ -1,6 +1,6 @@
 // The about modal's live diagrams. Each one runs the game's real code (game.mjs, minimax.mjs)
 // on the player's current board.
-import { move, slide, isLegal, score, scoreParts, clusteriness, pathScore, bestSnake, SNAKE_PATHS, DIRECTIONS } from "./game.mjs";
+import { move, slide, isLegal, score, scoreParts, pathScore, bestSnake, SNAKE_PATHS, DIRECTIONS } from "./game.mjs";
 import { chooseAction } from "./minimax.mjs";
 import { tileColors, numeralScale } from "./palette.mjs";
 
@@ -109,16 +109,12 @@ function snakeDrawer(cv, cap, board, sampleNote) {
 
 // ---------- 3. the score's parts ----------
 function drawParts(el, board) {
-  const p = scoreParts(board), best = clusteriness(board), snake = bestSnake(board).score;
+  const p = scoreParts(board);
   const row = (a, b) => `<tr><td style="color:var(--muted);padding:2px 14px 2px 0">${a}</td><td style="font-family:var(--font-mono);text-align:right">${b}</td></tr>`;
   el.innerHTML = `<table style="margin:4px auto 1.2em;font-size:.9rem;border-collapse:collapse">
-    ${row("best snake on that board", fmt(snake))}
-    ${row("best possible with its tiles", fmt(best))}
-    ${row("snake ÷ best possible", (snake / best).toFixed(3))}
-    ${row(`empty cells`, `${p.empty} of 16`)}
-    ${row("√(empty ÷ 16)", Math.sqrt(p.emptiness).toFixed(3))}
-    ${p.dead ? row("no moves left", "÷ 10") : ""}
-    ${row("<b style='color:var(--text)'>score</b>", `<b style="color:var(--bot)">${p.score.toFixed(3)}</b>`)}
+    ${row("best of the 8 snakes", fmt(p.snake))}
+    ${row("no moves left", p.dead ? "÷ 10" : "no")}
+    ${row("<b style='color:var(--text)'>score</b>", `<b style="color:var(--bot)">${fmt(p.score)}</b>`)}
   </table>`;
   // sanity: the same number the search uses
   if (p.score !== score(board)) console.warn("about: score mismatch");
@@ -178,7 +174,7 @@ function treeDrawer(cv, cap, game) {
       });
       if (groupDone) {
         g.fillStyle = chosen ? BOT : TEXT; g.font = "600 11px 'JetBrains Mono', monospace";
-        g.fillText(gr.v.toFixed(3), cx, barTop + barH + 30);
+        g.fillText(fmt(gr.v), cx, barTop + barH + 30);
       }
     });
     if (shown < nLeaves) {

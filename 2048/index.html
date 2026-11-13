@@ -392,13 +392,11 @@
     <p class="g-cap" data-cap="snakes">&nbsp;</p>
 
     <div class="section-label">one number per board</div>
-    <p>The snake score grows with the tiles, so on its own it can't compare a board of small tiles
-      with a board of big ones. It gets divided by the best any snake could do with these tiles
-      (the same halving walk over the tiles sorted smallest to largest), which gives 1 for a board
-      in perfect order. Then it's multiplied by the square root of the fraction of cells that are
-      empty, since room to move matters too, and a full board scores 0. A board with no moves left
-      is divided by 10 on top of that.</p>
-    <p class="g-cap" style="font: 600 1rem var(--font-mono); color: var(--text)">score = √(empty ÷ 16) × snake ÷ best possible snake</p>
+    <p>That best snake score is the whole judgment of a board. The only other rule: a board with
+      no moves left is divided by 10, so the bot steers away from losing even when the tiles on a
+      full board happen to be in good order. Bigger tiles in a long, ordered line score higher, so
+      merging up toward the corner raises the score and scattering big tiles lowers it.</p>
+    <p class="g-cap" style="font: 600 1rem var(--font-mono); color: var(--text)">score = best of the 8 snakes (÷ 10 if stuck)</p>
     <div data-dia="parts"></div>
 
     <div class="section-label">looking six moves ahead</div>
@@ -743,13 +741,15 @@
     }
     function showThought(r) {
       bot.lastThink = r;
-      const vals = Object.values(r.values), top = Math.max(...vals), low = Math.min(...vals, 0);
+      // the worst legal move gets a sliver, the best a full bar, so close calls stay visible
+      const vals = Object.values(r.values), top = Math.max(...vals), worst = Math.min(...vals);
+      const low = worst - 0.15 * (top - worst);
       for (const m of $("think").children) {
         const d = m.dataset.dir, v = r.values[d];
         m.classList.toggle("is-illegal", v === undefined);
         m.classList.toggle("is-best", d === r.move);
-        m.querySelector(".g-think-fill").style.height = v === undefined || top <= low ? "0%" : (8 + 92 * (v - low) / (top - low)).toFixed(0) + "%";
-        m.querySelector(".g-think-val").textContent = v === undefined ? "–" : v.toFixed(3);
+        m.querySelector(".g-think-fill").style.height = v === undefined ? "0%" : top === worst ? "100%" : (100 * (v - low) / (top - low)).toFixed(0) + "%";
+        m.querySelector(".g-think-val").textContent = v === undefined ? "–" : v >= 1000 ? Math.round(v).toLocaleString("en-US") : v.toFixed(1);
       }
     }
 

@@ -1,6 +1,8 @@
 """Reference outputs from Mike's original Python, for game.test.mjs.
 
-Run from this folder with a checkout of quasarbright/2048 (numpy needed):
+Run from this folder with a checkout of quasarbright/2048 at 278d7fa (numpy needed). That's the
+version the README describes; the last commit, ba4a3a2, changed Game.score and plays worse:
+    git -C /path/to/quasarbright-2048 checkout 278d7fa
     python3 make_reference.py /path/to/quasarbright-2048 > reference.json
 
 Everything here calls the original modules unchanged. Two things are patched from outside:
