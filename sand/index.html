@@ -166,32 +166,44 @@
         runs on the graphics card, which computes every cell of the next step at the same time,
         each from a snapshot of the last step. That's fast enough for a whole screen of grains, but
         it breaks the obvious rule. Two grains can both see the same empty cell and both move into
-        it, and one of them disappears. And an empty cell can't tell whether a grain is about to
-        arrive from above or from the side.</p>
+        it, and one of them disappears. The way around it is to make sure that, for every kind of
+        move, each empty cell has only one grain that could fill it, and that the grain and the
+        cell agree on it. Then the cell can pull its grain in while the grain's old cell lets it go,
+        both working from the same snapshot. Each kind of move gets its own pass.</p>
 
-      <div class="section-label">moving in 2×2 blocks</div>
-      <p>The fix is to give every possible move a single owner. Each step, the grid is cut into
-        blocks of 2×2 cells. A grain only ever moves within its own block, and all four cells of a
-        block work out the same rearrangement together, then each keeps its own share. Nothing can
-        be claimed twice, because no other block touches those four cells. Within a block, in order:</p>
-      <ol>
-        <li>A grain in the top row falls straight down if the cell below is empty, or if it's
-          <span class="m-sand">sand</span> and the cell below is a liquid (the two swap, so sand sinks).</li>
-        <li>If nothing fell, a top grain slides diagonally down into an empty cell. That's what
-          gives piles their slopes.</li>
-        <li>If nothing moved yet, a <span class="m-water">liquid</span> that's resting on something
-          slides sideways into an empty cell. That's what flattens a puddle. Lava is thick, so it
-          only spreads one time in five.</li>
-      </ol>
-      <p>Grains in the bottom row of a block could never fall, so on the next step the blocks shift
-        one cell down and right, and on the step after that they shift back. The outlines in this
-        diagram are the blocks for the step about to run. Each block is also flipped left-to-right
-        at random, so a grain has no favorite side to slide toward.</p>
+      <div class="section-label">falling</div>
+      <p>A cell only ever takes the grain directly above it, so falling has one source per cell
+        already. A grain falls when the grains under it are a stack that ends in an empty cell, and
+        then the whole stack moves down together. If only the bottom grain moved, a falling clump
+        would come apart into stripes, one row at a time. A stack that ends on stone, wood or the
+        floor is <b>held up</b>, and only held-up grains slide or flow; otherwise a falling stream
+        of water would spray out sideways in midair.</p>
+
+      <div class="section-label">flowing</div>
+      <p>Every grain of <span class="m-water">liquid</span> carries a direction, left or right. When
+        it's held up, it moves one cell that way into an empty cell, and turns around when it bumps
+        into something. Keeping a direction is what levels a puddle: a grain on top of a mound walks
+        straight to the edge and falls off, where one that picked a new direction every time would
+        wander back and forth. An empty cell between two grains heading toward it picks one of them
+        at random, and both grains compute the same pick. Lava is thick, so it only flows one time
+        in five. This pass runs six times per step, so liquids spread faster than things fall.</p>
+
+      <div class="section-label">sliding, in 2×2 blocks</div>
+      <p>Diagonal slides are what give piles their slopes, and they're harder: a grain could come
+        from the upper left or the upper right, and the cell beside it might be moving too. So for
+        these, the grid is cut into blocks of 2×2 cells. A grain only slides within its own block,
+        all four cells of a block work out the same rearrangement, and each keeps its own share. No
+        other block touches those four cells, so nothing can be claimed twice. In a block, a held-up
+        grain in the top row slides down into an empty cell diagonally below it, and
+        <span class="m-sand">sand</span> sitting on a liquid swaps places with it, which is how sand
+        sinks. On the next step the blocks shift one cell down and right, and then back, so grains
+        can cross block edges. Each block is also flipped left-to-right at random, so a grain has no
+        favorite side.</p>
       <canvas class="sd-viz" data-viz="blocks"></canvas>
       <p class="sd-viz-caption">the real simulation, at 4 steps a second, with the next step's blocks outlined</p>
 
       <div class="section-label">reacting to neighbors</div>
-      <p>Reactions are a second pass, and they need no blocks. A cell never changes another cell,
+      <p>Reactions are the last pass, and they need no blocks. A cell never changes another cell,
         only itself: it looks at its 8 neighbors and decides what it becomes. For every burning
         neighbor, <span class="m-wood">wood</span> has a 1% chance of catching fire, and gasoline
         and gunpowder 10%. For every <span class="m-acid">acid</span> neighbor, wood has a 10%
@@ -279,6 +291,20 @@
     }
     bool isPowder(uint m) { return m == SAND || m == GUNPOWDER; }
     bool isLiquid(uint m) { return m == WATER || m == ACID || m == GASOLINE || m == LAVA; }
+    bool faller(uint m) { return isPowder(m) || isLiquid(m) || m == FIRE; }
+
+    // Is the grain at p held up? Look down through the grains under it: if they end on stone,
+    // wood or the floor it's held up; if they end on an empty cell the whole stack is falling.
+    // (Stacks taller than REACH count as held up.)
+    const int REACH = 32;
+    bool supported(ivec2 p) {
+      for (int i = 1; i <= REACH; i++) {
+        uint n = cellAt(p + ivec2(0, i)).r;
+        if (n == EMPTY) return false;
+        if (!faller(n)) return true;
+      }
+      return true;
+    }
     `
 
     // movement: 2x2 blocks, offset by one cell on alternate steps. All four fragments of a block
@@ -311,31 +337,25 @@
       // c d   (bottom row)
       uvec4 a = cellAt(o + ivec2(dx, 0)), b = cellAt(o + ivec2(1 - dx, 0));
       uvec4 c = cellAt(o + ivec2(dx, 1)), d = cellAt(o + ivec2(1 - dx, 1));
-      // the cells under the block are only read, to tell whether c and d are resting on something
-      uint underC = cellAt(o + ivec2(dx, 2)).r, underD = cellAt(o + ivec2(1 - dx, 2)).r;
-      float r1 = u01(h.y), r2 = u01(h.z), r3 = u01(h2.x), r4 = u01(h2.y);
+      float r1 = u01(h.y), r4 = u01(h2.y);
 
       // Each grain moves at most once per step. ma..md say whether the grain now in that slot
       // has already moved; a grain can only move into an empty slot or an unmoved liquid.
       bool ma = false, mb = false, mc = false, md = false;
       #define FREE(x, mx) (x.r == EMPTY || !mx)
 
-      // 1. fall straight down
-      if (canDisplace(a.r, c.r)) { swapCells(a, c); ma = mc = true; }
-      if (canDisplace(b.r, d.r)) { swapCells(b, d); mb = md = true; }
+      // (falling into empty cells and sideways flow have their own passes, FALL and SPREAD)
 
-      // 2. slide diagonally down
-      bool aSlides = !ma && a.r != EMPTY && (isPowder(a.r) || (isLiquid(a.r) && r1 >= viscosity(a.r)));
-      bool bSlides = !mb && b.r != EMPTY && (isPowder(b.r) || (isLiquid(b.r) && r1 >= viscosity(b.r)));
-      if (aSlides && FREE(d, md) && canDisplace(a.r, d.r)) { swapCells(a, d); ma = md = true; }
-      else if (bSlides && FREE(c, mc) && canDisplace(b.r, c.r)) { swapCells(b, c); mb = mc = true; }
+      // 1. sand and gunpowder sink through liquid
+      if (isPowder(a.r) && isLiquid(c.r)) { swapCells(a, c); ma = mc = true; }
+      if (isPowder(b.r) && isLiquid(d.r)) { swapCells(b, d); mb = md = true; }
 
-      // 3. liquids resting on something spread sideways (the top row always rests: it didn't fall)
-      if (!ma && isLiquid(a.r) && b.r == EMPTY && r3 >= viscosity(a.r)) { swapCells(a, b); ma = mb = true; }
-      else if (!mb && isLiquid(b.r) && a.r == EMPTY && r3 >= viscosity(b.r)) { swapCells(a, b); ma = mb = true; }
-      bool cRests = !canDisplace(c.r, underC), dRests = !canDisplace(d.r, underD);
-      if (!mc && isLiquid(c.r) && d.r == EMPTY && cRests && r2 >= viscosity(c.r)) { swapCells(c, d); mc = md = true; }
-      else if (!md && isLiquid(d.r) && c.r == EMPTY && dRests && r2 >= viscosity(d.r)) { swapCells(c, d); mc = md = true; }
+      // 2. a grain resting on something slides diagonally down
+      bool aSlides = !ma && (isPowder(a.r) || (isLiquid(a.r) && r1 >= viscosity(a.r)));
+      bool bSlides = !mb && (isPowder(b.r) || (isLiquid(b.r) && r1 >= viscosity(b.r)));
+      // (the support check is last: it's the expensive one)
+      if (aSlides && FREE(d, md) && canDisplace(a.r, d.r) && supported(o + ivec2(dx, 0))) { swapCells(a, d); ma = md = true; }
+      else if (bSlides && FREE(c, mc) && canDisplace(b.r, c.r) && supported(o + ivec2(1 - dx, 0))) { swapCells(b, c); mb = mc = true; }
 
       // different liquids slowly mix
       if (!mc && !md && isLiquid(c.r) && isLiquid(d.r) && c.r != d.r && r4 < min(mixChance(c.r), mixChance(d.r))) swapCells(c, d);
@@ -343,6 +363,58 @@
 
       int lx = mirror ? 1 - l.x : l.x;
       outCell = l.y == 0 ? (lx == 0 ? a : b) : (lx == 0 ? c : d);
+    }`
+
+    // falling: a grain falls if the cells under it are a run of falling grains that ends in an
+    // empty cell, so a whole falling clump moves down together instead of peeling apart row by
+    // row. Each cell only ever takes the grain from directly above it, so nothing collides.
+    const FALL = COMMON + `
+    bool drops(ivec2 p) { return faller(cellAt(p).r) && !supported(p); }
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy), up = p - ivec2(0, 1);
+      if (drops(up)) outCell = cellAt(up);
+      else if (drops(p)) outCell = uvec4(0u);
+      else outCell = texelFetch(uState, p, 0);
+    }`
+
+    // sideways flow: each liquid grain carries a direction (bit 0 of .a). Resting on something, it
+    // keeps moving that way into empty cells, and turns around when it bumps into something. That
+    // carries grains all the way across the top of a mound to its edge, so puddles level out.
+    // When grains from both sides want the same empty cell, the cell picks one at random, and the
+    // two grains work out the same pick, so nothing collides.
+    const SPREAD = COMMON + `
+    uniform uint uPass;
+    int dirOf(uvec4 s) { return (s.a & 1u) == 1u ? 1 : -1; }
+    uint passSeed() { return (uStep ^ uSeed) + uPass * 977u; }
+    // does the grain at p want to move into t this pass?
+    bool wantsInto(ivec2 p, ivec2 t) {
+      uvec4 s = cellAt(p);
+      if (!isLiquid(s.r) || p.x + dirOf(s) != t.x || cellAt(t).r != EMPTY) return false;
+      // lava is thick: it only flows one time in five
+      if (s.r == LAVA && u01(pcg3d(uvec3(uvec2(p), passSeed())).x) < 0.8) return false;
+      return supported(p);
+    }
+    // which neighbor fills empty cell t: -1 the left one, 1 the right one, 0 neither
+    int winner(ivec2 t) {
+      bool l = wantsInto(t - ivec2(1, 0), t), r = wantsInto(t + ivec2(1, 0), t);
+      if (l && r) return (pcg3d(uvec3(uvec2(t), passSeed() + 3u)).x & 1u) == 0u ? -1 : 1;
+      return l ? -1 : r ? 1 : 0;
+    }
+    void main() {
+      ivec2 p = ivec2(gl_FragCoord.xy);
+      uvec4 s = texelFetch(uState, p, 0);
+      if (s.r == EMPTY) {
+        int w = winner(p);
+        outCell = w == 0 ? s : cellAt(p + ivec2(w, 0));
+        return;
+      }
+      if (!isLiquid(s.r)) { outCell = s; return; }
+      ivec2 t = p + ivec2(dirOf(s), 0);
+      if (wantsInto(p, t) && winner(t) == -dirOf(s)) { outCell = uvec4(0u); return; }
+      // resting and blocked: turn around
+      uint ahead = cellAt(t).r;
+      if (ahead != EMPTY && cellAt(p + ivec2(0, 1)).r != EMPTY) s.a ^= 1u;
+      outCell = s;
     }`
 
     // reactions: each cell looks at its 8 neighbors and decides what it becomes
@@ -416,7 +488,7 @@
       if (uMat == EMPTY) { outCell = uvec4(0u); return; }
       uvec3 h = pcg3d(uvec3(uvec2(p), (uStep ^ uSeed) + 0x2545f491u));
       uint life = uMat == FIRE ? FIRE_LIFE : uMat == LAVA ? LAVA_LIFE : 0u;
-      outCell = uvec4(uMat, h.x & 255u, life, 0u);
+      outCell = uvec4(uMat, h.x & 255u, life, h.y & 1u);   // .a bit 0: which way a liquid flows
     }`
 
     // resizing: keep the old grains, lined up along the bottom edge
@@ -474,6 +546,7 @@
         this.gl = gl
         this.vao = gl.createVertexArray()
         this.progs = {
+          fall: this.program(FALL), spread: this.program(SPREAD),
           move: this.program(MOVE), react: this.program(REACT), paint: this.program(PAINT),
           copy: this.program(COPY), render: this.program(RENDER),
         }
@@ -560,6 +633,10 @@
       }
 
       step() {
+        const gl = this.gl
+        this.flip(this.progs.fall)
+        // six flow passes per step, so puddles level out faster than grains fall
+        for (let k = 0; k < 6; k++) this.flip(this.progs.spread, (u) => gl.uniform1ui(u.uPass, k))
         this.flip(this.progs.move)
         this.flip(this.progs.react)
         this.stepN++
@@ -590,6 +667,7 @@
           const m = fn(c, r) || 0, i = 4 * (r * this.cols + c)
           data[i] = m; data[i + 1] = (Math.random() * 256) | 0
           data[i + 2] = m === MAT.FIRE ? FIRE_LIFE : m === MAT.LAVA ? LAVA_LIFE : 0
+          data[i + 3] = Math.random() < 0.5 ? 1 : 0
         }
         gl.bindTexture(gl.TEXTURE_2D, this.tex[this.cur])
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, data)
