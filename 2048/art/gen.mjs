@@ -134,35 +134,76 @@ function lava() {
   return [uri(art), uri(glow)];
 }
 
-// ---- constellation: Orion, as on a star chart. Lines between the stars, each star a bright
-// point with a glow sized by its brightness, and four-point spikes on the brightest.
-function constellation() {
-  const S = {
-    meissa: [50, 13, 1.0, "#dfe8ff"], betelgeuse: [30, 29, 2.1, "#ffb27a"], bellatrix: [69, 32, 1.4, "#dfe8ff"],
-    alnitak: [42, 55, 1.4, "#dfe8ff"], alnilam: [50, 53, 1.5, "#e8f0ff"], mintaka: [58, 51, 1.3, "#dfe8ff"],
-    saiph: [37, 85, 1.3, "#dfe8ff"], rigel: [70, 81, 2.0, "#bcd4ff"],
-  };
-  const lines = [["meissa", "betelgeuse"], ["meissa", "bellatrix"], ["betelgeuse", "alnitak"], ["bellatrix", "mintaka"],
-    ["alnitak", "alnilam"], ["alnilam", "mintaka"], ["alnitak", "saiph"], ["mintaka", "rigel"], ["betelgeuse", "bellatrix"]];
-  const d = lines.map(([a, b]) => `M${S[a][0]} ${S[a][1]}L${S[b][0]} ${S[b][1]}`).join("");
-  let stars = "";
-  for (const [x, y, m, c] of Object.values(S)) {
-    stars += `<circle cx='${x}' cy='${y}' r='${f(m * 3.2)}' fill='url(#halo)' opacity='.8'/>`;
-    if (m >= 1.4) stars += `<path d='M${x - m * 4.5} ${y}H${x + m * 4.5}M${x} ${y - m * 4.5}V${y + m * 4.5}' stroke='${c}' stroke-width='.35' opacity='.7' stroke-linecap='round'/>`;
-    stars += `<circle cx='${x}' cy='${y}' r='${f(0.5 + m * 0.55)}' fill='${c}'/>`;
+// ---- constellation: Orion as on a star chart, over the real sky around it: the Orion Nebula
+// glowing pink in the sword under the belt, the red arc of Barnard's Loop, a band of Milky Way
+// and a dense field of stars. Three files so the tile can animate them separately: the sky, the
+// chart's lines, and Orion's stars.
+const ORION = {
+  meissa: [50, 13, 1.0, "#dfe8ff"], betelgeuse: [30, 29, 2.1, "#ffb27a"], bellatrix: [69, 32, 1.4, "#dfe8ff"],
+  alnitak: [42, 55, 1.4, "#dfe8ff"], alnilam: [50, 53, 1.5, "#e8f0ff"], mintaka: [58, 51, 1.3, "#dfe8ff"],
+  saiph: [37, 85, 1.3, "#dfe8ff"], rigel: [70, 81, 2.0, "#bcd4ff"],
+};
+const ORION_LINES = [["meissa", "betelgeuse"], ["meissa", "bellatrix"], ["betelgeuse", "alnitak"], ["bellatrix", "mintaka"],
+  ["alnitak", "alnilam"], ["alnilam", "mintaka"], ["alnitak", "saiph"], ["mintaka", "rigel"], ["betelgeuse", "bellatrix"]];
+function orionSky() {
+  let field = "";
+  const tints = ["#ffffff", "#ffffff", "#dfe8ff", "#cfe0ff", "#ffe9d0", "#ffd6b0"];
+  for (let i = 0; i < 260; i++) {
+    const r = 0.12 + rnd() ** 3 * 0.55;
+    field += `<circle cx='${f(rnd() * 100)}' cy='${f(rnd() * 100)}' r='${f(r)}' fill='${tints[Math.floor(rnd() * tints.length)]}' opacity='${f(0.35 + rnd() * 0.65)}'/>`;
   }
+  // the Milky Way: a soft band of many faint stars and glow across the corner
+  let band = "";
+  for (let i = 0; i < 220; i++) {
+    const t = rnd(), off = (rnd() + rnd() + rnd() - 1.5) * 14;
+    const x = -10 + t * 120 + off * 0.6, y = 70 - t * 90 + off;
+    band += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(0.1 + rnd() * 0.25)}' fill='#e6ecff' opacity='${f(0.3 + rnd() * 0.5)}'/>`;
+  }
+  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='xMidYMid slice'>
+    <defs>
+      <radialGradient id='sky' cx='.5' cy='.45' r='.75'><stop offset='0' stop-color='#1b2a62'/><stop offset='.55' stop-color='#0b1236'/><stop offset='1' stop-color='#03050f'/></radialGradient>
+      <linearGradient id='band' x1='0' y1='1' x2='1' y2='0'><stop offset='.25' stop-color='#8ea6ff' stop-opacity='0'/>
+        <stop offset='.5' stop-color='#a8b4ff' stop-opacity='.13'/><stop offset='.75' stop-color='#c8a8ff' stop-opacity='0'/></linearGradient>
+      <radialGradient id='m42'><stop offset='0' stop-color='#fff0f6'/><stop offset='.2' stop-color='#ff8fc8' stop-opacity='.9'/>
+        <stop offset='.55' stop-color='#c04aa0' stop-opacity='.45'/><stop offset='1' stop-color='#6a2a9a' stop-opacity='0'/></radialGradient>
+      <filter id='blur' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='3'/></filter>
+      <filter id='soft' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='1.2'/></filter>
+    </defs>
+    <rect width='100' height='100' fill='url(#sky)'/>
+    <rect width='100' height='100' fill='url(#band)'/>
+    <g filter='url(#soft)'>${band}</g>
+    <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff3a5a' stroke-width='7' opacity='.4' filter='url(#blur)'/>
+    <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff7a8a' stroke-width='1.6' opacity='.25' filter='url(#soft)'/>
+    <ellipse cx='48' cy='67' rx='9' ry='11' fill='url(#m42)' filter='url(#soft)'/>
+    <ellipse cx='46' cy='64' rx='16' ry='14' fill='#7a3ab0' opacity='.18' filter='url(#blur)'/>
+    ${field}</svg>`);
+}
+function orionLines() {
+  const d = ORION_LINES.map(([a, b]) => `M${ORION[a][0]} ${ORION[a][1]}L${ORION[b][0]} ${ORION[b][1]}`).join("");
   return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-    <defs><radialGradient id='halo'><stop offset='0' stop-color='#fff' stop-opacity='.9'/><stop offset='.25' stop-color='#cfe0ff' stop-opacity='.35'/>
-      <stop offset='1' stop-color='#9fb8ff' stop-opacity='0'/></radialGradient>
-      <filter id='b' x='-10%' y='-10%' width='120%' height='120%'><feGaussianBlur stdDeviation='1.2'/></filter></defs>
+    <defs><filter id='b' x='-10%' y='-10%' width='120%' height='120%'><feGaussianBlur stdDeviation='1.3'/></filter></defs>
     <g fill='none' stroke='#9fd0ff' stroke-linecap='round'>
-      <path d='${d}' stroke-width='2.6' opacity='.45' filter='url(#b)'/>
-      <path d='${d}' stroke-width='.7' opacity='.85'/></g>
-    ${stars}</svg>`);
+      <path d='${d}' stroke-width='2.8' opacity='.5' filter='url(#b)'/>
+      <path d='${d}' stroke-width='.7' opacity='.9'/></g></svg>`);
+}
+function orionStars() {
+  let stars = "";
+  for (const [x, y, m, c] of Object.values(ORION)) {
+    stars += `<circle cx='${x}' cy='${y}' r='${f(m * 3.6)}' fill='url(#halo)'/>`;
+    if (m >= 1.3) stars += `<path d='M${x - m * 5} ${y}H${x + m * 5}M${x} ${y - m * 5}V${y + m * 5}' stroke='${c}' stroke-width='.4' opacity='.8' stroke-linecap='round'/>`;
+    stars += `<circle cx='${x}' cy='${y}' r='${f(0.55 + m * 0.6)}' fill='${c}'/>`;
+  }
+  // the sword hanging from the belt, through the nebula
+  for (const [x, y] of [[47, 62], [48, 66], [48.5, 70]]) stars += `<circle cx='${x}' cy='${y}' r='.55' fill='#f4f0ff'/>`;
+  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+    <defs><radialGradient id='halo'><stop offset='0' stop-color='#fff' stop-opacity='.95'/><stop offset='.22' stop-color='#cfe0ff' stop-opacity='.4'/>
+      <stop offset='1' stop-color='#9fb8ff' stop-opacity='0'/></radialGradient></defs>${stars}</svg>`);
 }
 
 const out = process.argv[2];
-for (const [name, fn] of Object.entries({ aurora, galaxy, constellation })) writeFileSync(`${out}/${name}.svg`, fn());
+for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${out}/${name}.svg`, fn());
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);
+// after lava, so adding Orion didn't change the earlier art's random numbers
+for (const [name, fn] of Object.entries({ "orion-sky": orionSky, "orion-lines": orionLines, "orion-stars": orionStars })) writeFileSync(`${out}/${name}.svg`, fn());

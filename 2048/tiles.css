@@ -63,49 +63,16 @@
   animation: g-slide2 17s linear infinite reverse;
 }
 
-/* 65536: a constellation (Orion) on a night sky. The chart (art/constellation.svg, in a .g-fx
-   element paintFace adds) turns very slowly with one star field and its lines glow brighter and
-   dimmer; a second star field twinkles out of step. */
+/* 65536: Orion, as on a star chart, over the real sky around it: the pink Orion Nebula in the
+   sword, the red arc of Barnard's Loop, the Milky Way. The sky is the tile's background
+   (art/orion-sky.svg); the chart's lines and Orion's stars are .g-fx layers paintFace adds, so the
+   lines can glow and fade while the stars twinkle, and now and then a meteor crosses. */
 .g-face[data-tier="constellation"] {
-  background:
-    linear-gradient(125deg, transparent 30%, rgba(150, 170, 255, .1) 45%, rgba(190, 160, 255, .08) 55%, transparent 70%),
-    radial-gradient(circle at 50% 45%, #1a2656, #0a1030 60%, #03050f);
+  background: #050a1f url(art/orion-sky.svg) center / cover;
   color: #ffffff;
   text-shadow: 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .14) #9fd0ff;
 }
-.g-face[data-tier="constellation"]::before, .g-face[data-tier="constellation"]::after { inset: -30%; border-radius: 50%; }
 .g-face[data-tier="constellation"]::before {
-  background:
-    radial-gradient(2px 2px at 42% 90%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 11% 13%, #fff 99%, transparent),
-    radial-gradient(2px 2px at 49% 62%, #fff 99%, transparent),
-    radial-gradient(2px 2px at 17% 76%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 89% 32%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 81% 59%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 66% 36%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 38% 53%, #fff 99%, transparent),
-    radial-gradient(2px 2px at 40% 60%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 34% 5%, #fff 99%, transparent),
-    radial-gradient(2.2px 2.2px at 56% 35%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 67% 42%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 89% 45%, #fff 99%, transparent),
-    radial-gradient(2px 2px at 54% 85%, #fff 99%, transparent),
-    radial-gradient(2.2px 2.2px at 89% 56%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 45% 42%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 48% 46%, #fff 99%, transparent),
-    radial-gradient(2.2px 2.2px at 36% 14%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 52% 27%, #fff 99%, transparent),
-    radial-gradient(2px 2px at 30% 53%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 35% 26%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 74% 48%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 72% 39%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 42% 44%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 70% 24%, #fff 99%, transparent),
-    radial-gradient(2.2px 2.2px at 16% 89%, #fff 99%, transparent);
-  opacity: .7;
-  animation: g-turn 160s linear infinite;
-}
-.g-face[data-tier="constellation"]::after {
   background:
     radial-gradient(1.6px 1.6px at 41% 22%, #fff 99%, transparent),
     radial-gradient(1.2px 1.2px at 29% 9%, #fff 99%, transparent),
@@ -135,10 +102,20 @@
     radial-gradient(1.3px 1.3px at 51% 42%, #fff 99%, transparent);
   animation: g-twinkle 2.6s ease-in-out infinite alternate;
 }
-.g-face[data-tier="constellation"] .g-fx {
-  position: absolute; inset: 4%; z-index: -1; pointer-events: none;
-  background: url(art/constellation.svg) center / contain no-repeat;
-  animation: g-turn 160s linear infinite, g-chart 3.2s ease-in-out infinite alternate;
+.g-face[data-tier="constellation"] .g-fx { position: absolute; inset: 4%; z-index: -1; pointer-events: none; }
+.g-face[data-tier="constellation"] .g-fx[data-fx="lines"] {
+  background: url(art/orion-lines.svg) center / contain no-repeat;
+  animation: g-chart 3.2s ease-in-out infinite alternate;
+}
+.g-face[data-tier="constellation"] .g-fx[data-fx="stars"] {
+  background: url(art/orion-stars.svg) center / contain no-repeat;
+  animation: g-shine 1.7s ease-in-out infinite alternate;
+}
+.g-face[data-tier="constellation"] .g-fx[data-fx="meteor"] {
+  inset: auto; left: 0; top: 0; width: calc(var(--cell) * .45); height: max(1.5px, calc(var(--cell) * .012));
+  border-radius: 99px; background: linear-gradient(90deg, transparent, rgba(200, 225, 255, .5) 60%, #ffffff);
+  opacity: 0;
+  animation: g-meteor 7s ease-in infinite 1.5s;
 }
 
 /* 131072, the biggest tile the game can make: a spiral galaxy, tilted and slowly turning, in
@@ -169,7 +146,14 @@
 @keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
-@keyframes g-chart { from { opacity: .7; } to { opacity: 1; } }
+@keyframes g-chart { from { opacity: .45; } to { opacity: 1; } }
+@keyframes g-shine { from { opacity: .7; } to { opacity: 1; } }
+@keyframes g-meteor {
+  0% { opacity: 0; transform: translate(calc(var(--cell) * .05), calc(var(--cell) * .08)) rotate(24deg); }
+  2% { opacity: 1; }
+  11% { opacity: 0; transform: translate(calc(var(--cell) * .85), calc(var(--cell) * .45)) rotate(24deg); }
+  100% { opacity: 0; transform: translate(calc(var(--cell) * .85), calc(var(--cell) * .45)) rotate(24deg); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }

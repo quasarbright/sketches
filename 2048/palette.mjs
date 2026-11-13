@@ -32,8 +32,8 @@ export function paintFace(face, v, cell) {
   face.style.setProperty("--glowR", lv >= 7 ? Math.min(40, (lv - 6) * 5) + "px" : "0px");
   const t = tier(v);
   if (t) face.dataset.tier = t; else delete face.dataset.tier;
-  // the constellation tile's chart layer (textContent above already cleared any old one)
-  if (t === "constellation") for (const k of ["chart"]) {
+  // the constellation tile's layers (textContent above already cleared any old ones)
+  if (t === "constellation") for (const k of ["lines", "stars", "meteor"]) {
     const fx = document.createElement("i");
     fx.className = "g-fx"; fx.dataset.fx = k; fx.setAttribute("aria-hidden", "true");
     face.append(fx);
