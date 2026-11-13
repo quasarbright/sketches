@@ -134,8 +134,37 @@ function lava() {
   return [uri(art), uri(glow)];
 }
 
+// ---- black hole sky: clouds of glowing gas in a loose ring around the hole, lit orange and
+// amber, with bright knots and a star field. Drawn past the tile's edges (viewBox) so the tile
+// can sway it.
+function blackholeSky() {
+  let stars = "", clouds = "", knots = "";
+  for (let i = 0; i < 320; i++) {
+    stars += `<circle cx='${f(-14 + rnd() * 128)}' cy='${f(-14 + rnd() * 128)}' r='${f(0.12 + rnd() ** 3 * 0.5)}' fill='${["#fff", "#ffe8d0", "#ffd6b0", "#fff4e8"][Math.floor(rnd() * 4)]}' opacity='${f(0.3 + rnd() * 0.65)}'/>`;
+  }
+  const cols = ["#ff8a3a", "#ffb060", "#c8501a", "#ff6a2a", "#e07030"];
+  for (let i = 0; i < 90; i++) {
+    const a = rnd() * 2 * Math.PI, r = 22 + (rnd() + rnd()) * 14;
+    const x = 50 + Math.cos(a) * r * 1.15, y = 50 + Math.sin(a) * r * 0.9;
+    clouds += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(3 + rnd() * 9)}' fill='${cols[Math.floor(rnd() * cols.length)]}' opacity='${f(0.16 + rnd() * 0.24)}'/>`;
+    if (rnd() < 0.25) knots += `<circle cx='${f(x + (rnd() - .5) * 6)}' cy='${f(y + (rnd() - .5) * 6)}' r='${f(0.5 + rnd() * 1.2)}' fill='#ffe0b0' opacity='${f(0.4 + rnd() * 0.4)}'/>`;
+  }
+  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='-14 -14 128 128' preserveAspectRatio='xMidYMid slice'>
+    <defs>
+      <radialGradient id='sky' cx='.5' cy='.5' r='.75'><stop offset='0' stop-color='#1e0c04'/><stop offset='.55' stop-color='#0a0402'/><stop offset='1' stop-color='#020101'/></radialGradient>
+      <filter id='fog' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='3.2'/></filter>
+      <filter id='k' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='.8'/></filter>
+    </defs>
+    <rect x='-14' y='-14' width='128' height='128' fill='url(#sky)'/>
+    ${stars}
+    <g filter='url(#fog)'>${clouds}</g>
+    <g filter='url(#k)'>${knots}</g></svg>`);
+}
+
 const out = process.argv[2];
 for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${out}/${name}.svg`, fn());
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);
+// after lava, so adding new art doesn't change the earlier art's random numbers
+writeFileSync(`${out}/blackhole-sky.svg`, blackholeSky());

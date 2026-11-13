@@ -64,49 +64,41 @@
   animation: g-slide2 85s linear infinite reverse;
 }
 
-/* 65536: a black hole, as in the Interstellar and Event Horizon Telescope pictures. A glowing
-   accretion disk seen almost edge-on wraps around a black shadow: the near half of the disk
-   passes in front, the far half behind, and light from the far side bends up over the top into a
-   ring. The disk turns (a flat ring spun, then squashed to an ellipse); the ring of light around
-   the shadow pulses. Layers are .g-fx elements paintFace adds, back to front: halo, disk,
-   shadow, front (a box over the lower half holding a second copy of the disk). */
-.g-face[data-tier="blackhole"] {
-  background:
-    radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent), radial-gradient(1px 1px at 84% 14%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 70% 82%, #fff 99%, transparent), radial-gradient(1px 1px at 22% 74%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 90% 58%, #fff 99%, transparent), radial-gradient(1px 1px at 40% 10%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 8% 46%, #fff 99%, transparent), radial-gradient(1.2px 1.2px at 58% 92%, #fff 99%, transparent),
-    radial-gradient(circle at 50% 50%, #2a1206, #0c0503 45%, #020101 75%);
-  color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #000, 0 0 calc(var(--cell) * .03) #000, 0 0 calc(var(--cell) * .14) #ff9a3a;
+/* 65536: a black hole, as in the Interstellar pictures. A black shadow sits in a thick
+   white-hot ring of light (the far side of the disk, bent around it by gravity), a thin wispy
+   accretion disk crosses in front at a tilt, and clouds of orange gas glow around it
+   (art/blackhole-sky.svg). The disk turns (a flat ring spun, then squashed to an ellipse); the
+   ring pulses and the clouds breathe and sway. Layers are .g-fx elements paintFace adds, back to
+   front: halo, disk, shadow, front (a box over the lower half holding a second copy of the
+   disk, so the near side passes in front of the shadow). */
+.g-face[data-tier="blackhole"] { background: #050201; color: #ffffff;
+  text-shadow: 0 0 calc(var(--cell) * .035) #000, 0 0 calc(var(--cell) * .035) #000, 0 0 calc(var(--cell) * .14) #ff9a3a; }
+.g-face[data-tier="blackhole"]::after {
+  inset: -14%; z-index: -2; border-radius: 0;
+  background: url(art/blackhole-sky.svg) center / cover;
+  animation: g-sway 20s ease-in-out infinite alternate, g-clouds 4.5s ease-in-out infinite alternate;
 }
 .g-face[data-tier="blackhole"] .g-fx { position: absolute; pointer-events: none; z-index: -1; }
-/* the far side of the disk, bent over and under the shadow by gravity */
 .g-face[data-tier="blackhole"] .g-fx[data-fx="halo"] {
-  inset: 18%; border-radius: 50%;
-  background: radial-gradient(circle, transparent 47%, #fff1c8 51%, rgba(255, 170, 70, .85) 55%, rgba(255, 90, 20, .35) 62%, transparent 72%);
-  animation: g-halo 2.6s ease-in-out infinite alternate;
+  inset: 12%; border-radius: 50%;
+  background: radial-gradient(circle closest-side, transparent 60%, #ffffff 65%, #fff6e2 71%, #ffd79a 78%, rgba(255, 150, 60, .5) 87%, rgba(255, 110, 30, .15) 95%, transparent 100%);
+  animation: g-halo 3s ease-in-out infinite alternate;
 }
-/* the disk: a ring with streaks, spun and squashed; .disk is shared by the far and near copies */
 .g-face[data-tier="blackhole"] .g-disk {
   position: absolute; left: 50%; top: 50%;
-  width: calc(var(--cell) * 1.1); height: calc(var(--cell) * 1.1);
-  margin: calc(var(--cell) * -.55) 0 0 calc(var(--cell) * -.55); border-radius: 50%;
-  filter: blur(calc(var(--cell) * .008));
+  width: calc(var(--cell) * 1.5); height: calc(var(--cell) * 1.5);
+  margin: calc(var(--cell) * -.75) 0 0 calc(var(--cell) * -.75); border-radius: 50%;
+  filter: blur(calc(var(--cell) * .006));
   background:
-    repeating-conic-gradient(rgba(60, 10, 0, .22) 0 6deg, transparent 6deg 11deg, rgba(255, 240, 200, .3) 11deg 14deg, transparent 14deg 21deg),
-    radial-gradient(circle, transparent 40%, #fff6d8 43%, #ffc060 49%, #ff7a1a 60%, rgba(200, 50, 10, .55) 76%, transparent 90%);
-  animation: g-disk 6s linear infinite;
+    repeating-conic-gradient(rgba(255, 250, 235, .22) 0 2deg, transparent 2deg 7deg, rgba(120, 40, 10, .14) 7deg 9deg, transparent 9deg 13deg),
+    radial-gradient(circle closest-side, transparent 30%, #ffffff 34%, #fff4e0 44%, rgba(255, 205, 130, .85) 56%, rgba(255, 140, 50, .5) 72%, rgba(220, 80, 20, .18) 88%, transparent 100%);
+  animation: g-disk 9s linear infinite;
 }
 .g-face[data-tier="blackhole"] .g-fx[data-fx="disk"] { inset: 0; }
-/* the shadow, edged by a thin bright photon ring */
 .g-face[data-tier="blackhole"] .g-fx[data-fx="shadow"] {
-  inset: 29%; border-radius: 50%;
-  background: radial-gradient(circle, #000 0 62%, #1a0700 66%, #fff0c0 69%, rgba(255, 150, 50, .7) 72%, transparent 78%);
-  box-shadow: 0 0 calc(var(--cell) * .08) rgba(255, 140, 40, .55);
-  animation: g-photon 1.3s ease-in-out infinite alternate;
+  inset: 28%; border-radius: 50%;
+  background: radial-gradient(circle closest-side, #000 0 93%, #24100a 97%, transparent 100%);
 }
-/* the near half of the disk, in front of the shadow */
 .g-face[data-tier="blackhole"] .g-fx[data-fx="front"] { left: 0; right: 0; top: 50%; bottom: 0; overflow: hidden; }
 .g-face[data-tier="blackhole"] .g-fx[data-fx="front"] .g-disk { top: 0; }
 
@@ -138,9 +130,10 @@
 @keyframes g-surge { 0% { opacity: .35; } 30% { opacity: 1; } 45% { opacity: .7; } 60% { opacity: 1; } 100% { opacity: .35; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
-@keyframes g-disk { from { transform: rotate(-8deg) scaleY(.2) rotate(0deg); } to { transform: rotate(-8deg) scaleY(.2) rotate(360deg); } }
-@keyframes g-halo { from { opacity: .65; } to { opacity: 1; } }
-@keyframes g-photon { from { opacity: .8; transform: scale(.98); } to { opacity: 1; transform: scale(1.03); } }
+@keyframes g-disk { from { transform: rotate(-14deg) scaleY(.12) rotate(0deg); } to { transform: rotate(-14deg) scaleY(.12) rotate(360deg); } }
+@keyframes g-halo { from { opacity: .72; transform: scale(.97); } to { opacity: 1; transform: scale(1.03); } }
+@keyframes g-sway { from { transform: rotate(-4deg) scale(1.02); } to { transform: rotate(4deg) scale(1.1); } }
+@keyframes g-clouds { from { opacity: .6; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }
