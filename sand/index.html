@@ -940,24 +940,46 @@
       '..##########..',
       '...########...',
     ]
+    // Each kind of material gets its own silhouette, so the rail sorts itself at a glance:
+    // grainy things are a ragged heap with loose grains, liquids a droplet with a highlight,
+    // solids a hard-edged block (stone in bricks, wood with grain lines), fire a flame.
+    const KIND = {
+      [MAT.SAND]: 'grain', [MAT.GUNPOWDER]: 'grain', [MAT.STONE]: 'solid', [MAT.WOOD]: 'solid',
+      [MAT.WATER]: 'liquid', [MAT.ACID]: 'liquid', [MAT.GASOLINE]: 'liquid', [MAT.LAVA]: 'liquid',
+      [MAT.FIRE]: 'fire',
+    }
     function drawSwatch(cv, m) {
-      const w = 14, h = 10
+      const w = 14, h = 10, kind = KIND[m]
       cv.width = w; cv.height = h
       const g = cv.getContext('2d'), img = g.createImageData(w, h)
       for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        let life
-        if (m === MAT.FIRE) {
+        let life = 0, k = 1   // k brightens or darkens this pixel
+        if (kind === 'fire') {
           if (FLAME[y][x] !== '#') continue
           // red at the tips, yellow at the base and in the middle (fire turns yellow as it burns down)
           const core = Math.max(0, 1 - Math.abs(x - 6.5) / 5) * (y / (h - 1))
           life = FIRE_LIFE * Math.min(1, Math.max(0, 1 - y / (h - 1) * 0.8 - core * 0.6 + (Math.random() - 0.5) * 0.15))
+        } else if (kind === 'grain') {
+          const top = h - Math.round((h - 1) * (1 - Math.pow(Math.abs(x - 6.5) / 6, 2)))
+          if (y < top) {
+            // a few loose grains just above the surface
+            if (!(y >= top - 3 && y >= 1 && Math.random() < 0.09)) continue
+          } else if (y === top && Math.random() < 0.3) continue   // ragged surface
+        } else if (kind === 'liquid') {
+          const cx = 6.5, cy = 6, r = 3.7
+          const inBall = (x - cx) ** 2 + (y - cy) ** 2 <= r * r
+          const inTip = y < cy && Math.abs(x - cx) <= (y / cy) * r + 0.6
+          if (!inBall && !inTip) continue
+          if ((x === 5 && (y === 4 || y === 5)) || (x === 4 && y === 6)) k = 1.45   // highlight
+          life = LAVA_LIFE * (0.3 + 0.7 * y / (h - 1))   // lava: cooler on top
         } else {
-          const top = h - Math.round((h - 1) * (1 - Math.pow(Math.abs(x - (w - 1) / 2) / (w / 2), 2)))
-          if (y < top) continue
-          const age = Math.min(1, 0.1 + (h - 1 - y) / h + Math.random() * 0.3)
-          life = LAVA_LIFE * (1 - age)
+          if (y < 2 || x < 1 || x > 12) continue
+          if (m === MAT.STONE) {
+            // two courses of bricks
+            if (y === 5 || (y < 5 && x === 6) || (y > 5 && (x === 3 || x === 10))) k = 0.55
+          } else if ((y === 4 && x > 1 && x < 9) || (y === 7 && x > 4 && x < 12)) k = 0.6   // wood grain
         }
-        const c = grainRGB(m, Math.random(), life), i = 4 * (y * w + x)
+        const c = grainRGB(m, Math.random(), life).map((v) => Math.min(255, v * k)), i = 4 * (y * w + x)
         img.data.set([c[0], c[1], c[2], 255], i)
       }
       g.putImageData(img, 0, 0)
