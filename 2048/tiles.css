@@ -40,7 +40,8 @@
 
 /* 32768: aurora, curtains of green light rippling over a night sky, their tops fading to violet.
    art/aurora.svg is one curtain, periodic across its width. Two strips of it slide sideways at
-   different speeds (the back one blurred, for the glow). */
+   different speeds (the back one blurred, for the glow), slowly; mostly the curtain's light
+   surges and fades. (Fading the blurred layer itself made the browser redraw it every frame.) */
 .g-face[data-tier="aurora"] {
   background: radial-gradient(1px 1px at 12% 18%, #fff 99%, transparent),
     radial-gradient(1px 1px at 82% 12%, #fff 99%, transparent),
@@ -56,78 +57,48 @@
   inset: 0 auto 0 0; width: calc(var(--cell) * 6); border-radius: 0;
   background: url(art/aurora.svg) 0 0 / calc(var(--cell) * 2) 100% repeat-x;
 }
-.g-face[data-tier="aurora"]::before { animation: g-slide2 24s linear infinite, g-flicker 3.1s ease-in-out infinite alternate; }
+.g-face[data-tier="aurora"]::before { animation: g-slide2 55s linear infinite, g-surge 4.3s ease-in-out infinite; }
 .g-face[data-tier="aurora"]::after {
   background-size: calc(var(--cell) * 2) 92%; background-position: 0 -8%;
   filter: blur(calc(var(--cell) * .07)) saturate(1.4); mix-blend-mode: screen; z-index: 0; opacity: .85;
-  animation: g-slide2 37s linear infinite reverse;
+  animation: g-slide2 85s linear infinite reverse;
 }
 
-/* 65536: Orion, as on a star chart, over the real sky around it: the pink Orion Nebula in the
-   sword, the red arc of Barnard's Loop, the Milky Way. The sky (art/orion-sky.svg) is ::after; the chart's lines and Orion's stars are .g-fx layers paintFace adds, so the
-   lines can glow and fade while the stars twinkle. The whole sky sways and zooms slowly (every
-   layer shares g-sky, so they stay lined up), and meteors cross it. */
-.g-face[data-tier="constellation"] {
-  background: #050a1f;
+/* 65536: a pulsar, a spinning neutron star. Its heart beats, each beat throws out a ring of
+   light, and two beams sweep around like a lighthouse, inside the glowing nebula its wind blows
+   (art/pulsar-sky.svg), which breathes on a slower beat and sways a little. The star, beams and
+   rings are .g-fx layers paintFace adds. */
+.g-face[data-tier="pulsar"] {
+  background: #02010a;
   color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .14) #9fd0ff;
+  text-shadow: 0 0 calc(var(--cell) * .035) #02010a, 0 0 calc(var(--cell) * .035) #02010a, 0 0 calc(var(--cell) * .15) #6fe0ff;
 }
-.g-face[data-tier="constellation"]::after {
+.g-face[data-tier="pulsar"]::after {
   inset: -14%; z-index: -2; border-radius: 0;
-  background: url(art/orion-sky.svg) center / cover;
-  animation: g-sky 13s ease-in-out infinite alternate;
+  background: url(art/pulsar-sky.svg) center / cover;
+  animation: g-sky 18s ease-in-out infinite alternate, g-nebula 3.3s ease-in-out infinite alternate;
 }
-.g-face[data-tier="constellation"]::before {
-  inset: -14%; border-radius: 0;
+.g-face[data-tier="pulsar"] .g-fx { position: absolute; z-index: -1; pointer-events: none; border-radius: 50%; }
+.g-face[data-tier="pulsar"] .g-fx[data-fx="beams"] {
+  inset: -45%;
   background:
-    radial-gradient(1.6px 1.6px at 41% 22%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 29% 9%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 88% 32%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 7% 20%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 93% 38%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 92% 58%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 92% 56%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 51% 66%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 82% 46%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 95% 31%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 28% 46%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 5% 82%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 6% 46%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 40% 74%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 51% 27%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 8% 78%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 82% 83%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 18% 85%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 26% 88%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 8% 9%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 81% 26%, #fff 99%, transparent),
-    radial-gradient(1.6px 1.6px at 28% 47%, #fff 99%, transparent),
-    radial-gradient(1.2px 1.2px at 18% 34%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 35% 28%, #fff 99%, transparent),
-    radial-gradient(1px 1px at 54% 40%, #fff 99%, transparent),
-    radial-gradient(1.3px 1.3px at 51% 42%, #fff 99%, transparent);
-  animation: g-sky 13s ease-in-out infinite alternate, g-twinkle 2.6s ease-in-out infinite alternate;
+    conic-gradient(transparent 0 84deg, rgba(190, 245, 255, .95) 90deg, transparent 95deg 265deg, rgba(190, 245, 255, .95) 270deg, transparent 276deg),
+    conic-gradient(transparent 0 76deg, rgba(110, 170, 255, .35) 90deg, transparent 104deg 256deg, rgba(110, 170, 255, .35) 270deg, transparent 284deg);
+  -webkit-mask: radial-gradient(circle, #000 8%, rgba(0, 0, 0, .5) 30%, transparent 62%);
+  mask: radial-gradient(circle, #000 8%, rgba(0, 0, 0, .5) 30%, transparent 62%);
+  animation: g-turn 7s linear infinite, g-beam 1.1s ease-in-out infinite;
 }
-.g-face[data-tier="constellation"] .g-fx { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-.g-face[data-tier="constellation"] .g-fx[data-fx="lines"] {
-  background: url(art/orion-lines.svg) center / contain no-repeat;
-  animation: g-sky 13s ease-in-out infinite alternate, g-chart 2.4s ease-in-out infinite alternate;
-}
-.g-face[data-tier="constellation"] .g-fx[data-fx="stars"] {
-  background: url(art/orion-stars.svg) center / contain no-repeat;
-  animation: g-sky 13s ease-in-out infinite alternate, g-shine 1.3s ease-in-out infinite alternate;
-}
-.g-face[data-tier="constellation"] .g-fx[data-fx="meteor"] {
-  inset: auto; left: 0; top: 0; width: calc(var(--cell) * .45); height: max(1.5px, calc(var(--cell) * .012));
-  border-radius: 99px; background: linear-gradient(90deg, transparent, rgba(200, 225, 255, .5) 60%, #ffffff);
+.g-face[data-tier="pulsar"] .g-fx[data-fx="ring"], .g-face[data-tier="pulsar"] .g-fx[data-fx="ring2"] {
+  inset: 0;
+  background: radial-gradient(circle, transparent 55%, rgba(150, 235, 255, .9) 63%, rgba(120, 140, 255, .35) 67%, transparent 71%);
   opacity: 0;
-  animation: g-meteor 4.4s ease-in infinite 1s;
+  animation: g-ring 2.2s cubic-bezier(.2, .6, .4, 1) infinite;
 }
-.g-face[data-tier="constellation"] .g-fx[data-fx="meteor2"] {
-  inset: auto; left: 0; top: 0; width: calc(var(--cell) * .32); height: max(1.2px, calc(var(--cell) * .009));
-  border-radius: 99px; background: linear-gradient(90deg, transparent, rgba(255, 220, 200, .5) 60%, #fff4ea);
-  opacity: 0;
-  animation: g-meteor2 6.3s ease-in infinite 3.2s;
+.g-face[data-tier="pulsar"] .g-fx[data-fx="ring2"] { animation-delay: -1.1s; }
+.g-face[data-tier="pulsar"] .g-fx[data-fx="core"] {
+  inset: 8%;
+  background: radial-gradient(circle, #ffffff 0, #d8f8ff 5%, rgba(110, 220, 255, .75) 16%, rgba(90, 120, 255, .3) 34%, transparent 62%);
+  animation: g-beat 1.1s ease-out infinite;
 }
 
 /* 131072, the biggest tile the game can make: a spiral galaxy, tilted and slowly turning, in
@@ -155,27 +126,17 @@
 @keyframes g-turn { to { transform: rotate(360deg); } }
 @keyframes g-heat { 0% { opacity: .2; } 100% { opacity: .85; } }
 @keyframes g-slide2 { to { transform: translateX(calc(var(--cell) * -2)); } }
-@keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
+@keyframes g-surge { 0% { opacity: .35; } 30% { opacity: 1; } 45% { opacity: .7; } 60% { opacity: 1; } 100% { opacity: .35; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
-@keyframes g-chart { from { opacity: .45; } to { opacity: 1; } }
-@keyframes g-shine { from { opacity: .7; } to { opacity: 1; } }
 @keyframes g-sky {
   from { transform: rotate(-5deg) scale(1.02); }
   to { transform: rotate(5deg) scale(1.13); }
 }
-@keyframes g-meteor2 {
-  0% { opacity: 0; transform: translate(calc(var(--cell) * .9), calc(var(--cell) * .15)) rotate(152deg); }
-  2% { opacity: 1; }
-  10% { opacity: 0; transform: translate(calc(var(--cell) * .2), calc(var(--cell) * .55)) rotate(152deg); }
-  100% { opacity: 0; transform: translate(calc(var(--cell) * .2), calc(var(--cell) * .55)) rotate(152deg); }
-}
-@keyframes g-meteor {
-  0% { opacity: 0; transform: translate(calc(var(--cell) * .05), calc(var(--cell) * .08)) rotate(24deg); }
-  2% { opacity: 1; }
-  11% { opacity: 0; transform: translate(calc(var(--cell) * .85), calc(var(--cell) * .45)) rotate(24deg); }
-  100% { opacity: 0; transform: translate(calc(var(--cell) * .85), calc(var(--cell) * .45)) rotate(24deg); }
-}
+@keyframes g-nebula { from { opacity: .7; } to { opacity: 1; } }
+@keyframes g-beat { 0% { transform: scale(.82); opacity: .6; } 12% { transform: scale(1.18); opacity: 1; } 45% { transform: scale(.9); opacity: .72; } 100% { transform: scale(.82); opacity: .6; } }
+@keyframes g-beam { 0%, 100% { opacity: .55; } 12% { opacity: 1; } }
+@keyframes g-ring { 0% { transform: scale(.12); opacity: 1; } 70% { opacity: .35; } 100% { transform: scale(1.45); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }

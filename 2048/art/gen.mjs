@@ -134,72 +134,38 @@ function lava() {
   return [uri(art), uri(glow)];
 }
 
-// ---- constellation: Orion as on a star chart, over the real sky around it: the Orion Nebula
-// glowing pink in the sword under the belt, the red arc of Barnard's Loop, a band of Milky Way
-// and a dense field of stars. Three files so the tile can animate them separately: the sky, the
-// chart's lines, and Orion's stars.
-const ORION = {
-  meissa: [50, 13, 1.0, "#dfe8ff"], betelgeuse: [30, 29, 2.1, "#ffb27a"], bellatrix: [69, 32, 1.4, "#dfe8ff"],
-  alnitak: [42, 55, 1.4, "#dfe8ff"], alnilam: [50, 53, 1.5, "#e8f0ff"], mintaka: [58, 51, 1.3, "#dfe8ff"],
-  saiph: [37, 85, 1.3, "#dfe8ff"], rigel: [70, 81, 2.0, "#bcd4ff"],
-};
-const ORION_LINES = [["meissa", "betelgeuse"], ["meissa", "bellatrix"], ["betelgeuse", "alnitak"], ["bellatrix", "mintaka"],
-  ["alnitak", "alnilam"], ["alnilam", "mintaka"], ["alnitak", "saiph"], ["mintaka", "rigel"], ["betelgeuse", "bellatrix"]];
-function orionSky() {
-  let field = "";
-  const tints = ["#ffffff", "#ffffff", "#dfe8ff", "#cfe0ff", "#ffe9d0", "#ffd6b0"];
-  for (let i = 0; i < 420; i++) {
-    const r = 0.12 + rnd() ** 3 * 0.55;
-    field += `<circle cx='${f(-14 + rnd() * 128)}' cy='${f(-14 + rnd() * 128)}' r='${f(r)}' fill='${tints[Math.floor(rnd() * tints.length)]}' opacity='${f(0.35 + rnd() * 0.65)}'/>`;
+// ---- pulsar: the sky behind a spinning neutron star. The nebula its wind blows (like the
+// Crab): a blue glow threaded with red and orange filaments, over a star field. The tile adds the
+// star itself, its beams and the rings it pulses out.
+function pulsarSky() {
+  let stars = "";
+  for (let i = 0; i < 300; i++) {
+    const r = 0.12 + rnd() ** 3 * 0.5;
+    stars += `<circle cx='${f(-14 + rnd() * 128)}' cy='${f(-14 + rnd() * 128)}' r='${f(r)}' fill='${["#fff", "#dfe8ff", "#cfe0ff", "#ffe6d6"][Math.floor(rnd() * 4)]}' opacity='${f(0.35 + rnd() * 0.6)}'/>`;
   }
-  // the Milky Way: a soft band of many faint stars and glow across the corner
-  let band = "";
-  for (let i = 0; i < 220; i++) {
-    const t = rnd(), off = (rnd() + rnd() + rnd() - 1.5) * 14;
-    const x = -20 + t * 140 + off * 0.6, y = 80 - t * 105 + off;
-    band += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(0.1 + rnd() * 0.25)}' fill='#e6ecff' opacity='${f(0.3 + rnd() * 0.5)}'/>`;
+  // filaments: wavy strands bulging out of the nebula's oval
+  let fil = "";
+  for (let i = 0; i < 60; i++) {
+    const a = rnd() * 2 * Math.PI, r0 = 8 + rnd() * 10, r1 = r0 + 10 + rnd() * 18;
+    const bend = (rnd() - 0.5) * 0.9;
+    const p = (r, da) => [50 + Math.cos(a + da) * r * 1.25, 50 + Math.sin(a + da) * r * 0.85];
+    const [x0, y0] = p(r0, 0), [xm, ym] = p((r0 + r1) / 2, bend * 0.4), [x1, y1] = p(r1, bend);
+    fil += `<path d='M${f(x0)} ${f(y0)}Q${f(xm)} ${f(ym)} ${f(x1)} ${f(y1)}' stroke='${["#ff5a3a", "#ff8a3a", "#ff4a6a", "#ffb05a"][Math.floor(rnd() * 4)]}' stroke-width='${f(0.4 + rnd() * 0.9)}' opacity='${f(0.25 + rnd() * 0.4)}'/>`;
   }
-  // viewBox past the tile on every side: the tile draws this 14% larger than itself so it can
-  // sway without showing an edge, and tile coordinates stay the same as the chart's
   return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='-14 -14 128 128' preserveAspectRatio='xMidYMid slice'>
     <defs>
-      <radialGradient id='sky' cx='.5' cy='.45' r='.75'><stop offset='0' stop-color='#1b2a62'/><stop offset='.55' stop-color='#0b1236'/><stop offset='1' stop-color='#03050f'/></radialGradient>
-      <linearGradient id='band' x1='0' y1='1' x2='1' y2='0'><stop offset='.25' stop-color='#8ea6ff' stop-opacity='0'/>
-        <stop offset='.5' stop-color='#a8b4ff' stop-opacity='.13'/><stop offset='.75' stop-color='#c8a8ff' stop-opacity='0'/></linearGradient>
-      <radialGradient id='m42'><stop offset='0' stop-color='#fff0f6'/><stop offset='.2' stop-color='#ff8fc8' stop-opacity='.9'/>
-        <stop offset='.55' stop-color='#c04aa0' stop-opacity='.45'/><stop offset='1' stop-color='#6a2a9a' stop-opacity='0'/></radialGradient>
-      <filter id='blur' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='3'/></filter>
-      <filter id='soft' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='1.2'/></filter>
+      <radialGradient id='sky' cx='.5' cy='.5' r='.75'><stop offset='0' stop-color='#160a3a'/><stop offset='.6' stop-color='#080520'/><stop offset='1' stop-color='#02010a'/></radialGradient>
+      <radialGradient id='neb'><stop offset='0' stop-color='#8fe8ff' stop-opacity='.75'/><stop offset='.35' stop-color='#5a7aff' stop-opacity='.45'/>
+        <stop offset='.7' stop-color='#7a3ad0' stop-opacity='.2'/><stop offset='1' stop-color='#7a3ad0' stop-opacity='0'/></radialGradient>
+      <filter id='blur' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='2.5'/></filter>
+      <filter id='soft' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='.5'/></filter>
     </defs>
     <rect x='-14' y='-14' width='128' height='128' fill='url(#sky)'/>
-    <rect x='-14' y='-14' width='128' height='128' fill='url(#band)'/>
-    <g filter='url(#soft)'>${band}</g>
-    <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff3a5a' stroke-width='7' opacity='.4' filter='url(#blur)'/>
-    <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff7a8a' stroke-width='1.6' opacity='.25' filter='url(#soft)'/>
-    <ellipse cx='48' cy='67' rx='9' ry='11' fill='url(#m42)' filter='url(#soft)'/>
-    <ellipse cx='46' cy='64' rx='16' ry='14' fill='#7a3ab0' opacity='.18' filter='url(#blur)'/>
-    ${field}</svg>`);
-}
-function orionLines() {
-  const d = ORION_LINES.map(([a, b]) => `M${ORION[a][0]} ${ORION[a][1]}L${ORION[b][0]} ${ORION[b][1]}`).join("");
-  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-    <defs><filter id='b' x='-10%' y='-10%' width='120%' height='120%'><feGaussianBlur stdDeviation='1.3'/></filter></defs>
-    <g fill='none' stroke='#9fd0ff' stroke-linecap='round'>
-      <path d='${d}' stroke-width='2.8' opacity='.5' filter='url(#b)'/>
-      <path d='${d}' stroke-width='.7' opacity='.9'/></g></svg>`);
-}
-function orionStars() {
-  let stars = "";
-  for (const [x, y, m, c] of Object.values(ORION)) {
-    stars += `<circle cx='${x}' cy='${y}' r='${f(m * 3.6)}' fill='url(#halo)'/>`;
-    if (m >= 1.3) stars += `<path d='M${x - m * 5} ${y}H${x + m * 5}M${x} ${y - m * 5}V${y + m * 5}' stroke='${c}' stroke-width='.4' opacity='.8' stroke-linecap='round'/>`;
-    stars += `<circle cx='${x}' cy='${y}' r='${f(0.55 + m * 0.6)}' fill='${c}'/>`;
-  }
-  // the sword hanging from the belt, through the nebula
-  for (const [x, y] of [[47, 62], [48, 66], [48.5, 70]]) stars += `<circle cx='${x}' cy='${y}' r='.55' fill='#f4f0ff'/>`;
-  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-    <defs><radialGradient id='halo'><stop offset='0' stop-color='#fff' stop-opacity='.95'/><stop offset='.22' stop-color='#cfe0ff' stop-opacity='.4'/>
-      <stop offset='1' stop-color='#9fb8ff' stop-opacity='0'/></radialGradient></defs>${stars}</svg>`);
+    ${stars}
+    <ellipse cx='50' cy='50' rx='44' ry='31' fill='url(#neb)' filter='url(#blur)'/>
+    <g fill='none' stroke-linecap='round' filter='url(#soft)'>${fil}</g>
+    <g fill='none' stroke-linecap='round' filter='url(#blur)' opacity='.6'>${fil}</g>
+  </svg>`);
 }
 
 const out = process.argv[2];
@@ -207,5 +173,5 @@ for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${ou
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);
-// after lava, so adding Orion didn't change the earlier art's random numbers
-for (const [name, fn] of Object.entries({ "orion-sky": orionSky, "orion-lines": orionLines, "orion-stars": orionStars })) writeFileSync(`${out}/${name}.svg`, fn());
+// after lava, so adding new art doesn't change the earlier art's random numbers
+writeFileSync(`${out}/pulsar-sky.svg`, pulsarSky());
