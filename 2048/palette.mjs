@@ -32,12 +32,10 @@ export function paintFace(face, v, cell) {
   face.style.setProperty("--glowR", lv >= 7 ? Math.min(40, (lv - 6) * 5) + "px" : "0px");
   const t = tier(v);
   if (t) face.dataset.tier = t; else delete face.dataset.tier;
-  // the black hole's layers, back to front (textContent above already cleared any old ones);
-  // the disk is drawn twice, the near copy clipped to the lower half so it passes in front
-  if (t === "blackhole") for (const k of ["halo", "disk", "shadow", "front"]) {
+  // the black hole's pulsing glow (textContent above already cleared any old one)
+  if (t === "blackhole") {
     const fx = document.createElement("i");
-    fx.className = "g-fx"; fx.dataset.fx = k; fx.setAttribute("aria-hidden", "true");
-    if (k === "disk" || k === "front") { const d = document.createElement("i"); d.className = "g-disk"; fx.append(d); }
+    fx.className = "g-fx"; fx.setAttribute("aria-hidden", "true");
     face.append(fx);
   }
 }

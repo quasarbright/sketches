@@ -146,7 +146,7 @@ function blackholeSky() {
   for (let i = 0; i < 90; i++) {
     const a = rnd() * 2 * Math.PI, r = 22 + (rnd() + rnd()) * 14;
     const x = 50 + Math.cos(a) * r * 1.15, y = 50 + Math.sin(a) * r * 0.9;
-    clouds += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(3 + rnd() * 9)}' fill='${cols[Math.floor(rnd() * cols.length)]}' opacity='${f(0.16 + rnd() * 0.24)}'/>`;
+    clouds += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(3 + rnd() * 9)}' fill='${cols[Math.floor(rnd() * cols.length)]}' opacity='${f(0.07 + rnd() * 0.13)}'/>`;
     if (rnd() < 0.25) knots += `<circle cx='${f(x + (rnd() - .5) * 6)}' cy='${f(y + (rnd() - .5) * 6)}' r='${f(0.5 + rnd() * 1.2)}' fill='#ffe0b0' opacity='${f(0.4 + rnd() * 0.4)}'/>`;
   }
   return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='-14 -14 128 128' preserveAspectRatio='xMidYMid slice'>
