@@ -558,8 +558,8 @@
 
     function moveSound(merges) {
       if (!merges.length) { audio.play("slide"); return; }
-      const top = Math.max(...merges.map((m) => m.value));
-      setTimeout(() => audio.play("merge", top), slideMs * 0.7); // as the tiles meet
+      const values = merges.map((m) => m.value);
+      setTimeout(() => audio.play("merge", values), slideMs * 0.7); // as the tiles meet
     }
 
     function addPoints(p, who) {

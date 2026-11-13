@@ -17,7 +17,7 @@ function ensure() {
   return ctx;
 }
 
-export function unlockAudio() { ensure(); }
+export function unlockAudio() { return ensure()?.resume() ?? Promise.resolve(); }
 export function setMuted(m) { muted = m; }
 export function isMuted() { return muted; }
 
@@ -37,30 +37,39 @@ function tone({ freq, to = freq, dur = 0.08, type = "square", gain = 0.5, delay 
 
 // semitones above a base note
 const note = (base, semis) => base * 2 ** (semis / 12);
-// the major pentatonic, so merges of any size sound fine back to back
-const PENTA = [0, 2, 4, 7, 9];
-const pentaStep = (k) => 12 * Math.floor(k / 5) + PENTA[k % 5];
+// Tiles climb the notes of a C major chord, C E G C E G ..., from C3 for a 4. Any set of tiles
+// then sounds like one chord when they merge together.
+const C3 = 130.81;
+const CHORD = [0, 4, 7];
+const chordStep = (k) => 12 * Math.floor(k / 3) + CHORD[k % 3];
+export const tileFreq = (v) => note(C3, chordStep(Math.max(0, Math.log2(v) - 2)));
 
 const SOUNDS = {
   slide: () => tone({ freq: 300, to: 200, dur: 0.05, gain: 0.14, type: "triangle" }),
-  // a merge's pitch climbs with the tile: 4 is the lowest note, each doubling one step up
-  merge: (v = 4) => {
-    const f = note(330, pentaStep(Math.log2(v) - 2));
-    tone({ freq: f, dur: 0.09, gain: 0.28, type: "square" });
-    tone({ freq: f * 2, dur: 0.06, gain: 0.08, type: "triangle", delay: 0.02 });
+  // every tile made by one move sounds at once, each at its own chord note
+  merge: (values = [4]) => {
+    const vs = [...new Set(values)];
+    const g = 0.28 / Math.sqrt(vs.length); // a chord shouldn't be louder than one note
+    for (const v of vs) {
+      const f = tileFreq(v);
+      tone({ freq: f, dur: 0.11, gain: g, type: "square" });
+      tone({ freq: f * 2, dur: 0.07, gain: g * 0.3, type: "triangle", delay: 0.02 });
+    }
   },
-  // a new biggest tile from 512 up: a rising arpeggio from that tile's note
+  // a new biggest tile from 512 up: the chord rolled upward from that tile's note
   record: (v = 512) => {
-    const k = pentaStep(Math.log2(v) - 2);
-    [0, 4, 7, 12].forEach((s, i) => tone({ freq: note(330, k + s), dur: 0.16, gain: 0.26, delay: 0.06 + i * 0.07, type: "triangle" }));
+    const k = chordStep(Math.log2(v) - 2);
+    [0, 1, 2, 3].forEach((i) => tone({ freq: note(C3, k + chordStep(i)), dur: 0.16, gain: 0.26, delay: 0.06 + i * 0.07, type: "triangle" }));
   },
   // 2048 and up, with the banner
-  fanfare: () => [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone({ freq: note(523, s), dur: i === 6 ? 0.5 : 0.14, gain: 0.3, delay: i * 0.075 })),
-  botOn: () => [0, 7].forEach((s, i) => tone({ freq: note(660, s), dur: 0.07, gain: 0.2, delay: i * 0.06, type: "triangle" })),
-  botOff: () => [7, 0].forEach((s, i) => tone({ freq: note(660, s), dur: 0.07, gain: 0.2, delay: i * 0.06, type: "triangle" })),
+  fanfare: () => [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => tone({ freq: note(523.25, s), dur: i === 6 ? 0.5 : 0.14, gain: 0.3, delay: i * 0.075 })),
+  botOn: () => [0, 7].forEach((s, i) => tone({ freq: note(523.25, s), dur: 0.07, gain: 0.2, delay: i * 0.06, type: "triangle" })),
+  botOff: () => [7, 0].forEach((s, i) => tone({ freq: note(523.25, s), dur: 0.07, gain: 0.2, delay: i * 0.06, type: "triangle" })),
   bump: () => tone({ freq: 120, to: 90, dur: 0.07, gain: 0.25, type: "triangle" }),
-  over: () => [0, -3, -7, -12].forEach((s, i) => tone({ freq: note(330, s), dur: 0.3, gain: 0.3, delay: i * 0.16, type: "sawtooth" })),
+  over: () => [0, -3, -7, -12].forEach((s, i) => tone({ freq: note(261.63, s), dur: 0.3, gain: 0.3, delay: i * 0.16, type: "sawtooth" })),
 };
+
+export const NAMES = Object.keys(SOUNDS);
 
 export function play(name, arg) {
   if (muted || !ctx || ctx.state !== "running") return;

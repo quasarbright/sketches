@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2048 sounds</title>
+  <style>
+    :root { --bg: #120f24; --panel: #2a2350; --text: #f0ecff; --muted: #a69ed0; --accent: #ffcf4d; --bot: #57e3dc; }
+    body { margin: 0; padding: 24px 16px 60px; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+    main { max-width: 640px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; font-size: 1.4rem; }
+    h2 { margin: 26px 0 8px; font-size: .95rem; color: var(--muted); font-weight: 600; }
+    p { margin: 0; color: var(--muted); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      font: 700 .9rem system-ui, sans-serif; color: var(--text); background: var(--panel); border: 0;
+      border-radius: 12px; padding: 10px 14px; cursor: pointer; box-shadow: 0 3px 0 #0c0a19;
+      touch-action: manipulation;
+    }
+    button:active { transform: translateY(2px); box-shadow: 0 1px 0 #0c0a19; }
+    button small { display: block; font-weight: 500; color: var(--muted); font-size: .72rem; }
+    .gold { background: var(--accent); color: #241a00; }
+    .gold small { color: #6b5200; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>2048 sounds</h1>
+    <p>Every sound effect in the game, from the same audio.mjs. Merges use the notes of a C major chord, one per tile size.</p>
+
+    <h2>Moves</h2>
+    <div class="row" id="moves"></div>
+
+    <h2>One merge, by tile</h2>
+    <div class="row" id="tiles"></div>
+
+    <h2>Several merges in one move (they sound together)</h2>
+    <div class="row" id="combos"></div>
+
+    <h2>Big moments and the rest</h2>
+    <div class="row" id="other"></div>
+  </main>
+  <script type="module">
+    import * as audio from "./audio.mjs";
+    const btn = (parent, label, sub, fn, cls = "") => {
+      const b = document.createElement("button");
+      b.className = cls;
+      b.innerHTML = label + (sub ? `<small>${sub}</small>` : "");
+      b.onclick = () => audio.unlockAudio().then(fn);
+      document.getElementById(parent).append(b);
+    };
+    const hz = (v) => Math.round(audio.tileFreq(v)) + " Hz";
+
+    btn("moves", "slide", "a move with no merge", () => audio.play("slide"));
+    btn("moves", "bump", "a move that does nothing", () => audio.play("bump"));
+
+    for (let v = 4; v <= 65536; v *= 2) btn("tiles", v, hz(v), () => audio.play("merge", [v]), "gold");
+
+    const combos = [[4, 4], [4, 8], [4, 8, 16], [8, 32], [16, 64, 256], [4, 16, 64, 256], [2048, 1024, 512], [4, 8, 16, 32]];
+    for (const c of combos) btn("combos", c.join(" + "), c.map((v) => hz(v)).join(", "), () => audio.play("merge", c), "gold");
+
+    for (const v of [512, 1024]) btn("other", "new biggest " + v, "record", () => audio.play("record", v));
+    btn("other", "2048!", "fanfare, with the banner", () => audio.play("fanfare"));
+    btn("other", "bot on", "", () => audio.play("botOn"));
+    btn("other", "bot off", "", () => audio.play("botOff"));
+    btn("other", "game over", "", () => audio.play("over"));
+  </script>
+</body>
+</html>
