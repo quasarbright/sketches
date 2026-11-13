@@ -13,11 +13,11 @@ function ensure() {
     master.gain.value = 0.22;
     master.connect(ctx.destination);
   }
-  if (ctx.state === "suspended") ctx.resume();
+  if (ctx.state === "suspended") ctx.resume().catch(() => {}); // rejects if the page is leaving
   return ctx;
 }
 
-export function unlockAudio() { return ensure()?.resume() ?? Promise.resolve(); }
+export function unlockAudio() { return (ensure()?.resume() ?? Promise.resolve()).catch(() => {}); }
 export function setMuted(m) { muted = m; }
 export function isMuted() { return muted; }
 
