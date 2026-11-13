@@ -77,18 +77,8 @@
     .sd-slider input { width: 110px; }
     .sd-num { font-family: var(--font-mono); font-size: .8rem; color: var(--text); min-width: 5ch; }
     .sd-bar { padding-right: 14px; }
-    .sd-corner { position: fixed; top: 16px; right: 16px; z-index: 4; }
-    .sd-corner .btn { border-radius: 999px; padding: 6px 14px; }
 
     mike-footer[overlay] { opacity: 1 !important; text-shadow: 0 1px 2px var(--bg), 0 0 8px var(--bg); }
-    /* about-modal diagrams */
-    .sd-viz { display: block; width: 100%; max-width: 460px; margin: 14px auto 4px; border-radius: 8px; }
-    .sd-viz-caption { font-size: .8rem; color: var(--muted); text-align: center; margin: 2px 0 0; }
-    .cohesion-about ol, .cohesion-about ul { padding-left: 1.3em; }
-    .cohesion-about li { margin: .35em 0; }
-    .m-sand { color: #e6b870; } .m-water { color: #5e9cf0; } .m-acid { color: #86dc50; }
-    .m-wood { color: #c08a5c; } .m-fire { color: #ffb347; } .m-lava { color: #ff7a2e; }
-    .m-stone { color: #b4b6bd; }
 
     .sd-nogl {
       position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
@@ -105,7 +95,6 @@
       .sd-bar { bottom: 34px; gap: 12px; padding: 8px 12px; }
       .sd-slider { gap: 6px; font-size: .8rem; }
       .sd-slider input { width: 60px; }
-      .sd-corner { top: 12px; right: 12px; }
       .sd-num { min-width: 4ch; font-size: .72rem; }
     }
     @media (max-height: 640px) {
@@ -151,73 +140,6 @@
       <input type="range" id="speed" min="0" max="100" step="1" value="60" aria-label="Speed" />
       <span class="sd-num" id="speedNum"></span>
     </label>
-  </div>
-
-  <div class="sd-corner">
-    <about-modal label="about">
-      <h2 class="title">Sand</h2>
-      <p class="intro">Paint materials and watch them fall, flow, burn and dissolve. The screen is a
-        grid of cells, each holding at most one grain, and every step each grain follows a few rules
-        about the cells right next to it. Everything else, from slopes to puddles to a forest fire,
-        comes out of those rules.</p>
-
-      <div class="section-label">everything at once</div>
-      <p>The obvious way to run this is one grain at a time: sand looks below itself and moves down
-        if the cell is empty. That's how the older version worked, 10,000 cells in a loop. This one
-        runs on the graphics card, which computes every cell of the next step at the same time,
-        each from a snapshot of the last step. That's fast enough for a whole screen of grains, but
-        it breaks the obvious rule. Two grains can both see the same empty cell and both move into
-        it, and one of them disappears. The way around it is to make sure that, for every kind of
-        move, each empty cell has only one grain that could fill it, and that the grain and the
-        cell agree on it. Then the cell can pull its grain in while the grain's old cell lets it go,
-        both working from the same snapshot. Each kind of move gets its own pass.</p>
-
-      <div class="section-label">falling</div>
-      <p>A cell only ever takes the grain directly above it, so falling has one source per cell
-        already. A grain falls when the grains under it are a stack that ends in an empty cell, and
-        then the whole stack moves down together. If only the bottom grain moved, a falling clump
-        would come apart into stripes, one row at a time. A stack that ends on stone, wood or the
-        floor is <b>held up</b>, and only held-up grains slide or flow; otherwise a falling stream
-        of water would spray out sideways in midair.</p>
-
-      <div class="section-label">flowing</div>
-      <p>Every grain of <span class="m-water">liquid</span> carries a direction, left or right. When
-        it's held up, it moves one cell that way into an empty cell that has something under it,
-        and turns around when it bumps into something. (Going over an edge is a slide, below.) Keeping a direction is what levels a puddle: a grain on top of a mound walks
-        straight to the edge and falls off, where one that picked a new direction every time would
-        wander back and forth. An empty cell between two grains heading toward it picks one of them
-        at random, and both grains compute the same pick. Lava is thick, so it only flows one time
-        in five. This pass runs six times per step, so liquids spread faster than things fall.</p>
-
-      <div class="section-label">sliding, in 2×2 blocks</div>
-      <p>Diagonal slides are what give piles their slopes, and they're harder: a grain could come
-        from the upper left or the upper right, and the cell beside it might be moving too. So for
-        these, the grid is cut into blocks of 2×2 cells. A grain only slides within its own block,
-        all four cells of a block work out the same rearrangement, and each keeps its own share. No
-        other block touches those four cells, so nothing can be claimed twice. In a block, a held-up
-        grain in the top row slides down into an empty cell diagonally below it, and
-        <span class="m-sand">sand</span> sitting on a liquid swaps places with it, which is how sand
-        sinks. On the next step the blocks shift one cell down and right, and then back, so grains
-        can cross block edges. Each block is also flipped left-to-right at random, so a grain has no
-        favorite side.</p>
-      <canvas class="sd-viz" data-viz="blocks"></canvas>
-      <p class="sd-viz-caption">the real simulation, at 4 steps a second, with the next step's blocks outlined</p>
-
-      <div class="section-label">reacting to neighbors</div>
-      <p>Reactions are the last pass, and they need no blocks. A cell never changes another cell,
-        only itself: it looks at its 8 neighbors and decides what it becomes. For every burning
-        neighbor, <span class="m-wood">wood</span> has a 1% chance of catching fire, and gasoline
-        and gunpowder 10%. For every <span class="m-acid">acid</span> neighbor, wood has a 10%
-        chance of dissolving, sand 5% and stone 1%. Stone next to <span class="m-lava">lava</span>
-        melts into more lava at 0.15% per neighbor.</p>
-      <p><span class="m-fire">Fire</span> and lava also carry a countdown. Fire loses one tick for
-        every neighbor that's empty or won't burn, so it lasts as long as there's fuel around it
-        and dies in about half a second in open air. Water puts it out at once. Lava counts down
-        against everything that isn't fire or lava, except while it's falling, and turns to <span class="m-stone">stone</span>
-        when it runs out, or the moment it touches water. Both get yellower as they run down.</p>
-      <canvas class="sd-viz" data-viz="react"></canvas>
-      <p class="sd-viz-caption">fire eating along a plank, acid on a sand pile, and lava landing in water</p>
-    </about-modal>
   </div>
 
   <mike-footer overlay></mike-footer>
@@ -540,8 +462,6 @@
     uniform vec3 uColors[10];
     uniform float uShade[10];
     uniform vec3 uBox, uFireHot, uFireCool, uLavaHot, uLavaCool;
-    uniform int uOverlay, uBlockOff;   // about-modal diagram: cell grid + the next step's blocks
-    uniform vec3 uOverlayColor;
     uniform sampler2D uGlow;
     uniform vec2 uGlowSpan;   // the glow texture's size, in cells
     uniform float uGlowStrength;
@@ -570,13 +490,6 @@
             if (p.y % 4 == 1 && ((seg >> 15u) & 3u) != 0u) col *= 0.68;
           }
         }
-      }
-      if (uOverlay == 1) {
-        vec2 f = fract(cf) * uCellPx;
-        if (min(f.x, f.y) < 1.0) col = mix(col, vec3(0.0), 0.45);
-        bool bx = ((p.x + uBlockOff) & 1) == 0 && f.x < 2.0;
-        bool by = ((p.y + uBlockOff) & 1) == 0 && f.y < 2.0;
-        if (bx || by) col = mix(col, uOverlayColor, 0.8);
       }
       // bloom: screen-blend the blurred glow over everything
       vec3 g = texture(uGlow, cf / uGlowSpan).rgb * uGlowStrength;
@@ -841,7 +754,7 @@
         return out
       }
 
-      render({ overlay = false } = {}) {
+      render() {
         const gl = this.gl, { u } = this.progs.render
         this.bloom()
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
@@ -860,9 +773,6 @@
         gl.uniform3fv(u.uFireCool, FIRE_COOL.map((v) => v / 255))
         gl.uniform3fv(u.uLavaHot, LAVA_HOT.map((v) => v / 255))
         gl.uniform3fv(u.uLavaCool, LAVA_COOL.map((v) => v / 255))
-        gl.uniform1i(u.uOverlay, overlay ? 1 : 0)
-        gl.uniform1i(u.uBlockOff, this.stepN & 1)
-        gl.uniform3fv(u.uOverlayColor, [0.9, 0.72, 0.44])
         gl.activeTexture(gl.TEXTURE2)
         gl.bindTexture(gl.TEXTURE_2D, this.glow[0].tex)
         gl.uniform1i(u.uGlow, 2)
@@ -871,10 +781,6 @@
         gl.activeTexture(gl.TEXTURE0)
         gl.bindVertexArray(this.vao)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
-      }
-
-      dispose() {
-        this.gl.getExtension('WEBGL_lose_context')?.loseContext()
       }
     }
 
@@ -1104,73 +1010,6 @@
         brushEl.value = Number(brushEl.value) + (e.key === ']' ? 1 : -1)
         syncSliders()
       }
-    })
-
-    // ------------------------------------------------------------------ about-modal diagrams
-    // Each diagram is a small SandSim running the same shaders on its own canvas.
-    const VIZ = {
-      blocks: {
-        cols: 16, rows: 10, rate: 4, overlay: true, reset: 90,
-        scene: (c, r) => (r === 9 && c >= 9) || (r === 8 && c >= 12) ? MAT.STONE
-          : (r <= 2 && c >= 2 && c <= 5) ? MAT.SAND : (r <= 1 && c >= 10 && c <= 13) ? MAT.WATER : 0,
-        // keep a trickle of sand coming
-        every: (sim) => { if (sim.stepN % 3 === 0) sim.paint({ col: 4, row: 0 }, { col: 4, row: 0 }, 0, MAT.SAND) },
-      },
-      react: {
-        cols: 36, rows: 18, rate: 30, overlay: false, reset: 420,
-        scene: (c, r) => {
-          if (r === 11 && c >= 1 && c <= 11) return MAT.WOOD
-          if (r === 10 && c >= 1 && c <= 3) return MAT.FIRE
-          if (r >= 12 && c <= 12 && c >= 1 && r <= 12) return MAT.STONE
-          if (r >= 13 && c >= 13 && c <= 22 && r - 13 >= Math.abs(c - 17.5) - 1) return MAT.SAND
-          if (r >= 2 && r <= 4 && c >= 16 && c <= 19) return MAT.ACID
-          if (r >= 14 && c >= 25) return MAT.WATER
-          if (r >= 1 && r <= 4 && c >= 28 && c <= 32) return MAT.LAVA
-          return 0
-        },
-      },
-    }
-    let vizRunning = []
-    function startViz(el) {
-      for (const cv of el.querySelectorAll('canvas[data-viz]')) {
-        const spec = VIZ[cv.dataset.viz]
-        const w = cv.clientWidth
-        if (!w) continue
-        const d = Math.min(window.devicePixelRatio || 1, 2)
-        const cell = Math.floor(w * d / spec.cols)
-        cv.width = cell * spec.cols; cv.height = cell * spec.rows
-        cv.style.height = (cv.height / d) + 'px'
-        const s = new SandSim(cv)
-        s.cellPx = cell
-        s.setSize(spec.cols, spec.rows)
-        const reset = () => { s.load(spec.scene); s.stepN = 0 }
-        reset()
-        const run = { s, raf: 0, acc: 0, last: performance.now() }
-        const tick = (now) => {
-          run.acc = Math.min(run.acc + (now - run.last) / 1000 * spec.rate, 10)
-          run.last = now
-          while (run.acc >= 1) {
-            run.acc -= 1
-            if (s.stepN >= spec.reset) reset()
-            spec.every?.(s)
-            s.step()
-          }
-          s.render({ overlay: spec.overlay })
-          run.raf = requestAnimationFrame(tick)
-        }
-        run.raf = requestAnimationFrame(tick)
-        vizRunning.push(run)
-      }
-    }
-    function stopViz() {
-      for (const r of vizRunning) { cancelAnimationFrame(r.raf); r.s.dispose() }
-      vizRunning = []
-    }
-    document.addEventListener('cohesion-modal-open', (e) => {
-      if (e.detail.className?.includes('cohesion-about')) requestAnimationFrame(() => startViz(e.detail.el))
-    })
-    document.addEventListener('cohesion-modal-close', (e) => {
-      if (e.detail.className?.includes('cohesion-about')) stopViz()
     })
 
     // test hook
