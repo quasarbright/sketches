@@ -63,7 +63,92 @@
   animation: g-slide2 17s linear infinite reverse;
 }
 
-/* 65536: a spiral galaxy, tilted and slowly turning, in front of a star field */
+/* 65536: cosmos, deep violet space full of stars inside a turning rainbow rim. Two star
+   fields turn slowly in opposite directions and twinkle out of step, over drifting nebula glow.
+   The rim's layers are .g-fx elements that paintFace adds. */
+.g-face[data-tier="cosmos"] {
+  background: radial-gradient(circle at 50% 42%, #4a2290, #170838 58%, #05020f);
+  color: #ffffff;
+  text-shadow: 0 0 calc(var(--cell) * .03) #05020f, 0 0 calc(var(--cell) * .1) #c79bff, 0 0 calc(var(--cell) * .2) #8fd3ff;
+}
+.g-face[data-tier="cosmos"]::before, .g-face[data-tier="cosmos"]::after { inset: -30%; border-radius: 50%; }
+.g-face[data-tier="cosmos"]::before {
+  background:
+    radial-gradient(2px 2px at 42% 90%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 11% 13%, #fff 99%, transparent),
+    radial-gradient(2px 2px at 49% 62%, #fff 99%, transparent),
+    radial-gradient(2px 2px at 17% 76%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 89% 32%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 81% 59%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 66% 36%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 38% 53%, #fff 99%, transparent),
+    radial-gradient(2px 2px at 40% 60%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 34% 5%, #fff 99%, transparent),
+    radial-gradient(2.2px 2.2px at 56% 35%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 67% 42%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 89% 45%, #fff 99%, transparent),
+    radial-gradient(2px 2px at 54% 85%, #fff 99%, transparent),
+    radial-gradient(2.2px 2.2px at 89% 56%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 45% 42%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 48% 46%, #fff 99%, transparent),
+    radial-gradient(2.2px 2.2px at 36% 14%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 52% 27%, #fff 99%, transparent),
+    radial-gradient(2px 2px at 30% 53%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 35% 26%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 74% 48%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 72% 39%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 42% 44%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 70% 24%, #fff 99%, transparent),
+    radial-gradient(2.2px 2.2px at 16% 89%, #fff 99%, transparent),
+    radial-gradient(30% 22% at 35% 40%, rgba(255, 110, 210, .22), transparent 70%),
+    radial-gradient(28% 24% at 66% 62%, rgba(110, 160, 255, .22), transparent 70%);
+  animation: g-turn 70s linear infinite, g-twinkle 2.2s ease-in-out infinite alternate;
+}
+.g-face[data-tier="cosmos"]::after {
+  background:
+    radial-gradient(1.6px 1.6px at 41% 22%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 29% 9%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 88% 32%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 7% 20%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 93% 38%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 92% 58%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 92% 56%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 51% 66%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 82% 46%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 95% 31%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 28% 46%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 5% 82%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 6% 46%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 40% 74%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 51% 27%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 8% 78%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 82% 83%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 18% 85%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 26% 88%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 8% 9%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 81% 26%, #fff 99%, transparent),
+    radial-gradient(1.6px 1.6px at 28% 47%, #fff 99%, transparent),
+    radial-gradient(1.2px 1.2px at 18% 34%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 35% 28%, #fff 99%, transparent),
+    radial-gradient(1px 1px at 54% 40%, #fff 99%, transparent),
+    radial-gradient(1.3px 1.3px at 51% 42%, #fff 99%, transparent);
+  animation: g-turn 100s linear infinite reverse, g-twinkle 3.1s ease-in-out infinite alternate-reverse;
+}
+/* the rim: a big rainbow disc spinning at the bottom (clipped to the tile), covered by a panel
+   of night sky one rim-width in from the edge; the stars sit over both */
+.g-face[data-tier="cosmos"] .g-fx { position: absolute; pointer-events: none; }
+.g-face[data-tier="cosmos"] .g-fx[data-fx="disc"] {
+  inset: -50%; z-index: -3;
+  background: conic-gradient(#ff8fd1, #ffe27a, #8ff7c8, #8fd3ff, #c79bff, #ff8fd1);
+  animation: g-turn 4s linear infinite;
+}
+.g-face[data-tier="cosmos"] .g-fx[data-fx="sky"] {
+  inset: calc(var(--cell) * .045); z-index: -2; border-radius: calc(var(--cell) * .1);
+  background: radial-gradient(circle at 50% 42%, #4a2290, #170838 58%, #05020f);
+}
+
+/* 131072, the biggest tile the game can make: a spiral galaxy, tilted and slowly turning, in
+   front of a star field */
 .g-face[data-tier="galaxy"] {
   background: radial-gradient(circle at 50% 50%, #120a33, #04020e 75%);
   color: #ffffff;
@@ -84,42 +169,12 @@
     radial-gradient(1px 1px at 46% 8%, #fff 99%, transparent);
 }
 
-/* 131072, the biggest tile the game can make: the cosmic web, colored like the Millennium
-   Simulation pictures (art/web.webp, from art/web-render.mjs), drifting and breathing. */
-.g-face[data-tier="web"] {
-  background: #1c0838;
-  color: #fff8e6;
-  text-shadow: 0 0 calc(var(--cell) * .03) #12041f, 0 0 calc(var(--cell) * .03) #12041f, 0 0 calc(var(--cell) * .12) #ff9a4a;
-}
-.g-face[data-tier="web"]::before {
-  inset: -12%;
-  background: url(art/web.webp) center / cover no-repeat;
-  animation: g-webdrift 12s ease-in-out infinite alternate, g-breathe 2.4s ease-in-out infinite alternate;
-}
-/* sparkles on the clusters and strands, in two halves fading out of step; they drift with the web */
-.g-face[data-tier="web"] .g-fx {
-  position: absolute; inset: -12%; z-index: -1; pointer-events: none; mix-blend-mode: screen;
-  background: url(art/web-sparks-a.webp) center / cover no-repeat;
-  animation: g-webdrift 12s ease-in-out infinite alternate, g-twinkle 1.7s ease-in-out infinite alternate;
-}
-.g-face[data-tier="web"] .g-fx[data-fx="b"] {
-  background-image: url(art/web-sparks-b.webp);
-  animation: g-webdrift 12s ease-in-out infinite alternate, g-twinkle 2.3s ease-in-out infinite alternate-reverse;
-}
-.g-face[data-tier="web"]::after { box-shadow: inset 0 0 calc(var(--cell) * .12) rgba(18, 4, 31, .8); z-index: 0; }
-
 @keyframes g-turn { to { transform: rotate(360deg); } }
 @keyframes g-heat { 0% { opacity: .2; } 100% { opacity: .85; } }
 @keyframes g-slide2 { to { transform: translateX(calc(var(--cell) * -2)); } }
 @keyframes g-flicker { 0% { opacity: .75; } 40% { opacity: 1; } 70% { opacity: .85; } 100% { opacity: 1; } }
 @keyframes g-galaxy { from { transform: scaleY(.72) rotate(0deg); } to { transform: scaleY(.72) rotate(-360deg); } }
-@keyframes g-drift { from { transform: rotate(-6deg) scale(1.02); } to { transform: rotate(8deg) scale(1.14); } }
-@keyframes g-breathe { from { opacity: .72; } to { opacity: 1; } }
-@keyframes g-webdrift {
-  from { transform: translate(-2%, 1.5%) rotate(-8deg) scale(1.04); }
-  to { transform: translate(2%, -2%) rotate(9deg) scale(1.2); }
-}
-@keyframes g-twinkle { from { opacity: 0; } to { opacity: 1; } }
+@keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .g-face[data-tier], .g-face[data-tier]::before, .g-face[data-tier]::after, .g-fx { animation: none !important; }

@@ -62,7 +62,6 @@ function galaxy() {
   return uri(svg);
 }
 
-// (the cosmic web is a raster: art/web-render.mjs)
 
 // ---- lava: plates of dark cooled crust split by glowing cracks. The cracks are the edges of a
 // Voronoi diagram (from a Bowyer-Watson Delaunay triangulation), made jagged. lava-glow.svg is

@@ -7,17 +7,17 @@ export const TILE = {
   1024: ["#ff3d9a", "#ffffff"], 2048: ["#b04dff", "#ffffff"], 4096: ["#fff6dc", "#4a1f8a"],
   // past 4096 each tile is drawn by its tier in tiles.css; these are its glow and spark colors
   8192: ["#c79bff", "#3a1670"], 16384: ["#ff6a1f", "#fff8e0"], 32768: ["#39ff9e", "#f2fff6"],
-  65536: ["#8a7dff", "#ffffff"],
+  65536: ["#9b6bff", "#ffffff"],
 };
-const BEYOND = ["#ff8a4a", "#fff8e6"]; // 131072, the largest possible
+const BEYOND = ["#8a7dff", "#ffffff"]; // 131072, the largest possible
 export const tileColors = (v) => TILE[v] || BEYOND;
 export const tileColor = (v) => tileColors(v)[0];
 // font size for a numeral, as a fraction of the tile's width
 export const numeralScale = (v) => [0, 0.46, 0.46, 0.37, 0.29, 0.235, 0.2][String(v).length] || 0.17;
 
 // the special tiles past 4096, each with its own look in tiles.css
-const TIERS = { 8192: "foil", 16384: "molten", 32768: "aurora", 65536: "galaxy" };
-export const tier = (v) => (v <= 4096 ? null : TIERS[v] || "web");
+const TIERS = { 8192: "foil", 16384: "molten", 32768: "aurora", 65536: "cosmos" };
+export const tier = (v) => (v <= 4096 ? null : TIERS[v] || "galaxy");
 
 // style a tile face (a .g-face from tiles.css) for value v at a cell width in px
 export function paintFace(face, v, cell) {
@@ -32,8 +32,9 @@ export function paintFace(face, v, cell) {
   face.style.setProperty("--glowR", lv >= 7 ? Math.min(40, (lv - 6) * 5) + "px" : "0px");
   const t = tier(v);
   if (t) face.dataset.tier = t; else delete face.dataset.tier;
-  // the web's two sparkle layers (textContent above already cleared any old ones)
-  if (t === "web") for (const k of ["a", "b"]) {
+  // the cosmos tile's turning rim: a spinning disc and the sky panel over it
+  // (textContent above already cleared any old ones)
+  if (t === "cosmos") for (const k of ["disc", "sky"]) {
     const fx = document.createElement("i");
     fx.className = "g-fx"; fx.dataset.fx = k; fx.setAttribute("aria-hidden", "true");
     face.append(fx);
