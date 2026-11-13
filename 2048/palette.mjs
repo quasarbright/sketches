@@ -33,7 +33,7 @@ export function paintFace(face, v, cell) {
   const t = tier(v);
   if (t) face.dataset.tier = t; else delete face.dataset.tier;
   // the constellation tile's layers (textContent above already cleared any old ones)
-  if (t === "constellation") for (const k of ["lines", "stars", "meteor"]) {
+  if (t === "constellation") for (const k of ["lines", "stars", "meteor", "meteor2"]) {
     const fx = document.createElement("i");
     fx.className = "g-fx"; fx.dataset.fx = k; fx.setAttribute("aria-hidden", "true");
     face.append(fx);

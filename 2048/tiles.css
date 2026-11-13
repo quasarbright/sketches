@@ -56,23 +56,29 @@
   inset: 0 auto 0 0; width: calc(var(--cell) * 6); border-radius: 0;
   background: url(art/aurora.svg) 0 0 / calc(var(--cell) * 2) 100% repeat-x;
 }
-.g-face[data-tier="aurora"]::before { animation: g-slide2 11s linear infinite, g-flicker 3.1s ease-in-out infinite alternate; }
+.g-face[data-tier="aurora"]::before { animation: g-slide2 24s linear infinite, g-flicker 3.1s ease-in-out infinite alternate; }
 .g-face[data-tier="aurora"]::after {
   background-size: calc(var(--cell) * 2) 92%; background-position: 0 -8%;
   filter: blur(calc(var(--cell) * .07)) saturate(1.4); mix-blend-mode: screen; z-index: 0; opacity: .85;
-  animation: g-slide2 17s linear infinite reverse;
+  animation: g-slide2 37s linear infinite reverse;
 }
 
 /* 65536: Orion, as on a star chart, over the real sky around it: the pink Orion Nebula in the
-   sword, the red arc of Barnard's Loop, the Milky Way. The sky is the tile's background
-   (art/orion-sky.svg); the chart's lines and Orion's stars are .g-fx layers paintFace adds, so the
-   lines can glow and fade while the stars twinkle, and now and then a meteor crosses. */
+   sword, the red arc of Barnard's Loop, the Milky Way. The sky (art/orion-sky.svg) is ::after; the chart's lines and Orion's stars are .g-fx layers paintFace adds, so the
+   lines can glow and fade while the stars twinkle. The whole sky sways and zooms slowly (every
+   layer shares g-sky, so they stay lined up), and meteors cross it. */
 .g-face[data-tier="constellation"] {
-  background: #050a1f url(art/orion-sky.svg) center / cover;
+  background: #050a1f;
   color: #ffffff;
   text-shadow: 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .03) #03050f, 0 0 calc(var(--cell) * .14) #9fd0ff;
 }
+.g-face[data-tier="constellation"]::after {
+  inset: -14%; z-index: -2; border-radius: 0;
+  background: url(art/orion-sky.svg) center / cover;
+  animation: g-sky 13s ease-in-out infinite alternate;
+}
 .g-face[data-tier="constellation"]::before {
+  inset: -14%; border-radius: 0;
   background:
     radial-gradient(1.6px 1.6px at 41% 22%, #fff 99%, transparent),
     radial-gradient(1.2px 1.2px at 29% 9%, #fff 99%, transparent),
@@ -100,22 +106,28 @@
     radial-gradient(1px 1px at 35% 28%, #fff 99%, transparent),
     radial-gradient(1px 1px at 54% 40%, #fff 99%, transparent),
     radial-gradient(1.3px 1.3px at 51% 42%, #fff 99%, transparent);
-  animation: g-twinkle 2.6s ease-in-out infinite alternate;
+  animation: g-sky 13s ease-in-out infinite alternate, g-twinkle 2.6s ease-in-out infinite alternate;
 }
-.g-face[data-tier="constellation"] .g-fx { position: absolute; inset: 4%; z-index: -1; pointer-events: none; }
+.g-face[data-tier="constellation"] .g-fx { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
 .g-face[data-tier="constellation"] .g-fx[data-fx="lines"] {
   background: url(art/orion-lines.svg) center / contain no-repeat;
-  animation: g-chart 3.2s ease-in-out infinite alternate;
+  animation: g-sky 13s ease-in-out infinite alternate, g-chart 2.4s ease-in-out infinite alternate;
 }
 .g-face[data-tier="constellation"] .g-fx[data-fx="stars"] {
   background: url(art/orion-stars.svg) center / contain no-repeat;
-  animation: g-shine 1.7s ease-in-out infinite alternate;
+  animation: g-sky 13s ease-in-out infinite alternate, g-shine 1.3s ease-in-out infinite alternate;
 }
 .g-face[data-tier="constellation"] .g-fx[data-fx="meteor"] {
   inset: auto; left: 0; top: 0; width: calc(var(--cell) * .45); height: max(1.5px, calc(var(--cell) * .012));
   border-radius: 99px; background: linear-gradient(90deg, transparent, rgba(200, 225, 255, .5) 60%, #ffffff);
   opacity: 0;
-  animation: g-meteor 7s ease-in infinite 1.5s;
+  animation: g-meteor 4.4s ease-in infinite 1s;
+}
+.g-face[data-tier="constellation"] .g-fx[data-fx="meteor2"] {
+  inset: auto; left: 0; top: 0; width: calc(var(--cell) * .32); height: max(1.2px, calc(var(--cell) * .009));
+  border-radius: 99px; background: linear-gradient(90deg, transparent, rgba(255, 220, 200, .5) 60%, #fff4ea);
+  opacity: 0;
+  animation: g-meteor2 6.3s ease-in infinite 3.2s;
 }
 
 /* 131072, the biggest tile the game can make: a spiral galaxy, tilted and slowly turning, in
@@ -148,6 +160,16 @@
 @keyframes g-twinkle { from { opacity: .25; } to { opacity: 1; } }
 @keyframes g-chart { from { opacity: .45; } to { opacity: 1; } }
 @keyframes g-shine { from { opacity: .7; } to { opacity: 1; } }
+@keyframes g-sky {
+  from { transform: rotate(-5deg) scale(1.02); }
+  to { transform: rotate(5deg) scale(1.13); }
+}
+@keyframes g-meteor2 {
+  0% { opacity: 0; transform: translate(calc(var(--cell) * .9), calc(var(--cell) * .15)) rotate(152deg); }
+  2% { opacity: 1; }
+  10% { opacity: 0; transform: translate(calc(var(--cell) * .2), calc(var(--cell) * .55)) rotate(152deg); }
+  100% { opacity: 0; transform: translate(calc(var(--cell) * .2), calc(var(--cell) * .55)) rotate(152deg); }
+}
 @keyframes g-meteor {
   0% { opacity: 0; transform: translate(calc(var(--cell) * .05), calc(var(--cell) * .08)) rotate(24deg); }
   2% { opacity: 1; }

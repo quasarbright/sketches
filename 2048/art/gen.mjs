@@ -148,18 +148,20 @@ const ORION_LINES = [["meissa", "betelgeuse"], ["meissa", "bellatrix"], ["betelg
 function orionSky() {
   let field = "";
   const tints = ["#ffffff", "#ffffff", "#dfe8ff", "#cfe0ff", "#ffe9d0", "#ffd6b0"];
-  for (let i = 0; i < 260; i++) {
+  for (let i = 0; i < 420; i++) {
     const r = 0.12 + rnd() ** 3 * 0.55;
-    field += `<circle cx='${f(rnd() * 100)}' cy='${f(rnd() * 100)}' r='${f(r)}' fill='${tints[Math.floor(rnd() * tints.length)]}' opacity='${f(0.35 + rnd() * 0.65)}'/>`;
+    field += `<circle cx='${f(-14 + rnd() * 128)}' cy='${f(-14 + rnd() * 128)}' r='${f(r)}' fill='${tints[Math.floor(rnd() * tints.length)]}' opacity='${f(0.35 + rnd() * 0.65)}'/>`;
   }
   // the Milky Way: a soft band of many faint stars and glow across the corner
   let band = "";
   for (let i = 0; i < 220; i++) {
     const t = rnd(), off = (rnd() + rnd() + rnd() - 1.5) * 14;
-    const x = -10 + t * 120 + off * 0.6, y = 70 - t * 90 + off;
+    const x = -20 + t * 140 + off * 0.6, y = 80 - t * 105 + off;
     band += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(0.1 + rnd() * 0.25)}' fill='#e6ecff' opacity='${f(0.3 + rnd() * 0.5)}'/>`;
   }
-  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='xMidYMid slice'>
+  // viewBox past the tile on every side: the tile draws this 14% larger than itself so it can
+  // sway without showing an edge, and tile coordinates stay the same as the chart's
+  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='-14 -14 128 128' preserveAspectRatio='xMidYMid slice'>
     <defs>
       <radialGradient id='sky' cx='.5' cy='.45' r='.75'><stop offset='0' stop-color='#1b2a62'/><stop offset='.55' stop-color='#0b1236'/><stop offset='1' stop-color='#03050f'/></radialGradient>
       <linearGradient id='band' x1='0' y1='1' x2='1' y2='0'><stop offset='.25' stop-color='#8ea6ff' stop-opacity='0'/>
@@ -169,8 +171,8 @@ function orionSky() {
       <filter id='blur' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='3'/></filter>
       <filter id='soft' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='1.2'/></filter>
     </defs>
-    <rect width='100' height='100' fill='url(#sky)'/>
-    <rect width='100' height='100' fill='url(#band)'/>
+    <rect x='-14' y='-14' width='128' height='128' fill='url(#sky)'/>
+    <rect x='-14' y='-14' width='128' height='128' fill='url(#band)'/>
     <g filter='url(#soft)'>${band}</g>
     <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff3a5a' stroke-width='7' opacity='.4' filter='url(#blur)'/>
     <path d='M24 6 C4 24 4 62 22 90' fill='none' stroke='#ff7a8a' stroke-width='1.6' opacity='.25' filter='url(#soft)'/>
