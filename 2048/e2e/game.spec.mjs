@@ -131,7 +131,10 @@ test("speed slider sets the bot's moves per second", async ({ page }) => {
   await page.evaluate(() => window.game2048.setSpeedPos(0));
   await expect(page.locator("#speedOut")).toHaveText("1.0/s");
   await page.evaluate(() => window.game2048.setSpeedPos(100));
-  await expect(page.locator("#speedOut")).toHaveText("30/s");
+  await expect(page.locator("#speedOut")).toHaveText("max");
+  // at max the bot doesn't wait between moves, and still searches at full depth
+  await page.waitForFunction(() => window.game2048.state.botMoves >= 10);
+  expect(await page.evaluate(() => window.game2048.bot.depth)).toBe(5);
   await page.click("#botBtn");
   await expect(page.locator("#speedRow")).toHaveClass(/is-off/);
 });

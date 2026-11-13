@@ -313,8 +313,8 @@
           <svg class="g-ico" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M2 13v2M22 13v2"/></svg>
           <span id="botLabel">Let the bot play</span>
         </button>
-        <label class="g-speed is-off" id="speedRow" title="how many moves the bot makes per second (at the top end it's limited by how fast it can think)">
-          speed <input type="range" id="speed" min="0" max="100" step="1" title="how many moves the bot makes per second (at the top end it's limited by how fast it can think)"><output id="speedOut"></output>
+        <label class="g-speed is-off" id="speedRow" title="how many moves the bot makes per second. At max it moves as soon as it has thought, which is usually 20 to 40 moves a second. Speed never changes how far ahead it looks">
+          speed <input type="range" id="speed" min="0" max="100" step="1" title="how many moves the bot makes per second. At max it moves as soon as it has thought, which is usually 20 to 40 moves a second. Speed never changes how far ahead it looks"><output id="speedOut"></output>
         </label>
       </div>
       <div class="g-ctl">
@@ -675,14 +675,16 @@
     }
 
     // ---------- the bot ----------
-    const SPEED_MIN = 1, SPEED_MAX = 30;
-    const posToSpeed = (p) => SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (p / 100);
+    // log scale from 1 to 200 moves a second; the very top is "max": no waiting at all, so the
+    // bot moves as soon as it finishes thinking (the search depth never changes with speed)
+    const SPEED_MIN = 1, SPEED_MAX = 200;
+    const posToSpeed = (p) => p >= 100 ? Infinity : SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (p / 100);
     const speedToPos = (s) => (100 * Math.log(s / SPEED_MIN)) / Math.log(SPEED_MAX / SPEED_MIN);
     const bot = { on: false, speed: 4, depth: DEFAULT_DEPTH, reqId: 0, timer: 0, lastAt: 0, lastThink: null };
     $("speed").value = Math.round(speedToPos(bot.speed));
     function showSpeed() {
       bot.speed = posToSpeed(+$("speed").value);
-      $("speedOut").textContent = (bot.speed < 10 ? bot.speed.toFixed(1) : Math.round(bot.speed)) + "/s";
+      $("speedOut").textContent = bot.speed === Infinity ? "max" : (bot.speed < 10 ? bot.speed.toFixed(1) : Math.round(bot.speed)) + "/s";
       setSlide(Math.min(110, Math.round(0.8 * 1000 / bot.speed)));
     }
     $("speed").addEventListener("input", showSpeed);
