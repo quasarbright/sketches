@@ -370,9 +370,15 @@
       if (isPowder(a.r) && isLiquid(c.r)) { swapCells(a, c); ma = mc = true; }
       if (isPowder(b.r) && isLiquid(d.r)) { swapCells(b, d); mb = md = true; }
 
-      // 2. a grain resting on something slides diagonally down
-      bool aSlides = !ma && (isPowder(a.r) || (isLiquid(a.r) && r1 >= viscosity(a.r)));
-      bool bSlides = !mb && (isPowder(b.r) || (isLiquid(b.r) && r1 >= viscosity(b.r)));
+      // 2. a grain resting on something slides diagonally down. Sand has friction: half the grains
+      // (picked by their shade, so it's fixed per grain) only slide where the ground drops away
+      // by at least two cells, i.e. the cell under the landing spot is empty or liquid. Piles
+      // then settle steeper than 45 degrees, with a rough surface, instead of slumping flat.
+      uint underD = cellAt(o + ivec2(1 - dx, 2)).r, underC = cellAt(o + ivec2(dx, 2)).r;
+      bool steepD = underD == EMPTY || isLiquid(underD), steepC = underC == EMPTY || isLiquid(underC);
+      bool aGrips = (a.g & 1u) == 0u, bGrips = (b.g & 1u) == 0u;
+      bool aSlides = !ma && ((isPowder(a.r) && (steepD || !aGrips)) || (isLiquid(a.r) && r1 >= viscosity(a.r)));
+      bool bSlides = !mb && ((isPowder(b.r) && (steepC || !bGrips)) || (isLiquid(b.r) && r1 >= viscosity(b.r)));
       // (the support check is last: it's the expensive one)
       if (aSlides && FREE(d, md) && canDisplace(a.r, d.r) && supported(o + ivec2(dx, 0))) { swapCells(a, d); ma = md = true; }
       else if (bSlides && FREE(c, mc) && canDisplace(b.r, c.r) && supported(o + ivec2(1 - dx, 0))) { swapCells(b, c); mb = mc = true; }
