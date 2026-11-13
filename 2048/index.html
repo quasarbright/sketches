@@ -279,7 +279,7 @@
         <div class="g-stat is-score" id="statScore" title="points from merges in this game: each merge adds the new tile's value">
           <span class="g-stat-label">Score</span><span class="g-stat-value" id="score">0</span>
         </div>
-        <div class="g-stat" title="your best score on this device">
+        <div class="g-stat" title="your best score on this device, in games the bot didn't play any moves in">
           <span class="g-stat-label">Best</span><span class="g-stat-value" id="best">0</span>
         </div>
       </div>
@@ -500,7 +500,8 @@
     function addPoints(p, who) {
       points += p;
       $("score").textContent = points;
-      if (points > best) { best = points; store.set(BEST_KEY, best); }
+      // only your own games count: once the bot has made a move in this game, it can't set the best
+      if (points > best && botMoves === 0) { best = points; store.set(BEST_KEY, best); }
       $("best").textContent = best;
       if (reduceMotion || slideMs < 80) return; // at bot speed they'd stack up over the score
       const plus = document.createElement("span");
@@ -730,7 +731,7 @@
         t.style.position = "relative";
         const face = document.createElement("div"); face.className = "g-face"; paintFace(face, maxTile, 46);
         t.append(face);
-        $("overWho").textContent = botMoves === 0 ? "No moves left." : botMoves === moves ? "The bot played every move." : `The bot played ${botMoves} of ${moves} moves.`;
+        $("overWho").textContent = botMoves === 0 ? "No moves left." : (botMoves === moves ? "The bot played every move." : `The bot played ${botMoves} of ${moves} moves.`) + " Games the bot plays in don't count toward your best.";
         $("over").hidden = false;
         $("overNew").focus({ preventScroll: true });
       }, reduceMotion ? 0 : 700);

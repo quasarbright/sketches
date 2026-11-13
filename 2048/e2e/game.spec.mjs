@@ -144,7 +144,7 @@ test("game over shows the card; New game clears it", async ({ page }) => {
   expect(isDead(DEAD)).toBe(true);
   await page.evaluate((b) => window.game2048.load(b, 0.5, { moves: 40, botMoves: 10 }), DEAD);
   await expect(page.locator("#over")).toBeVisible();
-  await expect(page.locator("#overWho")).toHaveText("The bot played 10 of 40 moves.");
+  await expect(page.locator("#overWho")).toHaveText("The bot played 10 of 40 moves. Games the bot plays in don't count toward your best.");
   await expect(page.locator("#overMoves")).toHaveText("40");
   // the bot can't start on a finished game
   await page.evaluate(() => window.game2048.setBot(true));
@@ -170,7 +170,7 @@ test("the bot runs a game to the end and the card says so", async ({ page }) => 
   const s = await state(page);
   expect(s.over).toBe(true);
   expect(s.bot).toBe(false);
-  await expect(page.locator("#overWho")).toHaveText("The bot played every move.");
+  await expect(page.locator("#overWho")).toHaveText("The bot played every move. Games the bot plays in don't count toward your best.");
 });
 
 test("about modal: opens with the snake drawn, closes with Esc", async ({ page }) => {
@@ -234,4 +234,23 @@ test.describe("phone", () => {
     await fits("over");
     expect(errors).toEqual([]);
   });
+});
+
+test("a game the bot has played in doesn't set the best score", async ({ page }) => {
+  const errors = await open(page, { init: () => { try { localStorage.setItem("quasarbright:2048-best", "10"); } catch {} } });
+  // your own merge beats the best
+  await page.evaluate(() => window.game2048.load([8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0.5));
+  await page.evaluate(() => window.game2048.move("LEFT"));
+  await expect(page.locator("#best")).toHaveText("16");
+  // the bot makes a move in a fresh game; after that, nobody's merges raise the best
+  await page.evaluate(() => window.game2048.load([2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0.5));
+  await page.evaluate(() => { window.game2048.setSpeedPos(100); window.game2048.setBot(true); });
+  await page.waitForFunction(() => window.game2048.state.botMoves >= 3);
+  await page.evaluate(() => window.game2048.setBot(false));
+  await page.evaluate(() => window.game2048.load([64, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0.5, { botMoves: 3, moves: 3 }));
+  await page.evaluate(() => window.game2048.move("LEFT"));
+  expect((await state(page)).points).toBe(128);
+  await expect(page.locator("#best")).toHaveText("16");
+  expect(await page.evaluate(() => localStorage.getItem("quasarbright:2048-best"))).toBe("16");
+  expect(errors).toEqual([]);
 });
