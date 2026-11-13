@@ -173,19 +173,16 @@ test("the bot runs a game to the end and the card says so", async ({ page }) => 
   await expect(page.locator("#overWho")).toHaveText("The bot played every move.");
 });
 
-test("about modal: opens with its diagrams drawn, closes with Esc", async ({ page }) => {
+test("about modal: opens with the snake drawn, closes with Esc", async ({ page }) => {
   const errors = await open(page);
   await page.evaluate(() => window.game2048.load([2, 0, 0, 0, 4, 8, 2, 0, 16, 32, 8, 4, 256, 128, 64, 16], 0.77));
   await page.click("#about");
   const modal = page.locator(".cohesion-about");
   await expect(modal).toBeVisible();
-  for (const d of ["next", "snakes", "tree"]) {
-    const box = await modal.locator(`[data-dia="${d}"]`).boundingBox();
-    expect(box.width, d).toBeGreaterThan(150);
-    expect(box.height, d).toBeGreaterThan(100); // "next" is one row of four boards
-  }
-  await expect(modal.locator('[data-cap="snakes"]')).toContainText("of 8");
-  await expect(modal.locator('[data-dia="parts"] table')).toContainText("score");
+  const box = await modal.locator('[data-dia="snake"]').boundingBox();
+  expect(box.width).toBeGreaterThan(150);
+  expect(box.height).toBeGreaterThan(150);
+  await expect(modal).not.toContainText("Mike");
   // arrows don't move tiles behind the modal
   await page.keyboard.press("ArrowRight");
   expect((await state(page)).moves).toBe(0);

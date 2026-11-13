@@ -360,67 +360,17 @@
 
   <template id="aboutTpl">
     <h2 class="title">How the bot thinks</h2>
-    <p class="intro">The bot is Mike's 2048 AI from 2020, ported from Python. Before each move it
-      plays out every sequence of six moves, scores the board each one ends on, and makes the first
-      move of the best sequence. It can do that because the new tiles in this game aren't really
-      random.</p>
-
-    <div class="section-label">the tiles aren't random</div>
-    <p>After every move a 2 or a 4 appears in an empty cell. Where it lands comes from a random
-      number generator, but the generator is restarted before every spawn from a number the game
-      keeps, its <b>seed</b>, and every move that changes the board adds 1 to the seed. So the board
-      and the seed decide every tile that will ever appear. Anyone with a copy of the game can try a
-      move and see exactly where the next tile goes. These are the four boards your current game
-      would turn into, new tile ringed:</p>
-    <canvas class="g-dia" data-dia="next"></canvas>
-    <p class="g-cap" data-cap="next">&nbsp;</p>
-    <p>A bot that couldn't see this would have to average over every cell the tile might land in.
-      This one plans with the real future, which is a big advantage over a human, and over most
-      other 2048 bots.</p>
-
-    <div class="section-label">what a good board looks like</div>
-    <p>Strong players keep their biggest tile in a corner and line the rest up in decreasing order,
-      back and forth along the rows, like a snake. Each tile then sits beside the one it will merge
-      into next, and a chain of merges can roll all the way up to the corner.</p>
-    <p>The bot measures this. Pick a snake path through all 16 cells and walk it, halving the
-      running total and then adding the next tile. The last cell on the path counts fully, the one
-      before it half, the one before that a quarter, so the walk scores highest when the tiles shrink
-      away from the end. A square can be rotated or flipped 8 ways, so there are 8 snakes, and the
-      board gets the best of the 8 scores. Here are the 8 on your board, with the line brightening
-      the way the weights grow:</p>
-    <canvas class="g-dia" data-dia="snakes"></canvas>
-    <p class="g-cap" data-cap="snakes">&nbsp;</p>
-
-    <div class="section-label">one number per board</div>
-    <p>That best snake score is the whole judgment of a board. The only other rule: a board with
-      no moves left is divided by 10, so the bot steers away from losing even when the tiles on a
-      full board happen to be in good order. Bigger tiles in a long, ordered line score higher, so
-      merging up toward the corner raises the score and scattering big tiles lowers it.</p>
-    <p class="g-cap" style="font: 600 1rem var(--font-mono); color: var(--text)">score = best of the 8 snakes (÷ 10 if stuck)</p>
-    <div data-dia="parts"></div>
-
-    <div class="section-label">looking six moves ahead</div>
-    <p>For each move it could make, the bot tries all four next moves after it, then all four after
-      each of those, and so on, six moves deep: 4,096 sequences per decision. It scores the board at
-      the end of each, gives each move the best score reachable after it, and picks the move with the
-      best value. Here is the same search cut to two moves deep, on your board:</p>
-    <canvas class="g-dia" data-dia="tree"></canvas>
-    <p class="g-cap" data-cap="tree">&nbsp;</p>
-    <p>The four bars under the board while the bot plays are these values from the full six-move
-      search. Two details from the original: moves that change nothing are allowed partway down a
-      sequence, so "stay put" is one of the options it considers after the first move, and a
-      board reached by two different sequences is only scored once.</p>
-
-    <div class="section-label">the port</div>
-    <p>The Python is at <a href="https://github.com/quasarbright/2048" target="_blank" rel="noopener">quasarbright/2048</a>.
-      This page runs a line-by-line JavaScript port of it, Python's random number generator
-      included, so for the same seed the same tiles appear and the bot chooses the same moves. That's
-      checked against the Python's own output. The search runs in a background thread and takes
-      about 30&nbsp;ms per move. In six test games it reached 2048 in all six and 4096 in four,
-      lasting between 1,700 and 3,600 moves.</p>
-    <p>One quirk came along with it: merges always pair up from the left or top of a line, whichever
-      way you slide. Slide <code>2 2 2</code> right and you get <code>4 2</code>, where most versions
-      of 2048 give <code>2 4</code>. The bot's model of the game has the same rule, so it's kept.</p>
+    <p class="intro">This is my 2048 AI from 2020, ported from Python.</p>
+    <p>The best way to play 2048 is to keep the biggest tile in a corner and line the rest up
+      behind it in decreasing order, back and forth like a snake. Then every tile sits next to the
+      one it merges into next.</p>
+    <canvas class="g-dia" data-dia="snake"></canvas>
+    <p>So the bot scores a board by how snake-like it is: walk a snake path through the board,
+      halving the running total at each cell and adding that cell's tile, so the tiles near the end
+      of the path count the most. It tries the snake in all 8 orientations and keeps the best.</p>
+    <p>Then it's minimax with that score: before each move it tries every sequence of the next six
+      moves, and makes the first move of the sequence that ends on the best-scoring board.</p>
+    <p>The Python is at <a href="https://github.com/quasarbright/2048" target="_blank" rel="noopener">quasarbright/2048</a>.</p>
   </template>
 
   <mike-footer overlay></mike-footer>
@@ -871,7 +821,7 @@
     // ---------- about ----------
     $("about").onclick = () => {
       const { el } = openModal($("aboutTpl").innerHTML, { className: "cohesion-about" });
-      const stop = setupAbout(el, { board: game.board.slice(), seed: game.seed });
+      const stop = setupAbout(el);
       document.addEventListener("cohesion-modal-close", stop, { once: true });
     };
 
