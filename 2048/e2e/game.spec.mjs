@@ -6,18 +6,19 @@ import { open, state, expectTilesMatchBoard, CORNER, DEAD } from "./helpers.mjs"
 import { move, newGame, isDead, DIRECTIONS } from "../game.mjs";
 import { chooseAction } from "../minimax.mjs";
 
-test("start screen: Play hides it, Watch the bot starts the bot", async ({ page }) => {
-  const errors = await open(page, { menu: "none" });
-  await expect(page.locator("#menu")).toBeVisible();
-  await page.click("#playBtn");
-  await expect(page.locator("#menu")).toBeHidden();
+test("the page opens straight on the game, and on your saved game after a reload", async ({ page }) => {
+  const errors = await open(page);
+  await expect(page.locator("#board")).toBeVisible();
   expect((await state(page)).bot).toBe(false);
-
+  await page.evaluate((b) => window.game2048.load(b, 0.5), CORNER);
+  await page.evaluate(() => window.game2048.move("RIGHT"));
+  const before = await state(page);
   await page.reload();
   await page.waitForFunction(() => !!window.game2048);
-  await page.click("#watchBtn");
-  await expect(page.locator("#botLabel")).toHaveText("Take over");
-  expect((await state(page)).bot).toBe(true);
+  const after = await state(page);
+  expect(after.board).toEqual(before.board);
+  expect(after.moves).toBe(before.moves);
+  expect(after.bot).toBe(false);
   expect(errors).toEqual([]);
 });
 
@@ -65,8 +66,7 @@ test("score adds merged tiles; best is kept across a reload", async ({ page }) =
   await page.reload();
   await page.waitForFunction(() => !!window.game2048);
   await expect(page.locator("#best")).toHaveText("24");
-  // and the game itself was saved: the start screen offers to continue it
-  await expect(page.locator("#playName")).toHaveText("Continue");
+  // and the game itself was saved: the page reopens on it
   expect((await state(page)).points).toBe(24);
 });
 
@@ -194,7 +194,7 @@ test("about modal: opens with the snake drawn, closes with Esc", async ({ page }
 test.describe("phone", () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true });
   test("everything fits at 375×812, in play, with the bot on, and at game over", async ({ page }) => {
-    const errors = await open(page, { menu: "none" });
+    const errors = await open(page);
     const fits = async (label) => {
       const r = await page.evaluate(() => {
         const W = document.documentElement.clientWidth, H = document.documentElement.clientHeight;
@@ -216,10 +216,8 @@ test.describe("phone", () => {
       expect(r.out, label).toEqual([]);
       expect(r.scroll, label).toBeLessThanOrEqual(0);
     };
-    await fits("menu");
     // the bot button's label stays on one line (it wrapped once the robot icon was added)
     const oneLine = async () => page.evaluate(() => { const l = document.getElementById("botLabel"); return l.getClientRects().length === 1 && l.offsetHeight < 30; });
-    await page.click("#playBtn");
     await fits("play");
     expect(await oneLine()).toBe(true);
     const board = await page.locator("#board").boundingBox();

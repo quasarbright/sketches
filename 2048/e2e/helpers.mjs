@@ -1,7 +1,7 @@
 // Shared setup: open the page, collect page errors, wait for the test hook (window.game2048).
 import { expect } from "@playwright/test";
 
-export async function open(page, { menu = "skip", init } = {}) {
+export async function open(page, { init } = {}) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/net::|Failed to load resource/.test(m.text())) errors.push(m.text()); });
@@ -10,8 +10,6 @@ export async function open(page, { menu = "skip", init } = {}) {
   if (init) await page.addInitScript(init);
   await page.goto("index.html", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.game2048);
-  if (menu === "play") await page.click("#playBtn");
-  else if (menu === "skip") await page.evaluate(() => { document.getElementById("menu").hidden = true; });
   return errors;
 }
 

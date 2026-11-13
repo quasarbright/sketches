@@ -189,34 +189,6 @@
     .g-speed input { width: 120px; accent-color: var(--bot); margin: 0; }
     .g-speed output { font: 600 .75rem var(--font-mono); color: var(--bot); width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
 
-    /* ---------- start screen ---------- */
-    .g-menu {
-      position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px 16px 60px;
-      background: radial-gradient(120% 80% at 50% 30%, rgba(18,15,36,.55), rgba(18,15,36,.92));
-      backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
-    }
-    .g-menu-inner { text-align: center; max-width: 640px; }
-    .g-menu-logo {
-      margin: 0; font: 400 clamp(4rem, 24vw, 8.5rem)/1 var(--font-display); color: var(--accent);
-      text-shadow: 0 7px 0 #a87a10, 0 18px 40px rgba(0,0,0,.55); transform: rotate(-4deg);
-    }
-    .g-menu-logo span { display: inline-block; animation: g-hop 2.4s ease-in-out infinite; }
-    .g-menu-logo span:nth-child(2) { animation-delay: .12s; color: #ff9f2e; text-shadow: 0 7px 0 #a8580f, 0 18px 40px rgba(0,0,0,.55); }
-    .g-menu-logo span:nth-child(3) { animation-delay: .24s; color: #ff5b5b; text-shadow: 0 7px 0 #a02a2a, 0 18px 40px rgba(0,0,0,.55); }
-    .g-menu-logo span:nth-child(4) { animation-delay: .36s; color: #b04dff; text-shadow: 0 7px 0 #6720a8, 0 18px 40px rgba(0,0,0,.55); }
-    @keyframes g-hop { 0%, 60%, 100% { transform: none; } 30% { transform: translateY(-10px); } }
-    .g-pitch {
-      margin: 22px auto 30px; max-width: 430px; font-size: 1.05rem; line-height: 1.5; color: #d6cff5;
-      text-shadow: 0 1px 2px rgba(10,8,20,.9);
-    }
-    .g-pitch b { color: var(--text); }
-    .g-modes { display: flex; gap: 16px; justify-content: center; }
-    .g-mode { flex-direction: column; gap: 8px; width: 196px; padding: 20px 14px 18px; border-radius: 22px; }
-    .g-mode svg { width: 92px; height: 70px; }
-    .g-mode > div { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-    .g-mode-name { font: 400 1.35rem/1 var(--font-display); }
-    .g-mode-sub { font-weight: 600; font-size: .88rem; opacity: .75; }
-
     /* ---------- game over ---------- */
     .g-over { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: rgba(10,8,20,.55); }
     .g-card {
@@ -247,10 +219,6 @@
       .g-top-right { top: 2px; }
       .g-score { top: 58px; left: 0; right: 0; transform: none; justify-content: center; padding: 6px 4px; }
       .g-stat { min-width: 0; flex: 1; padding: 0 12px; }
-      .g-modes { flex-direction: column; align-items: center; gap: 12px; }
-      .g-mode { flex-direction: row; width: 100%; max-width: 320px; padding: 14px 18px; gap: 16px; text-align: left; justify-content: flex-start; }
-      .g-mode svg { width: 64px; height: 50px; flex: none; }
-      .g-mode > div { display: flex; flex-direction: column; gap: 4px; }
       .g-controls { gap: 8px; }
       .g-ctl:has(.is-round) { width: 78px; }
       .g-ctl .g-btn.is-round { width: 50px; height: 50px; }
@@ -264,7 +232,7 @@
     }
     @media (max-width: 360px) { .g-bot-btn { width: 150px; font-size: .85rem; padding: 0 8px; gap: 4px; } .g-bot-btn svg.g-ico { display: none; } .g-ctl:has(.is-round) { width: 70px; } }
     @media (prefers-reduced-motion: reduce) {
-      .g-card, .g-menu-logo span, .g-board-wrap.is-shake { animation: none !important; }
+      .g-card, .g-board-wrap.is-shake { animation: none !important; }
       .g-tile .g-face { animation: none !important; }
     }
   </style>
@@ -325,26 +293,6 @@
     </div>
   </div>
 
-  <!-- start screen -->
-  <div class="g-menu" id="menu">
-    <div class="g-menu-inner">
-      <h1 class="g-menu-logo" aria-label="2048"><span>2</span><span>0</span><span>4</span><span>8</span></h1>
-      <p class="g-pitch">Slide the tiles. Two equal tiles <b>merge into their sum</b>. Get to 2048, or hand
-        the board to the <b>bot</b> and watch it plan six moves ahead.</p>
-      <div class="g-modes">
-        <button class="g-btn is-gold g-mode" id="playBtn" title="play it yourself with the arrow keys, WASD or swipes">
-          <svg viewBox="0 0 92 70" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><rect x="33" y="4" width="26" height="26" rx="6"/><rect x="4" y="38" width="26" height="26" rx="6"/><rect x="33" y="38" width="26" height="26" rx="6"/><rect x="62" y="38" width="26" height="26" rx="6"/><path d="M46 22v-10m-4 4 4-4 4 4"/></g></svg>
-          <div><span class="g-mode-name" id="playName">Play</span><span class="g-mode-sub" id="playSub">arrow keys or swipe</span></div>
-        </button>
-        <button class="g-btn is-teal g-mode" id="watchBtn" title="the bot plays from the start; take over whenever you like">
-          <svg viewBox="0 0 92 70" aria-hidden="true"><path d="M8 8h76v18H8v18h76v18H8" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="62" r="7" fill="currentColor"/></svg>
-          <div><span class="g-mode-name">Watch the bot</span><span class="g-mode-sub">take over any time</span></div>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- game over -->
   <div class="g-over" id="over" hidden>
     <div class="g-card" role="dialog" aria-labelledby="overTitle">
       <h2 id="overTitle">Game over</h2>
@@ -738,21 +686,14 @@
     }
     $("overNew").onclick = $("newGame").onclick = freshGame;
 
-    // ---------- start screen ----------
+    // the page opens on your last game, or a new one; the bot button is how you hand it over
     const saved = loadGame();
-    if (saved) { $("playName").textContent = "Continue"; $("playSub").textContent = "pick up where you left off"; }
-    function leaveMenu(withBot) {
-      $("menu").hidden = true;
-      if (withBot) setBot(true);
-    }
-    $("playBtn").onclick = () => leaveMenu(false);
-    $("watchBtn").onclick = () => leaveMenu(true);
 
     // ---------- input ----------
     const KEYS = { ArrowUp: UP, ArrowDown: DOWN, ArrowLeft: LEFT, ArrowRight: RIGHT, w: UP, s: DOWN, a: LEFT, d: RIGHT, W: UP, S: DOWN, A: LEFT, D: RIGHT };
     const modalOpen = () => !!document.querySelector(".cohesion-modal-backdrop");
     function humanMove(dir) {
-      if (!$("menu").hidden || modalOpen() || over) return;
+      if (modalOpen() || over) return;
       if (bot.on) setBot(false); // sliding a tile yourself takes over from the bot
       if (!doMove(dir, "human")) audio.play("bump");
     }
@@ -763,10 +704,7 @@
         if (e.target.matches?.("input")) e.target.blur();
         e.preventDefault(); humanMove(dir); return;
       }
-      if (!$("menu").hidden || modalOpen()) {
-        if (!$("menu").hidden && e.key === "Enter" && !e.target.matches?.("button")) leaveMenu(false);
-        return;
-      }
+      if (modalOpen()) return;
       if (e.key === "b" || e.key === "B") $("botBtn").click();
       else if (e.key === "m" || e.key === "M") toggleSound();
       else if ((e.key === "n" || e.key === "N")) freshGame();
@@ -774,7 +712,7 @@
     // swipes, anywhere outside the buttons
     let swipe = null;
     addEventListener("pointerdown", (e) => {
-      if (e.target.closest("button, input, label, a, .cohesion-modal-backdrop, .g-menu")) return;
+      if (e.target.closest("button, input, label, a, .cohesion-modal-backdrop")) return;
       swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
     });
     addEventListener("pointerup", (e) => {

@@ -8,7 +8,7 @@ async function load(page, board, seed = 0.5) {
 }
 
 test("arrow keys and WASD slide the tiles", async ({ page }) => {
-  const errors = await open(page, { menu: "play" });
+  const errors = await open(page);
   for (const [key, dir] of [["ArrowRight", 3], ["d", 3], ["ArrowDown", 12], ["s", 12]]) {
     await load(page, CORNER);
     await page.keyboard.press(key);
@@ -28,7 +28,7 @@ test("arrow keys and WASD slide the tiles", async ({ page }) => {
 });
 
 test("swipes on the board slide the tiles; a short drag doesn't", async ({ page }) => {
-  await open(page, { menu: "play" });
+  await open(page);
   const b = await page.locator("#board").boundingBox();
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
   const drag = async (dx, dy) => {
@@ -53,7 +53,7 @@ test("swipes on the board slide the tiles; a short drag doesn't", async ({ page 
 });
 
 test("the bot button toggles with a click, and a key press takes over from the bot", async ({ page }) => {
-  const errors = await open(page, { menu: "play" });
+  const errors = await open(page);
   await page.evaluate(() => window.game2048.setSpeedPos(100));
   await page.locator("#botBtn").click();
   await expect(page.locator("#botLabel")).toHaveText("Take over");
@@ -82,7 +82,7 @@ test("the bot button toggles with a click, and a key press takes over from the b
 });
 
 test("B toggles the bot, N starts a new game", async ({ page }) => {
-  await open(page, { menu: "play" });
+  await open(page);
   await load(page, [2, 4, 8, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   await page.keyboard.press("b");
   expect((await state(page)).bot).toBe(true);
@@ -94,19 +94,15 @@ test("B toggles the bot, N starts a new game", async ({ page }) => {
   expect(s.board.filter((v) => v).length).toBe(2);
 });
 
-test("the start screen ignores arrows; Play with a real click starts input", async ({ page }) => {
-  await open(page, { menu: "none" });
-  await page.keyboard.press("ArrowLeft");
-  await page.keyboard.press("ArrowRight");
-  expect((await state(page)).moves).toBe(0);
-  await page.locator("#playBtn").click();
+test("arrow keys work as soon as the page opens", async ({ page }) => {
+  await open(page);
   await load(page, CORNER);
   await page.keyboard.press("ArrowRight");
   expect((await state(page)).moves).toBe(1);
 });
 
 test("the sound button and M mute and unmute, and the choice survives a reload", async ({ page }) => {
-  const errors = await open(page, { menu: "play" });
+  const errors = await open(page);
   expect(await page.evaluate(() => window.game2048.muted)).toBe(false);
   await expect(page.locator("#soundBtn")).toHaveAttribute("aria-pressed", "true");
   await page.locator("#soundBtn").click();
@@ -115,7 +111,6 @@ test("the sound button and M mute and unmute, and the choice survives a reload",
   await page.reload();
   await page.waitForFunction(() => !!window.game2048);
   expect(await page.evaluate(() => window.game2048.muted)).toBe(true);
-  await page.evaluate(() => { document.getElementById("menu").hidden = true; });
   await page.keyboard.press("m");
   expect(await page.evaluate(() => window.game2048.muted)).toBe(false);
   // moves, merges and a blocked move all play without errors
