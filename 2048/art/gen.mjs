@@ -62,50 +62,7 @@ function galaxy() {
   return uri(svg);
 }
 
-// ---- cosmic web: a fine web of filaments between clusters of galaxies, over faint gas. Static:
-// the tile moves it with transforms, which don't make the browser redraw the image.
-function web() {
-  // clusters spread evenly over the tile (and a little past its edges), so the web fills it
-  const nodes = [];
-  for (let tries = 0; tries < 8000 && nodes.length < 130; tries++) {
-    const x = -6 + rnd() * 112, y = -6 + rnd() * 112;
-    if (nodes.every(([u, v]) => Math.hypot(u - x, v - y) > 7.6)) nodes.push([x, y, 0]);
-  }
-  // join each cluster to its neighbors within reach; clusters where many threads meet are bigger
-  const edges = new Set(), degree = nodes.map(() => 0);
-  nodes.forEach((a, i) => nodes.forEach((b, j) => {
-    if (i < j && Math.hypot(a[0] - b[0], a[1] - b[1]) < 12.5 && rnd() < 0.85) { edges.add(`${i}-${j}`); degree[i]++; degree[j]++; }
-  }));
-  nodes.forEach((n, i) => { n[2] = 0.25 + Math.max(0, degree[i] - 3) * 0.4 + rnd() * 0.3; });
-  let soft = "";
-  for (const e of edges) {
-    const [i, j] = e.split("-").map(Number), [ax, ay] = nodes[i], [bx, by] = nodes[j];
-    const mx = (ax + bx) / 2 + (rnd() - 0.5) * 7, my = (ay + by) / 2 + (rnd() - 0.5) * 7;
-    const d = `M${f(ax)} ${f(ay)}Q${f(mx)} ${f(my)} ${f(bx)} ${f(by)}`;
-    soft += d;
-  }
-  let clusters = "";
-  nodes.forEach(([x, y, r]) => {
-    clusters += `<circle cx='${f(x)}' cy='${f(y)}' r='${f(r * 2.4)}' fill='url(#n)' opacity='${f(0.55 + rnd() * 0.45)}'/><circle cx='${f(x)}' cy='${f(y)}' r='${f(0.25 + r * 0.3)}' fill='#fff'/>`;
-  });
-  let gasClouds = "";
-  for (let i = 0; i < 9; i++) gasClouds += `<circle cx='${f(rnd() * 100)}' cy='${f(rnd() * 100)}' r='${f(14 + rnd() * 16)}' fill='${["#5a2bd0", "#1a6bd0", "#c02b9a"][i % 3]}'/>`;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-    <defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#4de8ff'/>
-      <stop offset='.5' stop-color='#a46bff'/><stop offset='1' stop-color='#ff5fc8'/></linearGradient>
-      <radialGradient id='n'><stop offset='0' stop-color='#ffffff'/><stop offset='.25' stop-color='#bff4ff' stop-opacity='.85'/>
-      <stop offset='1' stop-color='#a46bff' stop-opacity='0'/></radialGradient>
-      <filter id='fog' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='9'/></filter>
-      <filter id='b' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='1.4'/></filter></defs>
-    <g opacity='.5' filter='url(#fog)'>${gasClouds}</g>
-    <g fill='none' stroke='url(#g)' stroke-linecap='round'>
-      <path d='${soft}' stroke-width='4' opacity='.6' filter='url(#b)'/>
-      <path d='${soft}' stroke-width='.45'/>
-</g>
-    ${clusters}</svg>`;
-  return uri(svg);
-}
-
+// (the cosmic web is a raster: art/web-render.mjs)
 
 // ---- lava: plates of dark cooled crust split by glowing cracks. The cracks are the edges of a
 // Voronoi diagram (from a Bowyer-Watson Delaunay triangulation), made jagged. lava-glow.svg is
@@ -179,7 +136,7 @@ function lava() {
 }
 
 const out = process.argv[2];
-for (const [name, fn] of Object.entries({ aurora, galaxy, web })) writeFileSync(`${out}/${name}.svg`, fn());
+for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${out}/${name}.svg`, fn());
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);

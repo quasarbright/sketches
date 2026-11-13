@@ -9,7 +9,7 @@ export const TILE = {
   8192: ["#c79bff", "#3a1670"], 16384: ["#ff6a1f", "#fff8e0"], 32768: ["#39ff9e", "#f2fff6"],
   65536: ["#8a7dff", "#ffffff"],
 };
-const BEYOND = ["#4de8ff", "#ffffff"]; // 131072, the largest possible
+const BEYOND = ["#ff8a4a", "#fff8e6"]; // 131072, the largest possible
 export const tileColors = (v) => TILE[v] || BEYOND;
 export const tileColor = (v) => tileColors(v)[0];
 // font size for a numeral, as a fraction of the tile's width

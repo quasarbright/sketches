@@ -84,28 +84,19 @@
     radial-gradient(1px 1px at 46% 8%, #fff 99%, transparent);
 }
 
-/* 131072, the biggest tile the game can make: the cosmic web. Filaments join glowing clusters
-   of galaxies over faint gas, drifting and breathing inside a rainbow rim. */
+/* 131072, the biggest tile the game can make: the cosmic web, colored like the Millennium
+   Simulation pictures (art/web.webp, from art/web-render.mjs), drifting and breathing. */
 .g-face[data-tier="web"] {
-  background: radial-gradient(circle at 50% 50%, #140828, #020108 80%);
-  color: #ffffff;
-  text-shadow: 0 0 calc(var(--cell) * .03) #020108, 0 0 calc(var(--cell) * .03) #020108,
-    calc(var(--cell) * -.015) 0 calc(var(--cell) * .09) #4de8ff, calc(var(--cell) * .015) 0 calc(var(--cell) * .09) #ff5fc8;
+  background: #1c0838;
+  color: #fff8e6;
+  text-shadow: 0 0 calc(var(--cell) * .03) #12041f, 0 0 calc(var(--cell) * .03) #12041f, 0 0 calc(var(--cell) * .12) #ff9a4a;
 }
 .g-face[data-tier="web"]::before {
   inset: -12%;
-  background: url(art/web.svg) center / 100% 100% no-repeat;
+  background: url(art/web.webp) center / cover no-repeat;
   animation: g-drift 16s ease-in-out infinite alternate, g-breathe 2.4s ease-in-out infinite alternate;
 }
-.g-face[data-tier="web"]::after {
-  padding: calc(var(--cell) * .045);
-  background: conic-gradient(from 210deg, #4de8ff, #a46bff, #ff5fc8, #ffe27a, #8ff7c8, #4de8ff);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-  z-index: 1;
-  animation: g-breathe 2.4s ease-in-out infinite alternate-reverse;
-}
+.g-face[data-tier="web"]::after { box-shadow: inset 0 0 calc(var(--cell) * .12) rgba(18, 4, 31, .8); z-index: 0; }
 
 @keyframes g-turn { to { transform: rotate(360deg); } }
 @keyframes g-heat { 0% { opacity: .2; } 100% { opacity: .85; } }
