@@ -533,6 +533,9 @@
     uniform vec3 uBox, uFireHot, uFireCool, uLavaHot, uLavaCool;
     uniform int uOverlay, uBlockOff;   // about-modal diagram: cell grid + the next step's blocks
     uniform vec3 uOverlayColor;
+    uniform sampler2D uGlow;
+    uniform vec2 uGlowSpan;   // the glow texture's size, in cells
+    uniform float uGlowStrength;
     out vec4 frag;
     void main() {
       vec2 cf = vec2(gl_FragCoord.x, uViewH - gl_FragCoord.y) / uCellPx;
@@ -555,7 +558,50 @@
         bool by = ((p.y + uBlockOff) & 1) == 0 && f.y < 2.0;
         if (bx || by) col = mix(col, uOverlayColor, 0.8);
       }
+      // bloom: screen-blend the blurred glow over everything
+      vec3 g = texture(uGlow, cf / uGlowSpan).rgb * uGlowStrength;
+      col = 1.0 - (1.0 - min(col, 1.0)) * (1.0 - min(g, 1.0));
       frag = vec4(col, 1.0);
+    }`
+
+    // bloom, step 1: what glows. Half resolution: each pixel averages a 2x2 patch of cells,
+    // keeping only fire, lava and (dimmer) acid.
+    const EMIT = `#version 300 es
+    precision highp float;
+    precision highp usampler2D;
+    uniform usampler2D uState;
+    uniform ivec2 uSize;
+    uniform vec3 uFireHot, uFireCool, uLavaHot, uLavaCool, uAcid;
+    out vec4 frag;
+    vec3 emit(ivec2 p) {
+      if (p.x >= uSize.x || p.y >= uSize.y) return vec3(0.0);
+      uvec4 s = texelFetch(uState, p, 0);
+      if (s.r == 6u) return mix(uFireHot, uFireCool, sqrt(max(0.0, 1.0 - float(s.b) / ${FIRE_LIFE}.0)));
+      if (s.r == 9u) return 0.85 * mix(uLavaHot, uLavaCool, sqrt(max(0.0, 1.0 - float(s.b) / ${LAVA_LIFE}.0)));
+      if (s.r == 3u) return 0.45 * uAcid;
+      return vec3(0.0);
+    }
+    void main() {
+      ivec2 q = ivec2(gl_FragCoord.xy) * 2;
+      vec3 c = emit(q) + emit(q + ivec2(1, 0)) + emit(q + ivec2(0, 1)) + emit(q + ivec2(1, 1));
+      frag = vec4(c * 0.25, 1.0);
+    }`
+
+    // bloom, step 2: a 9-tap Gaussian blur along uDir, run horizontally then vertically, twice
+    const BLUR = `#version 300 es
+    precision highp float;
+    uniform sampler2D uSrc;
+    uniform vec2 uDir;
+    out vec4 frag;
+    void main() {
+      vec2 size = vec2(textureSize(uSrc, 0));
+      vec2 uv = gl_FragCoord.xy / size, step = uDir * 2.2 / size;
+      const float w[5] = float[5](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+      vec3 c = texture(uSrc, uv).rgb * w[0];
+      for (int i = 1; i < 5; i++) {
+        c += (texture(uSrc, uv + step * float(i)).rgb + texture(uSrc, uv - step * float(i)).rgb) * w[i];
+      }
+      frag = vec4(c, 1.0);
     }`
 
     // ------------------------------------------------------------------ the simulation
@@ -571,7 +617,10 @@
           move: this.program(MOVE), react: this.program(REACT), paint: this.program(PAINT),
           copy: this.program(COPY), render: this.program(RENDER),
           supportInit: this.program(SUPPORT_INIT), supportJump: this.program(SUPPORT_JUMP),
+          emit: this.program(EMIT), blur: this.program(BLUR),
         }
+        this.glow = []   // two half-resolution color targets for the bloom
+        this.glowStrength = 1.6
         this.sup = []; this.supCur = 0   // support field, ping-ponged like the grid
         this.cols = 0; this.rows = 0
         this.tex = []; this.fbo = []; this.cur = 0
@@ -634,6 +683,51 @@
         for (const s of this.sup) { gl.deleteTexture(s.tex); gl.deleteFramebuffer(s.fbo) }
         this.sup = [this.makeTarget(cols, rows), this.makeTarget(cols, rows)]; this.supCur = 0
         this.jumps = Math.ceil(Math.log2(rows)) + 1
+        for (const g of this.glow) { gl.deleteTexture(g.tex); gl.deleteFramebuffer(g.fbo) }
+        this.gw = Math.ceil(cols / 2); this.gh = Math.ceil(rows / 2)
+        this.glow = [this.makeGlowTarget(this.gw, this.gh), this.makeGlowTarget(this.gw, this.gh)]
+      }
+
+      makeGlowTarget(w, h) {
+        const gl = this.gl
+        const tex = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, tex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+        for (const k of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, k, gl.LINEAR)
+        for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE)
+        const fbo = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0)
+        return { tex, fbo }
+      }
+
+      // bloom: draw what glows into glow[0], then blur it back and forth between the two targets
+      bloom() {
+        const gl = this.gl, rgb = (c) => c.map((v) => v / 255)
+        gl.viewport(0, 0, this.gw, this.gh)
+        gl.bindVertexArray(this.vao)
+        const e = this.progs.emit
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.glow[0].fbo)
+        gl.useProgram(e.p)
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, this.tex[this.cur])
+        gl.uniform1i(e.u.uState, 0)
+        gl.uniform2i(e.u.uSize, this.cols, this.rows)
+        gl.uniform3fv(e.u.uFireHot, rgb(FIRE_HOT)); gl.uniform3fv(e.u.uFireCool, rgb(FIRE_COOL))
+        gl.uniform3fv(e.u.uLavaHot, rgb(LAVA_HOT)); gl.uniform3fv(e.u.uLavaCool, rgb(LAVA_COOL))
+        gl.uniform3fv(e.u.uAcid, rgb(COLORS[MAT.ACID]))
+        gl.drawArrays(gl.TRIANGLES, 0, 3)
+        const b = this.progs.blur
+        gl.useProgram(b.p)
+        gl.uniform1i(b.u.uSrc, 0)
+        for (const dir of [[1, 0], [0, 1], [1, 0], [0, 1]]) {
+          const src = dir[0] ? 0 : 1
+          gl.bindFramebuffer(gl.FRAMEBUFFER, this.glow[1 - src].fbo)
+          gl.bindTexture(gl.TEXTURE_2D, this.glow[src].tex)
+          gl.uniform2f(b.u.uDir, dir[0], dir[1])
+          gl.drawArrays(gl.TRIANGLES, 0, 3)
+        }
+        // the result ends up back in glow[0]
       }
 
       // work out which grains are held up (see SUPPORT_INIT / SUPPORT_JUMP)
@@ -729,6 +823,7 @@
 
       render({ overlay = false } = {}) {
         const gl = this.gl, { u } = this.progs.render
+        this.bloom()
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, this.canvas.width, this.canvas.height)
         gl.useProgram(this.progs.render.p)
@@ -748,6 +843,12 @@
         gl.uniform1i(u.uOverlay, overlay ? 1 : 0)
         gl.uniform1i(u.uBlockOff, this.stepN & 1)
         gl.uniform3fv(u.uOverlayColor, [0.9, 0.72, 0.44])
+        gl.activeTexture(gl.TEXTURE2)
+        gl.bindTexture(gl.TEXTURE_2D, this.glow[0].tex)
+        gl.uniform1i(u.uGlow, 2)
+        gl.uniform2f(u.uGlowSpan, this.gw * 2, this.gh * 2)
+        gl.uniform1f(u.uGlowStrength, this.glowStrength)
+        gl.activeTexture(gl.TEXTURE0)
         gl.bindVertexArray(this.vao)
         gl.drawArrays(gl.TRIANGLES, 0, 3)
       }
