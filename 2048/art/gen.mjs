@@ -134,44 +134,8 @@ function lava() {
   return [uri(art), uri(glow)];
 }
 
-// ---- pulsar: the sky behind a spinning neutron star. The nebula its wind blows (like the
-// Crab): a blue glow threaded with red and orange filaments, over a star field. The tile adds the
-// star itself, its beams and the rings it pulses out.
-function pulsarSky() {
-  let stars = "";
-  for (let i = 0; i < 300; i++) {
-    const r = 0.12 + rnd() ** 3 * 0.5;
-    stars += `<circle cx='${f(-14 + rnd() * 128)}' cy='${f(-14 + rnd() * 128)}' r='${f(r)}' fill='${["#fff", "#dfe8ff", "#cfe0ff", "#ffe6d6"][Math.floor(rnd() * 4)]}' opacity='${f(0.35 + rnd() * 0.6)}'/>`;
-  }
-  // filaments: wavy strands bulging out of the nebula's oval
-  let fil = "";
-  for (let i = 0; i < 60; i++) {
-    const a = rnd() * 2 * Math.PI, r0 = 8 + rnd() * 10, r1 = r0 + 10 + rnd() * 18;
-    const bend = (rnd() - 0.5) * 0.9;
-    const p = (r, da) => [50 + Math.cos(a + da) * r * 1.25, 50 + Math.sin(a + da) * r * 0.85];
-    const [x0, y0] = p(r0, 0), [xm, ym] = p((r0 + r1) / 2, bend * 0.4), [x1, y1] = p(r1, bend);
-    fil += `<path d='M${f(x0)} ${f(y0)}Q${f(xm)} ${f(ym)} ${f(x1)} ${f(y1)}' stroke='${["#ff5a3a", "#ff8a3a", "#ff4a6a", "#ffb05a"][Math.floor(rnd() * 4)]}' stroke-width='${f(0.4 + rnd() * 0.9)}' opacity='${f(0.25 + rnd() * 0.4)}'/>`;
-  }
-  return uri(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='-14 -14 128 128' preserveAspectRatio='xMidYMid slice'>
-    <defs>
-      <radialGradient id='sky' cx='.5' cy='.5' r='.75'><stop offset='0' stop-color='#160a3a'/><stop offset='.6' stop-color='#080520'/><stop offset='1' stop-color='#02010a'/></radialGradient>
-      <radialGradient id='neb'><stop offset='0' stop-color='#8fe8ff' stop-opacity='.75'/><stop offset='.35' stop-color='#5a7aff' stop-opacity='.45'/>
-        <stop offset='.7' stop-color='#7a3ad0' stop-opacity='.2'/><stop offset='1' stop-color='#7a3ad0' stop-opacity='0'/></radialGradient>
-      <filter id='blur' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='2.5'/></filter>
-      <filter id='soft' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='.5'/></filter>
-    </defs>
-    <rect x='-14' y='-14' width='128' height='128' fill='url(#sky)'/>
-    ${stars}
-    <ellipse cx='50' cy='50' rx='44' ry='31' fill='url(#neb)' filter='url(#blur)'/>
-    <g fill='none' stroke-linecap='round' filter='url(#soft)'>${fil}</g>
-    <g fill='none' stroke-linecap='round' filter='url(#blur)' opacity='.6'>${fil}</g>
-  </svg>`);
-}
-
 const out = process.argv[2];
 for (const [name, fn] of Object.entries({ aurora, galaxy })) writeFileSync(`${out}/${name}.svg`, fn());
 const [lavaArt, lavaGlow] = lava();
 writeFileSync(`${out}/lava.svg`, lavaArt);
 writeFileSync(`${out}/lava-glow.svg`, lavaGlow);
-// after lava, so adding new art doesn't change the earlier art's random numbers
-writeFileSync(`${out}/pulsar-sky.svg`, pulsarSky());
