@@ -225,10 +225,10 @@
         neighbor, <span class="m-wood">wood</span> has a 1% chance of catching fire, and gasoline
         and gunpowder 10%. For every <span class="m-acid">acid</span> neighbor, wood has a 10%
         chance of dissolving, sand 5% and stone 1%. Stone next to <span class="m-lava">lava</span>
-        melts into more lava at 0.3% per neighbor.</p>
+        melts into more lava at 0.15% per neighbor.</p>
       <p><span class="m-fire">Fire</span> and lava also carry a countdown. Fire loses one tick for
         every neighbor that's empty or won't burn, so it lasts as long as there's fuel around it
-        and dies in a few dozen steps in open air. Water puts it out at once. Lava counts down
+        and dies in about half a second in open air. Water puts it out at once. Lava counts down
         against everything that isn't fire or lava, except while it's falling, and turns to <span class="m-stone">stone</span>
         when it runs out, or the moment it touches water. Both get yellower as they run down.</p>
       <canvas class="sd-viz" data-viz="react"></canvas>
@@ -241,9 +241,11 @@
   <script type="module">
     // ------------------------------------------------------------------ materials
     // ids are what the shaders store; colors and shade amounts are shared by the shaders and
-    // the rail swatches. Probabilities and lifetimes match p5js/sand2.
+    // the rail swatches. Probabilities match p5js/sand2. Lifetimes are 4x sand2's in steps, because
+    // this runs 240 steps a second by default and sand2 ran 60, so fire and lava last as long in
+    // seconds as they did there (lava 20 s, fire 4 s) and lava has time to melt through stone.
     const MAT = { EMPTY: 0, SAND: 1, WATER: 2, ACID: 3, STONE: 4, WOOD: 5, FIRE: 6, GASOLINE: 7, GUNPOWDER: 8, LAVA: 9 }
-    const FIRE_LIFE = 240, LAVA_LIFE = 1200
+    const FIRE_LIFE = 960, LAVA_LIFE = 4800
     const BOX = [14, 13, 18]
     const COLORS = {
       [MAT.SAND]: [230, 184, 112], [MAT.WATER]: [52, 128, 232], [MAT.ACID]: [118, 214, 58],
@@ -496,7 +498,7 @@
       uint shade = h.z & 255u;
 
       if (nAcid > 0 && rAcid < chance(acidVulnerability(m), nAcid)) { outCell = uvec4(EMPTY, 0u, 0u, 0u); return; }
-      if (m == STONE && nLava > 0 && rHeat < chance(0.003, nLava)) { outCell = uvec4(LAVA, shade, lavaLife, 0u); return; }
+      if (m == STONE && nLava > 0 && rHeat < chance(0.0015, nLava)) { outCell = uvec4(LAVA, shade, lavaLife, 0u); return; }
       float f = flammability(m);
       if (f > 0.0 && nBurning > 0 && rHeat < chance(f, nBurning)) { outCell = uvec4(FIRE, shade, FIRE_LIFE, 0u); return; }
 
