@@ -217,13 +217,17 @@ test.describe("phone", () => {
       expect(r.scroll, label).toBeLessThanOrEqual(0);
     };
     await fits("menu");
+    // the bot button's label stays on one line (it wrapped once the robot icon was added)
+    const oneLine = async () => page.evaluate(() => { const l = document.getElementById("botLabel"); return l.getClientRects().length === 1 && l.offsetHeight < 30; });
     await page.click("#playBtn");
     await fits("play");
+    expect(await oneLine()).toBe(true);
     const board = await page.locator("#board").boundingBox();
     expect(board.width).toBeGreaterThan(300);
     await page.click("#botBtn");
     await page.waitForFunction(() => window.game2048.state.botMoves >= 2);
     await fits("bot");
+    expect(await oneLine()).toBe(true);
     await page.click("#botBtn");
     await page.evaluate((b) => window.game2048.load(b, 0.5), DEAD);
     await expect(page.locator("#over")).toBeVisible();

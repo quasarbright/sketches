@@ -169,7 +169,7 @@
     .g-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
     .g-ctl .g-btn.is-round { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
     .g-ctl > span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
-    .g-bot-btn { min-width: 210px; height: 54px; border-radius: 27px; font-size: 1.05rem; }
+    .g-bot-btn { min-width: 210px; height: 54px; border-radius: 27px; font-size: 1.05rem; white-space: nowrap; }
     .g-bot-btn svg.g-ico { width: 24px; height: 24px; }
     /* the speed slider, under the bot button while it plays */
     .g-speed { display: flex; align-items: center; gap: 10px; height: 20px; font: 700 .75rem var(--font-ui); color: var(--muted); transition: opacity .2s; }
@@ -242,14 +242,15 @@
       .g-controls { gap: 8px; }
       .g-ctl:has(.is-round) { width: 78px; }
       .g-ctl .g-btn.is-round { width: 50px; height: 50px; }
-      .g-bot-btn { min-width: 0; width: 176px; height: 50px; font-size: 1rem; }
+      .g-bot-btn { min-width: 0; width: 176px; height: 50px; font-size: .95rem; padding: 0 12px; gap: 6px; }
+      .g-bot-btn svg.g-ico { width: 20px; height: 20px; }
       .g-speed { gap: 6px; }
       .g-speed input { width: 70px; }
       .g-speed output { width: 5.5ch; }
       .g-think { gap: 6px; }
       .g-think-move { width: 54px; }
     }
-    @media (max-width: 360px) { .g-bot-btn { width: 150px; } .g-ctl:has(.is-round) { width: 70px; } }
+    @media (max-width: 360px) { .g-bot-btn { width: 150px; font-size: .85rem; padding: 0 8px; gap: 4px; } .g-bot-btn svg.g-ico { display: none; } .g-ctl:has(.is-round) { width: 70px; } }
     @media (prefers-reduced-motion: reduce) {
       .g-card, .g-menu-logo span, .g-board-wrap.is-shake { animation: none !important; }
       .g-tile .g-face { animation: none !important; }
