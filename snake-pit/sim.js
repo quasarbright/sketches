@@ -97,6 +97,7 @@ export class World {
     this.foodDebt = 0;
     this.events = []; // { type: "shed"|"die"|"split"|"eat", ... } since the renderer last drained them
     this.stats = { births: 0, deaths: 0, starved: 0, trapped: 0 };
+    this.tree = new Map();
     for (let i = 0; i < this.p.startSnakes; i++) this.spawnRandomSnake(randomGenes(this.rand));
     const n = Math.round(cols * rows * this.p.startFoodDensity);
     for (let i = 0; i < n; i++) this.spawnFood();
@@ -142,9 +143,11 @@ export class World {
     const s = {
       id: this.nextId, founder: founder >= 0 ? founder : this.nextId, body, dir, genes, energy, generation,
       hue: geneHue(genes), drain: this.p.drainBase + this.p.drainBrain * brainSize(genes),
-      alive: true, prevTail: -1, born: this.step,
+      alive: true, trail: [], born: this.step, parent: -1,
     };
     this.nextId++;
+    // family tree: every snake that ever lived, with its genes after each split
+    this.tree.set(s.id, { id: s.id, parent: -1, born: this.step, died: -1, history: [{ step: this.step, genes, hue: s.hue }] });
     for (const i of body) { this.occ[i] = s.id + 1; if (this.food[i]) { this.food[i] = 0; this.foodCount--; } }
     this.snakes.push(s);
     return s;
@@ -206,6 +209,7 @@ export class World {
     for (const i of s.body) this.occ[i] = 0;
     const at = s.body.length ? s.body[0] : s.lastHead;
     this.events.push({ type: "die", body: s.body.slice(), hue: s.hue, cause });
+    this.tree.get(s.id).died = this.step;
     if (at >= 0) this.dropFood(at);
     s.body = [];
   }
@@ -225,14 +229,16 @@ export class World {
     const nx = (head % this.cols) + DX[bestDir], ny = ((head / this.cols) | 0) + DY[bestDir];
     const ni = this.idx(nx, ny);
     s.body.unshift(ni);
+    // cells the tail left this step, nearest the new tail first, so the renderer can slide it out
+    s.trail = [];
     this.occ[ni] = s.id + 1;
     if (this.food[ni]) {
       this.food[ni] = 0; this.foodCount--;
-      s.prevTail = -1; // grew: the tail stays put
       this.events.push({ type: "eat", at: ni, hue: s.hue });
     } else {
-      s.prevTail = s.body.pop();
-      this.occ[s.prevTail] = 0;
+      const t = s.body.pop();
+      this.occ[t] = 0;
+      s.trail.push(t);
     }
 
     // metabolism: every move spends energy; each full unit kills the tail tip
@@ -241,7 +247,7 @@ export class World {
       s.energy -= 1;
       const t = s.body.pop();
       this.occ[t] = 0;
-      s.prevTail = -1;
+      s.trail.unshift(t);
       s.lastHead = s.body.length ? s.body[0] : t;
       this.events.push({ type: "shed", at: t, hue: s.hue });
     }
@@ -261,7 +267,7 @@ export class World {
     const back = s.body.slice(h).reverse(); // old tail tip becomes the new head
     for (const i of back) this.occ[i] = 0;
     s.body = front;
-    s.prevTail = -1;
+    s.trail = [];
     const parentGenes = s.genes;
     s.genes = mutateGenes(parentGenes, this.p.mutation, this.rand);
     s.hue = geneHue(s.genes);
@@ -273,6 +279,9 @@ export class World {
     const dir = dy === -1 ? 0 : dx === 1 ? 1 : dy === 1 ? 2 : 3;
     const child = this.addSnake(back, dir, mutateGenes(parentGenes, this.p.mutation, this.rand), s.energy, s.generation, s.founder);
     this.stats.births++;
+    child.parent = s.id;
+    this.tree.get(child.id).parent = s.id;
+    this.tree.get(s.id).history.push({ step: this.step, genes: s.genes, hue: s.hue });
     this.events.push({ type: "split", at: front[front.length - 1], child: child.id, parent: s.id });
   }
 
