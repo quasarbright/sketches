@@ -120,8 +120,10 @@
       <div class="section-label">aiming at the goal</div>
       <p><b>A*</b> uses where the goal is. It always looks next at the cell where the distance
         walked so far plus the straight distance still to go is smallest. It still finds a shortest
-        route, but it only drifts away from the goal when a wall forces it to, so it looks at far
-        fewer cells.</p>
+        route, and it skips every cell that couldn't be on one: anywhere the walk so far plus the
+        straight line left already adds up to more than the route. In a twisty maze that rules out
+        less than you'd hope, because the real route is so much longer than the straight line, so
+        A* saves the most when the maze has loops and shortcuts.</p>
       <p><b>Greedy best-first</b> keeps only the distance still to go. It heads straight for the
         goal, which is fast in an open maze, but dead ends fool it and its route isn't always the
         shortest. <b>Bidirectional search</b> spreads in rings from both ends at once, warm colors

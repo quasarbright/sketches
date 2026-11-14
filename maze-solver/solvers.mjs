@@ -74,7 +74,7 @@ function* bestFirst(m, start, goal, greedy) {
       if (d < dist[n] && !done[n]) {
         dist[n] = d; prev[n] = c;
         // ties go to the newest, so equal-cost cells are explored deepest first
-        heap.push([greedy ? manhattan(m, n, goal) : d + manhattan(m, n, goal), -(tie++), n]);
+        heap.push([greedy ? manhattan(m, n, goal) : d + manhattan(m, n, goal), greedy ? -(tie++) : manhattan(m, n, goal) * 1e6 - (tie++), n]);
       }
     }
   }
