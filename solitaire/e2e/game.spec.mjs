@@ -134,6 +134,38 @@ test("finishing a deal yourself shows the end card and counts toward your record
   expect(conserved(await state(page))).toEqual(ALL);
 });
 
+test("running out of moves shows the end card, and Undo from it plays on", async ({ page }) => {
+  await open(page);
+  // black twos to eights on top, aces buried, one useless card left in the stock
+  const tops = [c("2", "S"), c("2", "C"), c("4", "S"), c("4", "C"), c("6", "S"), c("6", "C"), c("8", "S")];
+  const rest = [...Array(52).keys()].filter((k) => !tops.includes(k) && k !== c("10", "C"));
+  const tab = tops.map((t, i) => ({ down: rest.slice(i * 6, i * 6 + 6 + (i === 6 ? 2 : 0)), up: [t] }));
+  await page.evaluate((p) => window.solitaire.load(p), { seed: 1, moves: 0, stock: [c("10", "C")], waste: [], found: [[], [], [], []], tab });
+  await page.evaluate(() => window.solitaire.draw());
+  await expect(page.locator("#over")).toBeVisible();
+  await expect(page.locator("#overTitle")).toHaveText("No moves left");
+  await expect(page.locator("#overUndo")).toBeVisible();
+  await page.click("#overUndo");
+  await expect(page.locator("#over")).toBeHidden();
+  const s = await state(page);
+  expect(s.stock).toEqual([c("10", "C")]);
+  expect((await info(page)).over).toBe(false);
+});
+
+test("the bot finishing a deal at normal speed shows the end card too", async ({ page }) => {
+  await open(page);
+  const found = [0, 1, 2, 3].map((s) => [...Array(s === 3 ? 12 : 13).keys()].map((r) => s * 13 + r));
+  const tab = Array.from({ length: 7 }, () => ({ down: [], up: [] }));
+  tab[4] = { down: [], up: [c("K", "C")] };
+  await page.evaluate((p) => window.solitaire.load(p), { ...position({ tab, found }), stock: [] });
+  await page.evaluate(() => { window.solitaire.setBot(true); window.solitaire.step(); });
+  await expect(page.locator("#over")).toBeVisible();
+  await expect(page.locator("#overTitle")).toHaveText("The bot won!");
+  await expect(page.locator("#overUndo")).toBeHidden();
+  expect((await info(page)).bot).toBe(false);
+  expect((await info(page)).botRecord).toEqual({ won: 1, played: 1 });
+});
+
 test("a deal in progress comes back after a reload", async ({ page }) => {
   await open(page);
   await page.evaluate(() => { window.solitaire.deal(9); window.solitaire.draw(); window.solitaire.draw(); });

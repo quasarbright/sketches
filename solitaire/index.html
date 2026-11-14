@@ -149,6 +149,8 @@
     .k-card-who { margin: 12px 0 0; font-weight: 600; color: var(--muted); }
     .k-results { display: flex; justify-content: center; margin: 22px 0 26px; }
     .k-results .k-stat { min-width: 0; padding: 0 14px; }
+    .k-card-end h2.is-stuck { color: var(--muted); }
+    .k-end-btns { display: flex; gap: 12px; justify-content: center; }
 
     canvas#fx { position: fixed; inset: 0; pointer-events: none; z-index: 1500; }
     mike-footer[overlay] { z-index: 11 !important; }
@@ -262,15 +264,18 @@
       <div class="k-results">
         <div class="k-stat is-main"><span class="k-stat-label">Moves</span><span class="k-stat-value" id="overMoves"></span></div>
         <div class="k-stat"><span class="k-stat-label">Time</span><span class="k-stat-value" id="overTime"></span></div>
-        <div class="k-stat"><span class="k-stat-label">Won</span><span class="k-stat-value" id="overWins"></span></div>
+        <div class="k-stat"><span class="k-stat-label" id="overWinsLabel">Won</span><span class="k-stat-value" id="overWins"></span></div>
       </div>
-      <button class="k-btn is-coral" id="overNew" title="deal a new game">New deal</button>
+      <div class="k-end-btns">
+        <button class="k-btn" id="overUndo" title="take back the last move and keep playing">Undo</button>
+        <button class="k-btn is-coral" id="overNew" title="deal a new game">New deal</button>
+      </div>
     </div>
   </div>
 
   <template id="aboutTpl">
     <h2 class="title">How the bot thinks</h2>
-    <p class="intro">My bot plays Klondike knowing only what you could see, and wins about 45% of
+    <p class="intro">The AI plays Klondike knowing only what you could see, and wins about 45% of
       deals.</p>
 
     <div class="section-label">what it knows</div>
@@ -309,7 +314,7 @@
 
   <script type="module">
     import { deal, apply, legal, won, hiddenCount, foundCount, fitsTab, fitsFound, suitOf, rankOf, cardName, SUITS, RANKS } from "./game.mjs";
-    import { decide, view, key } from "./bot.mjs";
+    import { decide, rankMoves, view, key } from "./bot.mjs";
     import { faceSVG, backSVG, suitDefs } from "./faces.mjs";
     import { openModal } from "../shared/cohesion.js";
     import * as audio from "./audio.mjs";
@@ -543,7 +548,8 @@
       saveGame();
       if (won(state)) return gameWon();
       // everything face up: the rest plays itself
-      if (!hiddenCount(state) && !bot.on && !finishing) finish();
+      if (!hiddenCount(state) && !bot.on && !finishing) return finish();
+      if (!bot.on && !finishing && !rankMoves(state, seen).ranked.length) youStuck();
     }
 
     // when the face-down cards are all turned over, the bot plays out the rest quickly
@@ -562,6 +568,7 @@
     }
 
     function undo() {
+      if (over && !won(state) && history.length) { over = false; $("over").hidden = true; startClock(); }
       if (!history.length || over) return audio.play("bump");
       if (bot.on) setBot(false);
       finishing = false;
@@ -711,14 +718,17 @@
       audio.play(on ? "botOn" : "botOff");
       bot.on = on;
       finishing = false;
-      $("botBtn").classList.toggle("is-coral", !on);
-      $("botBtn").classList.toggle("is-lav", on);
-      $("botLabel").textContent = on ? "Take over" : "Let the bot play";
-      $("speedRow").classList.toggle("is-off", !on);
-      $("hint").hidden = on; $("think").hidden = !on;
+      botUi();
       if (on) { showSpeed(); if (over) newDeal(); plan(); acc = 1; }
       else nextPlan = null;
       placeCards(); renderHud();
+    }
+    function botUi() {
+      $("botBtn").classList.toggle("is-coral", !bot.on);
+      $("botBtn").classList.toggle("is-lav", bot.on);
+      $("botLabel").textContent = bot.on ? "Take over" : "Let the bot play";
+      $("speedRow").classList.toggle("is-off", !bot.on);
+      $("hint").hidden = bot.on; $("think").hidden = !bot.on;
     }
     $("botBtn").onclick = () => setBot(!bot.on);
 
@@ -760,6 +770,8 @@
     }
 
     // ---------- the end of a deal ----------
+    // The end of a deal: won, or nowhere left to go. The card shows for every ending, yours or
+    // the bot's, except when the bot plays at max speed: then it deals the next one straight away.
     function gameWon() {
       over = true; finishing = false;
       stopClock();
@@ -767,39 +779,53 @@
       if (byBot) { botRecord.won++; botRecord.played++; }
       else { record.won++; record.played++; store.set(REC_KEY, JSON.stringify(record)); }
       store.set(GAME_KEY, "");
-      renderHud();
-      if (bot.on) {
-        // the bot deals the next one itself; at max speed straight away
-        audio.play("win");
-        nextPlan = null; placeCards();
-        setTimeout(() => { if (bot.on) newDeal(); }, bot.speed === Infinity ? 0 : 1400);
-        return;
-      }
       audio.play("win");
-      celebrate();
-      setTimeout(() => {
-        if (!over) return;
-        $("overTitle").textContent = "You won!";
-        $("overMoves").textContent = state.moves;
-        $("overTime").textContent = mmss(clock());
-        $("overWins").textContent = `${record.won}/${record.played}`;
-        $("overWho").textContent = botMoves ? "The bot made some of the moves, so this one doesn't count toward your record." : "";
-        $("over").hidden = false;
-        $("overNew").focus({ preventScroll: true });
-      }, reduceMotion ? 0 : 1300);
+      endDeal("won", byBot);
     }
     function botStuck() {
       over = true;
       stopClock();
       botRecord.played++;
       audio.play("stuck");
-      nextPlan = { move: null }; plan();
+      endDeal("stuck", true);
+    }
+    // you've run out: no move goes anywhere this deal hasn't already been
+    function youStuck() {
+      over = true; finishing = false;
+      stopClock();
+      audio.play("stuck");
+      endDeal("stuck", botMoves > 0);
+    }
+    function endDeal(how, byBot) {
+      nextPlan = null;
+      if (bot.on && bot.speed === Infinity) {
+        renderHud(); placeCards();
+        newDeal();
+        return;
+      }
+      if (bot.on) { bot.on = false; botUi(); }
       renderHud(); placeCards();
-      setTimeout(() => { if (bot.on) newDeal(); }, bot.speed === Infinity ? 0 : 1600);
+      if (how === "won") celebrate();
+      setTimeout(() => {
+        if (!over) return;
+        const r = byBot ? botRecord : record;
+        $("overTitle").textContent = how === "won" ? (byBot ? "The bot won!" : "You won!") : (byBot ? "The bot is stuck" : "No moves left");
+        $("overTitle").classList.toggle("is-stuck", how !== "won");
+        $("overMoves").textContent = state.moves;
+        $("overTime").textContent = mmss(clock());
+        $("overWins").textContent = `${r.won}/${r.played}`;
+        $("overWinsLabel").textContent = byBot ? "Bot won" : "Won";
+        $("overWho").textContent = how !== "won"
+          ? (byBot ? "Every move it has left leads back to a position it's already been in." : "Every move left leads back to a position you've already been in. Undo to try another way, or deal again.")
+          : byBot && botMoves < state.moves ? "The bot made some of the moves, so this one doesn't count toward your record." : "";
+        $("overUndo").hidden = how === "won" || byBot;
+        $("over").hidden = false;
+        $("overNew").focus({ preventScroll: true });
+      }, reduceMotion ? 0 : how === "won" ? 1300 : 600);
     }
     // a deal you leave unfinished counts as played, if you made a move and the bot didn't
     function countAbandoned() {
-      if (!over && state && state.moves > 0 && botMoves === 0 && history.length) { record.played++; store.set(REC_KEY, JSON.stringify(record)); }
+      if (state && !won(state) && state.moves > 0 && botMoves === 0 && history.length) { record.played++; store.set(REC_KEY, JSON.stringify(record)); }
     }
 
     // the foundations' cards hop one after another
@@ -839,7 +865,7 @@
       return null;
     }
     $("overNew").onclick = $("newGame").onclick = () => newDeal();
-    $("undo").onclick = undo;
+    $("undo").onclick = $("overUndo").onclick = undo;
 
     // ---------- keys ----------
     addEventListener("keydown", (e) => {
