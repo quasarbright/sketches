@@ -133,17 +133,18 @@ export class World {
         body.push(i);
       }
       if (!ok) continue;
-      return this.addSnake(body, dir, genes, 0, 0);
+      return this.addSnake(body, dir, genes, 0, 0, -1);
     }
     return null;
   }
 
-  addSnake(body, dir, genes, energy, generation) {
+  addSnake(body, dir, genes, energy, generation, founder) {
     const s = {
-      id: this.nextId++, body, dir, genes, energy, generation,
+      id: this.nextId, founder: founder >= 0 ? founder : this.nextId, body, dir, genes, energy, generation,
       hue: geneHue(genes), drain: this.p.drainBase + this.p.drainBrain * brainSize(genes),
       alive: true, prevTail: -1, born: this.step,
     };
+    this.nextId++;
     for (const i of body) { this.occ[i] = s.id + 1; if (this.food[i]) { this.food[i] = 0; this.foodCount--; } }
     this.snakes.push(s);
     return s;
@@ -270,7 +271,7 @@ export class World {
     const b0 = back[0], b1 = back[1];
     const dx = (b0 % this.cols) - (b1 % this.cols), dy = ((b0 / this.cols) | 0) - ((b1 / this.cols) | 0);
     const dir = dy === -1 ? 0 : dx === 1 ? 1 : dy === 1 ? 2 : 3;
-    const child = this.addSnake(back, dir, mutateGenes(parentGenes, this.p.mutation, this.rand), s.energy, s.generation);
+    const child = this.addSnake(back, dir, mutateGenes(parentGenes, this.p.mutation, this.rand), s.energy, s.generation, s.founder);
     this.stats.births++;
     this.events.push({ type: "split", at: front[front.length - 1], child: child.id, parent: s.id });
   }

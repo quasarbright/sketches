@@ -215,13 +215,17 @@
     const cx = (i) => ox + ((i % world.cols) + 0.5) * cs;
     const cy = (i) => oy + (((i / world.cols) | 0) + 0.5) * cs;
 
-    // snake body as points, each sliding from where it was toward its cell
+    // The snake's outline mid-move: the polyline through its cell centers, with the head partway
+    // along its last step and the tail partway out of the cell it just left. Every point stays on
+    // the real path, so the body's length never changes mid-step and the back pattern can't wobble
+    // (lerping each segment separately cut corners, which shortened and re-lengthened the body).
     function snakePoints(s, t) {
-      const b = s.body, n = b.length, pts = new Array(n);
-      for (let k = 0; k < n; k++) {
-        const src = k + 1 < n ? b[k + 1] : (s.prevTail >= 0 ? s.prevTail : b[k]);
-        pts[k] = [cx(src) + (cx(b[k]) - cx(src)) * t, cy(src) + (cy(b[k]) - cy(src)) * t];
-      }
+      const b = s.body, n = b.length;
+      const lerp = (from, to) => [cx(from) + (cx(to) - cx(from)) * t, cy(from) + (cy(to) - cy(from)) * t];
+      const headFrom = n > 1 ? b[1] : (s.prevTail >= 0 ? s.prevTail : b[0]);
+      const pts = [lerp(headFrom, b[0])];
+      for (let k = 1; k < n; k++) pts.push([cx(b[k]), cy(b[k])]);
+      if (n > 1 && s.prevTail >= 0) pts.push(lerp(s.prevTail, b[n - 1]));
       return pts;
     }
 
@@ -248,8 +252,8 @@
       // head
       const [hx, hy] = pts[0];
       let dx = 0, dy = -1;
-      if (n > 1) { dx = hx - pts[1][0]; dy = hy - pts[1][1]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; }
-      else { dx = [0, 1, 0, -1][s.dir]; dy = [-1, 0, 1, 0][s.dir]; }
+      // facing comes from the cells, not the drawn points (those coincide at the start of a step)
+      dx = [0, 1, 0, -1][s.dir]; dy = [-1, 0, 1, 0][s.dir];
       ctx.fillStyle = body;
       ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.08, hy + dy * cs * 0.08, cs * 0.46, cs * 0.4, Math.atan2(dy, dx), 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = light;
@@ -400,6 +404,7 @@
     window.snakePit = {
       get world() { return world; }, tick, newWorld,
       setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
+      drawAt: (t) => draw(t, performance.now()),
     };
     requestAnimationFrame(frame);
   </script>
