@@ -2,14 +2,15 @@
 import { N, E, S, Wb } from "./maze.mjs";
 import { SOLVERS } from "./solvers.mjs";
 
-// ---------- the glow's colors ----------
-// a cell's color depends on how many steps ago the algorithm last touched it: white-hot, then
-// cyan, blue, violet, settling at a faint afterglow (bidirectional search's second side is pink;
-// dead-end filling's sealed cells go gray)
-export const DECAY = 140; // steps for a cell to cool to its afterglow
-const RAMP = [[0, [244, 251, 255]], [.12, [94, 240, 255]], [.4, [59, 123, 255]], [.75, [96, 52, 230]], [1, [26, 22, 64]]];
-const RAMP2 = [[0, [255, 246, 252]], [.12, [255, 120, 214]], [.4, [214, 74, 255]], [.75, [120, 46, 200]], [1, [48, 20, 70]]];
-const FILL = [[0, [255, 255, 255]], [.15, [140, 150, 190]], [1, [16, 20, 34]]];
+// ---------- the heat map ----------
+// a cell's color depends on how many steps ago the algorithm last touched it, like a heat map:
+// pale yellow when it's just been looked at, cooling through orange and red to a dim purple that
+// stays (bidirectional search's goal side cools through greens and blues instead; dead-end
+// filling's sealed cells go a flat gray)
+export const DECAY = 140; // steps for a cell to cool all the way
+const RAMP = [[0, [252, 244, 170]], [.15, [247, 168, 64]], [.42, [214, 78, 66]], [.75, [128, 38, 96]], [1, [58, 26, 72]]];
+const RAMP2 = [[0, [236, 248, 170]], [.15, [120, 206, 120]], [.42, [46, 150, 150]], [.75, [42, 88, 130]], [1, [30, 46, 84]]];
+const FILL = [[0, [236, 238, 244]], [.2, [120, 128, 146]], [1, [44, 50, 62]]];
 function lut(stops, n = 96) {
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -21,7 +22,7 @@ function lut(stops, n = 96) {
   return out;
 }
 const LUTS = [lut(RAMP), lut(RAMP2), lut(FILL)];
-export const PATH = "#ffb347", START = "#5fffb0", GOAL = "#ff5e7e", WALL = "#1c2536";
+export const PATH = "#6fe7ff", START = "#5fffb0", GOAL = "#ff5e7e", WALL = "#06080d", FLOOR = "#161d29";
 
 // One run of one solver on one maze: steps it and remembers, per cell, the step it was last
 // touched and which color ramp to use.
@@ -50,8 +51,15 @@ export class Run {
 // where a maze sits: { ox, oy, cell } (top-left corner in CSS px, and the cell size)
 export const centerOf = (m, at, c) => [at.ox + (c % m.w + 0.5) * at.cell, at.oy + (Math.floor(c / m.w) + 0.5) * at.cell];
 
+// the maze's floor, before any heat
+export function drawFloor(g, m, { ox, oy, cell }) {
+  g.fillStyle = FLOOR;
+  g.fillRect(ox, oy, m.w * cell, m.h * cell);
+}
+
+// walls go over the heat, so the maze always shows through it
 export function drawWalls(g, m, { ox, oy, cell }, color = WALL) {
-  g.strokeStyle = color; g.lineWidth = Math.max(1, cell * 0.12); g.lineCap = "round";
+  g.strokeStyle = color; g.lineWidth = Math.max(1.5, cell * 0.2); g.lineCap = "square";
   g.beginPath();
   for (let c = 0; c < m.w * m.h; c++) {
     const x = ox + (c % m.w) * cell, y = oy + Math.floor(c / m.w) * cell, o = m.open[c];
@@ -63,20 +71,25 @@ export function drawWalls(g, m, { ox, oy, cell }, color = WALL) {
   g.stroke();
 }
 
-// the glowing cells, the walker, the finished path (drawn out over half a second) and the markers
-export function drawRun(g, run, at, now) {
-  const { cell, ox, oy } = at, m = run.maze;
-  const inset = Math.max(0.5, cell * 0.12), sz = cell - inset * 2, n = LUTS[0].length;
+// The whole picture: floor, heat (each touched cell filled edge to edge), walls on top (from a
+// cached image of them, if given), then the walker, the finished path (drawn out over half a
+// second) and the markers.
+export function drawRun(g, run, at, now, wallsImage = null) {
+  const { cell, ox, oy } = at, m = run.maze, n = LUTS[0].length;
+  drawFloor(g, m, at);
   for (let c = 0; c < run.last.length; c++) {
     const t = run.last[c];
     if (t < 0) continue;
     const age = Math.min(1, (run.steps - t) / run.decay);
     g.fillStyle = LUTS[run.kind[c]][Math.round(age * (n - 1))];
-    g.fillRect(ox + (c % m.w) * cell + inset, oy + Math.floor(c / m.w) * cell + inset, sz, sz);
+    g.fillRect(ox + (c % m.w) * cell, oy + Math.floor(c / m.w) * cell, cell + 0.5, cell + 0.5);
   }
+  if (wallsImage) g.drawImage(wallsImage, 0, 0, wallsImage.width / wallsImage.scale, wallsImage.height / wallsImage.scale);
+  else drawWalls(g, m, at);
   if (run.walker >= 0 && !run.path) {
     const [x, y] = centerOf(m, at, run.walker);
-    g.fillStyle = "#ffffff"; g.beginPath(); g.arc(x, y, Math.max(2, cell * 0.32), 0, 7); g.fill();
+    g.fillStyle = "#ffffff"; g.strokeStyle = WALL; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(x, y, Math.max(2, cell * 0.32), 0, 7); g.fill(); g.stroke();
   }
   if (run.path) {
     const f = Math.min(1, (now - run.pathAt) / 600), k = Math.max(2, Math.round(run.path.length * f));
@@ -89,6 +102,6 @@ export function drawRun(g, run, at, now) {
 }
 function marker(g, m, at, c, color) {
   const [x, y] = centerOf(m, at, c);
-  g.fillStyle = color; g.beginPath(); g.arc(x, y, Math.max(3, at.cell * 0.38), 0, 7); g.fill();
-  g.fillStyle = "#05070d"; g.beginPath(); g.arc(x, y, Math.max(1.2, at.cell * 0.14), 0, 7); g.fill();
+  g.fillStyle = color; g.strokeStyle = WALL; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(x, y, Math.max(3, at.cell * 0.38), 0, 7); g.fill(); g.stroke();
 }

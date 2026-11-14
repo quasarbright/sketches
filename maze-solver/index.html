@@ -28,7 +28,7 @@
       --accent:    #5ef0ff;   /* the glow's cyan */
       --accent-hi: #9ff7ff;
       --on-accent: #02161a;
-      --path:      #ffb347;
+      --path:      #6fe7ff;
       --start:     #5fffb0;
       --goal:      #ff5e7e;
       --font-ui:      "Instrument Sans", system-ui, sans-serif;
@@ -37,14 +37,10 @@
     }
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
     body { touch-action: none; }
-    canvas.ms-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
-    /* the bloom: a blurred copy of the glow, added on top */
-    #bloom { filter: blur(7px); mix-blend-mode: screen; opacity: .9; pointer-events: none; }
-    #glow { pointer-events: none; }
+    canvas.ms-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; pointer-events: none; }
     .ms-title {
       position: fixed; left: 18px; top: 12px; margin: 0; z-index: 5; pointer-events: none;
-      font: 400 1.7rem/1 var(--font-display); letter-spacing: .04em; color: var(--accent);
-      text-shadow: 0 0 6px rgba(94,240,255,.8), 0 0 18px rgba(94,240,255,.45), 0 0 34px rgba(107,60,255,.45);
+      font: 400 1.7rem/1 var(--font-display); letter-spacing: .04em; color: #f7a840;
     }
     .ms-readout {
       position: fixed; left: 18px; top: 48px; z-index: 5; pointer-events: none;
@@ -52,7 +48,7 @@
       font-variant-numeric: tabular-nums;
     }
     .ms-readout b { color: var(--text); font-weight: 500; }
-    .ms-readout .ms-algo { color: var(--accent); }
+    .ms-readout .ms-algo { color: #f7a840; }
     .ms-readout .ms-path { color: var(--path); }
     .control-bar { z-index: 6; }
     .control-bar .btn { min-width: 40px; }
@@ -63,14 +59,12 @@
     mike-footer[overlay] a { color: var(--accent) !important; }
     .cohesion-about .ms-dia { display: block; margin: 12px auto 4px; max-width: 100%; height: auto !important; border-radius: 10px; background: var(--bg); }
     .cohesion-about .ms-cap { font-size: .82rem; color: var(--muted); text-align: center; margin: 0 0 1.1em; }
-    .cohesion-about .cy { color: var(--accent); } .cohesion-about .am { color: var(--path); }
+    .cohesion-about .cy { color: var(--path); }
     @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } }
   </style>
 </head>
 <body>
-  <canvas class="ms-layer" id="walls"></canvas>
-  <canvas class="ms-layer" id="glow"></canvas>
-  <canvas class="ms-layer" id="bloom"></canvas>
+  <canvas class="ms-layer" id="board"></canvas>
 
   <h1 class="ms-title">Maze Solver</h1>
   <div class="ms-readout" id="readout"></div>
@@ -109,9 +103,10 @@
     <button class="btn" id="newMaze" title="a new maze (N)">new maze</button>
     <about-modal label="about" id="aboutModal">
       <h2 class="title">Maze Solver</h2>
-      <p class="intro">Pick a way to solve the maze and watch it work. Every cell it looks at flares
-        white-hot and cools to a faint afterglow, so the order it searched in stays on screen, and
-        the route it found lights up in <span class="am">amber</span>.</p>
+      <p class="intro">Pick a way to solve the maze and watch it work. It's a heat map: every cell
+        it looks at lights up pale yellow, then cools through orange and red to a dim purple, so the
+        order it searched in stays on screen. The route it found shows in
+        <span class="cy">blue</span>.</p>
 
       <div class="section-label">searching blind</div>
       <p>The simplest searches don't use where the goal is. <b>Breadth-first search</b> looks at
@@ -129,8 +124,8 @@
         fewer cells.</p>
       <p><b>Greedy best-first</b> keeps only the distance still to go. It heads straight for the
         goal, which is fast in an open maze, but dead ends fool it and its route isn't always the
-        shortest. <b>Bidirectional search</b> spreads in rings from both ends at once, cyan from the
-        start and pink from the goal, and stops where they meet.</p>
+        shortest. <b>Bidirectional search</b> spreads in rings from both ends at once, warm colors
+        from the start and greens and blues from the goal, and stops where they meet.</p>
       <canvas class="ms-dia" data-dia="aimed"></canvas><p class="ms-cap"></p>
       <p>That maze has loops, which is where the difference shows. With no loops there's only one
         route, so every method finds the same one, and the only question is how much it looks at
@@ -145,7 +140,7 @@
         already been, it turns straight back. It works on any maze. The <b>random mouse</b> picks a
         random way at every step, which on a big maze takes a very long time.</p>
       <canvas class="ms-dia" data-dia="walkers"></canvas><p class="ms-cap"></p>
-      <p>For a walker, the amber route is its walk with every loop it went round cut out.</p>
+      <p>For a walker, the blue route is its walk with every loop it went round cut out.</p>
 
       <div class="section-label">filling dead ends</div>
       <p><b>Dead-end filling</b> doesn't walk at all. A cell with only one way in or out can't be on
@@ -185,13 +180,14 @@
     // reads from here, and the controls are wired only when they exist.
     const set = { algo: "astar", speedPos: 55, style: "corridors", loops: 0, cell: 14 };
 
-    const wallsCv = $("walls"), glowCv = $("glow"), bloomCv = $("bloom");
-    const wg = wallsCv.getContext("2d"), gg = glowCv.getContext("2d"), bg = bloomCv.getContext("2d");
+    const boardCv = $("board"), wallsCv = document.createElement("canvas");
+    const gg = boardCv.getContext("2d"), wg = wallsCv.getContext("2d");
 
     function size() {
       const W = innerWidth, H = innerHeight, d = dpr();
-      for (const cv of [wallsCv, glowCv, bloomCv]) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
-      for (const g of [wg, gg, bg]) g.setTransform(d, 0, 0, d, 0, 0);
+      for (const cv of [wallsCv, boardCv]) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
+      for (const g of [wg, gg]) g.setTransform(d, 0, 0, d, 0, 0);
+      wallsCv.scale = d;
     }
 
     // ---------- a maze sized to the screen ----------
@@ -255,14 +251,10 @@
       requestAnimationFrame(frame);
     }
 
-    // the glow layer, and its blurred copy for the bloom
+    // the board: floor, heat, the cached walls on top, the path and markers
     function drawGlow(now) {
-      const W = innerWidth, H = innerHeight;
-      gg.clearRect(0, 0, W, H);
-      drawRun(gg, run, at(), now);
-      // bloom: the same picture, which the CSS blurs and adds on top
-      bg.clearRect(0, 0, W, H);
-      bg.drawImage(glowCv, 0, 0, W, H);
+      gg.clearRect(0, 0, innerWidth, innerHeight);
+      drawRun(gg, run, at(), now, wallsCv);
     }
     const center = (c) => centerOf(maze, at(), c);
 

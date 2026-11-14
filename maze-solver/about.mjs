@@ -3,7 +3,7 @@
 // moment, then starts over. Its caption counts the cells each one explored and its path length.
 import { generate } from "./maze.mjs";
 import { SOLVERS } from "./solvers.mjs";
-import { Run, drawWalls, drawRun } from "./render.mjs";
+import { Run, drawRun } from "./render.mjs";
 
 const BW = 23, BH = 15;
 
@@ -35,7 +35,6 @@ function diagram(cv, cap, { algos, loops = 0, style = "corridors", seed = 3, rat
     const total = cell * BW * algos.length + gap * (algos.length - 1);
     runs.forEach((r, i) => {
       const at = { ox: (w - total) / 2 + i * (cell * BW + gap), oy: 4, cell };
-      drawWalls(ctx, maze, at);
       drawRun(ctx, r, at, now);
     });
     const text = runs.map((r) => `${SOLVERS[r.algo].name}: ${r.looked} cells explored` + (r.path ? `, path ${r.path.length}` : "")).join("   ·   ");
