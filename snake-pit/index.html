@@ -362,7 +362,7 @@
       const sHead = path.ext.length > 1 ? 1 - t : 0;
       const sTail = n - 1 + m * (1 - t);
       const w = cs * 0.74;
-      const body = `hsl(${s.hue} 42% 50%)`, dark = `hsl(${s.hue} 45% 30%)`, light = `hsl(${s.hue} 55% 70%)`;
+      const body = `hsl(${s.hue} 42% 50%)`, dark = `hsl(${s.hue} 45% 30%)`;
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.strokeStyle = body;
       // body at full width, then a taper over the last 2.5 cells
@@ -389,9 +389,8 @@
       const [hx, hy, dx, dy] = pointAt(path, sHead);
       const ang = Math.atan2(dy, dx);
       ctx.fillStyle = body;
-      ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.08, hy + dy * cs * 0.08, cs * 0.46, cs * 0.4, ang, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = light;
-      ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.14, hy + dy * cs * 0.14, cs * 0.2, cs * 0.14, ang, 0, Math.PI * 2); ctx.fill();
+      // head: as wide as the body, just a slightly longer rounded snout
+      ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.06, hy + dy * cs * 0.06, cs * 0.44, w / 2, ang, 0, Math.PI * 2); ctx.fill();
       const px = -dy, py = dx, e = cs * 0.2, f = cs * 0.16;
       ctx.fillStyle = "#14110d";
       for (const sgn of [-1, 1]) {
