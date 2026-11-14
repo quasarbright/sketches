@@ -225,7 +225,7 @@
     </div>
 
     <div class="k-strip">
-      <div class="k-hint" id="hint">Drag cards, or tap one to send it where it fits. Tap the stock to draw.</div>
+      <div class="k-hint" id="hint">Click a card to pick it up and click where it goes, or drag it. Click the stock to draw.</div>
       <div class="k-think" id="think" hidden><span id="thinkText"></span><span class="k-think-sub" id="thinkSub"></span></div>
     </div>
 
@@ -442,13 +442,14 @@
         col.up.forEach((c) => { at(c, p.x, y, z++, false); y += f.up; });
       });
       // dragged cards follow the pointer, above everything
-      if (drag && drag.moved) drag.cards.forEach((c, i) => {
+      const carry = held || (drag && drag.moved ? drag : null);
+      if (carry) carry.cards.forEach((c, i) => {
         const t = cards[c].tgt;
-        t.x = drag.px - drag.dx; t.y = drag.py - drag.dy + i * ch * 0.27;
+        t.x = carry.px - carry.dx; t.y = carry.py - carry.dy + i * ch * 0.27;
         t.z = 1000 + i; t.lift = 1; cards[c].carried = true;
       });
       // the hovered card lifts and tilts toward the pointer (Balatro)
-      if (hover !== null && !drag) { const t = cards[hover].tgt; t.lift = 1; t.tx = tilt.x; t.ty = tilt.y; }
+      if (hover !== null && !drag && !held) { const t = cards[hover].tgt; t.lift = 1; t.tx = tilt.x; t.ty = tilt.y; }
       // the bot's next card lifts a little
       for (const k of cards) k.el.classList.remove("is-next", "is-up");
       if (nextPlan && nextPlan.card != null && nextPlan.why !== "draw" && bot.on && !fast()) {
@@ -525,6 +526,7 @@
     function doMove(m, who = "you") {
       if (over || !legal(state, m)) return false;
       if (who === "you" && bot.on) setBot(false);
+      if (who !== "you" && held) held = null;
       history.push(state);
       if (history.length > 500) history.shift();
       const prev = state;
@@ -533,10 +535,14 @@
       if (who === "bot") botMoves++;
       if (m.type !== "draw") seen.add(key(view(state)));
       startClock();
-      // sounds
+      // sounds: every card picked up and put down. Your own pick-ups sounded when you made them;
+      // the AI's and the automatic finish's sound here, with the put-down as the card lands.
       if (m.type === "draw") audio.play(prev.stock.length ? "draw" : "recycle");
-      else if (m.to.pile === "found") audio.play("home", foundCount(state) % 13);
-      else audio.play("place");
+      else {
+        const land = m.to.pile === "found" ? () => audio.play("home", rankOf(state.found[m.to.i].at(-1))) : () => audio.play("place");
+        if (who === "you") land();
+        else { audio.play("pickup"); if (fast()) land(); else setTimeout(land, 150); }
+      }
       if (r.flipped) setTimeout(() => audio.play("flip"), 90);
       afterMove();
       return true;
@@ -571,9 +577,9 @@
       if (over && !won(state) && history.length) { over = false; $("over").hidden = true; startClock(); }
       if (!history.length || over) return audio.play("bump");
       if (bot.on) setBot(false);
-      finishing = false;
+      finishing = false; held = null; drag = null;
       state = { ...history.pop(), moves: state.moves + 1 };
-      audio.play("place");
+      audio.play("pickup"); setTimeout(() => audio.play("place"), 150);
       placeCards(); renderHud(); saveGame();
     }
 
@@ -591,9 +597,9 @@
     const canPick = (c) => !!pickFrom(c);
 
     // the move for dropping what's carried where its middle is
-    function dropTarget(px, py) {
-      const pick = drag;
-      const x = px - drag.dx + cw / 2, y = py - drag.dy + ch / 2;
+    function dropTarget(carry) {
+      const pick = carry;
+      const x = carry.px - carry.dx + cw / 2, y = carry.py - carry.dy + ch / 2;
       let best = null, bestD = Infinity;
       const consider = (to, cx, cy) => {
         const m = { type: "move", from: pick.from, to, n: pick.n };
@@ -627,9 +633,29 @@
     const tableXY = (e) => { const r = tableEl.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     function cardAt(e) { const el = e.target.closest?.(".k-card"); return el ? +el.dataset.card : null; }
 
+    // Picking up: press and drag, and the cards follow until you let go. Or click a card: it's
+    // picked up and follows the pointer, and the next click puts it down there. A put-down that
+    // isn't a legal move sends the cards back where they came from.
+    let held = null; // cards picked up with a click: like a drag that lasts until the next click
+    function pickUp(pick, p, e) {
+      const k = cards[pick.cards[0]];
+      if (bot.on) setBot(false);
+      audio.play("pickup");
+      return { ...pick, dx: p.x - k.cur.x, dy: p.y - k.cur.y, px: p.x, py: p.y, sx: p.x, sy: p.y, moved: false, id: e.pointerId };
+    }
+    function putDown(carry) {
+      const m = dropTarget(carry);
+      held = null; drag = null;
+      if (m && doMove(m)) return;
+      // back where it came from; a red flash unless it was put down right where it started
+      if (Math.hypot(carry.px - carry.sx, carry.py - carry.sy) > cw * 0.6) bad(carry.cards[0]);
+      audio.play("place");
+      placeCards();
+    }
     tableEl.addEventListener("pointerdown", (e) => {
       if (over || modalOpen() || e.button > 0) return;
       const c = cardAt(e), p = tableXY(e);
+      if (held) { held.px = p.x; held.py = p.y; return putDown(held); }
       // the stock: draw (or turn the waste back over)
       const st = pileXY("stock");
       if ((c !== null && state.stock.includes(c)) || (c === null && p.x >= st.x && p.x <= st.x + cw && p.y >= st.y && p.y <= st.y + ch)) {
@@ -639,16 +665,17 @@
       if (c === null) return;
       const pick = pickFrom(c);
       if (!pick) return;
-      const k = cards[c];
-      drag = { ...pick, dx: p.x - k.cur.x, dy: p.y - k.cur.y, px: p.x, py: p.y, sx: p.x, sy: p.y, moved: false, id: e.pointerId };
+      drag = { ...pick, ...pickUp(pick, p, e) };
+      drag.moved = false;
       tableEl.setPointerCapture(e.pointerId);
     });
     tableEl.addEventListener("pointermove", (e) => {
       const p = tableXY(e);
-      if (drag && e.pointerId === drag.id) {
-        drag.px = p.x; drag.py = p.y;
-        if (!drag.moved && Math.hypot(p.x - drag.sx, p.y - drag.sy) > 5) { drag.moved = true; if (bot.on) setBot(false); }
-        if (drag.moved) placeCards();
+      const carry = held || (drag && e.pointerId === drag.id ? drag : null);
+      if (carry) {
+        carry.px = p.x; carry.py = p.y;
+        if (carry === drag && !drag.moved && Math.hypot(p.x - drag.sx, p.y - drag.sy) > 5) drag.moved = true;
+        placeCards();
         return;
       }
       // hover: lift the card under the pointer and tilt it toward the pointer
@@ -661,22 +688,18 @@
       }
       if (h !== hover || h !== null) { hover = h; placeCards(); }
     });
-    tableEl.addEventListener("pointerleave", () => { if (hover !== null && !drag) { hover = null; placeCards(); } });
-    function endDrag(e) {
+    tableEl.addEventListener("pointerleave", () => { if (hover !== null && !drag && !held) { hover = null; placeCards(); } });
+    tableEl.addEventListener("pointerup", (e) => {
       if (!drag || e.pointerId !== drag.id) return;
-      const d = drag;
-      if (d.moved) {
-        const m = dropTarget(d.px, d.py);
-        drag = null;
-        if (!m || !doMove(m)) { audio.play("bump"); placeCards(); }
-      } else {
-        drag = null;
-        const m = tapMove(d.cards[0]);
-        if (!m || !doMove(m)) { bad(d.cards[0]); audio.play("bump"); placeCards(); }
-      }
-    }
-    tableEl.addEventListener("pointerup", endDrag);
+      if (drag.moved) return putDown(drag);
+      // a click: keep holding the cards until the next click
+      held = drag; held.moved = true; drag = null;
+      hover = null;
+      placeCards();
+    });
     tableEl.addEventListener("pointercancel", (e) => { if (drag && e.pointerId === drag.id) { drag = null; placeCards(); } });
+    // Esc puts held cards back
+    addEventListener("keydown", (e) => { if (e.key === "Escape" && held) { held = null; audio.play("place"); placeCards(); } });
     // a card with nowhere to go flashes for a moment
     function bad(c) { const el = cards[c].el; el.classList.add("is-bad"); setTimeout(() => el.classList.remove("is-bad"), 300); }
 
@@ -849,7 +872,7 @@
       saveGame();
     }
     function startGame({ state: s, moves = 0, bm = 0, ms = 0 }) {
-      state = s; history = []; seen = new Set([key(view(state))]);
+      state = s; history = []; seen = new Set([key(view(state))]); held = null; drag = null;
       botMoves = bm; elapsed = ms; clockFrom = 0; over = false; finishing = false;
       $("over").hidden = true;
       nextPlan = null;

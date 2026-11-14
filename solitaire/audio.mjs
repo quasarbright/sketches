@@ -57,6 +57,8 @@ const note = (base, semis) => base * 2 ** (semis / 12);
 const MAJOR = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
 
 const SOUNDS = {
+  // picking a card up: a light, rising flick; putting it down: a lower tap
+  pickup: () => { tick({ freq: 3200, dur: 0.035, gain: 0.22 }); tone({ freq: 900, to: 1300, dur: 0.05, gain: 0.04, type: "sine" }); },
   place: () => tick({ freq: 1500, gain: 0.35 }),
   draw: () => tick({ freq: 2600, dur: 0.04, gain: 0.25 }),
   flip: () => { tick({ freq: 2200, dur: 0.06, gain: 0.3 }); tone({ freq: 700, to: 1000, dur: 0.06, gain: 0.05 }); },

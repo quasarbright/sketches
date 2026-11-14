@@ -24,36 +24,43 @@ test("a fresh deal: seven columns, 24 in the stock, the cards on screen where th
   expect(errors).toEqual([]);
 });
 
-test("clicking the stock draws; tapping a card sends it where it fits; undo takes it back", async ({ page }) => {
+test("click the stock to draw; click a card to pick it up and click again to put it down; undo", async ({ page }) => {
   const errors = await open(page);
   const p = position({ tab: [{ down: [], up: [c("K", "S")] }, { down: [c("2", "C")], up: [c("A", "H")] }, ...Array.from({ length: 5 }, () => ({ down: [], up: [] }))] });
   p.stock = p.stock.filter((k) => k !== c("Q", "H")).concat([c("Q", "H")]); // Q♥ on top of the stock
   await page.evaluate((p) => window.solitaire.load(p), p);
-  await page.waitForTimeout(300);
-  const stockBox = await page.evaluate(() => { const b = document.getElementById("table").getBoundingClientRect(), s = window.solitaire.pileXY("stock"), z = window.solitaire.size; return { x: b.x + s.x + z.cw / 2, y: b.y + s.y + z.ch / 2 }; });
-  await page.mouse.click(stockBox.x, stockBox.y);
+  const table = await page.evaluate(() => { const b = document.getElementById("table").getBoundingClientRect(); return { x: b.x, y: b.y, ...window.solitaire.size }; });
+  const pile = async (name, i) => { const q = await page.evaluate(([n, i]) => window.solitaire.pileXY(n, i), [name, i]); return { x: table.x + q.x + table.cw / 2, y: table.y + q.y + table.ch / 2 }; };
+  // the middle of a card's top edge, once it has stopped moving (cards spring into place)
+  const cardPoint = (k) => page.evaluate(async (k) => {
+    let last = null;
+    for (let i = 0; i < 100; i++) {
+      const r = window.solitaire.cardBox(k);
+      if (last && Math.abs(r.x - last.x) < 0.5 && Math.abs(r.y - last.y) < 0.5) return { x: r.x + r.width / 2, y: r.y + 12 };
+      last = r;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    return { x: last.x + last.width / 2, y: last.y + 12 };
+  }, k);
+  const click = async (pt) => page.mouse.click(pt.x, pt.y);
+
+  await click(await pile("stock"));
   let s = await state(page);
   expect(s.waste).toEqual([c("Q", "H")]);
-  // tap the Q♥ on the waste: it goes on the K♠
-  // click a card once it has stopped moving (cards spring into place)
-  const tapCard = async (k) => {
-    const b = await page.evaluate(async (k) => {
-      let last = null;
-      for (let i = 0; i < 100; i++) {
-        const r = window.solitaire.cardBox(k);
-        if (last && Math.abs(r.x - last.x) < 0.5 && Math.abs(r.y - last.y) < 0.5) return { x: r.x + r.width / 2, y: r.y + 12 };
-        last = r;
-        await new Promise((res) => setTimeout(res, 50));
-      }
-      return { x: last.x + last.width / 2, y: last.y + 12 };
-    }, k);
-    await page.mouse.click(b.x, b.y);
-  };
-  await tapCard(c("Q", "H"));
+  // pick up the Q♥ and put it down on the K♠
+  await click(await cardPoint(c("Q", "H")));
+  expect((await state(page)).waste).toEqual([c("Q", "H")]); // only held so far
+  await click(await cardPoint(c("K", "S")));
   s = await state(page);
   expect(s.tab[0].up).toEqual([c("K", "S"), c("Q", "H")]);
-  // tap the A♥: home, and the 2♣ under it turns over
-  await tapCard(c("A", "H"));
+  // pick up the A♥; a click somewhere it can't go puts it back
+  await click(await cardPoint(c("A", "H")));
+  await click(await pile("tab", 5));
+  s = await state(page);
+  expect(s.tab[1].up).toEqual([c("A", "H")]);
+  // pick it up again and put it on its foundation: the 2♣ under it turns over
+  await click(await cardPoint(c("A", "H")));
+  await click(await pile("found", 1));
   s = await state(page);
   expect(s.found[1]).toEqual([c("A", "H")]);
   expect(s.tab[1]).toEqual({ down: [], up: [c("2", "C")] });
