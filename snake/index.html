@@ -266,7 +266,8 @@
   <template id="aboutTpl">
     <h2 class="title">How the bot thinks</h2>
     <p class="intro">My bot heads for each egg by the shortest path, but first it checks that eating
-      the egg won't trap it. Over 100 games it filled 98% of the board on average, and all of it in 11.</p>
+      the egg won't trap it. Once the board is getting full it switches to following a loop through
+      every cell, which can't fail. It fills the whole board.</p>
 
     <div class="section-label">the shortest path isn't enough</div>
     <p>The obvious bot finds the shortest path to the egg and follows it. To find that path, spread
@@ -307,10 +308,22 @@
       gets there after the tail has left.</p>
 
     <div class="section-label">the end of the game</div>
-    <p>Near the end there's very little open space, and an egg can land somewhere it can't be eaten
-      safely. Then the bot follows its tail round and round. After 400 steps without eating it
-      starts picking among its safe moves at random, to change the body's shape, and after 1,200 it
-      goes for the egg anyway. Usually that's the end, with 98 or 99% of the board filled.</p>
+    <p>The check stops working near the end. With little open space left, an egg can land somewhere
+      it's never safe to eat, and the bot just chases its tail forever. So once the snake is 150
+      cells long, the bot changes strategy and follows a loop that passes through every cell on the
+      board (a <b>Hamiltonian cycle</b>).</p>
+    <p>If the body lies along such a loop and the head only moves forward on it, the head never
+      catches up to the tail, and sooner or later it passes every free cell, so it gets every egg.</p>
+    <p>The hard part is a loop the body already lies along. The bot starts small: the body, plus
+      the shortest way from the head back around to the tail. Then it grows the loop two cells at a
+      time. Wherever the loop runs past two free cells side by side, it reroutes through them, a
+      detour into a 2×2 square. It does the cramped spots first and avoids detours that would leave
+      a cell with no free neighbor, since nothing could reach that cell afterward.</p>
+    <canvas class="s-dia" data-dia="loop"></canvas>
+    <p class="s-cap" data-cap="loop"></p>
+    <p>Walking the whole loop for every egg would take forever, so it cuts corners: it can jump to a
+      cell further along the loop, as long as it lands at least 3 cells short of its tail. In 100
+      games it filled the whole board every time.</p>
   </template>
 
   <mike-footer overlay></mike-footer>
@@ -438,6 +451,7 @@
     // the strip under the board: how to play, or which rule the bot just used
     const THINK = {
       egg: ["Going for the egg", "eating it still leaves a way to its tail", "dots"],
+      loop: ["Following a loop through every cell", "it can't run into itself now", "line"],
       tail: ["Following its tail", "that egg would trap it", "dashes"],
       tailNoPath: ["Following its tail", "it can't reach the egg yet", "dashes"],
       gamble: ["Going for the egg anyway", "waiting hasn't made it safe", "reddots"],
@@ -456,7 +470,8 @@
       const col = key === "reddots" ? COLORS.danger : COLORS.bot;
       $("thinkKey").innerHTML = key === "dots" || key === "reddots"
         ? [5, 15, 25].map((x) => `<circle cx="${x}" cy="6" r="2.6" fill="${col}"/>`).join("")
-        : key === "dashes" ? `<path d="M3 6h9M18 6h9" stroke="${col}" stroke-width="3.4" stroke-linecap="round"/>` : "";
+        : key === "dashes" ? `<path d="M3 6h9M18 6h9" stroke="${col}" stroke-width="3.4" stroke-linecap="round"/>`
+        : key === "line" ? `<path d="M3 6h24" stroke="${col}" stroke-width="3" stroke-linecap="round"/>` : "";
     }
     setInterval(showThink, 120); // the strip doesn't need to change at bot speed
 

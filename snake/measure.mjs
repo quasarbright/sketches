@@ -8,7 +8,7 @@ const STUCK = CELLS * 4; // this many steps without eating counts as going round
 
 export function playOut(seed) {
   let g = newGame(seed);
-  const kinds = { egg: 0, gamble: 0, tail: 0, room: 0, stuck: 0 };
+  const kinds = { egg: 0, loop: 0, gamble: 0, tail: 0, room: 0, stuck: 0 };
   while (g.alive && !g.won && g.sinceEat < STUCK) {
     const p = decide(g);
     kinds[p.kind]++;

@@ -2,7 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { newGame, step, safeMoves, W, H, CELLS, UP, DOWN, LEFT, RIGHT, START_LENGTH } from "./game.mjs";
-import { decide, pathTo, followPath, region, GAMBLE } from "./bot.mjs";
+import { decide, pathTo, followPath, region, GAMBLE, LOOP_ROOM } from "./bot.mjs";
+import { buildLoop, bodyInOrder, loopMove } from "./cycle.mjs";
+import { withBoard, neighbors, dirTo } from "./game.mjs";
 
 const at = (x, y) => y * W + x;
 // a game in a given position: snake cells head first, heading `dir`
@@ -120,9 +122,28 @@ test("region counts the open cells the head can reach", () => {
   assert.equal(region([at(0, 2), ...row(0, W - 1, 1)]).length, CELLS - 2 * W - 1);
 });
 
-test("a whole game fills most of the board", { timeout: 60000 }, () => {
+test("the loop goes through every cell once, with the body in order along it", () => {
+  withBoard(12, 8, () => {
+    const a = (x, y) => y * 12 + x;
+    const snake = [a(5, 4), a(4, 4), a(3, 4), a(3, 3), a(3, 2), a(4, 2), a(5, 2), a(6, 2), a(7, 2), a(8, 2), a(8, 3), a(8, 4), a(8, 5), a(7, 5)];
+    let loop = null;
+    for (let sd = 1; !loop && sd < 20; sd++) loop = buildLoop(snake, sd);
+    assert.ok(loop, "built one");
+    assert.equal(new Set(loop.order).size, 96);
+    loop.order.forEach((c, i) => assert.ok(neighbors(c).includes(loop.order[(i + 1) % 96]), `step ${i} is to a neighbor`));
+    assert.ok(bodyInOrder(loop, snake));
+    // following it with shortcuts fills the board without dying
+    let g = { snake, egg: a(10, 6), dir: LEFT, seed: 3, alive: true, won: false, eaten: 0, steps: 0, sinceEat: 0 };
+    while (g.alive && !g.won && g.steps < 20000) {
+      g = step(g, dirTo(g.snake[0], loopMove(loop, g.snake, g.egg, LOOP_ROOM)));
+      if (g.alive && !g.won) assert.ok(bodyInOrder(loop, g.snake), `body in order at step ${g.steps}`);
+    }
+    assert.ok(g.won, "it fills the board");
+  });
+});
+
+test("a whole game fills the board", { timeout: 60000 }, () => {
   let g = newGame(5);
   while (g.alive && !g.won && g.sinceEat <= GAMBLE + CELLS) g = step(g, decide(g).dir);
-  assert.ok(!g.alive || g.won, "the game ends");
-  assert.ok(g.snake.length / CELLS > 0.9, `filled ${g.snake.length} of ${CELLS}`);
+  assert.ok(g.won, `filled ${g.snake.length} of ${CELLS}`);
 });

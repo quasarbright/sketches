@@ -6,7 +6,16 @@
 //   4. if even the tail is out of reach, take the move with the most open cells
 // Following your tail is always safe: the tail leaves its cell every step, so a snake that can
 // reach its tail can keep chasing it forever.
+// Once the board is mostly full it switches to a loop through every cell that its body lies along
+// in order (cycle.mjs), and follows that, with safe shortcuts, to the end of the game.
 import { CELLS, DIRECTIONS, OPPOSITE, neighbors, stepCell, dirTo, step, rand } from "./game.mjs";
+import { buildLoop, bodyInOrder, loopMove, loopAhead } from "./cycle.mjs";
+
+export const LOOP_FREE = +(globalThis.process?.env?.LOOP_FREE ?? 250); // switch to the loop once this few cells are free
+const RETRY = 16; // after failing to build a loop, steps before trying again
+let failedAt = -1;
+export const LOOP_ROOM = +(globalThis.process?.env?.ROOM ?? 3); // shortcuts land at least this far short of the tail
+let loop = null; // the loop it's following, if any; checked against the snake every step
 
 export const RESHUFFLE = CELLS; // steps without eating before the tail chase starts picking at random
 export const GAMBLE = +(globalThis.process?.env?.GAMBLE ?? 3 * CELLS); // ...and before it goes for the egg anyway
@@ -100,14 +109,30 @@ function tailMoves(game) {
 }
 
 // Returns the move and what the bot was thinking, for drawing:
-//   kind: "egg" | "gamble" | "tail" | "room" | "stuck"
+//   kind: "egg" | "loop" | "toloop" | "gamble" | "tail" | "room" | "stuck"
 //   path: the path to the egg (cells after the head), or null if the egg can't be reached
 //   ghost: the copy of the snake after eating, when there was a path
 //   trapped: the cells the copy could still reach, when it couldn't reach its tail
 //   chase: the path to the tail, in "tail" mode
-export function decide(game) {
+//   loop: the cells ahead on the loop up to the egg, and loopOrder the whole loop, in "loop" mode
+export function decide(game, { useLoop = true } = {}) {
   const { snake } = game;
-  const plan = { dir: game.dir, kind: "stuck", path: null, ghost: null, trapped: null, chase: null };
+  const plan = { dir: game.dir, kind: "stuck", path: null, ghost: null, trapped: null, chase: null, loop: null };
+
+  // 0: near the end, the loop. Keep the one it has while the body is still in order along it
+  // (it always is, once it's following it); otherwise build one, with a few tries.
+  if (useLoop && CELLS - snake.length <= LOOP_FREE) {
+    if (!bodyInOrder(loop, snake)) {
+      loop = null;
+      const waiting = game.steps >= failedAt && game.steps - failedAt < RETRY;
+      for (let k = 1; k <= 4 && !loop && !waiting; k++) loop = buildLoop(snake, game.steps * 4 + k);
+      if (!loop && !waiting) failedAt = game.steps;
+    }
+    if (loop) {
+      const n = loopMove(loop, snake, game.egg, LOOP_ROOM);
+      if (n >= 0) return { ...plan, kind: "loop", dir: dirTo(snake[0], n), loop: loopAhead(loop, snake, game.egg), loopOrder: loop.order };
+    }
+  }
 
   // 1 and 2: the egg, if eating it leaves a way out
   const e = eggCheck(game);

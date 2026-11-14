@@ -89,14 +89,15 @@ test("the strip names the rule the bot used", async ({ page }) => {
   await expect(page.locator("#thinkSub")).toHaveText("· that egg would trap it");
 });
 
-test("the bot at max speed fills most of the board, then the card counts its steps", async ({ page }) => {
+test("the bot at max speed fills the board, then the card counts its steps", async ({ page }) => {
   test.slow();
   const errors = await open(page, { manual: false });
-  await load(page, newGame(5)); // a seed that fills over 90% (the rare game ends around 70%)
+  await load(page, newGame(5));
   await page.evaluate(() => { window.snakeGame.setSpeedPos(100); window.snakeGame.setBot(true); });
   await expect(page.locator("#over")).toBeVisible({ timeout: 60000 });
   const s = await state(page);
-  expect(s.game.snake.length).toBeGreaterThan(300);
+  expect(s.game.snake.length).toBe(400);
+  await expect(page.locator("#overTitle")).toHaveText("Board filled!");
   expect(s.bot).toBe(false);
   await expect(page.locator("#overWho")).toContainText("The bot played every step.");
   await expect(page.locator("#best")).toHaveText("0"); // bot games don't set your best
@@ -122,7 +123,7 @@ test("the about modal's diagrams run", async ({ page }) => {
   const errors = await open(page);
   await page.locator("#about").click();
   const caps = page.locator(".cohesion-about [data-cap]");
-  await expect(caps).toHaveCount(2);
+  await expect(caps).toHaveCount(3);
   const seen = new Set();
   for (let i = 0; i < 40 && seen.size < 3; i++) {
     seen.add(await page.locator('.cohesion-about [data-cap="greedy"]').textContent());

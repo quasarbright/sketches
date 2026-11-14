@@ -34,7 +34,8 @@ export function fitCanvas(cv, cssW, cols = W, rows = H) {
 //   plan          what the bot thought (bot.mjs decide), drawn over the board
 //   dead          draw the crash
 //   eaten         the egg the last step ate, drawn until the sliding head gets to it
-export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead = false, view = null, round = 14, eaten = -1 } = {}) {
+//   under         draws extra things under the snake: under(g, cellSize, center)
+export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead = false, view = null, round = 14, eaten = -1, under = null } = {}) {
   const v = view || { x0: 0, y0: 0, cols: W, rows: H };
   const c = cssW / v.cols, cssH = c * v.rows;
   const center = (cell) => { const [x, y] = xy(cell); return [(x - v.x0 + 0.5) * c, (y - v.y0 + 0.5) * c]; };
@@ -46,6 +47,7 @@ export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead
   g.fillStyle = COLORS.check;
   for (let y = 0; y < v.rows; y++) for (let x = (y + v.x0 + v.y0) % 2; x < v.cols; x += 2) g.fillRect(x * c, y * c, c, c);
 
+  if (under) under(g, c, center);
   if (plan) drawPlanUnder(g, c, center, plan);
   if (game.egg >= 0) drawEgg(g, c, center(game.egg));
   if (eaten >= 0 && t < 0.6) drawEgg(g, c, center(eaten)); // the egg just eaten, until the head reaches it
@@ -181,8 +183,17 @@ export function drawEgg(g, c, [x, y]) {
   g.restore();
 }
 
-// under the snake: the cells a doomed copy could still reach, and the copy itself
+// under the snake: the loop through every cell, in the endgame; the cells a doomed copy could still
+// reach, and the copy itself
 function drawPlanUnder(g, c, center, plan) {
+  if (plan.loopOrder) {
+    g.save();
+    g.strokeStyle = "rgba(185, 163, 255, .22)"; g.lineWidth = c * 0.1; g.lineJoin = "round";
+    g.beginPath();
+    plan.loopOrder.forEach((cell, i) => { const [x, y] = center(cell); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.closePath(); g.stroke();
+    g.restore();
+  }
   if (plan.trapped && plan.kind !== "egg") {
     g.fillStyle = "rgba(255, 90, 110, .28)";
     for (const cell of [...plan.trapped, plan.ghost[0]]) {
@@ -224,7 +235,15 @@ function drawPlanOver(g, c, center, snake, plan) {
       last = p;
     }
   };
-  if (plan.kind === "egg" || plan.kind === "gamble") dots(plan.path, plan.kind === "egg" ? COLORS.bot : COLORS.danger, 0.08);
+  if (plan.kind === "loop") {
+    if (plan.loop?.length) {
+      g.strokeStyle = COLORS.bot; g.lineWidth = c * 0.1; g.lineJoin = "round"; g.lineCap = "round";
+      g.beginPath();
+      const [hx, hy] = center(snake[0]); g.moveTo(hx, hy);
+      for (const cell of plan.loop) { const [x, y] = center(cell); g.lineTo(x, y); }
+      g.stroke();
+    }
+  } else if (plan.kind === "egg" || plan.kind === "gamble") dots(plan.path, plan.kind === "egg" ? COLORS.bot : COLORS.danger, 0.08);
   else {
     if (plan.path) dots(plan.path, "rgba(255, 90, 110, .8)", 0.065); // the path it turned down
     if (plan.chase) dashes(plan.chase, COLORS.bot);
