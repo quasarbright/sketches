@@ -555,7 +555,7 @@
       if (won(state)) return gameWon();
       // everything face up: the rest plays itself
       if (!hiddenCount(state) && !bot.on && !finishing) return finish();
-      if (!bot.on && !finishing && !rankMoves(state, seen).ranked.length) youStuck();
+      if (!bot.on && !finishing && noMovesLeft()) youStuck();
     }
 
     // when the face-down cards are all turned over, the bot plays out the rest quickly
@@ -812,7 +812,9 @@
       audio.play("stuck");
       endDeal("stuck", true);
     }
-    // you've run out: no move goes anywhere this deal hasn't already been
+    // You've lost when no card you can see, and no card in the deck (however many times you go
+    // through it), can move anywhere new. Moving a card back off a foundation doesn't count.
+    const noMovesLeft = () => !rankMoves(state, seen).ranked.some((r) => r.m.from.pile !== "found");
     function youStuck() {
       over = true; finishing = false;
       stopClock();
@@ -832,14 +834,14 @@
       setTimeout(() => {
         if (!over) return;
         const r = byBot ? botRecord : record;
-        $("overTitle").textContent = how === "won" ? (byBot ? "The bot won!" : "You won!") : (byBot ? "The bot is stuck" : "No moves left");
+        $("overTitle").textContent = how === "won" ? (byBot ? "The AI won!" : "You won!") : (byBot ? "The AI is stuck" : "Game over");
         $("overTitle").classList.toggle("is-stuck", how !== "won");
         $("overMoves").textContent = state.moves;
         $("overTime").textContent = mmss(clock());
         $("overWins").textContent = `${r.won}/${r.played}`;
         $("overWinsLabel").textContent = byBot ? "Bot won" : "Won";
         $("overWho").textContent = how !== "won"
-          ? (byBot ? "Every move it has left leads back to a position it's already been in." : "Every move left leads back to a position you've already been in. Undo to try another way, or deal again.")
+          ? (byBot ? "Every move it has left leads back to a position it's already been in." : "No card you can see, and no card in the deck, can move anywhere new, so this deal can't be won from here. Undo to try another way, or deal again.")
           : byBot && botMoves < state.moves ? "The bot made some of the moves, so this one doesn't count toward your record." : "";
         $("overUndo").hidden = how === "won" || byBot;
         $("over").hidden = false;

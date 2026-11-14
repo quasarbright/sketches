@@ -141,16 +141,18 @@ test("finishing a deal yourself shows the end card and counts toward your record
   expect(conserved(await state(page))).toEqual(ALL);
 });
 
-test("running out of moves shows the end card, and Undo from it plays on", async ({ page }) => {
+test("when nothing can move anywhere new, you get the loss screen, and Undo from it plays on", async ({ page }) => {
   await open(page);
   // black twos to eights on top, aces buried, one useless card left in the stock
   const tops = [c("2", "S"), c("2", "C"), c("4", "S"), c("4", "C"), c("6", "S"), c("6", "C"), c("8", "S")];
-  const rest = [...Array(52).keys()].filter((k) => !tops.includes(k) && k !== c("10", "C"));
-  const tab = tops.map((t, i) => ({ down: rest.slice(i * 6, i * 6 + 6 + (i === 6 ? 2 : 0)), up: [t] }));
-  await page.evaluate((p) => window.solitaire.load(p), { seed: 1, moves: 0, stock: [c("10", "C")], waste: [], found: [[], [], [], []], tab });
+  // the 3♥ on its foundation could go back onto a black 4, but that doesn't count as a way out
+  const home = [c("A", "H"), c("2", "H"), c("3", "H")];
+  const rest = [...Array(52).keys()].filter((k) => !tops.includes(k) && !home.includes(k) && k !== c("10", "C"));
+  const tab = tops.map((t, i) => ({ down: rest.slice(i * 6, i * 6 + 6 + (i === 6 ? -1 : 0)), up: [t] }));
+  await page.evaluate((p) => window.solitaire.load(p), { seed: 1, moves: 0, stock: [c("10", "C")], waste: [], found: [[], home, [], []], tab });
   await page.evaluate(() => window.solitaire.draw());
   await expect(page.locator("#over")).toBeVisible();
-  await expect(page.locator("#overTitle")).toHaveText("No moves left");
+  await expect(page.locator("#overTitle")).toHaveText("Game over");
   await expect(page.locator("#overUndo")).toBeVisible();
   await page.click("#overUndo");
   await expect(page.locator("#over")).toBeHidden();
@@ -167,7 +169,7 @@ test("the bot finishing a deal at normal speed shows the end card too", async ({
   await page.evaluate((p) => window.solitaire.load(p), { ...position({ tab, found }), stock: [] });
   await page.evaluate(() => { window.solitaire.setBot(true); window.solitaire.step(); });
   await expect(page.locator("#over")).toBeVisible();
-  await expect(page.locator("#overTitle")).toHaveText("The bot won!");
+  await expect(page.locator("#overTitle")).toHaveText("The AI won!");
   await expect(page.locator("#overUndo")).toBeHidden();
   expect((await info(page)).bot).toBe(false);
   expect((await info(page)).botRecord).toEqual({ won: 1, played: 1 });
