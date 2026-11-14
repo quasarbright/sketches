@@ -132,7 +132,7 @@
       <input type="range" id="mut" min="0" max="0.2" step="0.005" value="0.06"
         title="How far a child's genes can drift from its parent's, as a fraction of each gene's full range." />
     </div>
-    <label class="check" title="Draw each snake's sight (green, how far it sees eggs) and wariness (red, how far ahead it sees walls and bodies).">
+    <label class="check" title="Draw the cells each snake checks: green outlines every cell within its sight (where it can spot eggs); red boxes are the straight runs past each cell it could move into, where it watches for walls and bodies.">
       <input type="checkbox" id="senses" /> show senses
     </label>
   </control-panel>
@@ -460,17 +460,37 @@
         ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(huskLayer, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
       drawEggs(t, now);
-      for (const s of shown.snakes.values()) drawSnake(s, t);
       if (showSenses) {
-        ctx.lineWidth = 1;
+        // the exact cells each sense checks, from the head cell the next move is decided from
+        ctx.save();
+        ctx.beginPath(); ctx.rect(ox, oy, cs * world.cols, cs * world.rows); ctx.clip();
+        ctx.lineWidth = 1; ctx.lineJoin = "miter";
         for (const s of shown.snakes.values()) {
-          const g = s.genes, path = snakePath(s), [x, y] = pointAt(path, path.ext.length > 1 ? 1 - t : 0);
-          ctx.strokeStyle = "rgba(0,255,0,.35)";
-          ctx.beginPath(); ctx.arc(x, y, g.sight * cs, 0, Math.PI * 2); ctx.stroke();
-          ctx.strokeStyle = "rgba(255,0,0,.45)";
-          ctx.beginPath(); ctx.arc(x, y, g.wariness * cs, 0, Math.PI * 2); ctx.stroke();
+          const g = s.genes, hc = s.body[0], hx = hc % world.cols, hy = (hc / world.cols) | 0;
+          const gx = (c) => ox + (hx + c) * cs, gy = (r) => oy + (hy + r) * cs;
+          // sight: every cell within `sight` steps, a staircase diamond
+          const r = Math.floor(g.sight);
+          if (r > 0) {
+            ctx.strokeStyle = "rgba(0,255,0,.3)";
+            ctx.beginPath(); ctx.moveTo(gx(0), gy(-r));
+            for (let dy = -r; dy <= r; dy++) { const k = r - Math.abs(dy); ctx.lineTo(gx(k + 1), gy(dy)); ctx.lineTo(gx(k + 1), gy(dy + 1)); }
+            for (let dy = r; dy >= -r; dy--) { const k = r - Math.abs(dy); ctx.lineTo(gx(-k), gy(dy + 1)); ctx.lineTo(gx(-k), gy(dy)); }
+            ctx.closePath(); ctx.stroke();
+          }
+          // wariness: the straight run of cells past each of the three cells it could move into
+          const reach = Math.floor(g.wariness);
+          if (reach > 0) {
+            ctx.strokeStyle = "rgba(255,0,0,.45)";
+            for (const d of [(s.dir + 3) % 4, s.dir, (s.dir + 1) % 4]) {
+              const [dx, dy] = DIRV[d];
+              const ax = dx + dx, ay = dy + dy, bx = dx * (reach + 1), by = dy * (reach + 1);
+              ctx.strokeRect(gx(Math.min(ax, bx)), gy(Math.min(ay, by)), (Math.abs(bx - ax) + 1) * cs, (Math.abs(by - ay) + 1) * cs);
+            }
+          }
         }
+        ctx.restore();
       }
+      for (const s of shown.snakes.values()) drawSnake(s, t);
     }
 
     // drawHusks uses `ctx`; point it at the husk layer while it runs

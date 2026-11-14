@@ -183,7 +183,7 @@ export class World {
   }
 
   findTarget(s) {
-    // nearest visible food from the head (Euclidean radius = sight)
+    // nearest visible food from the head, within `sight` steps (Manhattan distance, a diamond of cells)
     const r = Math.floor(s.genes.sight);
     s.target = -1;
     if (r <= 0) return;
@@ -191,13 +191,12 @@ export class World {
     let best = Infinity;
     const x0 = Math.max(0, hx - r), x1 = Math.min(this.cols - 1, hx + r);
     const y0 = Math.max(0, hy - r), y1 = Math.min(this.rows - 1, hy + r);
-    const r2 = s.genes.sight * s.genes.sight;
     for (let y = y0; y <= y1; y++) {
       const row = y * this.cols;
       for (let x = x0; x <= x1; x++) {
         if (!this.food[row + x]) continue;
-        const d2 = (x - hx) * (x - hx) + (y - hy) * (y - hy);
-        if (d2 <= r2 && d2 < best) { best = d2; s.target = row + x; }
+        const d = Math.abs(x - hx) + Math.abs(y - hy);
+        if (d <= r && d < best) { best = d; s.target = row + x; }
       }
     }
   }
