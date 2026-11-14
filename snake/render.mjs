@@ -147,7 +147,7 @@ export function drawSnake(g, c, center, snake, prev = null, t = 1, { alpha = 1, 
   g.restore();
 }
 
-function drawEyes(g, c, center, game, prev, t, dead) {
+export function drawEyes(g, c, center, game, prev, t, dead) {
   const [hx, hy] = headPoint(center, game.snake, prev, t);
   const [dx, dy] = DELTA[game.dir];
   const fx = hx + dx * c * 0.12, fy = hy + dy * c * 0.12;
