@@ -12,8 +12,8 @@ import { CELLS, DIRECTIONS, OPPOSITE, neighbors, stepCell, dirTo, step, rand } f
 import { buildLoop, bodyInOrder, loopMove, loopAhead } from "./cycle.mjs";
 
 export const LOOP_FREE = +(globalThis.process?.env?.LOOP_FREE ?? 250); // switch to the loop once this few cells are free
-const RETRY = 16; // after failing to build a loop, steps before trying again
-let failedAt = -1;
+const RETRY = 128; // after failing to build a loop, steps before trying again (or the next egg)
+let failedAt = -1, failedEaten = -1;
 export const LOOP_ROOM = +(globalThis.process?.env?.ROOM ?? 3); // shortcuts land at least this far short of the tail
 let loop = null; // the loop it's following, if any; checked against the snake every step
 
@@ -124,9 +124,10 @@ export function decide(game, { useLoop = true } = {}) {
   if (useLoop && CELLS - snake.length <= LOOP_FREE) {
     if (!bodyInOrder(loop, snake)) {
       loop = null;
-      const waiting = game.steps >= failedAt && game.steps - failedAt < RETRY;
-      for (let k = 1; k <= 4 && !loop && !waiting; k++) loop = buildLoop(snake, game.steps * 4 + k);
-      if (!loop && !waiting) failedAt = game.steps;
+      // building costs a few ms, so after a failure wait for the next egg or RETRY steps
+      const waiting = game.steps >= failedAt && game.steps - failedAt < RETRY && game.eaten === failedEaten;
+      if (!waiting) loop = buildLoop(snake, game.steps + 1);
+      if (!loop && !waiting) { failedAt = game.steps; failedEaten = game.eaten; }
     }
     if (loop) {
       const n = loopMove(loop, snake, game.egg, LOOP_ROOM);

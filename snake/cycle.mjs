@@ -11,20 +11,6 @@
 // body only has to be in order along the loop, not in one unbroken stretch.
 import { CELLS, W, neighbors, rand } from "./game.mjs";
 
-// the 2x2 squares an edge a-b (neighbors) is part of: the two cells on each side, [f next to a, g next to b]
-function sides(a, b) {
-  const out = [];
-  const ax = a % W, ay = Math.floor(a / W), bx = b % W, by = Math.floor(b / W);
-  const H = CELLS / W;
-  if (ay === by) { // horizontal edge: squares above and below
-    for (const dy of [-1, 1]) if (ay + dy >= 0 && ay + dy < H) out.push([a + dy * W, b + dy * W]);
-  } else { // vertical: left and right
-    for (const dx of [-1, 1]) if (ax + dx >= 0 && ax + dx < W) out.push([a + dx, b + dx]);
-  }
-  void bx; void by;
-  return out;
-}
-
 // A loop through every cell with the body in order, or null if growing it got stuck.
 // `seed` varies the starting path and the order of the detours, for another try.
 // `trace`, if given, gets the starting loop and then each change, for the about modal to replay.
@@ -73,25 +59,35 @@ export function buildLoop(snake, seed = 1, trace = null) {
   // a detour (those add two cells), so when growing stalls, swap a stray free cell into the loop in
   // place of a loop cell next to it (one that isn't body, and whose two loop neighbors also touch
   // the free cell). The hole moves, and may now pair up with another one. A few hundred tries.
-  const prevOf = (b) => { for (const n of neighbors(b)) if (next[n] === b) return n; return -1; };
+  // neighbor table, so the inner loops don't build little arrays: NB[4c..4c+3], -1 off the board
+  const NB = new Int32Array(CELLS * 4).fill(-1);
+  for (let c = 0; c < CELLS; c++) neighbors(c).forEach((n, i) => { NB[c * 4 + i] = n; });
+  const prevOf = (b) => { for (let i = 0; i < 4; i++) { const n = NB[b * 4 + i]; if (n >= 0 && next[n] === b) return n; } return -1; };
+  const touches = (x, y) => { for (let i = 0; i < 4; i++) if (NB[x * 4 + i] === y) return true; return false; };
+  const freeN = (x) => { let k = 0; for (let i = 0; i < 4; i++) { const n = NB[x * 4 + i]; if (n >= 0 && !taken[n]) k++; } return k; };
+  const strandedNear = (x) => { let k = 0; for (let i = 0; i < 4; i++) { const n = NB[x * 4 + i]; if (n >= 0 && !taken[n] && freeN(n) === 0) k++; } return k; };
   const isBody = new Uint8Array(CELLS);
   for (const c of snake) isBody[c] = 1;
-  for (let round = 0; round < 300 && size < CELLS; round++) {
+  const H = CELLS / W;
+  for (let round = 0; round < 60 && size < CELLS; round++) {
     // one detour at a time: the one that strands the fewest free cells (left with no free
     // neighbor, so no detour can reach them), then the one taking in the most cramped cells, so
     // the loop fills corners and corridors before they get cut off
-    const freeN = (x) => { let k = 0; for (const n of neighbors(x)) if (!taken[n]) k++; return k; };
     while (size < CELLS) {
       let best = null, bestScore = Infinity, ties = 0;
       for (let a = 0; a < CELLS; a++) {
-        if (next[a] < 0) continue;
         const b = next[a];
-        for (const [f, g] of sides(a, b)) {
+        if (b < 0) continue;
+        // the 2x2 squares on either side of the edge a-b: f next to a, g next to b
+        const horizontal = Math.floor(a / W) === Math.floor(b / W);
+        for (const side of [-1, 1]) {
+          let f, g;
+          if (horizontal) { const y = Math.floor(a / W) + side; if (y < 0 || y >= H) continue; f = a + side * W; g = b + side * W; }
+          else { const x = (a % W) + side; if (x < 0 || x >= W) continue; f = a + side; g = b + side; }
           if (taken[f] || taken[g]) continue;
           const cramp = freeN(f) + freeN(g) - 2;
           taken[f] = taken[g] = 1;
-          let stranded = 0;
-          for (const x of [...neighbors(f), ...neighbors(g)]) if (!taken[x] && freeN(x) === 0) stranded++;
+          const stranded = strandedNear(f) + strandedNear(g);
           taken[f] = taken[g] = 0;
           const score = stranded * 100 + cramp;
           if (score < bestScore) { bestScore = score; best = [a, b, f, g]; ties = 1; }
@@ -106,14 +102,15 @@ export function buildLoop(snake, seed = 1, trace = null) {
       size += 2;
     }
     if (size >= CELLS) break;
+    // stalled: move a hole (see above)
     const swaps = [];
     for (let f = 0; f < CELLS; f++) {
       if (taken[f]) continue;
-      for (const b of neighbors(f)) {
-        if (!taken[b] || isBody[b]) continue;
+      for (let i = 0; i < 4; i++) {
+        const b = NB[f * 4 + i];
+        if (b < 0 || !taken[b] || isBody[b]) continue;
         const a = prevOf(b), c = next[b];
-        const fn = neighbors(f);
-        if (a >= 0 && fn.includes(a) && fn.includes(c)) swaps.push([a, b, c, f]);
+        if (a >= 0 && touches(f, a) && touches(f, c)) swaps.push([a, b, c, f]);
       }
     }
     if (!swaps.length) break;
