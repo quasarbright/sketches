@@ -173,7 +173,39 @@
       world = new World(cols, rows, opts);
       husks.length = 0;
       if (typeof eggBorn !== "undefined") { eggBorn.clear(); eaten = []; }
+      world.events.length = 0;
+      shown = snapshot(null); next = null;
+      world.tick();
+      next = snapshot(shown);
+      linkNext();
       resize();
+    }
+
+    // ---- what's on screen runs one step behind the sim ----
+    // The sim decides each move at the start of a step, so while a step is being drawn we'd
+    // otherwise not know where the head goes next, and a cell's curve would change under it the
+    // moment a turn was decided. So the sim always runs one step ahead: `shown` is what's being
+    // drawn, `next` is the step after, and every snake drawn knows its next direction.
+    let shown = null, next = null;
+    function snapshot(prev) {
+      const snakes = new Map();
+      for (const s of world.snakes) {
+        const snap = { id: s.id, hue: s.hue, genes: s.genes, dir: s.dir, nextDir: s.dir, body: s.body.slice(), trail: s.trail.slice(), behind: -1 };
+        // the cell behind the last drawn cell, so the tail's curve doesn't change as it leaves
+        const p = prev && prev.snakes.get(s.id);
+        if (p) {
+          const pext = p.body.concat(p.trail), last = snap.trail.length ? snap.trail[snap.trail.length - 1] : snap.body[snap.body.length - 1];
+          const k = pext.lastIndexOf(last);
+          snap.behind = k >= 0 && k + 1 < pext.length ? pext[k + 1] : (k >= 0 ? p.behind : -1);
+        }
+        snakes.set(s.id, snap);
+      }
+      const snap = { snakes, food: world.food.slice(), events: world.events.slice() };
+      world.events.length = 0;
+      return snap;
+    }
+    function linkNext() {
+      for (const s of shown.snakes.values()) { const n = next.snakes.get(s.id); s.nextDir = n ? n.dir : s.dir; }
     }
 
     function resize() {
@@ -231,10 +263,9 @@
     function snakePath(s) {
       const ext = s.trail.length ? s.body.concat(s.trail) : s.body;
       const dirs = ext.map((cell, k) => {
-        let outD = k > 0 ? dirBetween(cell, ext[k - 1]) : null;
-        let inD = k + 1 < ext.length ? dirBetween(ext[k + 1], cell) : null;
-        if (!outD) outD = inD || DIRV[s.dir];
-        if (!inD) inD = outD;
+        const outD = k > 0 ? dirBetween(cell, ext[k - 1]) : DIRV[s.nextDir];
+        let inD = k + 1 < ext.length ? dirBetween(ext[k + 1], cell) : (s.behind >= 0 ? dirBetween(s.behind, cell) : null);
+        if (!inD || Math.abs(inD[0]) + Math.abs(inD[1]) !== 1) inD = outD;
         return [inD, outD];
       });
       return { ext, dirs };
@@ -323,7 +354,7 @@
       ctx.beginPath(); ctx.ellipse(x - cs * 0.07 * k, y - cs * 0.08 * k, cs * 0.05 * k, cs * 0.08 * k, -0.4, 0, Math.PI * 2); ctx.fill();
     }
     function drawEggs(t, now) {
-      const food = world.food;
+      const food = shown.food;
       for (let i = 0; i < food.length; i++) {
         if (!food[i]) continue;
         let born = eggBorn.get(i);
@@ -372,15 +403,15 @@
         ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(huskLayer, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
       drawEggs(t, now);
-      for (const s of world.snakes) drawSnake(s, t);
+      for (const s of shown.snakes.values()) drawSnake(s, t);
       if (showSenses) {
         ctx.lineWidth = 1;
-        for (const s of world.snakes) {
-          const x = cx(s.body[0]), y = cy(s.body[0]);
+        for (const s of shown.snakes.values()) {
+          const g = s.genes, path = snakePath(s), [x, y] = pointAt(path, path.ext.length > 1 ? 1 - t : 0);
           ctx.strokeStyle = "rgba(0,255,0,.35)";
-          ctx.beginPath(); ctx.arc(x, y, s.genes.sight * cs, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x, y, g.sight * cs, 0, Math.PI * 2); ctx.stroke();
           ctx.strokeStyle = "rgba(255,0,0,.45)";
-          ctx.beginPath(); ctx.arc(x, y, s.genes.wariness * cs, 0, Math.PI * 2); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x, y, g.wariness * cs, 0, Math.PI * 2); ctx.stroke();
         }
       }
     }
@@ -391,12 +422,11 @@
 
     function takeEvents() {
       const now = performance.now();
-      for (const e of world.events) {
+      for (const e of shown.events) {
         if (e.type === "eat") eaten.push(e.at);
         else if (e.type === "shed") husks.push({ cells: [e.at], born: now, life: SHED_MS });
         else if (e.type === "die" && e.body.length) husks.push({ cells: e.body, born: now, life: HUSK_MS });
       }
-      world.events.length = 0;
       // fast playback makes far more skins than the eye can follow; keep the newest
       if (husks.length > MAX_HUSKS) husks.splice(0, husks.length - MAX_HUSKS);
     }
@@ -404,8 +434,11 @@
     function tick() {
       eaten = [];
       world.tick();
+      shown = next;
+      next = snapshot(shown);
+      linkNext();
       takeEvents();
-      if (!world.snakes.length) newWorld();
+      if (!world.snakes.length && !shown.snakes.size) newWorld();
     }
 
     let statsAt = 0;
@@ -471,6 +504,17 @@
       get world() { return world; }, tick, newWorld,
       setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
       drawAt: (t) => draw(t, performance.now()),
+      // head point + facing and tail point of every drawn snake at tween time t (for tests)
+      ends: (t) => {
+        const out = {};
+        for (const s of shown.snakes.values()) {
+          const path = snakePath(s), n = s.body.length, m = s.trail.length;
+          const h = pointAt(path, path.ext.length > 1 ? 1 - t : 0), tl = pointAt(path, n - 1 + m * (1 - t));
+          out[s.id] = { head: [h[0], h[1], Math.atan2(h[3], h[2])], tail: [tl[0], tl[1]], len: n };
+        }
+        return out;
+      },
+      get cs() { return cs; },
     };
     requestAnimationFrame(frame);
   </script>
