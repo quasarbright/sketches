@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Snake Pit</title>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- identity: a terrarium at night. Soil, bone-pale eggs, scale-colored snakes whose hue comes
+       from their genes. Young Serif labels the tank, Instrument Sans runs the controls. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Instrument+Sans:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #14110d;   /* soil */
+      --panel:     #1d1914;
+      --panel-2:   #262019;
+      --border:    #3a3127;
+      --text:      #ece3d3;   /* bone */
+      --muted:     #a39580;
+      --faint:     #6f6353;
+      --accent:    #e9d9a6;   /* egg */
+      --accent-hi: #f6ead0;
+      --on-accent: #14110d;
+      --font-ui:      "Instrument Sans", system-ui, sans-serif;
+      --font-mono:    "Spline Sans Mono", ui-monospace, monospace;
+      --font-display: "Young Serif", Georgia, serif;
+    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); }
+    #pit { position: fixed; top: 0; left: 0; display: block; }
+
+    .pit-label {
+      position: fixed; top: 18px; left: 22px; z-index: 3; pointer-events: none;
+      color: var(--text);
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 10px rgba(0,0,0,.85);
+    }
+    .pit-label h1 {
+      margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 1.7rem;
+      letter-spacing: .01em; line-height: 1.1;
+    }
+    .pit-counts { margin-top: 4px; font-family: var(--font-mono); font-size: .74rem; color: var(--muted); }
+    .pit-counts b { color: var(--text); font-weight: 500; }
+    .pit-genes {
+      margin-top: 10px; display: grid; width: max-content; grid-template-columns: auto 72px 5ch; gap: 3px 10px;
+      align-items: center; font-family: var(--font-mono); font-size: .7rem; color: var(--muted);
+    }
+    .pit-genes .bar { height: 4px; border-radius: 2px; background: rgba(236,227,211,.12); position: relative; }
+    .pit-genes .bar i {
+      position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--accent);
+    }
+    .pit-genes .val { color: var(--text); text-align: right; }
+    .pit-genes .costly { color: var(--text); }
+
+    mike-footer[overlay] {
+      z-index: 4; opacity: 1 !important; color: var(--text) !important;
+      text-shadow: 0 1px 3px rgba(0,0,0,.95), 0 0 12px rgba(0,0,0,.9);
+    }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+
+    .control-panel .panel-title { font-family: var(--font-display); font-weight: 400; }
+    .cohesion-about .title { font-family: var(--font-display); font-weight: 400; }
+    .pit-swatch { display: inline-block; width: .8em; height: .8em; border-radius: 50%; vertical-align: -.05em; }
+
+    @media (max-width: 700px) {
+      .pit-label { top: 12px; left: 14px; }
+      .pit-label h1 { font-size: 1.3rem; }
+      .pit-genes { grid-template-columns: auto 52px 5ch; font-size: .64rem; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="pit"></canvas>
+
+  <div class="pit-label">
+    <h1>Snake Pit</h1>
+    <div class="pit-counts"><b id="nSnakes">0</b> snakes, <b id="nFood">0</b> eggs, generation <b id="nGen">0</b></div>
+    <div class="pit-genes" id="genes" title="Average genes across every living snake. The top four cost energy to run."></div>
+  </div>
+
+  <control-panel floating title="Snake Pit">
+    <div class="control">
+      <div class="control-head"><span class="name" title="How many moves each snake makes per second. Only changes playback speed, not behavior.">speed</span><span class="value" id="vSpeed"></span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="42"
+        title="How many moves each snake makes per second. Only changes playback speed, not behavior." />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="New eggs laid per step for every 1000 grid squares. More food supports more snakes.">food rate</span><span class="value" id="vFood"></span></div>
+      <input type="range" id="food" min="0.2" max="3" step="0.05" value="1"
+        title="New eggs laid per step for every 1000 grid squares. More food supports more snakes." />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="How far a child's genes can drift from its parent's, as a fraction of each gene's full range.">mutation</span><span class="value" id="vMut"></span></div>
+      <input type="range" id="mut" min="0" max="0.2" step="0.005" value="0.06"
+        title="How far a child's genes can drift from its parent's, as a fraction of each gene's full range." />
+    </div>
+    <label class="check" title="Draw each snake's sight (green, how far it sees eggs) and wariness (red, how far ahead it sees walls and bodies).">
+      <input type="checkbox" id="senses" /> show senses
+    </label>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn" id="pause" title="pause / resume">&#9208;</button>
+    <button class="btn" id="step" title="advance one step">&#9197;</button>
+    <button class="btn" id="restart" title="start over with 30 random snakes">&#8635;</button>
+    <about-modal label="about">
+      <h2 class="title">Snake Pit</h2>
+      <p class="intro">Every snake here is playing snake against all the others, in the same box.
+        None of them were trained. Each one has a few numbers I call genes that decide how it plays,
+        and the ones that play well enough to split pass slightly changed copies on to their kids.</p>
+      <div class="section-label">the rules</div>
+      <ol>
+        <li>Every step, every snake moves one square. Eating an egg makes it one square longer.</li>
+        <li>Moving costs energy. Each time a snake has spent a full unit, its tail tip dies. That's
+          starving: no food means it shrinks to nothing. A dead tail tip leaves a faint shed skin
+          and no food.</li>
+        <li>Running into a wall or any body, its own or someone else's, kills it. A snake that dies
+          leaves one egg behind.</li>
+        <li>The longer a snake gets, the more likely it splits in half. The back half turns around,
+          so its old tail tip becomes its new head.</li>
+      </ol>
+      <div class="section-label">how a snake decides</div>
+      <p>Each step a snake has three choices: turn left, go straight, or turn right. It scores
+        each one and takes the best. The score adds a pull toward the nearest egg it can see, a push
+        away from any wall or body it can see straight ahead, and a bit of randomness.</p>
+      <p>Six genes set those weights: <code>appetite</code> is how hard it pulls toward food,
+        <code>sight</code> is how far away it can see an egg, <code>caution</code> is how hard it
+        avoids danger, <code>wariness</code> is how far ahead it sees danger, <code>maturity</code>
+        is the length where splitting gets likely, and <code>jitter</code> is the randomness.</p>
+      <div class="section-label">brains cost food</div>
+      <p>The first four genes are the snake's brain, and running a brain costs energy. A snake with
+        sharp senses and strong drives starves faster than a dull one, so evolution has to trade
+        better play against needing more food. A snake's color comes from its genes, so a family
+        stays roughly one color until it drifts.</p>
+      <p>This is a remake of my 2019 genetic steering sketch, where creatures evolved how hard to
+        chase food and avoid poison. Turn on "show senses" for the old green and red rings.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { World, GENES } from "./sim.js";
+    import { isBackground } from "../shared/cohesion.js";
+
+    const $ = (id) => document.getElementById(id);
+    const canvas = $("pit");
+    let ctx = canvas.getContext("2d");
+
+    let world, cs = 16, ox = 0, oy = 0, W = 0, H = 0, dpr = 1;
+    let paused = false, stepsPerSec = 15, acc = 0, lastT = performance.now();
+    let showSenses = false;
+    const husks = []; // { cells: [i...], hue, born } faint shed skins that fade out
+    const HUSK_MS = 2600, SHED_MS = 1300, MAX_HUSKS = 120;
+    let soil = null;
+
+    function viewport() {
+      return { w: document.documentElement.clientWidth, h: document.documentElement.clientHeight };
+    }
+
+    function newWorld() {
+      const { w, h } = viewport();
+      // aim for roughly 3000 grid squares regardless of screen size
+      const target = Math.max(10, Math.min(22, Math.round(Math.sqrt((w * h) / 3000))));
+      const cols = Math.floor((w - 16) / target), rows = Math.floor((h - 16) / target);
+      const opts = {};
+      if (!isBackground()) { opts.foodRate = +$("food").value; opts.mutation = +$("mut").value; }
+      world = new World(cols, rows, opts);
+      husks.length = 0;
+      resize();
+    }
+
+    function resize() {
+      const { w, h } = viewport();
+      dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = w; H = h;
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + "px"; canvas.style.height = h + "px";
+      cs = Math.floor(Math.min((w - 16) / world.cols, (h - 16) / world.rows));
+      ox = Math.round((w - cs * world.cols) / 2); oy = Math.round((h - cs * world.rows) / 2);
+      buildSoil();
+    }
+
+    // speckled pit floor, drawn once per resize
+    function buildSoil() {
+      soil = document.createElement("canvas");
+      soil.width = canvas.width; soil.height = canvas.height;
+      const s = soil.getContext("2d");
+      s.scale(dpr, dpr);
+      s.fillStyle = "#14110d"; s.fillRect(0, 0, W, H);
+      const pw = cs * world.cols, ph = cs * world.rows;
+      s.fillStyle = "#1a1612";
+      roundRect(s, ox, oy, pw, ph, cs * 0.6); s.fill();
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const n = Math.round((pw * ph) / 90);
+      for (let k = 0; k < n; k++) {
+        const x = ox + rnd() * pw, y = oy + rnd() * ph, r = 0.4 + rnd() * 1.1;
+        s.fillStyle = rnd() < 0.5 ? "rgba(70,56,40,.35)" : "rgba(10,8,6,.45)";
+        s.beginPath(); s.arc(x, y, r, 0, Math.PI * 2); s.fill();
+      }
+      s.strokeStyle = "#3a3127"; s.lineWidth = 2;
+      roundRect(s, ox - 1, oy - 1, pw + 2, ph + 2, cs * 0.6); s.stroke();
+    }
+
+    function roundRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+    }
+
+    const cx = (i) => ox + ((i % world.cols) + 0.5) * cs;
+    const cy = (i) => oy + (((i / world.cols) | 0) + 0.5) * cs;
+
+    // snake body as points, each sliding from where it was toward its cell
+    function snakePoints(s, t) {
+      const b = s.body, n = b.length, pts = new Array(n);
+      for (let k = 0; k < n; k++) {
+        const src = k + 1 < n ? b[k + 1] : (s.prevTail >= 0 ? s.prevTail : b[k]);
+        pts[k] = [cx(src) + (cx(b[k]) - cx(src)) * t, cy(src) + (cy(b[k]) - cy(src)) * t];
+      }
+      return pts;
+    }
+
+    function drawSnake(s, t) {
+      const pts = snakePoints(s, t), n = pts.length;
+      const w = cs * 0.74;
+      const body = `hsl(${s.hue} 42% 50%)`, dark = `hsl(${s.hue} 45% 30%)`, light = `hsl(${s.hue} 55% 70%)`;
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      // body, tapering over the last three segments
+      ctx.strokeStyle = body;
+      for (let k = 0; k < n - 1; k++) {
+        const fromEnd = n - 1 - k;
+        ctx.lineWidth = fromEnd >= 3 ? w : w * (0.45 + 0.18 * fromEnd);
+        ctx.beginPath(); ctx.moveTo(pts[k][0], pts[k][1]); ctx.lineTo(pts[k + 1][0], pts[k + 1][1]); ctx.stroke();
+      }
+      // scale pattern: dark saddle marks down the back
+      if (n > 2) {
+        ctx.strokeStyle = dark; ctx.lineWidth = w * 0.42;
+        ctx.setLineDash([cs * 0.35, cs * 0.65]);
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let k = 1; k < n; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+      // head
+      const [hx, hy] = pts[0];
+      let dx = 0, dy = -1;
+      if (n > 1) { dx = hx - pts[1][0]; dy = hy - pts[1][1]; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l; }
+      else { dx = [0, 1, 0, -1][s.dir]; dy = [-1, 0, 1, 0][s.dir]; }
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.08, hy + dy * cs * 0.08, cs * 0.46, cs * 0.4, Math.atan2(dy, dx), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = light;
+      ctx.beginPath(); ctx.ellipse(hx + dx * cs * 0.14, hy + dy * cs * 0.14, cs * 0.2, cs * 0.14, Math.atan2(dy, dx), 0, Math.PI * 2); ctx.fill();
+      // eyes
+      const px = -dy, py = dx, e = cs * 0.2, f = cs * 0.16;
+      ctx.fillStyle = "#14110d";
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath(); ctx.arc(hx + dx * f + px * e * sgn, hy + dy * f + py * e * sgn, Math.max(1.2, cs * 0.075), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    function drawEgg(i) {
+      const x = cx(i), y = cy(i);
+      ctx.fillStyle = "#e9d9a6";
+      ctx.beginPath(); ctx.ellipse(x, y + cs * 0.03, cs * 0.21, cs * 0.27, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,250,235,.7)";
+      ctx.beginPath(); ctx.ellipse(x - cs * 0.07, y - cs * 0.08, cs * 0.05, cs * 0.08, -0.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawHusks(now) {
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (let k = husks.length - 1; k >= 0; k--) {
+        const h = husks[k], age = (now - h.born) / h.life;
+        if (age >= 1) { husks.splice(k, 1); continue; }
+        const a = (h.cells.length === 1 ? 0.3 : 0.45) * (1 - age);
+        ctx.strokeStyle = `rgba(236,227,211,${a})`;
+        ctx.lineWidth = Math.max(1, cs * 0.06);
+        if (h.cells.length === 1) {
+          ctx.beginPath(); ctx.arc(cx(h.cells[0]), cy(h.cells[0]), cs * 0.3, 0, Math.PI * 2); ctx.stroke();
+        } else {
+          // outline of a dead body: draw a wide pale stroke, then cut its middle out
+          ctx.beginPath(); ctx.moveTo(cx(h.cells[0]), cy(h.cells[0]));
+          for (let j = 1; j < h.cells.length; j++) ctx.lineTo(cx(h.cells[j]), cy(h.cells[j]));
+          ctx.lineWidth = cs * 0.66; ctx.stroke();
+          ctx.save(); ctx.globalCompositeOperation = "destination-out";
+          ctx.strokeStyle = "rgba(0,0,0,1)"; ctx.lineWidth = cs * 0.66 - 2 * Math.max(1, cs * 0.06); ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    function draw(t, now) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(soil, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // husks are cut with destination-out, so they get their own layer to keep the soil intact
+      if (husks.length) {
+        huskCtx.setTransform(1, 0, 0, 1, 0, 0);
+        huskCtx.clearRect(0, 0, huskLayer.width, huskLayer.height);
+        huskCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const real = ctx; ctxSwap(huskCtx); drawHusks(now); ctxSwap(real);
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(huskLayer, 0, 0); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      const food = world.food;
+      for (let i = 0; i < food.length; i++) if (food[i]) drawEgg(i);
+      for (const s of world.snakes) drawSnake(s, t);
+      if (showSenses) {
+        ctx.lineWidth = 1;
+        for (const s of world.snakes) {
+          const x = cx(s.body[0]), y = cy(s.body[0]);
+          ctx.strokeStyle = "rgba(0,255,0,.35)";
+          ctx.beginPath(); ctx.arc(x, y, s.genes.sight * cs, 0, Math.PI * 2); ctx.stroke();
+          ctx.strokeStyle = "rgba(255,0,0,.45)";
+          ctx.beginPath(); ctx.arc(x, y, s.genes.wariness * cs, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+    }
+
+    // drawHusks uses `ctx`; point it at the husk layer while it runs
+    let huskLayer = document.createElement("canvas"), huskCtx = huskLayer.getContext("2d");
+    let ctxSwap = (c) => { ctx = c; };
+
+    function takeEvents() {
+      const now = performance.now();
+      for (const e of world.events) {
+        if (e.type === "shed") husks.push({ cells: [e.at], born: now, life: SHED_MS });
+        else if (e.type === "die" && e.body.length) husks.push({ cells: e.body, born: now, life: HUSK_MS });
+      }
+      world.events.length = 0;
+      // fast playback makes far more skins than the eye can follow; keep the newest
+      if (husks.length > MAX_HUSKS) husks.splice(0, husks.length - MAX_HUSKS);
+    }
+
+    function tick() {
+      world.tick();
+      takeEvents();
+      if (!world.snakes.length) newWorld();
+    }
+
+    let statsAt = 0;
+    function updateStats(now) {
+      if (now - statsAt < 250) return;
+      statsAt = now;
+      $("nSnakes").textContent = world.snakes.length;
+      $("nFood").textContent = world.foodCount;
+      $("nGen").textContent = world.snakes.reduce((m, s) => Math.max(m, s.generation), 0);
+      const m = world.geneMeans();
+      $("genes").innerHTML = GENES.map((g) => {
+        const frac = (m[g.key] - g.min) / (g.max - g.min);
+        const v = g.max > 1 ? m[g.key].toFixed(1) : m[g.key].toFixed(2);
+        return `<span class="${g.costly ? "costly" : ""}">${g.key}</span><span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span><span class="val">${v}</span>`;
+      }).join("");
+    }
+
+    function frame(now) {
+      const dt = Math.min(100, now - lastT); lastT = now;
+      if (!paused) {
+        acc += (stepsPerSec * dt) / 1000;
+        if (acc > 8) acc = 8;
+        while (acc >= 1) { acc -= 1; tick(); }
+      }
+      const t = stepsPerSec > 60 ? 1 : (paused ? 1 : acc);
+      if (husks.length && (huskLayer.width !== canvas.width || huskLayer.height !== canvas.height)) {
+        huskLayer.width = canvas.width; huskLayer.height = canvas.height;
+      }
+      draw(t, now);
+      updateStats(now);
+      requestAnimationFrame(frame);
+    }
+
+    // speed slider is log scale: 1 to 240 moves per second
+    const speedFromPos = (p) => Math.round(1 * Math.pow(240, p / 100));
+
+    if (!isBackground()) {
+      if (matchMedia("(max-width: 700px)").matches) document.querySelector("control-panel").setAttribute("collapsed", "");
+      const sync = () => {
+        stepsPerSec = speedFromPos(+$("speed").value);
+        $("vSpeed").textContent = stepsPerSec + "/s";
+        world.p.foodRate = +$("food").value; $("vFood").textContent = (+$("food").value).toFixed(2);
+        world.p.mutation = +$("mut").value; $("vMut").textContent = (+$("mut").value).toFixed(3);
+        showSenses = $("senses").checked;
+      };
+      for (const id of ["speed", "food", "mut", "senses"]) $(id).addEventListener("input", sync);
+      $("pause").addEventListener("click", () => {
+        paused = !paused; $("pause").innerHTML = paused ? "&#9654;" : "&#9208;";
+      });
+      $("step").addEventListener("click", () => {
+        if (!paused) { paused = true; $("pause").innerHTML = "&#9654;"; }
+        tick();
+      });
+      $("restart").addEventListener("click", () => { newWorld(); sync(); });
+      newWorld(); sync();
+    } else {
+      newWorld();
+    }
+    window.addEventListener("resize", resize);
+    window.snakePit = {
+      get world() { return world; }, tick, newWorld,
+      setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
+    };
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>
