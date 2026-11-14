@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Maze Solver</title>
+  <meta name="theme-color" content="#05070d" />
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- phosphor on black: every cell a solver looks at flares white-hot and cools through cyan and
+       violet to a faint afterglow. Amber is kept for the finished path, the one warm thing on
+       screen. Monoton (neon tubing) for the title, Instrument Sans for the controls, JetBrains Mono
+       for the counters. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Monoton&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #05070d;
+      --panel:     #0c111c;
+      --panel-2:   #131a28;
+      --border:    #1f2a3d;
+      --text:      #e6f3ff;
+      --muted:     #7f93ad;
+      --faint:     #4a5a72;
+      --accent:    #5ef0ff;   /* the glow's cyan */
+      --accent-hi: #9ff7ff;
+      --on-accent: #02161a;
+      --path:      #ffb347;
+      --start:     #5fffb0;
+      --goal:      #ff5e7e;
+      --font-ui:      "Instrument Sans", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Monoton", "Instrument Sans", sans-serif;
+    }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+    body { touch-action: none; }
+    canvas.ms-layer { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+    /* the bloom: a blurred copy of the glow, added on top */
+    #bloom { filter: blur(7px); mix-blend-mode: screen; opacity: .9; pointer-events: none; }
+    #glow { pointer-events: none; }
+    .ms-title {
+      position: fixed; left: 18px; top: 12px; margin: 0; z-index: 5; pointer-events: none;
+      font: 400 1.7rem/1 var(--font-display); letter-spacing: .04em; color: var(--accent);
+      text-shadow: 0 0 6px rgba(94,240,255,.8), 0 0 18px rgba(94,240,255,.45), 0 0 34px rgba(107,60,255,.45);
+    }
+    .ms-readout {
+      position: fixed; left: 18px; top: 48px; z-index: 5; pointer-events: none;
+      font: 500 .82rem/1.55 var(--font-mono); color: var(--muted); text-shadow: 0 1px 3px #000, 0 0 8px #000;
+      font-variant-numeric: tabular-nums;
+    }
+    .ms-readout b { color: var(--text); font-weight: 500; }
+    .ms-readout .ms-algo { color: var(--accent); }
+    .ms-readout .ms-path { color: var(--path); }
+    .control-bar { z-index: 6; }
+    .control-bar .btn { min-width: 40px; }
+    .control-bar .btn svg { width: 16px; height: 16px; fill: currentColor; display: block; margin: auto; }
+    .ms-run.is-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+    select.ms-select { width: 100%; }
+    .ms-hint { font-size: .78rem; color: var(--faint); margin-top: 4px; }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+    .cohesion-about .ms-dia { display: block; margin: 12px auto 4px; max-width: 100%; height: auto !important; border-radius: 10px; background: var(--bg); }
+    .cohesion-about .ms-cap { font-size: .82rem; color: var(--muted); text-align: center; margin: 0 0 1.1em; }
+    .cohesion-about .cy { color: var(--accent); } .cohesion-about .am { color: var(--path); }
+    @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } }
+  </style>
+</head>
+<body>
+  <canvas class="ms-layer" id="walls"></canvas>
+  <canvas class="ms-layer" id="glow"></canvas>
+  <canvas class="ms-layer" id="bloom"></canvas>
+
+  <h1 class="ms-title">Maze Solver</h1>
+  <div class="ms-readout" id="readout"></div>
+
+  <control-panel floating title="Controls">
+    <div class="control">
+      <div class="control-head"><span class="name" title="how the maze gets searched">algorithm</span></div>
+      <select class="ms-select" id="algo" title="how the maze gets searched"></select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="how many steps the algorithm takes per second">speed</span><span class="value" id="speedOut"></span></div>
+      <input type="range" id="speed" min="0" max="100" step="1" value="55" title="how many steps the algorithm takes per second" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="long winding corridors, or short branches everywhere">maze</span></div>
+      <select class="ms-select" id="style" title="long winding corridors, or short branches everywhere">
+        <option value="corridors">winding corridors</option>
+        <option value="branchy">short branches</option>
+      </select>
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="how many extra walls get knocked out, making more than one route between places">loops</span><span class="value" id="loopsOut"></span></div>
+      <input type="range" id="loops" min="0" max="100" step="1" value="0" title="how many extra walls get knocked out, making more than one route between places" />
+    </div>
+    <div class="control">
+      <div class="control-head"><span class="name" title="how big each cell of the maze is, so how many cells fit on screen">cell size</span><span class="value" id="cellOut"></span></div>
+      <input type="range" id="cell" min="6" max="40" step="1" value="14" title="how big each cell of the maze is, so how many cells fit on screen" />
+    </div>
+    <div class="ms-hint">Drag the green start or the red goal to move them.</div>
+  </control-panel>
+
+  <div class="control-bar">
+    <button class="btn ms-run" id="run" title="run the algorithm (space)" aria-label="run"><svg viewBox="0 0 16 16" id="runIco"></svg></button>
+    <button class="btn" id="step" title="one step (→)" aria-label="step"><svg viewBox="0 0 16 16"><path d="M3 2.5v11L10 8zM11 2.5h2v11h-2z"/></svg></button>
+    <button class="btn" id="reset" title="clear the search, keep the maze (R)">reset</button>
+    <button class="btn" id="newMaze" title="a new maze (N)">new maze</button>
+    <about-modal label="about" id="aboutModal">
+      <h2 class="title">Maze Solver</h2>
+      <p class="intro">Pick a way to solve the maze and watch it work. Every cell it looks at flares
+        white-hot and cools to a faint afterglow, so the order it searched in stays on screen, and
+        the route it found lights up in <span class="am">amber</span>.</p>
+
+      <div class="section-label">searching blind</div>
+      <p>The simplest searches don't use where the goal is. <b>Breadth-first search</b> looks at
+        every cell one step from the start, then every cell two steps away, and so on, so it spreads
+        out in rings. The first ring to reach the goal gives a shortest route.</p>
+      <p><b>Depth-first search</b> picks a passage and follows it as far as it goes, backing up only
+        at a dead end. It can get lucky or wander the whole maze, and the route it finds can be a
+        long way round.</p>
+      <canvas class="ms-dia" data-dia="blind"></canvas><p class="ms-cap"></p>
+
+      <div class="section-label">aiming at the goal</div>
+      <p><b>A*</b> uses where the goal is. It always looks next at the cell where the distance
+        walked so far plus the straight distance still to go is smallest. It still finds a shortest
+        route, but it only drifts away from the goal when a wall forces it to, so it looks at far
+        fewer cells.</p>
+      <p><b>Greedy best-first</b> keeps only the distance still to go. It heads straight for the
+        goal, which is fast in an open maze, but dead ends fool it and its route isn't always the
+        shortest. <b>Bidirectional search</b> spreads in rings from both ends at once, cyan from the
+        start and pink from the goal, and stops where they meet.</p>
+      <canvas class="ms-dia" data-dia="aimed"></canvas><p class="ms-cap"></p>
+      <p>That maze has loops, which is where the difference shows. With no loops there's only one
+        route, so every method finds the same one, and the only question is how much it looks at
+        on the way.</p>
+
+      <div class="section-label">walking it</div>
+      <p>The rest solve it the way you would on foot, seeing only where you're standing. The
+        <b>wall follower</b> keeps its right hand on the wall. In a maze without loops that always
+        gets you out eventually; with loops it can circle an island forever.</p>
+      <p><b>Trémaux's method</b> marks every passage it walks. At a junction it takes an unmarked
+        passage, it never walks one a third time, and when a new passage leads somewhere it's
+        already been, it turns straight back. It works on any maze. The <b>random mouse</b> picks a
+        random way at every step, which on a big maze takes a very long time.</p>
+      <canvas class="ms-dia" data-dia="walkers"></canvas><p class="ms-cap"></p>
+      <p>For a walker, the amber route is its walk with every loop it went round cut out.</p>
+
+      <div class="section-label">filling dead ends</div>
+      <p><b>Dead-end filling</b> doesn't walk at all. A cell with only one way in or out can't be on
+        the route (unless it's the start or the goal), so it gets sealed off, which can turn its
+        neighbor into a dead end too. Keep sealing, and in a maze without loops only the route is
+        left.</p>
+      <canvas class="ms-dia" data-dia="fill"></canvas><p class="ms-cap"></p>
+
+      <div class="section-label">the mazes</div>
+      <p>Winding corridors are carved by a walk that keeps going until it's boxed in, then backs up
+        to the last place with an unvisited neighbor: long passages and few branches. Short branches
+        grow outward from everywhere at once, so dead ends are short and everywhere. The loops
+        slider knocks out extra walls afterward.</p>
+    </about-modal>
+  </div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { generate } from "./maze.mjs";
+    import { SOLVERS } from "./solvers.mjs";
+    import { Run, drawWalls as paintWalls, drawRun, centerOf } from "./render.mjs";
+    import { setupAbout } from "./about.mjs";
+    import { isBackground, onAboutModalToggle } from "../shared/cohesion.js";
+
+    const $ = (id) => document.getElementById(id);
+    const BG = isBackground();
+    const dpr = () => Math.max(1, devicePixelRatio || 1);
+
+    // ---------- state ----------
+    let maze, cols = 0, rows = 0, cell = 14, ox = 0, oy = 0; // ox/oy: where the maze starts on screen
+    let start = 0, goal = 0;
+    let run = null, running = false;
+    let seed = (Math.random() * 2 ** 31) | 0;
+    const at = () => ({ ox, oy, cell });
+    // what the controls set. Under ?background the control panel removes itself, so everything
+    // reads from here, and the controls are wired only when they exist.
+    const set = { algo: "astar", speedPos: 55, style: "corridors", loops: 0, cell: 14 };
+
+    const wallsCv = $("walls"), glowCv = $("glow"), bloomCv = $("bloom");
+    const wg = wallsCv.getContext("2d"), gg = glowCv.getContext("2d"), bg = bloomCv.getContext("2d");
+
+    function size() {
+      const W = innerWidth, H = innerHeight, d = dpr();
+      for (const cv of [wallsCv, glowCv, bloomCv]) { cv.width = Math.round(W * d); cv.height = Math.round(H * d); }
+      for (const g of [wg, gg, bg]) g.setTransform(d, 0, 0, d, 0, 0);
+    }
+
+    // ---------- a maze sized to the screen ----------
+    function newMaze(keepSeed = false) {
+      if (!keepSeed) seed = (Math.random() * 2 ** 31) | 0;
+      cell = set.cell;
+      // keep clear of the title and readout above and the control bar below
+      const W = innerWidth, H = innerHeight, margin = Math.max(12, cell);
+      const top = BG ? margin : W < 600 ? 92 : 104, bottom = BG ? margin : 82;
+      cols = Math.max(4, Math.floor((W - 2 * margin) / cell));
+      rows = Math.max(4, Math.floor((H - top - bottom) / cell));
+      ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
+      maze = generate(cols, rows, { style: set.style, loops: set.loops / 100, seed });
+      start = 0; goal = cols * rows - 1;
+      drawWalls();
+      reset();
+    }
+    function drawWalls() {
+      wg.clearRect(0, 0, innerWidth, innerHeight);
+      paintWalls(wg, maze, at());
+    }
+
+    // ---------- running a solver ----------
+    function reset() {
+      run = new Run(maze, set.algo, start, goal);
+      setRunning(false);
+      showReadout();
+    }
+    function stepOnce() {
+      if (run.done) return;
+      run.step(performance.now());
+      if (run.done) setRunning(false);
+    }
+
+    // speed: log scale from 1 to 3000 steps a second; the top is "max"
+    const posToSpeed = (p) => p >= 100 ? Infinity : 1 * 3000 ** (p / 100);
+    function showSpeed() {
+      const s = posToSpeed(set.speedPos);
+      if ($("speedOut")) $("speedOut").textContent = s === Infinity ? "max" : (s < 10 ? s.toFixed(1) : Math.round(s)) + "/s";
+      return s;
+    }
+    function setRunning(on) {
+      running = on && !run.done;
+      $("run").classList.toggle("is-on", running);
+      $("runIco").innerHTML = running ? '<path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z"/>' : '<path d="M4 2.5v11L13 8z"/>';
+      acc = 0;
+    }
+
+    // ---------- the frame ----------
+    let acc = 0, lastT = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
+      if (running && !run.done) {
+        const sp = showSpeed();
+        if (sp === Infinity) { const t0 = performance.now(); do stepOnce(); while (!run.done && performance.now() - t0 < 10); }
+        else { acc = Math.min(acc + dt * sp, 1 + sp * 0.1); while (acc >= 1 && !run.done) { acc -= 1; stepOnce(); } }
+      }
+      if (run.done && BG) bgNext();
+      drawGlow(now);
+      showReadout();
+      requestAnimationFrame(frame);
+    }
+
+    // the glow layer, and its blurred copy for the bloom
+    function drawGlow(now) {
+      const W = innerWidth, H = innerHeight;
+      gg.clearRect(0, 0, W, H);
+      drawRun(gg, run, at(), now);
+      // bloom: the same picture, which the CSS blurs and adds on top
+      bg.clearRect(0, 0, W, H);
+      bg.drawImage(glowCv, 0, 0, W, H);
+    }
+    const center = (c) => centerOf(maze, at(), c);
+
+    function showReadout() {
+      const name = SOLVERS[set.algo].name;
+      $("readout").innerHTML = `<span class="ms-algo">${name}</span><br>` +
+        `steps <b>${run.steps.toLocaleString("en-US")}</b> · cells explored <b>${run.looked.toLocaleString("en-US")}</b> of ${(cols * rows).toLocaleString("en-US")}` +
+        (run.path ? `<br><span class="ms-path">path ${run.path.length.toLocaleString("en-US")} cells</span>` : run.done ? "<br>no way through" : "");
+    }
+
+    // ---------- moving the start and goal ----------
+    let dragging = null;
+    const cellAt = (x, y) => {
+      const cx = Math.floor((x - ox) / cell), cy = Math.floor((y - oy) / cell);
+      return cx < 0 || cy < 0 || cx >= cols || cy >= rows ? -1 : cy * cols + cx;
+    };
+    addEventListener("pointerdown", (e) => {
+      if (e.target.closest("control-panel, .control-bar, .cohesion-modal-backdrop, mike-footer")) return;
+      const c = cellAt(e.clientX, e.clientY);
+      if (c < 0) return;
+      const near = (m) => { const [x, y] = center(m); return Math.hypot(x - e.clientX, y - e.clientY) < Math.max(cell, 14); };
+      dragging = near(start) ? "start" : near(goal) ? "goal" : null;
+    });
+    addEventListener("pointermove", (e) => {
+      if (!dragging) return;
+      const c = cellAt(e.clientX, e.clientY);
+      if (c < 0 || c === start || c === goal) return;
+      if (dragging === "start") start = c; else goal = c;
+      reset();
+    });
+    addEventListener("pointerup", () => { dragging = null; });
+
+    // ---------- controls ----------
+    const showLoops = () => { if ($("loopsOut")) $("loopsOut").textContent = set.loops + "%"; };
+    const showCell = () => { if ($("cellOut")) $("cellOut").textContent = set.cell + "px"; };
+    if ($("algo")) {
+      for (const [id, s] of Object.entries(SOLVERS)) $("algo").insertAdjacentHTML("beforeend", `<option value="${id}">${s.name}</option>`);
+      $("algo").value = set.algo;
+      $("algo").addEventListener("change", () => { set.algo = $("algo").value; reset(); });
+      $("speed").addEventListener("input", () => { set.speedPos = +$("speed").value; showSpeed(); });
+      $("style").addEventListener("change", () => { set.style = $("style").value; newMaze(true); });
+      $("loops").addEventListener("input", () => { set.loops = +$("loops").value; showLoops(); newMaze(true); });
+      $("cell").addEventListener("input", () => { set.cell = +$("cell").value; showCell(); newMaze(true); });
+    }
+    $("run").onclick = () => { if (run.done) reset(); setRunning(!running); };
+    $("step").onclick = () => { setRunning(false); stepOnce(); };
+    $("reset").onclick = reset;
+    $("newMaze").onclick = () => newMaze();
+    addEventListener("keydown", (e) => {
+      if (e.target.closest?.("input, select") || document.querySelector(".cohesion-modal-backdrop")) return;
+      if (e.key === " ") { e.preventDefault(); $("run").click(); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); $("step").click(); }
+      else if (e.key === "r" || e.key === "R") reset();
+      else if (e.key === "n" || e.key === "N") newMaze();
+    });
+    let resizeT = 0;
+    // A resize keeps the maze and the run (a phone's address bar showing and hiding resizes the
+    // page every scroll) and only re-centers it, unless the width changed or the maze no longer fits
+    // or would leave a lot of empty room: then it's a new maze of the right size.
+    let builtW = innerWidth, builtH = innerHeight;
+    function resized() {
+      size();
+      const W = innerWidth, H = innerHeight;
+      const top = BG ? Math.max(12, cell) : W < 600 ? 92 : 104, bottom = BG ? Math.max(12, cell) : 82;
+      const fits = cols * cell <= W && rows * cell <= H - top - bottom + cell;
+      if (W !== builtW || !fits || Math.abs(H - builtH) > 160) { builtW = W; builtH = H; newMaze(true); return; }
+      ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
+      drawWalls();
+    }
+    addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(resized, 150); });
+
+    // ?background: run algorithm after algorithm on fresh mazes, no UI
+    let bgTimer = 0;
+    // (called every frame once a run is done; only the first call schedules the next one)
+    function bgNext() {
+      if (bgTimer) return;
+      bgTimer = setTimeout(() => {
+        bgTimer = 0;
+        const ids = ["astar", "bfs", "dfs", "greedy", "bidirectional", "deadend", "tremaux"];
+        set.algo = ids[(ids.indexOf(set.algo) + 1) % ids.length];
+        newMaze(); setRunning(true);
+      }, 2500);
+    }
+
+    // on a phone the controls start folded up, so the maze shows
+    if (innerWidth < 600) document.querySelector("control-panel")?.setAttribute("collapsed", "");
+
+    let stopAbout = () => {};
+    onAboutModalToggle((el) => { stopAbout = setupAbout(el); }, () => stopAbout());
+
+    showLoops(); showCell(); showSpeed();
+    size(); newMaze();
+    if (BG) { set.speedPos = 70; setRunning(true); }
+    requestAnimationFrame(frame);
+
+    // for tests
+    window.mazeSolver = {
+      get state() { return { cols, rows, start, goal, steps: run.steps, looked: run.looked, done: run.done, running, path: run.path && run.path.slice(), algo: set.algo }; },
+      setAlgo(id) { set.algo = id; if ($("algo")) $("algo").value = id; reset(); },
+      setLoops(v) { set.loops = v; if ($("loops")) $("loops").value = v; showLoops(); newMaze(true); },
+      run() { setRunning(true); }, step() { stepOnce(); }, reset, newMaze, setSeed(s) { seed = s; newMaze(true); },
+      finish() { while (!run.done) stepOnce(); },
+    };
+  </script>
+</body>
+</html>
