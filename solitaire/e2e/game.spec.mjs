@@ -35,13 +35,24 @@ test("clicking the stock draws; tapping a card sends it where it fits; undo take
   let s = await state(page);
   expect(s.waste).toEqual([c("Q", "H")]);
   // tap the Q♥ on the waste: it goes on the K♠
-  const tapCard = async (k) => { const b = await page.evaluate((k) => { const r = window.solitaire.cardBox(k); return { x: r.x + r.width / 2, y: r.y + 12 }; }, k); await page.mouse.click(b.x, b.y); };
-  await page.waitForTimeout(400);
+  // click a card once it has stopped moving (cards spring into place)
+  const tapCard = async (k) => {
+    const b = await page.evaluate(async (k) => {
+      let last = null;
+      for (let i = 0; i < 100; i++) {
+        const r = window.solitaire.cardBox(k);
+        if (last && Math.abs(r.x - last.x) < 0.5 && Math.abs(r.y - last.y) < 0.5) return { x: r.x + r.width / 2, y: r.y + 12 };
+        last = r;
+        await new Promise((res) => setTimeout(res, 50));
+      }
+      return { x: last.x + last.width / 2, y: last.y + 12 };
+    }, k);
+    await page.mouse.click(b.x, b.y);
+  };
   await tapCard(c("Q", "H"));
   s = await state(page);
   expect(s.tab[0].up).toEqual([c("K", "S"), c("Q", "H")]);
   // tap the A♥: home, and the 2♣ under it turns over
-  await page.waitForTimeout(400);
   await tapCard(c("A", "H"));
   s = await state(page);
   expect(s.found[1]).toEqual([c("A", "H")]);
