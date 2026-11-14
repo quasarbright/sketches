@@ -485,7 +485,7 @@
     }
 
     // ---- family tree ----
-    let treeOpen = false, hoverSnake = -1, treeAt = 0, tree = null;
+    let treeOpen = false, hoverSnake = -1, tree = null;
     if (!isBackground()) {
       tree = createTreeView({
         canvas: $("treeCanvas"), tip: $("treeTip"), getWorld: () => world,
@@ -522,7 +522,7 @@
       }
       draw(t, now);
       updateStats(now);
-      if (treeOpen && now - treeAt > 200) { treeAt = now; tree.draw(); }
+      if (treeOpen) tree.frame(now, t);
       requestAnimationFrame(frame);
     }
 
@@ -552,7 +552,7 @@
         $("treeDrawer").hidden = !treeOpen;
         document.body.classList.toggle("tree-open", treeOpen);
         $("treeBtn").classList.toggle("btn-primary", treeOpen);
-        if (!treeOpen) { hoverSnake = -1; $("treeTip").hidden = true; }
+        if (!treeOpen) tree.close();
         resize();
       });
       $("treeDead").addEventListener("change", () => tree.setShowDead($("treeDead").checked));
@@ -565,6 +565,7 @@
       get world() { return world; }, tick, newWorld,
       setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
       drawAt: (t) => draw(t, performance.now()),
+      treeDraw: () => tree && tree.frame(performance.now(), 1),
       // head point + facing and tail point of every drawn snake at tween time t (for tests)
       ends: (t) => {
         const out = {};
