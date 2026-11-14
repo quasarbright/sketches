@@ -144,6 +144,6 @@ test("the loop goes through every cell once, with the body in order along it", (
 
 test("a whole game fills the board", { timeout: 60000 }, () => {
   let g = newGame(5);
-  while (g.alive && !g.won && g.sinceEat <= GAMBLE + CELLS) g = step(g, decide(g).dir);
+  while (g.alive && !g.won && g.sinceEat <= (GAMBLE + 1) * CELLS) g = step(g, decide(g).dir);
   assert.ok(g.won, `filled ${g.snake.length} of ${CELLS}`);
 });

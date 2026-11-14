@@ -11,14 +11,15 @@
 import { CELLS, DIRECTIONS, OPPOSITE, neighbors, stepCell, dirTo, step, rand } from "./game.mjs";
 import { buildLoop, bodyInOrder, loopMove, loopAhead } from "./cycle.mjs";
 
-export const LOOP_FREE = +(globalThis.process?.env?.LOOP_FREE ?? 250); // switch to the loop once this few cells are free
+export const LOOP_AT = +(globalThis.process?.env?.LOOP_AT ?? 0.375); // switch to the loop once the snake covers this much of the board (150 of 400)
 const RETRY = 128; // after failing to build a loop, steps before trying again (or the next egg)
 let failedAt = -1, failedEaten = -1;
 export const LOOP_ROOM = +(globalThis.process?.env?.ROOM ?? 3); // shortcuts land at least this far short of the tail
 let loop = null; // the loop it's following, if any; checked against the snake every step
 
-export const RESHUFFLE = CELLS; // steps without eating before the tail chase starts picking at random
-export const GAMBLE = +(globalThis.process?.env?.GAMBLE ?? 3 * CELLS); // ...and before it goes for the egg anyway
+// steps without eating (in board cells) before the tail chase starts picking at random, and
+// before it goes for the egg anyway
+export const RESHUFFLE = 1, GAMBLE = 3;
 
 // When each cell of the snake's body frees up: the cell at index i (head = 0) of a snake of
 // length L is gone after L - i steps, so a path may enter it on step d when d >= L - i.
@@ -121,7 +122,7 @@ export function decide(game, { useLoop = true } = {}) {
 
   // 0: near the end, the loop. Keep the one it has while the body is still in order along it
   // (it always is, once it's following it); otherwise build one, with a few tries.
-  if (useLoop && CELLS - snake.length <= LOOP_FREE) {
+  if (useLoop && snake.length >= LOOP_AT * CELLS) {
     if (!bodyInOrder(loop, snake)) {
       loop = null;
       // building costs a few ms, so after a failure wait for the next egg or RETRY steps
@@ -150,7 +151,7 @@ export function decide(game, { useLoop = true } = {}) {
 
   // 2b: it has gone round long enough that waiting isn't going to make the egg safe: go for it
   // anyway. Sometimes the body moves out of the way in time; if not, the game ends.
-  if (e && game.sinceEat > GAMBLE) {
+  if (e && game.sinceEat > GAMBLE * CELLS) {
     plan.kind = "gamble";
     plan.dir = dirTo(snake[0], e.path[0]);
     return plan;
@@ -164,7 +165,7 @@ export function decide(game, { useLoop = true } = {}) {
   // Going round the long way can settle into a loop that repeats forever without the egg ever
   // becoming safe. After a while without eating, pick any safe move at random (seeded from the
   // game, so a game replays the same way) to change the body's shape.
-  if (safe.length > 1 && game.sinceEat > RESHUFFLE) {
+  if (safe.length > 1 && game.sinceEat > RESHUFFLE * CELLS) {
     const [r] = rand((game.seed ^ Math.imul(game.steps, 0x9e3779b1)) >>> 0);
     best = safe[Math.floor(r * safe.length)];
   }

@@ -135,3 +135,35 @@ test("the about modal's diagrams run", async ({ page }) => {
   expect(box.height / box.width).toBeCloseTo(8 / 12, 1);
   expect(errors).toEqual([]);
 });
+
+test("?background: the bot plays full screen at 60 steps a second, with no UI and nothing saved", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
+  await page.addInitScript(() => {
+    window.__writes = 0;
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (...a) { window.__writes++; return set.apply(this, a); };
+  });
+  await page.goto("index.html?background", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!window.snakeGame);
+  await page.waitForTimeout(500);
+  const a = await page.evaluate(() => window.snakeGame.state.steps);
+  await page.waitForTimeout(2000);
+  const r = await page.evaluate(() => {
+    const vp = [document.documentElement.clientWidth, document.documentElement.clientHeight];
+    const b = document.getElementById("board").getBoundingClientRect();
+    const shown = [...document.querySelectorAll(".s-top, .s-strip, .s-controls, mike-footer")].filter((el) => el.isConnected && el.getBoundingClientRect().height > 0);
+    return { steps: window.snakeGame.state.steps, bot: window.snakeGame.state.bot, plan: window.snakeGame.plan, writes: window.__writes, vp, b: [b.left, b.top, b.right, b.bottom], shown: shown.length };
+  });
+  expect(r.bot).toBe(true);
+  expect((r.steps - a) / 2).toBeGreaterThan(45);
+  expect((r.steps - a) / 2).toBeLessThan(75);
+  expect(r.writes).toBe(0);
+  expect(r.shown).toBe(0);
+  expect(r.b[0]).toBeLessThanOrEqual(1);
+  expect(r.b[1]).toBeLessThanOrEqual(1);
+  expect(r.b[2]).toBeGreaterThanOrEqual(r.vp[0] - 1);
+  expect(r.b[3]).toBeGreaterThanOrEqual(r.vp[1] - 1);
+  expect(errors).toEqual([]);
+});

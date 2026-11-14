@@ -185,6 +185,13 @@
       .s-hint { font-size: .85rem; }
     }
     @media (max-width: 360px) { .s-bot-btn { width: 150px; font-size: .85rem; padding: 0 8px; gap: 4px; } .s-bot-btn svg.s-ico { display: none; } .s-ctl:has(.is-round) { width: 70px; } }
+    /* ?background: just the board, filling the screen, the bot playing */
+    html[data-background] .s-top, html[data-background] .s-strip, html[data-background] .s-controls,
+    html[data-background] .s-veil, html[data-background] .s-over, html[data-background] #fx { display: none !important; }
+    html[data-background] .s-board-wrap { box-shadow: none; border-radius: 0; }
+    html[data-background] #board { position: fixed; border-radius: 0; transition: opacity 1s; }
+    html[data-background] #board.is-out { opacity: 0; }
+
     @media (prefers-reduced-motion: reduce) {
       .s-card, .s-board-wrap.is-shake, .s-veil-sub { animation: none !important; }
     }
@@ -334,18 +341,23 @@
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { newGame, step, effectiveDir, W, H, CELLS, UP, DOWN, LEFT, RIGHT, OPPOSITE } from "./game.mjs";
+    import { newGame, step, setBoard, effectiveDir, W, H, CELLS, UP, DOWN, LEFT, RIGHT, OPPOSITE } from "./game.mjs";
     import { decide } from "./bot.mjs";
     import { drawBoard, fitCanvas, COLORS } from "./render.mjs";
-    import { openModal } from "../shared/cohesion.js";
+    import { openModal, isBackground } from "../shared/cohesion.js";
     import * as audio from "./audio.mjs";
     import { setupAbout } from "./about.mjs";
 
     const $ = (id) => document.getElementById(id);
     const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // ?background (the portfolio's hero): the bot plays endless games on a board fitted to the
+    // screen, at 60 steps a second, with no UI, no plan drawn, no sound, and nothing saved (so it
+    // never touches a game you have going in another tab)
+    const BG = isBackground();
+    const BG_RATE = 60, BG_SHORT = 18; // steps a second; cells across the screen's short side
     const store = {
       get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-      set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+      set(k, v) { if (BG) return; try { localStorage.setItem(k, v); } catch {} },
     };
     const BEST_KEY = "quasarbright:snake-best", GAME_KEY = "quasarbright:snake-game", MUTE_KEY = "quasarbright:snake-muted";
     const HUMAN_RATE = 10; // steps a second when you play
@@ -366,11 +378,42 @@
     const cv = $("board");
     let size = 0, g = null;
     function layout() {
+      if (BG) return layoutBackground();
       const mid = $("mid").getBoundingClientRect();
       const Wd = document.documentElement.clientWidth;
       size = Math.floor(Math.max(200, Math.min(Wd - 32, 520, mid.height - 12)) / W) * W;
       g = fitCanvas(cv, size);
       draw();
+    }
+
+    // square cells, BG_SHORT of them across the short side; the board covers the screen (the last
+    // row or column may run a little off the edge). A loop through every cell needs an even number
+    // of cells, so one side gets an extra column if both counts are odd.
+    function layoutBackground() {
+      const Wd = document.documentElement.clientWidth, Hd = document.documentElement.clientHeight;
+      const cell = Math.min(Wd, Hd) / BG_SHORT;
+      let cols = Math.ceil(Wd / cell - 0.01), rows = Math.ceil(Hd / cell - 0.01);
+      if ((cols * rows) % 2) cols++;
+      size = cols * cell;
+      g = fitCanvas(cv, size, cols, rows);
+      cv.style.left = (Wd - size) / 2 + "px";
+      cv.style.top = (Hd - rows * cell) / 2 + "px";
+      if (cols !== W || rows !== H || !game) { setBoard(cols, rows); backgroundGame(); }
+      draw();
+    }
+    function backgroundGame() {
+      startGame(newGame());
+      bot.on = true; bot.speed = BG_RATE; started = true;
+      cv.classList.remove("is-out");
+    }
+    // a finished game plays its sweep (light down the body for a win, the color draining for a
+    // loss), holds, fades out, and a new game fades in
+    let bgEffect = null; // { kind, start, dur }
+    function backgroundNext(won) {
+      bgEffect = { kind: won ? "win" : "lose", start: performance.now(), dur: won ? 2600 : 1400 };
+      const hold = bgEffect.dur + 1200;
+      setTimeout(() => cv.classList.add("is-out"), hold);
+      setTimeout(() => { bgEffect = null; backgroundGame(); }, hold + 1100);
     }
 
     // ---------- the loop ----------
@@ -396,7 +439,7 @@
     }
     let manual = false;        // tests: only step when told to
     const running = () => started && !paused && !over && !manual;
-    const fast = () => bot.on && bot.speed > 30;
+    const fast = () => bot.on && bot.speed > 30 && !BG;
 
     function tick() {
       let dir;
@@ -430,7 +473,7 @@
       // only your own games count: once the bot has taken a step in this game, it can't set the best
       if (botSteps === 0 && game.snake.length > best) { best = game.snake.length; store.set(BEST_KEY, best); }
       renderHud();
-      if (!fast()) pop(game.snake[0]);
+      if (!fast() && !BG) pop(game.snake[0]);
       saveGame();
     }
 
@@ -438,7 +481,8 @@
     function draw() {
       if (!g || !game) return;
       const t = running() && !fast() && !reduceMotion ? Math.min(1, acc) : 1;
-      drawBoard(g, size, { game, prev, t, plan: bot.on || (over && plan) ? plan : null, dead: !game.alive, eaten: eatenEgg });
+      const effect = bgEffect && { kind: bgEffect.kind, t: Math.min(1, (performance.now() - bgEffect.start) / bgEffect.dur) };
+      drawBoard(g, size, { game, prev, t, plan: BG ? null : bot.on || (over && plan) ? plan : null, dead: !game.alive, eaten: eatenEgg, round: BG ? 0 : 14, effect });
     }
 
     // whole percents, except a decimal under 10% so the start doesn't read 0%; 100% only when full
@@ -598,6 +642,7 @@
     }
     function crash() {
       over = true;
+      if (BG) { draw(); return backgroundNext(false); }
       audio.play("crash");
       const wrap = $("boardWrap");
       if (!reduceMotion) { wrap.classList.remove("is-shake"); void wrap.offsetWidth; wrap.classList.add("is-shake"); }
@@ -605,6 +650,7 @@
     }
     function win() {
       over = true;
+      if (BG) { draw(); return backgroundNext(true); }
       audio.play("win");
       confetti();
       finish(true);
@@ -655,7 +701,7 @@
     // A turn joins the queue unless it's the way you're already going or straight back. Two
     // quick turns (a U-turn) both happen, one per step.
     function steer(dir) {
-      if (modalOpen() || over) return;
+      if (BG || modalOpen() || over) return;
       if (bot.on) setBot(false); // steering yourself takes over from the bot
       if (paused) setPaused(false);
       const lastDir = queue.length ? queue[queue.length - 1] : game.dir;
@@ -667,7 +713,7 @@
       }
     }
     addEventListener("keydown", (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (BG || e.metaKey || e.ctrlKey || e.altKey) return;
       const dir = KEYS[e.key];
       if (dir) {
         if (e.target.matches?.("input")) e.target.blur();
@@ -713,11 +759,13 @@
       audio.unlockAudio();
       showSound();
     }
-    audio.setMuted(store.get(MUTE_KEY) === "1");
+    audio.setMuted(BG || store.get(MUTE_KEY) === "1");
     showSound();
     $("soundBtn").onclick = toggleSound;
-    addEventListener("pointerdown", () => audio.unlockAudio(), { capture: true });
-    addEventListener("keydown", () => audio.unlockAudio(), { capture: true });
+    if (!BG) { // browsers only start audio from a user gesture; the background never makes a sound
+      addEventListener("pointerdown", () => audio.unlockAudio(), { capture: true });
+      addEventListener("keydown", () => audio.unlockAudio(), { capture: true });
+    }
 
     // ---------- about ----------
     $("about").onclick = () => {
@@ -729,9 +777,10 @@
     };
 
     // ---------- go ----------
-    addEventListener("resize", () => { sizeFx(); layout(); });
-    const saved = loadGame();
-    if (saved) startGame(saved.game, saved); else freshGame();
+    let resizeTimer = 0;
+    addEventListener("resize", () => { sizeFx(); if (BG) { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 250); } else layout(); });
+    const saved = BG ? null : loadGame();
+    if (saved) startGame(saved.game, saved); else if (!BG) freshGame();
     sizeFx();
     layout();
     requestAnimationFrame(layout); // after webfonts/scrollbars settle

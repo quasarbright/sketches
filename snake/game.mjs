@@ -6,6 +6,9 @@
 
 export let W = 20, H = 20, CELLS = W * H;
 
+// Sets the board size for good (the background mode fits the board to the screen).
+export function setBoard(w, h) { W = w; H = h; CELLS = w * h; }
+
 // Runs fn on a board of another size (the about modal's small diagrams use the real rules this
 // way), then puts the size back.
 export function withBoard(w, h, fn) {

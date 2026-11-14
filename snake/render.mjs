@@ -12,8 +12,26 @@ export const COLORS = {
 const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
 const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
 // head bright, tail dark: k = 0 at the head, 1 at the tail
-export function bodyColor(k) {
-  return rgb(k < 0.5 ? mix(COLORS.head, COLORS.mid, k * 2) : mix(COLORS.mid, COLORS.tail, (k - 0.5) * 2));
+export function bodyRGB(k) {
+  return k < 0.5 ? mix(COLORS.head, COLORS.mid, k * 2) : mix(COLORS.mid, COLORS.tail, (k - 0.5) * 2);
+}
+export function bodyColor(k) { return rgb(bodyRGB(k)); }
+
+// The background mode's end-of-game effects, as a recoloring of the body by distance from the head
+// (px) and how far through the effect it is (t in [0, 1]):
+//   win:  a band of light sweeps from the head to the tail
+//   lose: the color drains out of the body, head first
+const WHITE = [235, 255, 242], ASH = [70, 82, 92];
+function effectRGB(base, dist, total, c, effect) {
+  if (!effect) return base;
+  if (effect.kind === "win") {
+    // the band is wider on a longer snake, so on a full board it's a wave rolling across it
+    const wide = Math.max(1.6 * c, total * 0.05);
+    const at = effect.t * (total + 4 * wide) - 2 * wide, k = Math.exp(-(((dist - at) / wide) ** 2));
+    return mix(base, WHITE, 0.75 * k);
+  }
+  const front = effect.t * (total + 2 * c) - c, k = Math.max(0, Math.min(1, (front - dist) / (2 * c)));
+  return mix(base, ASH, 0.85 * k);
 }
 
 // Sizes a canvas for `cols` x `rows` cells at `cssW` px wide, sharp on hi-dpi screens.
@@ -35,7 +53,8 @@ export function fitCanvas(cv, cssW, cols = W, rows = H) {
 //   dead          draw the crash
 //   eaten         the egg the last step ate, drawn until the sliding head gets to it
 //   under         draws extra things under the snake: under(g, cellSize, center)
-export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead = false, view = null, round = 14, eaten = -1, under = null } = {}) {
+//   effect        { kind: "win" | "lose", t }: the background mode's end-of-game sweep
+export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead = false, view = null, round = 14, eaten = -1, under = null, effect = null } = {}) {
   const v = view || { x0: 0, y0: 0, cols: W, rows: H };
   const c = cssW / v.cols, cssH = c * v.rows;
   const center = (cell) => { const [x, y] = xy(cell); return [(x - v.x0 + 0.5) * c, (y - v.y0 + 0.5) * c]; };
@@ -51,7 +70,7 @@ export function drawBoard(g, cssW, { game, prev = null, t = 1, plan = null, dead
   if (plan) drawPlanUnder(g, c, center, plan);
   if (game.egg >= 0) drawEgg(g, c, center(game.egg));
   if (eaten >= 0 && t < 0.6) drawEgg(g, c, center(eaten)); // the egg just eaten, until the head reaches it
-  drawSnake(g, c, center, game.snake, prev, t);
+  drawSnake(g, c, center, game.snake, prev, t, { effect });
   if (plan) drawPlanOver(g, c, center, game.snake, plan);
   drawEyes(g, c, center, game, prev, t, dead);
   if (dead) drawCrash(g, c, center, game);
@@ -80,7 +99,19 @@ function tubePoints(center, snake, prev, t) {
   return pts;
 }
 
-export function drawSnake(g, c, center, snake, prev = null, t = 1, { alpha = 1, color = null, width = 0.72 } = {}) {
+// a scratch canvas the size of g's, cleared, with the same transform
+let layer = null;
+function shadowLayer(g) {
+  const cv = g.canvas;
+  if (!layer) layer = document.createElement("canvas").getContext("2d");
+  if (layer.canvas.width !== cv.width || layer.canvas.height !== cv.height) { layer.canvas.width = cv.width; layer.canvas.height = cv.height; }
+  layer.setTransform(1, 0, 0, 1, 0, 0);
+  layer.clearRect(0, 0, cv.width, cv.height);
+  layer.setTransform(g.getTransform());
+  return layer;
+}
+
+export function drawSnake(g, c, center, snake, prev = null, t = 1, { alpha = 1, color = null, width = 0.72, effect = null } = {}) {
   const pts = tubePoints(center, snake, prev, t);
   const n = pts.length;
   g.save();
@@ -104,35 +135,53 @@ export function drawSnake(g, c, center, snake, prev = null, t = 1, { alpha = 1, 
   for (let i = 1; i < n; i++) d.push(d[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
   const total = Math.max(d[n - 1], 1e-6);
 
-  g.strokeStyle = "rgba(0, 0, 0, .35)"; g.lineWidth = c * width; // shadow
-  path(pts, 0, c * 0.08); g.stroke();
-
   // the body in short pieces, tail first so the head end sits on top; each piece shaded by how
-  // far it is from the head, and the last couple of cells taper to a point. Pieces have flat ends
-  // so they join without seams; a dot at each bend fills the corner.
+  // far it is from the head, and the last couple of cells taper to a point (in pieces a couple of
+  // px long, so the taper is smooth). Pieces have flat ends so they join without seams; a dot at
+  // each bend fills the corner. The shadow is the same pieces in black, a little lower, so it
+  // tapers with the body.
   const span = Math.max(total, c * 8); // a short snake stays mostly bright
-  const shade = (dist) => bodyColor(dist / span);
-  const thick = (dist) => c * width * (0.5 + 0.5 * Math.min(1, (total - dist) / (2.5 * c)));
-  const pieces = n > 80 ? 1 : 3;
-  g.lineCap = "butt";
-  for (let i = n - 1; i > 0; i--) {
-    const [ax, ay] = pts[i], [bx, by] = pts[i - 1];
-    if (i < n - 1) { g.fillStyle = shade(d[i]); g.beginPath(); g.arc(ax, ay, thick(d[i]) / 2, 0, 7); g.fill(); }
-    for (let j = 0; j < pieces; j++) {
-      const f0 = j / pieces, f1 = (j + 1) / pieces;
-      const mid = d[i] - (d[i] - d[i - 1]) * (f0 + f1) / 2; // distance from the head
-      g.strokeStyle = shade(mid);
-      g.lineWidth = thick(mid);
-      // overlap the next piece a hair so no background shows through between them
-      const e = 0.6 / Math.max(1, d[i] - d[i - 1]);
-      g.beginPath();
-      g.moveTo(ax + (bx - ax) * Math.max(0, f0 - e), ay + (by - ay) * Math.max(0, f0 - e));
-      g.lineTo(ax + (bx - ax) * Math.min(1, f1 + e), ay + (by - ay) * Math.min(1, f1 + e));
-      g.stroke();
+  const shade = (dist) => rgb(effectRGB(bodyRGB(dist / span), dist, total, c, effect));
+  const TAPER = 2.5 * c;
+  const thick = (dist) => c * width * (0.5 + 0.5 * Math.min(1, (total - dist) / TAPER));
+  const body = (g, shadow) => {
+    const dy = shadow ? c * 0.08 : 0;
+    if (shadow) g.fillStyle = g.strokeStyle = "#000";
+    for (let i = n - 1; i > 0; i--) {
+      const [ax, ay] = pts[i], [bx, by] = pts[i - 1];
+      const len = d[i] - d[i - 1];
+      const inTaper = total - d[i] < TAPER;
+      const pieces = inTaper ? Math.max(1, Math.ceil(len / 2)) : n > 80 ? 1 : 3;
+      if (i < n - 1) {
+        if (!shadow) g.fillStyle = shade(d[i]);
+        g.beginPath(); g.arc(ax, ay + dy, thick(d[i]) / 2, 0, 7); g.fill();
+      }
+      for (let j = 0; j < pieces; j++) {
+        const f0 = j / pieces, f1 = (j + 1) / pieces;
+        const mid = d[i] - len * (f0 + f1) / 2; // distance from the head
+        if (!shadow) g.strokeStyle = shade(mid);
+        g.lineWidth = thick(mid);
+        // overlap the next piece a hair so no background shows through between them
+        const e = 0.6 / Math.max(1, len);
+        g.beginPath();
+        g.moveTo(ax + (bx - ax) * Math.max(0, f0 - e), ay + dy + (by - ay) * Math.max(0, f0 - e));
+        g.lineTo(ax + (bx - ax) * Math.min(1, f1 + e), ay + dy + (by - ay) * Math.min(1, f1 + e));
+        g.stroke();
+      }
     }
-  }
-  // the tip of the tail, rounded
-  if (n > 1) { g.fillStyle = shade(total); g.beginPath(); g.arc(pts[n - 1][0], pts[n - 1][1], thick(total) / 2, 0, 7); g.fill(); }
+    // the tip of the tail, rounded
+    if (n > 1) {
+      if (!shadow) g.fillStyle = shade(total);
+      g.beginPath(); g.arc(pts[n - 1][0], pts[n - 1][1] + dy, thick(total) / 2, 0, 7); g.fill();
+    }
+  };
+  // the shadow's pieces overlap, so draw them opaque onto a layer and lay that down at 35%
+  const L = shadowLayer(g);
+  L.lineCap = "butt";
+  body(L, true);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 0.35 * alpha; g.drawImage(L.canvas, 0, 0); g.restore();
+  g.lineCap = "butt";
+  body(g, false);
   g.lineCap = "round";
   // a soft sheen along the top of the tube, stopping short of the thin tail
   const sheen = [];
@@ -142,7 +191,7 @@ export function drawSnake(g, c, center, snake, prev = null, t = 1, { alpha = 1, 
     path(sheen, -c * 0.07, -c * 0.1); g.stroke();
   }
   // a slightly rounder head
-  g.fillStyle = bodyColor(0);
+  g.fillStyle = shade(0);
   g.beginPath(); g.arc(pts[0][0], pts[0][1], c * width * 0.56, 0, 7); g.fill();
   g.restore();
 }
