@@ -84,7 +84,7 @@
     </div>
     <div class="control">
       <div class="control-head"><span class="name" title="how many extra walls get knocked out, making more than one route between places">loops</span><span class="value" id="loopsOut"></span></div>
-      <input type="range" id="loops" min="0" max="100" step="1" value="0" title="how many extra walls get knocked out, making more than one route between places" />
+      <input type="range" id="loops" min="0" max="100" step="1" value="40" title="how many extra walls get knocked out, making more than one route between places" />
     </div>
     <div class="control">
       <div class="control-head"><span class="name" title="how big each cell of the maze is, so how many cells fit on screen">cell size</span><span class="value" id="cellOut"></span></div>
@@ -181,7 +181,7 @@
     const at = () => ({ ox, oy, cell });
     // what the controls set. Under ?background the control panel removes itself, so everything
     // reads from here, and the controls are wired only when they exist.
-    const set = { algo: "astar", speed: 64, style: "corridors", loops: 0, cell: 14 };
+    const set = { algo: "astar", speed: 512, style: "corridors", loops: 40, cell: 14 };
 
     const boardCv = $("board"), wallsCv = document.createElement("canvas");
     const gg = boardCv.getContext("2d"), wg = wallsCv.getContext("2d");
