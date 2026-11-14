@@ -27,6 +27,7 @@ export const DEFAULTS = {
   startSnakes: 30,
   startLength: 8,
   startFoodDensity: 0.03,
+  treeKeepDead: 4000,  // dead snakes with no living descendants stay in the family tree this many steps
 };
 
 // directions: 0 up, 1 right, 2 down, 3 left
@@ -297,8 +298,26 @@ export class World {
     for (const s of order) if (s.alive) this.maybeSplit(s);
     this.snakes = this.snakes.filter((s) => s.alive);
 
+    if (this.step % 250 === 0) this.pruneTree();
+
     this.foodDebt += (this.p.foodRate * this.cols * this.rows) / 1000;
     while (this.foodDebt >= 1) { this.foodDebt -= 1; this.spawnFood(); }
+  }
+
+  // Ancestors of the living, walking up from each living snake.
+  livingAncestry() {
+    const set = new Set();
+    for (const s of this.snakes) {
+      let id = s.id;
+      while (id >= 0 && !set.has(id)) { set.add(id); id = this.tree.get(id)?.parent ?? -1; }
+    }
+    return set;
+  }
+
+  // Forget dead branches that left no living descendants once they're old enough.
+  pruneTree() {
+    const keep = this.livingAncestry(), cutoff = this.step - this.p.treeKeepDead;
+    for (const [id, n] of this.tree) if (!keep.has(id) && n.died >= 0 && n.died < cutoff) this.tree.delete(id);
   }
 
   geneMeans() {

@@ -65,7 +65,42 @@
     .cohesion-about .title { font-family: var(--font-display); font-weight: 400; }
     .pit-swatch { display: inline-block; width: .8em; height: .8em; border-radius: 50%; vertical-align: -.05em; }
 
+    /* ---- family tree drawer ---- */
+    :root { --tree-h: min(320px, 38vh); }
+    .tree-drawer {
+      position: fixed; left: 12px; right: 12px; bottom: 30px; height: var(--tree-h); z-index: 4;
+      display: flex; flex-direction: column;
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: 0 -8px 30px rgba(0,0,0,.45);
+    }
+    .tree-drawer[hidden] { display: none; }
+    .tree-head { display: flex; align-items: baseline; gap: 14px; padding: 10px 14px 0; flex-wrap: wrap; }
+    .tree-head h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; color: var(--text); }
+    .tree-hint { font-size: .78rem; color: var(--muted); flex: 1; min-width: 200px; }
+    .tree-head .check { margin: 0; font-size: .8rem; }
+    #treeCanvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
+    body.tree-open .control-bar { bottom: calc(var(--tree-h) + 40px); }
+    .tree-tip {
+      position: fixed; z-index: 10; pointer-events: none; min-width: 230px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 10px 12px; box-shadow: 0 10px 28px rgba(0,0,0,.5); font-size: .8rem;
+    }
+    .tree-tip[hidden] { display: none; }
+    .tree-tip-head { font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; }
+    .tree-tip-meta { color: var(--muted); font-family: var(--font-mono); font-size: .7rem; margin-top: 3px; }
+    .tree-tip-genes {
+      margin-top: 7px; display: grid; width: max-content; grid-template-columns: auto 80px 5ch; gap: 3px 10px; align-items: center;
+      font-family: var(--font-mono); font-size: .7rem; color: var(--muted);
+    }
+    .tree-tip-genes .bar { height: 4px; border-radius: 2px; background: rgba(236,227,211,.12); position: relative; }
+    .tree-tip-genes .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--accent); }
+    .tree-tip-genes .val { color: var(--text); text-align: right; }
+
     @media (max-width: 700px) {
+      :root { --tree-h: 44vh; }
+      .tree-hint { display: none; }
+      body.tree-open .pit-genes { display: none; }
       .pit-label { top: 12px; left: 14px; }
       .pit-label h1 { font-size: 1.3rem; }
       .pit-genes { grid-template-columns: auto 52px 5ch; font-size: .64rem; }
@@ -106,6 +141,7 @@
     <button class="btn" id="pause" title="pause / resume">&#9208;</button>
     <button class="btn" id="step" title="advance one step">&#9197;</button>
     <button class="btn" id="restart" title="start over with 30 random snakes">&#8635;</button>
+    <button class="btn" id="treeBtn" title="show the family tree: every snake's line of descent, with each split as a branch">tree</button>
     <about-modal label="about">
       <h2 class="title">Snake Pit</h2>
       <p class="intro">Every snake here is playing snake against all the others, in the same box.
@@ -140,11 +176,24 @@
     </about-modal>
   </div>
 
+  <div class="tree-drawer" id="treeDrawer" hidden>
+    <div class="tree-head">
+      <h2>Family tree</h2>
+      <span class="tree-hint">Each line is a snake, from birth to death. A branch is a split. Hover a line to see its genes; scroll to zoom in time.</span>
+      <label class="check" title="Also draw snakes that died without any living descendants (from the last few thousand steps).">
+        <input type="checkbox" id="treeDead" /> show dead ends
+      </label>
+    </div>
+    <canvas id="treeCanvas"></canvas>
+  </div>
+  <div class="tree-tip" id="treeTip" hidden></div>
+
   <mike-footer overlay></mike-footer>
 
   <script type="module">
     import { World, GENES } from "./sim.js";
     import { isBackground } from "../shared/cohesion.js";
+    import { createTreeView } from "./tree.js";
 
     const $ = (id) => document.getElementById(id);
     const canvas = $("pit");
@@ -172,6 +221,7 @@
       if (!isBackground()) { opts.foodRate = +$("food").value; opts.mutation = +$("mut").value; }
       world = new World(cols, rows, opts);
       husks.length = 0;
+      if (tree) tree.reset();
       if (typeof eggBorn !== "undefined") { eggBorn.clear(); eaten = []; }
       world.events.length = 0;
       shown = snapshot(null); next = null;
@@ -214,8 +264,11 @@
       W = w; H = h;
       canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
       canvas.style.width = w + "px"; canvas.style.height = h + "px";
-      cs = Math.floor(Math.min((w - 16) / world.cols, (h - 16) / world.rows));
-      ox = Math.round((w - cs * world.cols) / 2); oy = Math.round((h - cs * world.rows) / 2);
+      // with the family tree open, the pit shrinks to fit above it and the control bar
+      const below = treeOpen ? $("treeDrawer").offsetHeight + 30 + 52 : 0, ph = h - below;
+      cs = Math.max(2, Math.floor(Math.min((w - 16) / world.cols, (ph - 16) / world.rows)));
+      ox = Math.round((w - cs * world.cols) / 2); oy = Math.round((ph - cs * world.rows) / 2);
+      if (treeOpen && tree) tree.resize();
       buildSoil();
     }
 
@@ -313,6 +366,11 @@
       ctx.lineCap = "round"; ctx.lineJoin = "round";
       ctx.strokeStyle = body;
       // body at full width, then a taper over the last 2.5 cells
+      // the snake hovered in the family tree gets a pale outline
+      if (s.id === hoverSnake) {
+        ctx.strokeStyle = "rgba(246,234,208,.9)"; ctx.lineWidth = w + Math.max(4, cs * 0.32);
+        strokeAlong(path, sHead, sTail);
+      }
       const taperFrom = Math.max(sHead, sTail - 2.5);
       if (taperFrom > sHead) { ctx.lineWidth = w; strokeAlong(path, sHead, taperFrom); }
       for (let sc = taperFrom; sc < sTail - 1e-6; sc += 0.25) {
@@ -441,6 +499,15 @@
       if (!world.snakes.length && !shown.snakes.size) newWorld();
     }
 
+    // ---- family tree ----
+    let treeOpen = false, hoverSnake = -1, treeAt = 0, tree = null;
+    if (!isBackground()) {
+      tree = createTreeView({
+        canvas: $("treeCanvas"), tip: $("treeTip"), getWorld: () => world,
+        onHover: (id) => { hoverSnake = id; },
+      });
+    }
+
     let statsAt = 0;
     function updateStats(now) {
       if (now - statsAt < 250) return;
@@ -470,6 +537,7 @@
       }
       draw(t, now);
       updateStats(now);
+      if (treeOpen && now - treeAt > 200) { treeAt = now; tree.draw(); }
       requestAnimationFrame(frame);
     }
 
@@ -495,6 +563,15 @@
         stepAnimAt = performance.now();
       });
       $("restart").addEventListener("click", () => { newWorld(); sync(); });
+      $("treeBtn").addEventListener("click", () => {
+        treeOpen = !treeOpen;
+        $("treeDrawer").hidden = !treeOpen;
+        document.body.classList.toggle("tree-open", treeOpen);
+        $("treeBtn").classList.toggle("btn-primary", treeOpen);
+        if (!treeOpen) { hoverSnake = -1; $("treeTip").hidden = true; }
+        resize();
+      });
+      $("treeDead").addEventListener("change", () => tree.setShowDead($("treeDead").checked));
       newWorld(); sync();
     } else {
       newWorld();
