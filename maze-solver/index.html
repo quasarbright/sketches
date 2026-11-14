@@ -163,7 +163,7 @@
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { generate } from "./maze.mjs";
+    import { generate, neighbors } from "./maze.mjs";
     import { SOLVERS } from "./solvers.mjs";
     import { Run, drawWalls as paintWalls, drawRun, centerOf } from "./render.mjs";
     import { setupAbout } from "./about.mjs";
@@ -262,11 +262,28 @@
     }
     const center = (c) => centerOf(maze, at(), c);
 
+    // the length of the shortest route (in cells, counting both ends), by a plain breadth-first
+    // search; cached until the maze, start or goal changes
+    let best = { maze: null, start: -1, goal: -1, len: 0 };
+    function shortestLength() {
+      if (best.maze === maze && best.start === start && best.goal === goal) return best.len;
+      const dist = new Int32Array(maze.w * maze.h).fill(-1), q = [start];
+      dist[start] = 0;
+      for (let i = 0; i < q.length && dist[goal] < 0; i++)
+        for (const n of neighbors(maze, q[i])) if (dist[n] < 0) { dist[n] = dist[q[i]] + 1; q.push(n); }
+      best = { maze, start, goal, len: dist[goal] + 1 };
+      return best.len;
+    }
+    function pathLine() {
+      const len = run.path.length, sh = shortestLength(), f = (x) => x.toLocaleString("en-US");
+      return `<br><span class="ms-path">path ${f(len)} cells</span> · ` +
+        (len === sh ? "the shortest there is" : `shortest is <b>${f(sh)}</b> (${(len / sh).toFixed(1)}×)`);
+    }
     function showReadout() {
       const name = SOLVERS[set.algo].name;
       $("readout").innerHTML = `<span class="ms-algo">${name}</span><br>` +
         `steps <b>${run.steps.toLocaleString("en-US")}</b> · cells explored <b>${run.looked.toLocaleString("en-US")}</b> of ${(cols * rows).toLocaleString("en-US")}` +
-        (run.path ? `<br><span class="ms-path">path ${run.path.length.toLocaleString("en-US")} cells</span>` : run.done ? "<br>no way through" : "");
+        (run.path ? pathLine() : run.done ? "<br>no way through" : "");
     }
 
     // ---------- moving the start and goal ----------
@@ -361,7 +378,7 @@
 
     // for tests
     window.mazeSolver = {
-      get state() { return { cols, rows, start, goal, steps: run.steps, looked: run.looked, done: run.done, running, path: run.path && run.path.slice(), algo: set.algo }; },
+      get state() { return { cols, rows, start, goal, steps: run.steps, looked: run.looked, done: run.done, running, path: run.path && run.path.slice(), shortest: shortestLength(), algo: set.algo }; },
       setAlgo(id) { set.algo = id; if ($("algo")) $("algo").value = id; reset(); },
       setLoops(v) { set.loops = v; if ($("loops")) $("loops").value = v; showLoops(); newMaze(true); },
       run() { setRunning(true); }, step() { stepOnce(); }, reset, newMaze, setSeed(s) { seed = s; newMaze(true); },
