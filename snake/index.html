@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Snake</title>
+  <meta name="theme-color" content="#0f141c" />
+  <meta name="description" content="Play Snake in the browser, or watch my bot play it. It checks every egg before eating it, and usually fills almost the whole board." />
+  <meta property="og:title" content="Snake" />
+  <meta property="og:description" content="Play Snake in the browser, or watch my bot play it. It checks every egg before eating it, and usually fills almost the whole board." />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Mike Delmonaco" />
+  <meta property="og:url" content="https://quasarbright.github.io/sketches/snake/" />
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- night grass: a dark board, a green snake shaded from bright head to dark tail, a gold egg,
+       lavender for everything the bot does and red for danger. Same type as the 2048 and Tetris
+       ports: Bungee for the marquee and big numbers, Outfit for labels, JetBrains Mono for readouts. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0f141c;   /* night */
+      --panel:     #18212d;
+      --panel-2:   #222e3d;
+      --border:    #2d3b4d;
+      --text:      #ecf3ee;
+      --muted:     #93a5a0;
+      --faint:     #5f716d;
+      --accent:    #5fe39a;   /* the snake's green, for the player */
+      --accent-hi: #8ff0b8;
+      --on-accent: #062414;
+      --bot:       #b9a3ff;   /* the bot's lavender */
+      --bot-hi:    #d3c6ff;
+      --egg:       #ffd66b;
+      --danger:    #ff5a6e;
+      --font-ui:      "Outfit", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Bungee", "Arial Black", sans-serif;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+    body { font-family: var(--font-ui); color: var(--text); touch-action: none; overscroll-behavior: none; }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+    svg.s-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* chunky pressable buttons with a darker lip underneath (pancakes, 2048) */
+    .s-btn {
+      --lip: #080c12;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      font: 800 1rem var(--font-ui); letter-spacing: .01em; color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 16px; padding: 12px 20px; cursor: pointer;
+      box-shadow: 0 4px 0 var(--lip), 0 8px 18px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s, color .15s, opacity .15s;
+    }
+    .s-btn:hover { background: #2b394b; }
+    .s-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lip), 0 4px 10px rgba(0,0,0,.3); }
+    .s-btn:disabled { opacity: .35; cursor: default; }
+    .s-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .s-btn.is-green { background: var(--accent); color: var(--on-accent); --lip: #23864f; }
+    .s-btn.is-green:hover { background: #78eaab; }
+    .s-btn.is-lav { background: var(--bot); color: #1b1240; --lip: #6f58c9; }
+    .s-btn.is-lav:hover { background: #c8b8ff; }
+
+    /* ---------- layout: a column, board in the middle ---------- */
+    .s-stage {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+      padding: max(14px, env(safe-area-inset-top)) 16px 34px;
+    }
+    .s-top { position: relative; width: 100%; max-width: 560px; height: 62px; flex: none; }
+    .s-logo {
+      position: absolute; left: 0; top: 8px; margin: 0;
+      font: 400 1.9rem/1 var(--font-display); color: var(--accent); transform: rotate(-4deg);
+      text-shadow: 0 3px 0 #23864f, 0 8px 18px rgba(0,0,0,.5);
+    }
+    .s-score {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+      display: flex; align-items: stretch; background: var(--panel); border-radius: 20px; padding: 8px 6px;
+      box-shadow: 0 4px 0 #080c12, 0 10px 24px rgba(0,0,0,.4);
+    }
+    .s-top-right { position: absolute; right: 0; top: 4px; display: flex; align-items: center; gap: 10px; }
+    .s-btn.is-small { width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+    .s-stat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 16px; min-width: 76px; }
+    .s-stat + .s-stat { border-left: 2px solid var(--border); }
+    .s-stat-label { font: 800 .66rem var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .s-stat-value { font: 800 1.45rem/1.15 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text); }
+    .s-stat.is-main .s-stat-value { font: 400 1.5rem/1.15 var(--font-display); color: var(--accent); }
+    .s-stat.is-main.is-bot .s-stat-value { color: var(--bot); }
+
+    .s-mid { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; }
+    .s-board-wrap { position: relative; border-radius: 16px; box-shadow: inset 0 0 0 2px #1f2a38, 0 6px 0 #070a0f, 0 30px 60px rgba(0,0,0,.5); }
+    .s-board-wrap.is-shake { animation: s-shake .32s; }
+    @keyframes s-shake {
+      20% { transform: translate(-5px, 2px); } 40% { transform: translate(4px, -3px); }
+      60% { transform: translate(-3px, 1px); } 80% { transform: translate(2px, -1px); }
+    }
+    #board { display: block; border-radius: 16px; }
+    /* over the board: ready / paused */
+    .s-veil {
+      position: absolute; inset: 0; display: grid; place-items: center; border-radius: 16px;
+      background: rgba(10, 14, 20, .55); pointer-events: none;
+    }
+    .s-veil-text { text-align: center; }
+    .s-veil-title { font: 400 2rem/1 var(--font-display); color: var(--text); transform: rotate(-3deg); text-shadow: 0 4px 0 #070a0f; }
+    .s-veil-sub { margin-top: 12px; font: 600 .95rem var(--font-ui); color: var(--muted); }
+    .s-veil.is-ready { background: none; place-items: end center; padding-bottom: 22%; }
+    .s-veil.is-ready .s-veil-title { display: none; }
+    .s-veil.is-ready .s-veil-sub {
+      background: var(--panel); color: var(--text); padding: 8px 14px; border-radius: 999px;
+      box-shadow: 0 3px 0 #080c12; animation: s-bob 1.6s ease-in-out infinite;
+    }
+    @keyframes s-bob { 50% { transform: translateY(-4px); } }
+
+    /* under the board: how to play, or what the bot is doing */
+    .s-strip { height: 58px; flex: none; display: grid; place-items: center; width: 100%; }
+    .s-hint { font: 600 .92rem var(--font-ui); color: var(--muted); text-align: center; }
+    kbd { font: 600 .8rem var(--font-mono); background: var(--panel-2); border-radius: 6px; padding: 2px 6px; box-shadow: 0 2px 0 #080c12; color: var(--text); }
+    .s-think { display: flex; align-items: center; gap: 10px; font: 600 .92rem var(--font-ui); color: var(--text); white-space: nowrap; }
+    .s-think-key { width: 30px; height: 12px; flex: none; }
+    .s-think-sub { color: var(--muted); font-weight: 500; }
+
+    /* bottom: round buttons with a label under each, the bot button between them */
+    .s-controls { flex: none; display: flex; gap: 18px; align-items: flex-start; justify-content: center; }
+    .s-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+    .s-ctl .s-btn.is-round { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
+    .s-ctl > span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+    .s-bot-btn { min-width: 210px; height: 54px; border-radius: 27px; font-size: 1.05rem; white-space: nowrap; }
+    .s-bot-btn svg.s-ico { width: 24px; height: 24px; }
+    .s-speed { display: flex; align-items: center; gap: 10px; height: 20px; font: 700 .75rem var(--font-ui); color: var(--muted); transition: opacity .2s; }
+    .s-speed.is-off { opacity: 0; pointer-events: none; }
+    .s-speed input { width: 120px; accent-color: var(--bot); margin: 0; }
+    .s-speed output { font: 600 .75rem var(--font-mono); color: var(--bot); width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---------- game over ---------- */
+    .s-over { position: fixed; inset: 0; z-index: 9; display: grid; place-items: center; padding: 16px; background: rgba(8,11,16,.55); }
+    .s-card {
+      width: min(380px, 100%); text-align: center; padding: 30px 26px 26px;
+      background: var(--panel); border-radius: 26px; box-shadow: 0 6px 0 #080c12, 0 24px 60px rgba(0,0,0,.6);
+      animation: s-pop .45s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes s-pop { from { transform: scale(.6) translateY(30px); opacity: 0; } }
+    .s-card h2 { margin: 0; font: 400 2.3rem/1 var(--font-display); color: var(--accent); transform: rotate(-3deg); }
+    .s-card.is-crash h2 { color: var(--danger); }
+    .s-card-who { margin: 12px 0 0; font-weight: 600; color: var(--muted); }
+    .s-results { display: flex; justify-content: center; margin: 22px 0 26px; }
+    .s-results .s-stat { min-width: 0; padding: 0 14px; }
+
+    canvas#fx { position: fixed; inset: 0; pointer-events: none; z-index: 7; }
+    mike-footer[overlay] { z-index: 11 !important; }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+
+    /* about modal */
+    .cohesion-about .s-dia { display: block; margin: 14px auto 6px; max-width: 100%; height: auto !important; border-radius: 12px; }
+    .cohesion-about .s-cap { font-size: .85rem; color: var(--muted); text-align: center; margin: 0 0 1.2em; }
+    .cohesion-about .bot { color: var(--bot); }
+    .cohesion-about .danger { color: var(--danger); }
+    .cohesion-about .egg { color: var(--egg); }
+
+    @media (max-width: 600px) {
+      .s-logo { font-size: 1.35rem; top: 14px; }
+      .s-top { height: 112px; }
+      .s-top-right { top: 2px; }
+      .s-score { top: 58px; left: 0; right: 0; transform: none; justify-content: center; padding: 6px 4px; }
+      .s-stat { min-width: 0; flex: 1; padding: 0 12px; }
+      .s-controls { gap: 8px; }
+      .s-ctl:has(.is-round) { width: 78px; }
+      .s-ctl .s-btn.is-round { width: 50px; height: 50px; }
+      .s-bot-btn { min-width: 0; width: 176px; height: 50px; font-size: .95rem; padding: 0 12px; gap: 6px; }
+      .s-bot-btn svg.s-ico { width: 20px; height: 20px; }
+      .s-speed { gap: 6px; }
+      .s-speed input { width: 70px; }
+      .s-speed output { width: 5.5ch; }
+      .s-think { font-size: .85rem; gap: 8px; }
+      .s-think-sub { display: none; }
+      .s-hint { font-size: .85rem; }
+    }
+    @media (max-width: 360px) { .s-bot-btn { width: 150px; font-size: .85rem; padding: 0 8px; gap: 4px; } .s-bot-btn svg.s-ico { display: none; } .s-ctl:has(.is-round) { width: 70px; } }
+    @media (prefers-reduced-motion: reduce) {
+      .s-card, .s-board-wrap.is-shake, .s-veil-sub { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+
+  <div class="s-stage" id="stage">
+    <div class="s-top">
+      <h1 class="s-logo">Snake</h1>
+      <div class="s-score" id="scoreboard">
+        <div class="s-stat is-main" id="statLength" title="how long the snake is: it starts at 3 and grows by one for every egg">
+          <span class="s-stat-label">Length</span><span class="s-stat-value" id="length">3</span>
+        </div>
+        <div class="s-stat" title="how much of the 20 × 20 board the snake covers">
+          <span class="s-stat-label">Board</span><span class="s-stat-value" id="fill">1%</span>
+        </div>
+        <div class="s-stat" title="your longest snake on this device, in games the bot didn't play any steps in">
+          <span class="s-stat-label">Best</span><span class="s-stat-value" id="best">0</span>
+        </div>
+      </div>
+      <div class="s-top-right">
+        <button class="s-btn is-small" id="pauseBtn" title="pause / resume (space)" aria-label="pause">
+          <svg class="s-ico" viewBox="0 0 24 24" id="pauseIco"></svg>
+        </button>
+        <button class="s-btn is-small" id="soundBtn" title="sound on/off (M)" aria-label="sound">
+          <svg class="s-ico" viewBox="0 0 24 24" id="soundIco"></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="s-mid" id="mid">
+      <div class="s-board-wrap" id="boardWrap">
+        <canvas id="board"></canvas>
+        <div class="s-veil" id="veil" hidden><div class="s-veil-text"><div class="s-veil-title" id="veilTitle">Paused</div><div class="s-veil-sub" id="veilSub"></div></div></div>
+      </div>
+    </div>
+
+    <div class="s-strip">
+      <div class="s-hint" id="hint">Steer with <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>, <kbd>WASD</kbd> or a swipe</div>
+      <div class="s-think" id="think" hidden>
+        <svg class="s-think-key" id="thinkKey" viewBox="0 0 30 12"></svg>
+        <span id="thinkText"></span><span class="s-think-sub" id="thinkSub"></span>
+      </div>
+    </div>
+
+    <div class="s-controls">
+      <div class="s-ctl">
+        <button class="s-btn is-round" id="newGame" title="start a new game (N)">
+          <svg class="s-ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button><span>New game</span>
+      </div>
+      <div class="s-ctl">
+        <button class="s-btn is-green s-bot-btn" id="botBtn" title="hand the snake to the bot from here; press it again, or steer yourself, to take over (B)">
+          <svg class="s-ico" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M2 13v2M22 13v2"/></svg>
+          <span id="botLabel">Let the bot play</span>
+        </button>
+        <label class="s-speed is-off" id="speedRow" title="how many steps the bot takes per second. At max it takes as many as it can think through. Speed never changes how it decides">
+          speed <input type="range" id="speed" min="0" max="100" step="1" title="how many steps the bot takes per second. At max it takes as many as it can think through. Speed never changes how it decides"><output id="speedOut"></output>
+        </label>
+      </div>
+      <div class="s-ctl">
+        <button class="s-btn is-round" id="about" title="how the bot decides where to go">
+          <svg class="s-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.6h.01"/></svg>
+        </button><span>How it thinks</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-over" id="over" hidden>
+    <div class="s-card" id="overCard" role="dialog" aria-labelledby="overTitle">
+      <h2 id="overTitle">Game over</h2>
+      <p class="s-card-who" id="overWho"></p>
+      <div class="s-results">
+        <div class="s-stat is-main"><span class="s-stat-label">Length</span><span class="s-stat-value" id="overLength"></span></div>
+        <div class="s-stat"><span class="s-stat-label">Board</span><span class="s-stat-value" id="overFill"></span></div>
+        <div class="s-stat"><span class="s-stat-label">Steps</span><span class="s-stat-value" id="overSteps"></span></div>
+      </div>
+      <button class="s-btn is-green" id="overNew" title="start a new game">New game</button>
+    </div>
+  </div>
+
+  <template id="aboutTpl">
+    <h2 class="title">How the bot thinks</h2>
+    <p class="intro">My bot heads for each egg by the shortest path, but first it checks that eating
+      the egg won't trap it. Over 100 games it filled 98% of the board on average, and all of it in 11.</p>
+
+    <div class="section-label">the shortest path isn't enough</div>
+    <p>The obvious bot finds the shortest path to the egg and follows it. To find that path, spread
+      out from the head one cell at a time, going around the body, until you reach the egg (this is
+      called a <b>breadth-first search</b>).</p>
+    <p>That works until the egg sits in a dead end. Here the shortest path runs down a corridor
+      between the snake's own body and the wall.</p>
+    <canvas class="s-dia" data-dia="greedy"></canvas>
+    <p class="s-cap" data-cap="greedy"></p>
+
+    <div class="section-label">the tail is always safe</div>
+    <p>A snake that's following its own tail can't get trapped. The tail leaves its cell on every
+      step, so the cell right behind it is always free to move into, and the snake can keep
+      chasing it forever. So the question to ask before eating an egg is: afterward, can I still
+      get to my tail?</p>
+
+    <div class="section-label">checking before eating</div>
+    <p>On every step the bot does this:</p>
+    <ol>
+      <li>Find the shortest path to the egg.</li>
+      <li>Send a copy of the snake along it. Once the copy has eaten the egg, search for a path from
+        its head to its tail.</li>
+      <li>If there is one, take the first step toward the egg. If not, follow the tail instead,
+        taking the longest way to it so the body has more time to move. Then check again on the
+        next step.</li>
+    </ol>
+    <p>Same position, real bot. The <span class="bot">lavender</span> copy eats the egg and ends up
+      boxed in the <span class="danger">red</span> corner, with no way to its tail, so the bot turns
+      away. (In a bigger dead end the red covers every cell the copy could still reach.) One step later the shortest path has to go the long way
+      round, and by the time it gets there the body has left the corner.</p>
+    <canvas class="s-dia" data-dia="check"></canvas>
+    <p class="s-cap" data-cap="check"></p>
+
+    <div class="section-label">paths through the body</div>
+    <p>You'll often see the bot's dotted path run right over the snake. The search knows when each
+      part of the body will be gone: the last cell of the tail is free after one step, the one
+      before it after two, and so on. So a path can cross a cell the body is in now, as long as it
+      gets there after the tail has left.</p>
+
+    <div class="section-label">the end of the game</div>
+    <p>Near the end there's very little open space, and an egg can land somewhere it can't be eaten
+      safely. Then the bot follows its tail round and round. After 400 steps without eating it
+      starts picking among its safe moves at random, to change the body's shape, and after 1,200 it
+      goes for the egg anyway. Usually that's the end, with 98 or 99% of the board filled.</p>
+  </template>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { newGame, step, effectiveDir, W, H, CELLS, UP, DOWN, LEFT, RIGHT, OPPOSITE } from "./game.mjs";
+    import { decide } from "./bot.mjs";
+    import { drawBoard, fitCanvas, COLORS } from "./render.mjs";
+    import { openModal } from "../shared/cohesion.js";
+    import * as audio from "./audio.mjs";
+    import { setupAbout } from "./about.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const store = {
+      get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    };
+    const BEST_KEY = "quasarbright:snake-best", GAME_KEY = "quasarbright:snake-game", MUTE_KEY = "quasarbright:snake-muted";
+    const HUMAN_RATE = 9; // steps a second when you play
+
+    // ---------- state ----------
+    let game, prev = null;     // prev: the snake one step earlier, for drawing the slide between cells
+    let steps = 0, botSteps = 0, best = +store.get(BEST_KEY) || 0;
+    let started = false;       // the snake waits for your first turn (or the bot)
+    let paused = false, over = false;
+    let queue = [];            // turns you've pressed that haven't happened yet
+    let acc = 0;               // fraction of a step built up since the last one
+    let plan = null;           // what the bot thought on its last step
+
+    // ---------- layout ----------
+    const cv = $("board");
+    let size = 0, g = null;
+    function layout() {
+      const mid = $("mid").getBoundingClientRect();
+      const Wd = document.documentElement.clientWidth;
+      size = Math.floor(Math.max(200, Math.min(Wd - 32, 520, mid.height - 12)) / W) * W;
+      g = fitCanvas(cv, size);
+      draw();
+    }
+
+    // ---------- the loop ----------
+    // DESIGN.md's step accumulator: the rate (steps a second) is the only place real time enters
+    let lastFrame = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+      if (running()) {
+        const rate = bot.on ? bot.speed : HUMAN_RATE;
+        if (rate === Infinity) {
+          const t0 = performance.now();
+          do tick(); while (running() && performance.now() - t0 < 10);
+          acc = 1;
+        } else {
+          acc += dt * rate;
+          if (acc > 1 + rate * 0.1) acc = 1 + rate * 0.1; // no catch-up burst after a stall
+          while (acc >= 1 && running()) { acc -= 1; tick(); }
+        }
+      }
+      draw();
+      requestAnimationFrame(frame);
+    }
+    let manual = false;        // tests: only step when told to
+    const running = () => started && !paused && !over && !manual;
+    const fast = () => bot.on && bot.speed > 30;
+
+    function tick() {
+      let dir;
+      if (bot.on) { plan = decide(game); dir = plan.dir; botSteps++; }
+      else { dir = queue.shift() || game.dir; plan = null; }
+      prev = game.snake;
+      const before = game;
+      game = step(game, dir);
+      steps++;
+      if (!game.alive) return crash();
+      if (game.eaten > before.eaten) ate();
+      if (game.won) return win();
+    }
+
+    function ate() {
+      audio.play("eat", game.eaten - 1);
+      // only your own games count: once the bot has taken a step in this game, it can't set the best
+      if (botSteps === 0 && game.snake.length > best) { best = game.snake.length; store.set(BEST_KEY, best); }
+      renderHud();
+      if (!fast()) pop(game.snake[0]);
+      saveGame();
+    }
+
+    // ---------- drawing ----------
+    function draw() {
+      if (!g || !game) return;
+      const t = running() && !fast() && !reduceMotion ? Math.min(1, acc) : 1;
+      drawBoard(g, size, { game, prev, t, plan: bot.on || (over && plan) ? plan : null, dead: !game.alive });
+    }
+
+    // whole percents, except a decimal under 10% so the start doesn't read 0%; 100% only when full
+    function fillText() {
+      const f = 100 * game.snake.length / CELLS;
+      return (f < 10 ? (Math.floor(f * 10) / 10).toFixed(1) : Math.floor(f)) + "%";
+    }
+    function renderHud() {
+      $("length").textContent = game.snake.length;
+      $("fill").textContent = fillText();
+      $("best").textContent = best;
+      $("statLength").classList.toggle("is-bot", bot.on);
+    }
+
+    // the strip under the board: how to play, or which rule the bot just used
+    const THINK = {
+      egg: ["Going for the egg", "eating it still leaves a way to its tail", "dots"],
+      tail: ["Following its tail", "that egg would trap it", "dashes"],
+      tailNoPath: ["Following its tail", "it can't reach the egg yet", "dashes"],
+      gamble: ["Going for the egg anyway", "waiting hasn't made it safe", "reddots"],
+      room: ["Taking the most room", "it can't reach its tail", "none"],
+      stuck: ["Nowhere to go", "", "none"],
+    };
+    let shownThink = "";
+    function showThink() {
+      if (!bot.on || !plan) return;
+      const k = plan.kind === "tail" && !plan.path ? "tailNoPath" : plan.kind;
+      if (k === shownThink) return;
+      shownThink = k;
+      const [text, sub, key] = THINK[k];
+      $("thinkText").textContent = text;
+      $("thinkSub").textContent = sub ? "· " + sub : "";
+      const col = key === "reddots" ? COLORS.danger : COLORS.bot;
+      $("thinkKey").innerHTML = key === "dots" || key === "reddots"
+        ? [5, 15, 25].map((x) => `<circle cx="${x}" cy="6" r="2.6" fill="${col}"/>`).join("")
+        : key === "dashes" ? `<path d="M3 6h9M18 6h9" stroke="${col}" stroke-width="3.4" stroke-linecap="round"/>` : "";
+    }
+    setInterval(showThink, 120); // the strip doesn't need to change at bot speed
+
+    function showVeil() {
+      const ready = !started && !over;
+      $("veil").hidden = !(paused || ready);
+      $("veil").classList.toggle("is-ready", ready && !paused);
+      $("veilTitle").textContent = "Paused";
+      $("veilSub").innerHTML = paused ? "<kbd>space</kbd> to go on" : (steps ? "Steer to carry on" : "Steer to start");
+      $("pauseIco").innerHTML = paused ? '<path d="M7 4.5v15l12-7.5z"/>' : '<path d="M8 5v14M16 5v14"/>';
+      $("pauseBtn").setAttribute("aria-label", paused ? "resume" : "pause");
+    }
+
+    // ---------- little egg pop, crash shake, confetti ----------
+    const fx = $("fx"), fctx = fx.getContext("2d");
+    let parts = [], fxRaf = 0;
+    function cellCenter(cell) {
+      const r = cv.getBoundingClientRect(), c = size / W;
+      return [r.left + (cell % W + 0.5) * c, r.top + (Math.floor(cell / W) + 0.5) * c];
+    }
+    function pop(cell) {
+      if (reduceMotion || document.hidden) return;
+      const [x, y] = cellCenter(cell);
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 2;
+        parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, decay: 0.05 + Math.random() * 0.03, r: 1.5 + Math.random() * 2, col: Math.random() < 0.3 ? "#fff3c4" : COLORS.egg });
+      }
+      startFx();
+    }
+    function confetti() {
+      if (reduceMotion) return;
+      const r = cv.getBoundingClientRect();
+      const cols = [COLORS.egg, "#5fe39a", "#b9a3ff", "#ff9f6b", "#ffffff"];
+      for (let i = 0; i < 160; i++) {
+        parts.push({ x: r.left + Math.random() * r.width, y: r.top - 20 - Math.random() * 120, vx: (Math.random() - .5) * 2,
+          vy: Math.random() * 2, life: 1, decay: 0.005 + Math.random() * 0.006, r: 3 + Math.random() * 3,
+          col: cols[i % cols.length], spin: Math.random() * 6, confetti: true });
+      }
+      startFx();
+    }
+    function startFx() { if (!fxRaf) fxRaf = requestAnimationFrame(fxTick); }
+    function sizeFx() {
+      const dpr = Math.max(1, devicePixelRatio || 1), Wd = document.documentElement.clientWidth, Hd = document.documentElement.clientHeight;
+      fx.width = Math.round(Wd * dpr); fx.height = Math.round(Hd * dpr);
+      fx.style.width = Wd + "px"; fx.style.height = Hd + "px";
+      fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function fxTick() {
+      fctx.clearRect(0, 0, fx.width, fx.height);
+      for (const p of parts) {
+        p.life -= p.decay; p.x += p.vx; p.y += p.vy;
+        if (p.confetti) { p.vy = Math.min(p.vy + 0.06, 3); p.vx *= 0.99; p.spin += 0.15; }
+        else { p.vx *= 0.9; p.vy *= 0.9; }
+        fctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.4));
+        fctx.fillStyle = p.col;
+        if (p.confetti) {
+          fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.spin);
+          fctx.fillRect(-p.r, -p.r * 0.45 * Math.abs(Math.cos(p.spin * 1.3)), p.r * 2, p.r * 0.9 * Math.abs(Math.cos(p.spin * 1.3)) + 0.5);
+          fctx.restore();
+        } else { fctx.beginPath(); fctx.arc(p.x, p.y, p.r * Math.max(0.2, p.life), 0, Math.PI * 2); fctx.fill(); }
+      }
+      fctx.globalAlpha = 1;
+      parts = parts.filter((p) => p.life > 0);
+      fxRaf = parts.length ? requestAnimationFrame(fxTick) : 0;
+      if (!fxRaf) fctx.clearRect(0, 0, fx.width, fx.height);
+    }
+
+    // ---------- the bot ----------
+    // log scale from 2 to 1000 steps a second; the very top is "max": as many as it can think
+    // through in each frame
+    const SPEED_MIN = 2, SPEED_MAX = 1000;
+    const posToSpeed = (p) => p >= 100 ? Infinity : SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (p / 100);
+    const speedToPos = (s) => (100 * Math.log(s / SPEED_MIN)) / Math.log(SPEED_MAX / SPEED_MIN);
+    const bot = { on: false, speed: 15 };
+    $("speed").value = Math.round(speedToPos(bot.speed));
+    function showSpeed() {
+      bot.speed = posToSpeed(+$("speed").value);
+      $("speedOut").textContent = bot.speed === Infinity ? "max" : (bot.speed < 10 ? bot.speed.toFixed(1) : Math.round(bot.speed)) + "/s";
+    }
+    $("speed").addEventListener("input", showSpeed);
+    function setBot(on) {
+      if (on && over) return;
+      if (on !== bot.on) audio.play(on ? "botOn" : "botOff");
+      bot.on = on;
+      queue = [];
+      $("botBtn").classList.toggle("is-green", !on);
+      $("botBtn").classList.toggle("is-lav", on);
+      $("botLabel").textContent = on ? "Take over" : "Let the bot play";
+      $("speedRow").classList.toggle("is-off", !on);
+      $("hint").hidden = on; $("think").hidden = !on;
+      shownThink = "";
+      if (on) { showSpeed(); started = true; paused = false; acc = Math.max(acc, 0); plan = decide(game); showThink(); }
+      else plan = null;
+      showVeil();
+      renderHud();
+    }
+    $("botBtn").onclick = () => setBot(!bot.on);
+
+    // ---------- game flow ----------
+    function startGame(g0, { steps: s = 0, botSteps: b = 0 } = {}) {
+      game = g0; prev = null; plan = null;
+      steps = s; botSteps = b;
+      started = false; paused = false; over = false; queue = []; acc = 0;
+      $("over").hidden = true;
+      if (bot.on) { started = true; plan = decide(game); }
+      renderHud(); showVeil(); draw();
+    }
+    function freshGame() { startGame(newGame()); saveGame(); } // the bot keeps playing if it was
+    function saveGame() {
+      if (!game.alive || game.won) { store.set(GAME_KEY, ""); return; }
+      store.set(GAME_KEY, JSON.stringify({ game, steps, botSteps }));
+    }
+    function loadGame() {
+      try {
+        const s = JSON.parse(store.get(GAME_KEY));
+        if (s && s.game && Array.isArray(s.game.snake) && s.game.alive && !s.game.won) return s;
+      } catch {}
+      return null;
+    }
+    function crash() {
+      over = true;
+      audio.play("crash");
+      const wrap = $("boardWrap");
+      if (!reduceMotion) { wrap.classList.remove("is-shake"); void wrap.offsetWidth; wrap.classList.add("is-shake"); }
+      finish(false);
+    }
+    function win() {
+      over = true;
+      audio.play("win");
+      confetti();
+      finish(true);
+    }
+    function finish(won) {
+      const botPlayed = botSteps;
+      if (bot.on) { bot.on = false; setBotUi(); }
+      store.set(GAME_KEY, "");
+      draw();
+      setTimeout(() => {
+        if (!over) return;
+        $("overCard").classList.toggle("is-crash", !won);
+        $("overTitle").textContent = won ? "Board filled!" : "Game over";
+        $("overLength").textContent = game.snake.length;
+        $("overFill").textContent = fillText();
+        $("overSteps").textContent = steps.toLocaleString("en-US");
+        const how = won ? "" : game.hit === -1 || game.hit === undefined ? "Hit the wall. " : "Ran into itself. ";
+        $("overWho").textContent = how + (botPlayed === 0 ? "" : (botPlayed === steps ? "The bot played every step." : `The bot played ${botPlayed.toLocaleString("en-US")} of ${steps.toLocaleString("en-US")} steps.`) + " Games the bot plays in don't count toward your best.");
+        $("over").hidden = false;
+        $("overNew").focus({ preventScroll: true });
+      }, reduceMotion ? 0 : 900);
+    }
+    // the bot's controls go back to "off" when the game ends, without the off chirp
+    function setBotUi() {
+      $("botBtn").classList.add("is-green"); $("botBtn").classList.remove("is-lav");
+      $("botLabel").textContent = "Let the bot play";
+      $("speedRow").classList.add("is-off");
+      $("hint").hidden = false; $("think").hidden = true;
+      renderHud();
+    }
+    $("overNew").onclick = $("newGame").onclick = freshGame;
+
+    function setPaused(p) {
+      if (over || (!started && p)) return;
+      if (p !== paused) audio.play("pause");
+      paused = p;
+      if (!p) lastFrame = performance.now();
+      showVeil();
+      if (p) saveGame();
+    }
+    $("pauseBtn").onclick = () => setPaused(!paused);
+    document.addEventListener("visibilitychange", () => { if (document.hidden && !bot.on) setPaused(true); if (document.hidden) saveGame(); });
+    addEventListener("pagehide", () => game && !over && saveGame());
+
+    // ---------- input ----------
+    const KEYS = { ArrowUp: UP, ArrowDown: DOWN, ArrowLeft: LEFT, ArrowRight: RIGHT, w: UP, s: DOWN, a: LEFT, d: RIGHT, W: UP, S: DOWN, A: LEFT, D: RIGHT };
+    const modalOpen = () => !!document.querySelector(".cohesion-modal-backdrop");
+    // A turn joins the queue unless it's the way you're already going or straight back. Two
+    // quick turns (a U-turn) both happen, one per step.
+    function steer(dir) {
+      if (modalOpen() || over) return;
+      if (bot.on) setBot(false); // steering yourself takes over from the bot
+      if (paused) setPaused(false);
+      const lastDir = queue.length ? queue[queue.length - 1] : game.dir;
+      if (dir !== lastDir && dir !== OPPOSITE[lastDir] && queue.length < 3) { queue.push(dir); audio.play("turn"); }
+      if (!started) {
+        // the first press starts the game; pressing the way it's facing (or straight back) just goes
+        started = true; lastFrame = performance.now(); acc = 0;
+        showVeil();
+      }
+    }
+    addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const dir = KEYS[e.key];
+      if (dir) {
+        if (e.target.matches?.("input")) e.target.blur();
+        e.preventDefault(); steer(dir); return;
+      }
+      if (modalOpen()) return;
+      if (e.key === " " || e.key === "p" || e.key === "P" || e.key === "Escape") {
+        if (e.key === " " && e.target.closest?.("button")) return; // space on a focused button presses it
+        e.preventDefault(); setPaused(!paused);
+      }
+      else if (e.key === "b" || e.key === "B") $("botBtn").click();
+      else if (e.key === "m" || e.key === "M") toggleSound();
+      else if (e.key === "n" || e.key === "N") freshGame();
+    });
+    // swipes, anywhere outside the buttons: a turn as soon as the finger has gone 24px, and
+    // another if it keeps going a different way
+    let swipe = null;
+    addEventListener("pointerdown", (e) => {
+      if (e.target.closest("button, input, label, a, .cohesion-modal-backdrop, .s-over")) return;
+      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    addEventListener("pointermove", (e) => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : (dy > 0 ? DOWN : UP));
+      swipe.x = e.clientX; swipe.y = e.clientY;
+    });
+    const endSwipe = (e) => { if (swipe && e.pointerId === swipe.id) swipe = null; };
+    addEventListener("pointerup", endSwipe);
+    addEventListener("pointercancel", endSwipe);
+
+    // ---------- sound ----------
+    const ICO_ON = '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>';
+    const ICO_OFF = '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6M22 9l-6 6"/>';
+    function showSound() {
+      $("soundIco").innerHTML = audio.isMuted() ? ICO_OFF : ICO_ON;
+      $("soundBtn").setAttribute("aria-pressed", String(!audio.isMuted()));
+    }
+    function toggleSound() {
+      audio.setMuted(!audio.isMuted());
+      store.set(MUTE_KEY, audio.isMuted() ? "1" : "");
+      audio.unlockAudio();
+      showSound();
+    }
+    audio.setMuted(store.get(MUTE_KEY) === "1");
+    showSound();
+    $("soundBtn").onclick = toggleSound;
+    addEventListener("pointerdown", () => audio.unlockAudio(), { capture: true });
+    addEventListener("keydown", () => audio.unlockAudio(), { capture: true });
+
+    // ---------- about ----------
+    $("about").onclick = () => {
+      const wasPaused = paused;
+      if (started && !over && !bot.on) setPaused(true);
+      const { el } = openModal($("aboutTpl").innerHTML, { className: "cohesion-about" });
+      const stop = setupAbout(el);
+      document.addEventListener("cohesion-modal-close", () => { stop(); if (!wasPaused && !bot.on && started && !over) setPaused(false); }, { once: true });
+    };
+
+    // ---------- go ----------
+    addEventListener("resize", () => { sizeFx(); layout(); });
+    const saved = loadGame();
+    if (saved) startGame(saved.game, saved); else freshGame();
+    sizeFx();
+    layout();
+    requestAnimationFrame(layout); // after webfonts/scrollbars settle
+    requestAnimationFrame(frame);
+
+    // for tests: drive the game the same way input does, and read its state
+    window.snakeGame = {
+      get state() { return { game, steps, botSteps, started, paused, over, bot: bot.on, queue: queue.slice(), best }; },
+      get plan() { return plan; },
+      steer, setBot, setPaused,
+      load(g0, extra) { startGame(g0, extra); saveGame(); },
+      tick() { if (!over) { started = true; tick(); draw(); showThink(); } },
+      setManual(m) { manual = m; },
+      setSpeedPos(p) { $("speed").value = p; showSpeed(); },
+      get size() { return size; },
+    };
+  </script>
+</body>
+</html>
