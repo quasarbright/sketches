@@ -11,7 +11,7 @@ function diagram(cv, cap, { algos, loops = 0, style = "corridors", seed = 3, rat
   const maze = generate(BW, BH, { style, loops, seed });
   const s = start ?? 0, g = goal ?? BW * BH - 1;
   let runs, doneAt = 0, w = 0, ctx = null, cell = 0;
-  const reset = () => { runs = algos.map((a) => new Run(maze, a, s, g, 40)); doneAt = 0; };
+  const reset = () => { runs = algos.map((a) => new Run(maze, a, s, g, 1200)); doneAt = 0; };
   reset();
   const gap = 14;
   const size = () => {

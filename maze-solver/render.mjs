@@ -3,11 +3,11 @@ import { N, E, S, Wb } from "./maze.mjs";
 import { SOLVERS } from "./solvers.mjs";
 
 // ---------- the heat map ----------
-// a cell's color depends on how many steps ago the algorithm last touched it, like a heat map:
+// a cell's color depends on how long ago the algorithm last touched it, like a heat map:
 // pale yellow when it's just been looked at, cooling through orange and red to a dim purple that
 // stays (bidirectional search's goal side cools through greens and blues instead; dead-end
 // filling's sealed cells go a flat gray)
-export const DECAY = 140; // steps for a cell to cool all the way
+export const DECAY = 2500; // ms for a cell to cool all the way (time, not steps, so a slow run and a fast one fade alike)
 const RAMP = [[0, [252, 244, 170]], [.15, [247, 168, 64]], [.42, [214, 78, 66]], [.75, [128, 38, 96]], [1, [58, 26, 72]]];
 const RAMP2 = [[0, [236, 248, 170]], [.15, [120, 206, 120]], [.42, [46, 150, 150]], [.75, [42, 88, 130]], [1, [30, 46, 84]]];
 const FILL = [[0, [236, 238, 244]], [.2, [120, 128, 146]], [1, [44, 50, 62]]];
@@ -24,14 +24,14 @@ function lut(stops, n = 96) {
 const LUTS = [lut(RAMP), lut(RAMP2), lut(FILL)];
 export const PATH = "#6fe7ff", START = "#5fffb0", GOAL = "#ff5e7e", WALL = "#06080d", FLOOR = "#161d29";
 
-// One run of one solver on one maze: steps it and remembers, per cell, the step it was last
-// touched and which color ramp to use.
+// One run of one solver on one maze: steps it and remembers, per cell, when it was last touched
+// (a performance.now() time) and which color ramp to use.
 export class Run {
   constructor(maze, algo, start, goal, decay = DECAY) {
     this.maze = maze; this.algo = algo; this.start = start; this.goal = goal; this.decay = decay;
     this.gen = SOLVERS[algo].run(maze, start, goal);
     this.steps = 0; this.looked = 0; this.path = null; this.pathAt = 0; this.done = false; this.walker = -1;
-    this.last = new Int32Array(maze.w * maze.h).fill(-1);
+    this.last = new Float64Array(maze.w * maze.h).fill(-1);
     this.kind = new Uint8Array(maze.w * maze.h);
   }
   step(now = 0) {
@@ -40,12 +40,12 @@ export class Run {
     if (r.done) { this.done = true; return; }
     const s = r.value;
     this.steps++;
-    if (s.look !== undefined) { this.touch(s.look, s.side ? 1 : 0); this.looked++; }
-    if (s.fill !== undefined) { this.touch(s.fill, 2); this.looked++; }
-    if (s.at !== undefined) { if (this.last[s.at] < 0) this.looked++; this.touch(s.at, 0); this.walker = s.at; }
+    if (s.look !== undefined) { this.touch(s.look, s.side ? 1 : 0, now); this.looked++; }
+    if (s.fill !== undefined) { this.touch(s.fill, 2, now); this.looked++; }
+    if (s.at !== undefined) { if (this.last[s.at] < 0) this.looked++; this.touch(s.at, 0, now); this.walker = s.at; }
     if (s.path !== undefined) { this.done = true; this.path = s.path; this.pathAt = now; }
   }
-  touch(c, k) { this.last[c] = this.steps; this.kind[c] = k; }
+  touch(c, k, now) { this.last[c] = now; this.kind[c] = k; }
 }
 
 // where a maze sits: { ox, oy, cell } (top-left corner in CSS px, and the cell size)
@@ -80,7 +80,7 @@ export function drawRun(g, run, at, now, wallsImage = null) {
   for (let c = 0; c < run.last.length; c++) {
     const t = run.last[c];
     if (t < 0) continue;
-    const age = Math.min(1, (run.steps - t) / run.decay);
+    const age = Math.min(1, Math.max(0, (now - t) / run.decay));
     g.fillStyle = LUTS[run.kind[c]][Math.round(age * (n - 1))];
     g.fillRect(ox + (c % m.w) * cell, oy + Math.floor(c / m.w) * cell, cell + 0.5, cell + 0.5);
   }

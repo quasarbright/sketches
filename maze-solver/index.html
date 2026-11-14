@@ -53,14 +53,15 @@
     .control-bar { z-index: 6; }
     .control-bar .btn { min-width: 40px; }
     .control-bar .btn svg { width: 16px; height: 16px; fill: currentColor; display: block; margin: auto; }
-    .ms-run.is-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+    .ms-run.is-on, .ms-skip-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+    .ms-speed { align-self: center; min-width: 6.5ch; text-align: center; font: 500 .82rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
     select.ms-select { width: 100%; }
     .ms-hint { font-size: .78rem; color: var(--faint); margin-top: 4px; }
     mike-footer[overlay] a { color: var(--accent) !important; }
     .cohesion-about .ms-dia { display: block; margin: 12px auto 4px; max-width: 100%; height: auto !important; border-radius: 10px; background: var(--bg); }
     .cohesion-about .ms-cap { font-size: .82rem; color: var(--muted); text-align: center; margin: 0 0 1.1em; }
     .cohesion-about .cy { color: var(--path); }
-    @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } }
+    @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } .control-bar { flex-wrap: wrap; justify-content: center; row-gap: 6px; width: calc(100vw - 24px); max-width: 380px; } }
   </style>
 </head>
 <body>
@@ -73,10 +74,6 @@
     <div class="control">
       <div class="control-head"><span class="name" title="how the maze gets searched">algorithm</span></div>
       <select class="ms-select" id="algo" title="how the maze gets searched"></select>
-    </div>
-    <div class="control">
-      <div class="control-head"><span class="name" title="how many steps the algorithm takes per second">speed</span><span class="value" id="speedOut"></span></div>
-      <input type="range" id="speed" min="0" max="100" step="1" value="55" title="how many steps the algorithm takes per second" />
     </div>
     <div class="control">
       <div class="control-head"><span class="name" title="long winding corridors, or short branches everywhere">maze</span></div>
@@ -99,6 +96,10 @@
   <div class="control-bar">
     <button class="btn ms-run" id="run" title="run the algorithm (space)" aria-label="run"><svg viewBox="0 0 16 16" id="runIco"></svg></button>
     <button class="btn" id="step" title="one step (→)" aria-label="step"><svg viewBox="0 0 16 16"><path d="M3 2.5v11L10 8zM11 2.5h2v11h-2z"/></svg></button>
+    <button class="btn" id="slower" title="half as fast (−)" aria-label="slower"><svg viewBox="0 0 16 16"><path d="M8 3v10L1.5 8zM14.5 3v10L8 8z"/></svg></button>
+    <span class="ms-speed" id="speedOut" title="steps the algorithm takes per second"></span>
+    <button class="btn" id="faster" title="twice as fast (+)" aria-label="faster"><svg viewBox="0 0 16 16"><path d="M1.5 3v10L8 8zM8 3v10l6.5-5z"/></svg></button>
+    <button class="btn" id="skip" title="skip to the end (E)" aria-label="skip to the end"><svg viewBox="0 0 16 16"><path d="M.8 3v10l5.6-5zM6.6 3v10L12.2 8zM12.6 3h2.4v10h-2.4z"/></svg></button>
     <button class="btn" id="reset" title="clear the search, keep the maze (R)">reset</button>
     <button class="btn" id="newMaze" title="a new maze (N)">new maze</button>
     <about-modal label="about" id="aboutModal">
@@ -180,7 +181,7 @@
     const at = () => ({ ox, oy, cell });
     // what the controls set. Under ?background the control panel removes itself, so everything
     // reads from here, and the controls are wired only when they exist.
-    const set = { algo: "astar", speedPos: 55, style: "corridors", loops: 0, cell: 14 };
+    const set = { algo: "astar", speed: 64, style: "corridors", loops: 0, cell: 14 };
 
     const boardCv = $("board"), wallsCv = document.createElement("canvas");
     const gg = boardCv.getContext("2d"), wg = wallsCv.getContext("2d");
@@ -198,7 +199,7 @@
       cell = set.cell;
       // keep clear of the title and readout above and the control bar below
       const W = innerWidth, H = innerHeight, margin = Math.max(12, cell);
-      const top = BG ? margin : W < 600 ? 92 : 104, bottom = BG ? margin : 82;
+      const top = BG ? margin : W < 600 ? 92 : 104, bottom = BG ? margin : W < 600 ? 128 : 82; // a phone's control bar takes two rows
       cols = Math.max(4, Math.floor((W - 2 * margin) / cell));
       rows = Math.max(4, Math.floor((H - top - bottom) / cell));
       ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
@@ -224,28 +225,29 @@
       if (run.done) setRunning(false);
     }
 
-    // speed: log scale from 1 to 3000 steps a second; the top is "max"
-    const posToSpeed = (p) => p >= 100 ? Infinity : 1 * 3000 ** (p / 100);
-    function showSpeed() {
-      const s = posToSpeed(set.speedPos);
-      if ($("speedOut")) $("speedOut").textContent = s === Infinity ? "max" : (s < 10 ? s.toFixed(1) : Math.round(s)) + "/s";
-      return s;
-    }
+    // speed: steps a second, halved and doubled by the buttons; skipping to the end runs as many
+    // steps as fit in each frame until the run finishes
+    const SPEED_MIN = 1, SPEED_MAX = 4096;
+    let skipping = false;
+    function showSpeed() { $("speedOut").textContent = set.speed + "/s"; }
+    function changeSpeed(f) { set.speed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, set.speed * f)); showSpeed(); }
     function setRunning(on) {
       running = on && !run.done;
-      $("run").classList.toggle("is-on", running);
+      if (!running) skipping = false;
+      $("run").classList.toggle("is-on", running && !skipping);
+      $("skip").classList.toggle("ms-skip-on", skipping);
       $("runIco").innerHTML = running ? '<path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z"/>' : '<path d="M4 2.5v11L13 8z"/>';
       acc = 0;
     }
+    function skipToEnd() { if (run.done) return; skipping = true; setRunning(true); }
 
     // ---------- the frame ----------
     let acc = 0, lastT = performance.now();
     function frame(now) {
       const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
       if (running && !run.done) {
-        const sp = showSpeed();
-        if (sp === Infinity) { const t0 = performance.now(); do stepOnce(); while (!run.done && performance.now() - t0 < 10); }
-        else { acc = Math.min(acc + dt * sp, 1 + sp * 0.1); while (acc >= 1 && !run.done) { acc -= 1; stepOnce(); } }
+        if (skipping) { const t0 = performance.now(); do stepOnce(); while (!run.done && performance.now() - t0 < 12); }
+        else { const sp = set.speed; acc = Math.min(acc + dt * sp, 1 + sp * 0.1); while (acc >= 1 && !run.done) { acc -= 1; stepOnce(); } }
       }
       if (run.done && BG) bgNext();
       drawGlow(now);
@@ -296,19 +298,24 @@
       for (const [id, s] of Object.entries(SOLVERS)) $("algo").insertAdjacentHTML("beforeend", `<option value="${id}">${s.name}</option>`);
       $("algo").value = set.algo;
       $("algo").addEventListener("change", () => { set.algo = $("algo").value; reset(); });
-      $("speed").addEventListener("input", () => { set.speedPos = +$("speed").value; showSpeed(); });
       $("style").addEventListener("change", () => { set.style = $("style").value; newMaze(true); });
       $("loops").addEventListener("input", () => { set.loops = +$("loops").value; showLoops(); newMaze(true); });
       $("cell").addEventListener("input", () => { set.cell = +$("cell").value; showCell(); newMaze(true); });
     }
     $("run").onclick = () => { if (run.done) reset(); setRunning(!running); };
     $("step").onclick = () => { setRunning(false); stepOnce(); };
+    $("slower").onclick = () => changeSpeed(0.5);
+    $("faster").onclick = () => changeSpeed(2);
+    $("skip").onclick = skipToEnd;
     $("reset").onclick = reset;
     $("newMaze").onclick = () => newMaze();
     addEventListener("keydown", (e) => {
       if (e.target.closest?.("input, select") || document.querySelector(".cohesion-modal-backdrop")) return;
       if (e.key === " ") { e.preventDefault(); $("run").click(); }
       else if (e.key === "ArrowRight") { e.preventDefault(); $("step").click(); }
+      else if (e.key === "-" || e.key === "_") changeSpeed(0.5);
+      else if (e.key === "=" || e.key === "+") changeSpeed(2);
+      else if (e.key === "e" || e.key === "E" || e.key === "End") skipToEnd();
       else if (e.key === "r" || e.key === "R") reset();
       else if (e.key === "n" || e.key === "N") newMaze();
     });
@@ -320,7 +327,7 @@
     function resized() {
       size();
       const W = innerWidth, H = innerHeight;
-      const top = BG ? Math.max(12, cell) : W < 600 ? 92 : 104, bottom = BG ? Math.max(12, cell) : 82;
+      const top = BG ? Math.max(12, cell) : W < 600 ? 92 : 104, bottom = BG ? Math.max(12, cell) : W < 600 ? 128 : 82;
       const fits = cols * cell <= W && rows * cell <= H - top - bottom + cell;
       if (W !== builtW || !fits || Math.abs(H - builtH) > 160) { builtW = W; builtH = H; newMaze(true); return; }
       ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
@@ -349,7 +356,7 @@
 
     showLoops(); showCell(); showSpeed();
     size(); newMaze();
-    if (BG) { set.speedPos = 70; setRunning(true); }
+    if (BG) { set.speed = 256; setRunning(true); }
     requestAnimationFrame(frame);
 
     // for tests
