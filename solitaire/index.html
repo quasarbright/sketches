@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Solitaire</title>
+  <meta name="theme-color" content="#0d1a14" />
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- night felt: a dark green room and table, ivory cards from my card-table deck, coral for the
+       player and lavender for the bot (Snake's bot color). Bungee for the marquee, the big numbers
+       and the court letters; Outfit for labels and card corners; JetBrains Mono for readouts. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #0d1a14;   /* night felt, the room */
+      --panel:     #16271e;
+      --panel-2:   #20352a;
+      --border:    #2b4436;
+      --text:      #eef2ea;
+      --muted:     #9db3a5;
+      --faint:     #66806f;
+      --accent:    #ff6b5e;   /* the player's coral */
+      --accent-hi: #ff8c80;
+      --on-accent: #2b0905;
+      --bot:       #b9a3ff;   /* the bot's lavender */
+      --felt:      #163a2a;
+      --felt-hi:   #1c4734;
+      --font-ui:      "Outfit", system-ui, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Bungee", "Arial Black", sans-serif;
+    }
+
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+    body { font-family: var(--font-ui); color: var(--text); touch-action: none; overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+    button { font: inherit; }
+    [hidden] { display: none !important; }
+    svg.k-ico { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* chunky pressable buttons with a darker lip underneath (pancakes, 2048, Snake) */
+    .k-btn {
+      --lip: #07100b;
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      font: 800 1rem var(--font-ui); letter-spacing: .01em; color: var(--text);
+      background: var(--panel-2); border: 0; border-radius: 16px; padding: 12px 20px; cursor: pointer;
+      box-shadow: 0 4px 0 var(--lip), 0 8px 18px rgba(0,0,0,.35);
+      transition: transform .08s, box-shadow .08s, background .15s, color .15s, opacity .15s;
+    }
+    .k-btn:hover { background: #29443a; }
+    .k-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--lip), 0 4px 10px rgba(0,0,0,.3); }
+    .k-btn:disabled { opacity: .35; cursor: default; }
+    .k-btn:focus-visible { outline: 3px solid var(--accent-hi); outline-offset: 3px; }
+    .k-btn.is-coral { background: var(--accent); color: var(--on-accent); --lip: #b23d32; }
+    .k-btn.is-coral:hover { background: #ff7e72; }
+    .k-btn.is-lav { background: var(--bot); color: #1b1240; --lip: #6f58c9; }
+    .k-btn.is-lav:hover { background: #c8b8ff; }
+
+    /* ---------- layout: a column, the table in the middle ---------- */
+    .k-stage {
+      position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+      padding: max(14px, env(safe-area-inset-top)) 16px 34px;
+    }
+    .k-top { position: relative; width: 100%; max-width: 760px; height: 62px; flex: none; }
+    .k-logo {
+      position: absolute; left: 0; top: 10px; margin: 0;
+      font: 400 1.7rem/1 var(--font-display); color: var(--accent); transform: rotate(-4deg);
+      text-shadow: 0 3px 0 #b23d32, 0 8px 18px rgba(0,0,0,.5);
+    }
+    .k-score {
+      position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+      display: flex; align-items: stretch; background: var(--panel); border-radius: 20px; padding: 8px 6px;
+      box-shadow: 0 4px 0 #07100b, 0 10px 24px rgba(0,0,0,.4);
+    }
+    .k-top-right { position: absolute; right: 0; top: 4px; display: flex; align-items: center; gap: 10px; }
+    .k-btn.is-small { width: 44px; height: 44px; padding: 0; border-radius: 50%; }
+    .k-stat { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 16px; min-width: 76px; }
+    .k-stat + .k-stat { border-left: 2px solid var(--border); }
+    .k-stat-label { font: 800 .66rem var(--font-ui); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+    .k-stat-value { font: 800 1.45rem/1.15 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+    .k-stat.is-main .k-stat-value { font: 400 1.5rem/1.15 var(--font-display); color: var(--accent); }
+    .k-stat.is-bot .k-stat-value, .k-stat.is-bot .k-stat-label { color: var(--bot); }
+
+    .k-mid { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; }
+    .k-table {
+      position: relative; border-radius: 18px; background: radial-gradient(120% 90% at 50% 30%, var(--felt-hi), var(--felt) 70%);
+      box-shadow: inset 0 0 0 2px #22513b, 0 6px 0 #07100b, 0 30px 60px rgba(0,0,0,.5);
+    }
+    /* empty spots: an outline, a suit on a foundation, a loop on an empty stock */
+    .k-slot {
+      position: absolute; left: 0; top: 0; border-radius: calc(var(--cw) * .08);
+      box-shadow: inset 0 0 0 2px rgba(238, 242, 234, .14); background: rgba(0,0,0,.1);
+      display: grid; place-items: center; color: rgba(238, 242, 234, .16);
+    }
+    .k-slot svg { width: 42%; height: 42%; }
+    .k-slot.is-stock { cursor: pointer; }
+    .k-slot.is-drop { box-shadow: inset 0 0 0 2.5px var(--accent); }
+
+    /* cards: a spring per card moves them (main script); the inner part flips between face and back */
+    .k-card { position: absolute; left: 0; top: 0; width: var(--cw); height: var(--ch); will-change: transform; cursor: default; }
+    .k-card.is-grab { cursor: grab; }
+    .k-flip { position: absolute; inset: 0; transform-style: preserve-3d; }
+    .k-face, .k-back { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: calc(var(--cw) * .07); }
+    .k-back { transform: rotateY(180deg); }
+    .k-face svg, .k-back svg { display: block; width: 100%; height: 100%; }
+    .k-shadow { position: absolute; inset: 0; border-radius: calc(var(--cw) * .07); box-shadow: 0 1px 2px rgba(0,0,0,.45); transition: box-shadow .15s; }
+    .k-card.is-up .k-shadow { box-shadow: 0 12px 20px rgba(0,0,0,.45); }
+    .k-card.is-next .k-shadow { box-shadow: 0 0 0 3px var(--bot), 0 0 18px rgba(185,163,255,.6), 0 8px 14px rgba(0,0,0,.4); }
+    .k-card.is-bad .k-shadow { box-shadow: 0 0 0 3px var(--accent), 0 6px 12px rgba(0,0,0,.4); }
+    .so-index { font: 800 15px var(--font-ui); }
+    .so-index.so-ten { font-size: 13px; letter-spacing: -.06em; }
+    .so-court { font: 400 22px var(--font-display); }
+    /* the bot's next move: an arc from the card to where it's going */
+    .k-arrow { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 900; }
+    .k-arrow path { fill: none; stroke: var(--bot); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 7; opacity: .9; }
+    .k-arrow circle { fill: var(--bot); }
+
+    /* under the table: how to play, or what the bot is doing */
+    .k-strip { height: 52px; flex: none; display: grid; place-items: center; width: 100%; }
+    .k-hint { font: 600 .92rem var(--font-ui); color: var(--muted); text-align: center; }
+    .k-think { display: flex; align-items: center; gap: 10px; font: 600 .92rem var(--font-ui); color: var(--text); white-space: nowrap; }
+    .k-think::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--bot); box-shadow: 0 0 10px var(--bot); }
+    .k-think-sub { color: var(--muted); font-weight: 500; }
+
+    .k-controls { flex: none; display: flex; gap: 18px; align-items: flex-start; justify-content: center; }
+    .k-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+    .k-ctl .k-btn.is-round { width: 54px; height: 54px; padding: 0; border-radius: 50%; }
+    .k-ctl > span { font: 700 .75rem var(--font-ui); letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+    .k-bot-btn { min-width: 210px; height: 54px; border-radius: 27px; font-size: 1.05rem; white-space: nowrap; }
+    .k-bot-btn svg.k-ico { width: 24px; height: 24px; }
+    .k-speed { display: flex; align-items: center; gap: 10px; height: 20px; font: 700 .75rem var(--font-ui); color: var(--muted); transition: opacity .2s; }
+    .k-speed.is-off { opacity: 0; pointer-events: none; }
+    .k-speed input { width: 120px; accent-color: var(--bot); margin: 0; }
+    .k-speed output { font: 600 .75rem var(--font-mono); color: var(--bot); width: 7ch; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ---------- the end of a game ---------- */
+    .k-over { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 16px; background: rgba(5,10,7,.5); }
+    .k-card-end {
+      width: min(380px, 100%); text-align: center; padding: 30px 26px 26px;
+      background: var(--panel); border-radius: 26px; box-shadow: 0 6px 0 #07100b, 0 24px 60px rgba(0,0,0,.6);
+      animation: k-pop .45s cubic-bezier(.2, 1.5, .4, 1);
+    }
+    @keyframes k-pop { from { transform: scale(.6) translateY(30px); opacity: 0; } }
+    .k-card-end h2 { margin: 0; font: 400 2.3rem/1 var(--font-display); color: var(--accent); transform: rotate(-3deg); }
+    .k-card-who { margin: 12px 0 0; font-weight: 600; color: var(--muted); }
+    .k-results { display: flex; justify-content: center; margin: 22px 0 26px; }
+    .k-results .k-stat { min-width: 0; padding: 0 14px; }
+
+    canvas#fx { position: fixed; inset: 0; pointer-events: none; z-index: 1500; }
+    mike-footer[overlay] { z-index: 11 !important; }
+    mike-footer[overlay] a { color: var(--accent) !important; }
+
+    .cohesion-about .k-dia { display: block; margin: 14px auto 6px; max-width: 100%; height: auto !important; }
+    .cohesion-about .k-cap { font-size: .85rem; color: var(--muted); text-align: center; margin: 0 0 1.2em; }
+    .cohesion-about .bot { color: var(--bot); }
+    .k-ranks { display: grid; gap: 6px; margin: 14px 0 6px; }
+    .k-rank { display: grid; grid-template-columns: 1fr 90px 3.5ch; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 10px; background: var(--panel-2); font-size: .9rem; }
+    .k-rank.is-best { box-shadow: inset 0 0 0 2px var(--bot); }
+    .k-rank-why { color: var(--muted); font-size: .8rem; }
+    .k-rank-bar { height: 8px; border-radius: 4px; background: rgba(0,0,0,.25); overflow: hidden; }
+    .k-rank-bar > div { height: 100%; background: var(--faint); border-radius: 4px; }
+    .k-rank.is-best .k-rank-bar > div { background: var(--bot); }
+    .k-rank-val { font: 600 .8rem var(--font-mono); text-align: right; color: var(--muted); }
+
+    @media (max-width: 600px) {
+      .k-logo { font-size: 1.2rem; top: 14px; }
+      .k-top { height: 112px; }
+      .k-top-right { top: 2px; }
+      .k-score { top: 58px; left: 0; right: 0; transform: none; justify-content: center; padding: 6px 4px; }
+      .k-stat { min-width: 0; flex: 1; padding: 0 10px; }
+      .k-stage { padding-left: 8px; padding-right: 8px; }
+      .k-controls { gap: 4px; }
+      .k-ctl:has(.is-round) { width: 66px; }
+      .k-ctl > span { font-size: .66rem; letter-spacing: 0; }
+      .k-ctl .k-btn.is-round { width: 48px; height: 48px; }
+      .k-bot-btn { min-width: 0; width: 132px; height: 48px; font-size: .86rem; padding: 0 10px; gap: 5px; }
+      .k-bot-btn svg.k-ico { width: 20px; height: 20px; }
+      .k-speed { gap: 6px; }
+      .k-speed input { width: 64px; }
+      .k-speed output { width: 5.5ch; }
+      .k-think { font-size: .85rem; }
+      .k-think-sub { display: none; }
+      .k-hint { font-size: .85rem; }
+      .so-index { font-size: 17px; }
+    }
+    @media (max-width: 360px) { .k-bot-btn { width: 118px; font-size: .8rem; } .k-bot-btn svg.k-ico { display: none; } .k-ctl:has(.is-round) { width: 60px; } }
+    @media (prefers-reduced-motion: reduce) { .k-card-end { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <canvas id="fx"></canvas>
+  <div id="defs"></div>
+
+  <div class="k-stage" id="stage">
+    <div class="k-top">
+      <h1 class="k-logo">Solitaire</h1>
+      <div class="k-score" id="scoreboard">
+        <div class="k-stat is-main" id="statMoves" title="moves made in this deal: every card moved, every draw and every undo counts">
+          <span class="k-stat-label">Moves</span><span class="k-stat-value" id="moves">0</span>
+        </div>
+        <div class="k-stat" title="time spent on this deal">
+          <span class="k-stat-label">Time</span><span class="k-stat-value" id="time">0:00</span>
+        </div>
+        <div class="k-stat" id="statWins" title="deals won out of deals played. Yours on this device count only deals the bot didn't touch; the bot's are this visit's">
+          <span class="k-stat-label" id="winsLabel">Won</span><span class="k-stat-value" id="wins">0/0</span>
+        </div>
+      </div>
+      <div class="k-top-right">
+        <button class="k-btn is-small" id="soundBtn" title="sound on/off (M)" aria-label="sound">
+          <svg class="k-ico" viewBox="0 0 24 24" id="soundIco"></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="k-mid" id="mid">
+      <div class="k-table" id="table">
+        <svg class="k-arrow" id="arrow"></svg>
+      </div>
+    </div>
+
+    <div class="k-strip">
+      <div class="k-hint" id="hint">Drag cards, or tap one to send it where it fits. Tap the stock to draw.</div>
+      <div class="k-think" id="think" hidden><span id="thinkText"></span><span class="k-think-sub" id="thinkSub"></span></div>
+    </div>
+
+    <div class="k-controls">
+      <div class="k-ctl">
+        <button class="k-btn is-round" id="newGame" title="deal a new game (N)">
+          <svg class="k-ico" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button><span>New deal</span>
+      </div>
+      <div class="k-ctl">
+        <button class="k-btn is-round" id="undo" title="take back the last move (Z)">
+          <svg class="k-ico" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </button><span>Undo</span>
+      </div>
+      <div class="k-ctl">
+        <button class="k-btn is-coral k-bot-btn" id="botBtn" title="hand the cards to the bot; press it again, or move a card yourself, to take over (B)">
+          <svg class="k-ico" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M2 13v2M22 13v2"/></svg>
+          <span id="botLabel">Let the bot play</span>
+        </button>
+        <label class="k-speed is-off" id="speedRow" title="how many moves the bot makes per second. At max it plays as fast as it can think, and deals the next game straight away">
+          speed <input type="range" id="speed" min="0" max="100" step="1" title="how many moves the bot makes per second. At max it plays as fast as it can think, and deals the next game straight away"><output id="speedOut"></output>
+        </label>
+      </div>
+      <div class="k-ctl">
+        <button class="k-btn is-round" id="about" title="how the bot decides what to play">
+          <svg class="k-ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><path d="M12 17.6h.01"/></svg>
+        </button><span>How it thinks</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="k-over" id="over" hidden>
+    <div class="k-card-end" role="dialog" aria-labelledby="overTitle">
+      <h2 id="overTitle">You won!</h2>
+      <p class="k-card-who" id="overWho"></p>
+      <div class="k-results">
+        <div class="k-stat is-main"><span class="k-stat-label">Moves</span><span class="k-stat-value" id="overMoves"></span></div>
+        <div class="k-stat"><span class="k-stat-label">Time</span><span class="k-stat-value" id="overTime"></span></div>
+        <div class="k-stat"><span class="k-stat-label">Won</span><span class="k-stat-value" id="overWins"></span></div>
+      </div>
+      <button class="k-btn is-coral" id="overNew" title="deal a new game">New deal</button>
+    </div>
+  </div>
+
+  <template id="aboutTpl">
+    <h2 class="title">How the bot thinks</h2>
+    <p class="intro">My bot plays Klondike knowing only what you could see, and wins about 45% of
+      deals.</p>
+
+    <div class="section-label">what it knows</div>
+    <p>It never looks at a face-down card. The stock is different: you can flip through it as many
+      times as you like, so every card in it is one you could reach. The bot treats the stock and
+      the waste as one pool of cards it can use, and playing one of them means drawing until it's on
+      top.</p>
+
+    <div class="section-label">looking ahead</div>
+    <p>Each turn it tries every move it could make, and every move after that, and scores where
+      each line ends up:</p>
+    <ul>
+      <li>turning a face-down card over counts the most, since it's a new card to play</li>
+      <li>then each card on a foundation</li>
+      <li>face-up cards piled on top of face-down ones count against it: they're in the way</li>
+      <li>an empty column counts while a king is waiting for one</li>
+    </ul>
+    <p>Every move costs a point, so it only moves cards around when that leads somewhere. If
+      nothing within two moves helps, it looks further ahead, up to six moves. Here's one turn from
+      a real deal: every move it could make, and how much better than doing nothing the best line
+      after it scores.</p>
+    <div class="k-ranks" data-dia="ranks"></div>
+    <p class="k-cap">The <span class="bot">top</span> move is the one it plays.</p>
+
+    <div class="section-label">never going back</div>
+    <p>It remembers every position the deal has been in and never moves back into one. That's
+      what stops it from moving the same card back and forth forever. When every move it has
+      leads somewhere it's already been, it's stuck, and the deal is lost.</p>
+
+    <div class="section-label">how often it wins</div>
+    <p>Over 200 deals it won 45%. Some deals can't be won by anyone, and some come down to what
+      happens to be face down.</p>
+  </template>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module">
+    import { deal, apply, legal, won, hiddenCount, foundCount, fitsTab, fitsFound, suitOf, rankOf, cardName, SUITS, RANKS } from "./game.mjs";
+    import { decide, view, key } from "./bot.mjs";
+    import { faceSVG, backSVG, suitDefs } from "./faces.mjs";
+    import { openModal } from "../shared/cohesion.js";
+    import * as audio from "./audio.mjs";
+    import { setupAbout } from "./about.mjs";
+
+    const $ = (id) => document.getElementById(id);
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const store = {
+      get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    };
+    const GAME_KEY = "quasarbright:solitaire-game", REC_KEY = "quasarbright:solitaire-record", MUTE_KEY = "quasarbright:solitaire-muted";
+    $("defs").innerHTML = suitDefs();
+
+    // ---------- state ----------
+    let state;                 // the game (game.mjs)
+    let history = [];          // earlier states, for undo
+    let seen = new Set();      // positions this deal has been in (the bot never goes back to one)
+    let botMoves = 0;          // moves the bot made this deal
+    let elapsed = 0, clockFrom = 0; // time on this deal: ms banked, plus since clockFrom while running
+    let over = false;
+    let record = JSON.parse(store.get(REC_KEY) || "null") || { won: 0, played: 0 }; // your deals
+    const botRecord = { won: 0, played: 0 }; // the bot's, this visit
+
+    // ---------- layout ----------
+    // the table: the stock, the waste and the four foundations across the top, seven columns below
+    const tableEl = $("table");
+    let cw = 70, ch = 98, gap = 8, tw = 0, th = 0;
+    function layoutTable() {
+      const mid = $("mid").getBoundingClientRect();
+      const Wd = document.documentElement.clientWidth;
+      const availW = Math.min(Wd - (Wd < 600 ? 16 : 32), 760), availH = mid.height - 8;
+      // card width from the width; the columns fan to fit whatever height there is
+      cw = Math.floor(Math.min((availW) / (7 + 8 * 0.14), (availH - 20) / (1.4 * 3.2)));
+      cw = Math.max(36, Math.min(cw, 100));
+      ch = Math.round(cw * 1.4);
+      gap = Math.round(cw * 0.14);
+      tw = 7 * cw + 8 * gap;
+      th = Math.max(ch * 3, Math.min(availH, ch * 5.4));
+      tableEl.style.width = tw + "px"; tableEl.style.height = th + "px";
+      tableEl.style.setProperty("--cw", cw + "px"); tableEl.style.setProperty("--ch", ch + "px");
+      placeSlots();
+      placeCards(true);
+    }
+    const colX = (i) => gap + i * (cw + gap);
+    const rowY = (r) => r === 0 ? gap : gap * 2 + ch;
+    // where each pile sits: { x, y }
+    function pileXY(pile, i) {
+      if (pile === "stock") return { x: colX(0), y: rowY(0) };
+      if (pile === "waste") return { x: colX(1), y: rowY(0) };
+      if (pile === "found") return { x: colX(3 + i), y: rowY(0) };
+      return { x: colX(i), y: rowY(1) };
+    }
+    // how far apart cards in a column are, shrinking for a tall column so it fits the table
+    function fan(col) {
+      const room = th - rowY(1) - ch - gap;
+      let down = ch * 0.12, up = ch * 0.27;
+      const need = col.down.length * down + Math.max(0, col.up.length - 1) * up;
+      if (need > room && need > 0) { const k = room / need; down *= k; up *= k; }
+      return { down, up };
+    }
+
+    // empty spots
+    const SUIT_ICON = (s) => `<svg viewBox="0 0 1 1" fill="currentColor"><use href="#so-suit-${s}"/></svg>`;
+    const LOOP_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
+    const slots = {};
+    function makeSlot(id, html) {
+      const el = document.createElement("div");
+      el.className = "k-slot"; el.innerHTML = html || "";
+      tableEl.append(el); slots[id] = el; return el;
+    }
+    makeSlot("stock", LOOP_ICON).classList.add("is-stock");
+    makeSlot("waste");
+    SUITS.forEach((s, i) => makeSlot("found" + i, SUIT_ICON(s)));
+    for (let i = 0; i < 7; i++) makeSlot("tab" + i);
+    function placeSlots() {
+      const put = (el, { x, y }) => { el.style.transform = `translate(${x}px, ${y}px)`; el.style.width = cw + "px"; el.style.height = ch + "px"; };
+      put(slots.stock, pileXY("stock")); put(slots.waste, pileXY("waste"));
+      for (let i = 0; i < 4; i++) put(slots["found" + i], pileXY("found", i));
+      for (let i = 0; i < 7; i++) put(slots["tab" + i], pileXY("tab", i));
+    }
+
+    // ---------- cards and their springs ----------
+    // One element per card. Each has a spring for position, lift (hover), lean (sway, while
+    // carried), tilt toward the pointer (tx, ty) and flip (0 = face up, 1 = face down). Every frame
+    // each card springs toward its target, so deals, moves, drags and flips are all continuous.
+    // Same motion as my card-table project.
+    const cards = [];
+    for (let c = 0; c < 52; c++) {
+      const el = document.createElement("div");
+      el.className = "k-card";
+      el.dataset.card = c;
+      el.innerHTML = `<div class="k-flip"><div class="k-shadow"></div><div class="k-face">${faceSVG(RANKS[rankOf(c)], SUITS[suitOf(c)])}</div><div class="k-back">${backSVG()}</div></div>`;
+      tableEl.append(el);
+      const flipEl = el.firstChild;
+      const KEYS = ["x", "y", "lift", "sway", "tx", "ty", "flip"];
+      const zero = () => Object.fromEntries(KEYS.map((k) => [k, 0]));
+      cards.push({ c, el, flipEl, cur: zero(), vel: zero(), tgt: { ...zero(), z: 0 }, carried: false, delay: 0 });
+    }
+    const KEYS = ["x", "y", "lift", "sway", "tx", "ty", "flip"];
+
+    // where every card belongs right now, from the game state (and the drag, if there is one)
+    let drag = null;       // { cards: [c...], from, dx, dy, px, py, moved }
+    let hover = null;      // card under the pointer that can be picked up
+    let tilt = { x: 0, y: 0 };
+    let nextPlan = null;   // the bot's next move, for the highlight
+    function placeCards(instant = false, stagger = false) {
+      const at = (c, x, y, z, faceDown) => {
+        const k = cards[c], t = k.tgt;
+        t.x = x; t.y = y; t.z = z; t.flip = faceDown ? 1 : 0;
+        t.lift = 0; t.tx = 0; t.ty = 0;
+        k.carried = false;
+      };
+      let z = 1;
+      const st = pileXY("stock");
+      state.stock.forEach((c, i) => at(c, st.x - Math.min(i, 6) * 0.4, st.y - Math.min(i, 6) * 0.4, z++, true));
+      const wa = pileXY("waste");
+      // the top three waste cards fan a little to the right
+      state.waste.forEach((c, i) => { const k = Math.max(0, i - (state.waste.length - 3)); at(c, wa.x + k * cw * 0.16, wa.y, z++, false); });
+      state.found.forEach((pile, s) => { const f = pileXY("found", s); pile.forEach((c) => at(c, f.x, f.y, z++, false)); });
+      state.tab.forEach((col, i) => {
+        const p = pileXY("tab", i), f = fan(col);
+        let y = p.y;
+        col.down.forEach((c) => { at(c, p.x, y, z++, true); y += f.down; });
+        col.up.forEach((c) => { at(c, p.x, y, z++, false); y += f.up; });
+      });
+      // dragged cards follow the pointer, above everything
+      if (drag && drag.moved) drag.cards.forEach((c, i) => {
+        const t = cards[c].tgt;
+        t.x = drag.px - drag.dx; t.y = drag.py - drag.dy + i * ch * 0.27;
+        t.z = 1000 + i; t.lift = 1; cards[c].carried = true;
+      });
+      // the hovered card lifts and tilts toward the pointer (Balatro)
+      if (hover !== null && !drag) { const t = cards[hover].tgt; t.lift = 1; t.tx = tilt.x; t.ty = tilt.y; }
+      // the bot's next card lifts a little
+      for (const k of cards) k.el.classList.remove("is-next", "is-up");
+      if (nextPlan && nextPlan.card != null && nextPlan.why !== "draw" && bot.on && !fast()) {
+        const k = cards[nextPlan.card];
+        k.el.classList.add("is-next"); k.tgt.lift = Math.max(k.tgt.lift, 0.6);
+      }
+      for (const k of cards) { k.el.style.zIndex = k.tgt.z; if (k.tgt.lift > 0.5) k.el.classList.add("is-up"); }
+      if (instant || reduceMotion) for (const k of cards) { for (const key of KEYS) { k.cur[key] = k.tgt[key]; k.vel[key] = 0; } draw1(k); }
+      drawArrow();
+      wake();
+    }
+
+    let raf = 0, lastT = 0;
+    function wake() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(springTick); } }
+    function springTick(now) {
+      raf = 0;
+      const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+      let busy = false;
+      for (const k of cards) {
+        const t = k.tgt, c = k.cur, v = k.vel;
+        // carried cards lean the way they're moving
+        t.sway = k.carried ? Math.max(-12, Math.min(12, v.x * 0.012)) : 0;
+        const stiff = fast() ? 1400 : k.carried ? 900 : 260, zeta = k.carried ? 0.85 : 0.72;
+        let moving = false;
+        for (let step = 0, steps = Math.ceil(dt / 0.008); step < steps; step++) {
+          const h = dt / steps;
+          for (const key of KEYS) {
+            const kk = key === "lift" ? 420 : key === "flip" ? 160 : key === "sway" || key === "tx" || key === "ty" ? 300 : stiff;
+            const z = key === "lift" ? 0.6 : key === "flip" ? 0.9 : zeta;
+            v[key] += (kk * (t[key] - c[key]) - 2 * z * Math.sqrt(kk) * v[key]) * h;
+            c[key] += v[key] * h;
+          }
+        }
+        for (const key of KEYS) if (Math.abs(t[key] - c[key]) > 0.02 || Math.abs(v[key]) > 0.05) moving = true;
+        if (!moving) for (const key of KEYS) { c[key] = t[key]; v[key] = 0; }
+        if (moving || k.dirty) { draw1(k); k.dirty = moving; busy = busy || moving; }
+      }
+      if (busy) raf = requestAnimationFrame(springTick);
+      drawArrow();
+    }
+    function draw1(k) {
+      const c = k.cur;
+      const lift = c.lift * cw * 0.08;
+      k.el.style.transform = `translate(${c.x}px, ${c.y - lift}px) rotate(${c.sway}deg) scale(${1 + c.lift * 0.05})`;
+      k.flipEl.style.transform = `perspective(${cw * 8}px) rotateX(${c.ty}deg) rotateY(${c.flip * 180 + c.tx}deg)`;
+    }
+
+    // ---------- the bot's next move, drawn as an arc ----------
+    function drawArrow() {
+      const svg = $("arrow");
+      if (!nextPlan || nextPlan.card == null || !nextPlan.to || nextPlan.why === "draw" || !bot.on || fast() || over) { if (svg.innerHTML) svg.innerHTML = ""; return; }
+      const k = cards[nextPlan.card];
+      const from = { x: k.cur.x + cw / 2, y: k.cur.y + ch * 0.3 };
+      const dest = destXY(nextPlan.to);
+      if (!dest) { svg.innerHTML = ""; return; }
+      const mx = (from.x + dest.x) / 2, my = Math.min(from.y, dest.y) - Math.max(30, Math.abs(dest.x - from.x) * 0.25);
+      svg.setAttribute("viewBox", `0 0 ${tw} ${th}`);
+      svg.setAttribute("width", tw); svg.setAttribute("height", th);
+      svg.innerHTML = `<path d="M${from.x} ${from.y}Q${mx} ${my} ${dest.x} ${dest.y}"/><circle cx="${dest.x}" cy="${dest.y}" r="5"/>`;
+    }
+    // the point a card moving to `to` would land on
+    function destXY(to) {
+      if (to.pile === "found") { const p = pileXY("found", to.i); return { x: p.x + cw / 2, y: p.y + ch * 0.3 }; }
+      if (to.pile === "tab") {
+        const col = state.tab[to.i], p = pileXY("tab", to.i), f = fan(col);
+        const y = p.y + col.down.length * f.down + col.up.length * f.up;
+        return { x: p.x + cw / 2, y: y + ch * 0.12 };
+      }
+      return null;
+    }
+
+    // ---------- moves ----------
+    // who: "you" or "bot". Returns whether it moved.
+    function doMove(m, who = "you") {
+      if (over || !legal(state, m)) return false;
+      if (who === "you" && bot.on) setBot(false);
+      history.push(state);
+      if (history.length > 500) history.shift();
+      const prev = state;
+      const r = apply(state, m);
+      state = r.state;
+      if (who === "bot") botMoves++;
+      if (m.type !== "draw") seen.add(key(view(state)));
+      startClock();
+      // sounds
+      if (m.type === "draw") audio.play(prev.stock.length ? "draw" : "recycle");
+      else if (m.to.pile === "found") audio.play("home", foundCount(state) % 13);
+      else audio.play("place");
+      if (r.flipped) setTimeout(() => audio.play("flip"), 90);
+      afterMove();
+      return true;
+    }
+    function afterMove() {
+      hover = hover !== null && canPick(hover) ? hover : null;
+      placeCards();
+      renderHud();
+      saveGame();
+      if (won(state)) return gameWon();
+      // everything face up: the rest plays itself
+      if (!hiddenCount(state) && !bot.on && !finishing) finish();
+    }
+
+    // when the face-down cards are all turned over, the bot plays out the rest quickly
+    let finishing = false;
+    function finish() {
+      finishing = true;
+      const step = () => {
+        if (!finishing || over || bot.on) { finishing = false; return; }
+        const p = decide(state, seen);
+        if (!p.move) { finishing = false; return; }
+        doMove(p.move, "finish");
+        if (!over) setTimeout(step, p.move.type === "draw" ? 40 : 110);
+        else finishing = false;
+      };
+      setTimeout(step, 250);
+    }
+
+    function undo() {
+      if (!history.length || over) return audio.play("bump");
+      if (bot.on) setBot(false);
+      finishing = false;
+      state = { ...history.pop(), moves: state.moves + 1 };
+      audio.play("place");
+      placeCards(); renderHud(); saveGame();
+    }
+
+    // ---------- picking up, dropping, tapping ----------
+    // the cards a press on card c would pick up (a run from a column), or null
+    function pickFrom(c) {
+      if (state.waste.length && state.waste[state.waste.length - 1] === c) return { cards: [c], from: { pile: "waste", i: 0 }, n: 1 };
+      for (let s = 0; s < 4; s++) { const f = state.found[s]; if (f.length && f[f.length - 1] === c) return { cards: [c], from: { pile: "found", i: s }, n: 1 }; }
+      for (let i = 0; i < 7; i++) {
+        const up = state.tab[i].up, k = up.indexOf(c);
+        if (k >= 0) return { cards: up.slice(k), from: { pile: "tab", i }, n: up.length - k };
+      }
+      return null;
+    }
+    const canPick = (c) => !!pickFrom(c);
+
+    // the move for dropping what's carried where its middle is
+    function dropTarget(px, py) {
+      const pick = drag;
+      const x = px - drag.dx + cw / 2, y = py - drag.dy + ch / 2;
+      let best = null, bestD = Infinity;
+      const consider = (to, cx, cy) => {
+        const m = { type: "move", from: pick.from, to, n: pick.n };
+        if (!legal(state, m)) return;
+        const d = Math.hypot(cx - x, (cy - y) * 0.6);
+        if (d < bestD && d < cw * 1.3) { bestD = d; best = m; }
+      };
+      for (let s = 0; s < 4; s++) { const p = pileXY("found", s); consider({ pile: "found", i: s }, p.x + cw / 2, p.y + ch / 2); }
+      for (let i = 0; i < 7; i++) {
+        const col = state.tab[i], p = pileXY("tab", i), f = fan(col);
+        const top = p.y + col.down.length * f.down + Math.max(0, col.up.length - 1) * f.up;
+        consider({ pile: "tab", i }, p.x + cw / 2, Math.min(top + ch / 2, Math.max(p.y + ch / 2, y)));
+      }
+      return best;
+    }
+    // a tap: the card goes to its foundation if it can, otherwise to the first column it fits
+    function tapMove(c) {
+      const pick = pickFrom(c);
+      if (!pick) return null;
+      if (pick.n === 1 && fitsFound(c, state.found)) return { type: "move", from: pick.from, to: { pile: "found", i: suitOf(c) }, n: 1 };
+      const order = [...Array(7).keys()].sort((a, b) => (state.tab[b].up.length > 0) - (state.tab[a].up.length > 0));
+      for (const i of order) {
+        if (pick.from.pile === "tab" && pick.from.i === i) continue;
+        const m = { type: "move", from: pick.from, to: { pile: "tab", i }, n: pick.n };
+        if (legal(state, m)) return m;
+      }
+      return null;
+    }
+
+    const modalOpen = () => !!document.querySelector(".cohesion-modal-backdrop");
+    const tableXY = (e) => { const r = tableEl.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    function cardAt(e) { const el = e.target.closest?.(".k-card"); return el ? +el.dataset.card : null; }
+
+    tableEl.addEventListener("pointerdown", (e) => {
+      if (over || modalOpen() || e.button > 0) return;
+      const c = cardAt(e), p = tableXY(e);
+      // the stock: draw (or turn the waste back over)
+      const st = pileXY("stock");
+      if ((c !== null && state.stock.includes(c)) || (c === null && p.x >= st.x && p.x <= st.x + cw && p.y >= st.y && p.y <= st.y + ch)) {
+        if (!doMove({ type: "draw" })) audio.play("bump");
+        return;
+      }
+      if (c === null) return;
+      const pick = pickFrom(c);
+      if (!pick) return;
+      const k = cards[c];
+      drag = { ...pick, dx: p.x - k.cur.x, dy: p.y - k.cur.y, px: p.x, py: p.y, sx: p.x, sy: p.y, moved: false, id: e.pointerId };
+      tableEl.setPointerCapture(e.pointerId);
+    });
+    tableEl.addEventListener("pointermove", (e) => {
+      const p = tableXY(e);
+      if (drag && e.pointerId === drag.id) {
+        drag.px = p.x; drag.py = p.y;
+        if (!drag.moved && Math.hypot(p.x - drag.sx, p.y - drag.sy) > 5) { drag.moved = true; if (bot.on) setBot(false); }
+        if (drag.moved) placeCards();
+        return;
+      }
+      // hover: lift the card under the pointer and tilt it toward the pointer
+      if (e.pointerType !== "mouse") return;
+      const c = cardAt(e);
+      const h = c !== null && canPick(c) ? c : null;
+      if (h !== null) {
+        const k = cards[h];
+        tilt = { x: ((p.x - k.cur.x) / cw - 0.5) * 16, y: -((p.y - k.cur.y) / ch - 0.5) * 12 };
+      }
+      if (h !== hover || h !== null) { hover = h; placeCards(); }
+    });
+    tableEl.addEventListener("pointerleave", () => { if (hover !== null && !drag) { hover = null; placeCards(); } });
+    function endDrag(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag;
+      if (d.moved) {
+        const m = dropTarget(d.px, d.py);
+        drag = null;
+        if (!m || !doMove(m)) { audio.play("bump"); placeCards(); }
+      } else {
+        drag = null;
+        const m = tapMove(d.cards[0]);
+        if (!m || !doMove(m)) { bad(d.cards[0]); audio.play("bump"); placeCards(); }
+      }
+    }
+    tableEl.addEventListener("pointerup", endDrag);
+    tableEl.addEventListener("pointercancel", (e) => { if (drag && e.pointerId === drag.id) { drag = null; placeCards(); } });
+    // a card with nowhere to go flashes for a moment
+    function bad(c) { const el = cards[c].el; el.classList.add("is-bad"); setTimeout(() => el.classList.remove("is-bad"), 300); }
+
+    // ---------- scoreboard ----------
+    function startClock() { if (!clockFrom && !over) clockFrom = performance.now(); }
+    function stopClock() { if (clockFrom) { elapsed += performance.now() - clockFrom; clockFrom = 0; } }
+    const clock = () => elapsed + (clockFrom ? performance.now() - clockFrom : 0);
+    const mmss = (ms) => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+    function renderHud() {
+      $("moves").textContent = state.moves;
+      $("time").textContent = mmss(clock());
+      const showBot = bot.on || (botRecord.played > 0 && botMoves > 0);
+      const r = showBot ? botRecord : record;
+      $("wins").textContent = `${r.won}/${r.played}`;
+      $("winsLabel").textContent = showBot ? "Bot won" : "Won";
+      $("statWins").classList.toggle("is-bot", showBot);
+      $("statMoves").classList.toggle("is-bot", bot.on);
+      $("undo").disabled = !history.length;
+    }
+    setInterval(() => { $("time").textContent = mmss(clock()); }, 250);
+
+    // ---------- the bot ----------
+    // log scale from 1 to 300 moves a second; the top is "max": as many as fit in a frame
+    const SPEED_MIN = 1, SPEED_MAX = 300;
+    const posToSpeed = (p) => p >= 100 ? Infinity : SPEED_MIN * (SPEED_MAX / SPEED_MIN) ** (p / 100);
+    const speedToPos = (s) => (100 * Math.log(s / SPEED_MIN)) / Math.log(SPEED_MAX / SPEED_MIN);
+    const bot = { on: false, speed: 4 };
+    let manual = false; // tests: only step when told to
+    const fast = () => bot.on && bot.speed > 12;
+    $("speed").value = Math.round(speedToPos(bot.speed));
+    function showSpeed() {
+      bot.speed = posToSpeed(+$("speed").value);
+      $("speedOut").textContent = bot.speed === Infinity ? "max" : (bot.speed < 10 ? bot.speed.toFixed(1) : Math.round(bot.speed)) + "/s";
+    }
+    $("speed").addEventListener("input", () => { showSpeed(); placeCards(); });
+
+    function setBot(on) {
+      if (on === bot.on) return;
+      audio.play(on ? "botOn" : "botOff");
+      bot.on = on;
+      finishing = false;
+      $("botBtn").classList.toggle("is-coral", !on);
+      $("botBtn").classList.toggle("is-lav", on);
+      $("botLabel").textContent = on ? "Take over" : "Let the bot play";
+      $("speedRow").classList.toggle("is-off", !on);
+      $("hint").hidden = on; $("think").hidden = !on;
+      if (on) { showSpeed(); if (over) newDeal(); plan(); acc = 1; }
+      else nextPlan = null;
+      placeCards(); renderHud();
+    }
+    $("botBtn").onclick = () => setBot(!bot.on);
+
+    const WHY = {
+      uncover: ["Turning over a face-down card", "every one is a new card to play"],
+      foundation: ["Sending a card home", ""],
+      build: ["Building a run", "it sets up a later move"],
+      empty: ["Moving a king into an empty column", ""],
+      draw: ["Drawing", ""],
+    };
+    function plan() {
+      nextPlan = over ? null : decide(state, seen);
+      const [text, sub] = nextPlan?.move ? (nextPlan.why === "draw" ? [`Drawing for the ${cardName(nextPlan.card)}`, ""] : WHY[nextPlan.why] || ["", ""]) : ["Stuck: every move leads back somewhere it's been", ""];
+      $("thinkText").textContent = text;
+      $("thinkSub").textContent = sub ? "· " + sub : "";
+    }
+    function botStep() {
+      if (!nextPlan) plan();
+      if (!nextPlan.move) return botStuck();
+      doMove(nextPlan.move, "bot");
+      if (!over) plan();
+    }
+
+    let acc = 0, lastFrame = performance.now();
+    function frame(now) {
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+      if (bot.on && !over && !manual && !modalOpen()) {
+        if (bot.speed === Infinity) {
+          const t0 = performance.now();
+          do botStep(); while (bot.on && !over && performance.now() - t0 < 12);
+        } else {
+          acc += dt * bot.speed;
+          if (acc > 1 + bot.speed * 0.1) acc = 1 + bot.speed * 0.1;
+          while (acc >= 1 && bot.on && !over) { acc -= 1; botStep(); }
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // ---------- the end of a deal ----------
+    function gameWon() {
+      over = true; finishing = false;
+      stopClock();
+      const byBot = botMoves > 0;
+      if (byBot) { botRecord.won++; botRecord.played++; }
+      else { record.won++; record.played++; store.set(REC_KEY, JSON.stringify(record)); }
+      store.set(GAME_KEY, "");
+      renderHud();
+      if (bot.on) {
+        // the bot deals the next one itself; at max speed straight away
+        audio.play("win");
+        nextPlan = null; placeCards();
+        setTimeout(() => { if (bot.on) newDeal(); }, bot.speed === Infinity ? 0 : 1400);
+        return;
+      }
+      audio.play("win");
+      celebrate();
+      setTimeout(() => {
+        if (!over) return;
+        $("overTitle").textContent = "You won!";
+        $("overMoves").textContent = state.moves;
+        $("overTime").textContent = mmss(clock());
+        $("overWins").textContent = `${record.won}/${record.played}`;
+        $("overWho").textContent = botMoves ? "The bot made some of the moves, so this one doesn't count toward your record." : "";
+        $("over").hidden = false;
+        $("overNew").focus({ preventScroll: true });
+      }, reduceMotion ? 0 : 1300);
+    }
+    function botStuck() {
+      over = true;
+      stopClock();
+      botRecord.played++;
+      audio.play("stuck");
+      nextPlan = { move: null }; plan();
+      renderHud(); placeCards();
+      setTimeout(() => { if (bot.on) newDeal(); }, bot.speed === Infinity ? 0 : 1600);
+    }
+    // a deal you leave unfinished counts as played, if you made a move and the bot didn't
+    function countAbandoned() {
+      if (!over && state && state.moves > 0 && botMoves === 0 && history.length) { record.played++; store.set(REC_KEY, JSON.stringify(record)); }
+    }
+
+    // the foundations' cards hop one after another
+    function celebrate() {
+      if (reduceMotion) return;
+      let i = 0;
+      for (let rank = 12; rank >= 0; rank--) for (let s = 0; s < 4; s++) {
+        const k = cards[s * 13 + rank];
+        setTimeout(() => { k.vel.y -= 900; k.vel.lift += 6; wake(); }, (i++) * 28);
+      }
+    }
+
+    function newDeal(seed) {
+      countAbandoned();
+      startGame({ state: deal(seed) });
+      // cards fly out of the stock spot
+      const st = pileXY("stock");
+      for (const k of cards) { k.cur.x = st.x; k.cur.y = st.y; k.cur.flip = 1; for (const key of KEYS) k.vel[key] = 0; }
+      placeCards();
+      for (const k of cards) k.dirty = true;
+      saveGame();
+    }
+    function startGame({ state: s, moves = 0, bm = 0, ms = 0 }) {
+      state = s; history = []; seen = new Set([key(view(state))]);
+      botMoves = bm; elapsed = ms; clockFrom = 0; over = false; finishing = false;
+      $("over").hidden = true;
+      nextPlan = null;
+      if (bot.on) plan();
+      renderHud();
+    }
+    function saveGame() {
+      if (over) return store.set(GAME_KEY, "");
+      store.set(GAME_KEY, JSON.stringify({ state, botMoves, ms: clock() }));
+    }
+    function loadGame() {
+      try { const g = JSON.parse(store.get(GAME_KEY)); if (g && g.state && Array.isArray(g.state.tab) && !won(g.state)) return g; } catch {}
+      return null;
+    }
+    $("overNew").onclick = $("newGame").onclick = () => newDeal();
+    $("undo").onclick = undo;
+
+    // ---------- keys ----------
+    addEventListener("keydown", (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || modalOpen()) return;
+      if (e.key === "b" || e.key === "B") $("botBtn").click();
+      else if (e.key === "m" || e.key === "M") toggleSound();
+      else if (e.key === "n" || e.key === "N") newDeal();
+      else if (e.key === "z" || e.key === "Z") undo();
+      else if (e.key === " " && !e.target.closest?.("button")) { e.preventDefault(); if (!doMove({ type: "draw" })) audio.play("bump"); }
+    });
+
+    // ---------- sound ----------
+    const ICO_ON = '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>';
+    const ICO_OFF = '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 6 6M22 9l-6 6"/>';
+    function showSound() { $("soundIco").innerHTML = audio.isMuted() ? ICO_OFF : ICO_ON; $("soundBtn").setAttribute("aria-pressed", String(!audio.isMuted())); }
+    function toggleSound() { audio.setMuted(!audio.isMuted()); store.set(MUTE_KEY, audio.isMuted() ? "1" : ""); audio.unlockAudio(); showSound(); }
+    audio.setMuted(store.get(MUTE_KEY) === "1");
+    showSound();
+    $("soundBtn").onclick = toggleSound;
+    addEventListener("pointerdown", () => audio.unlockAudio(), { capture: true });
+    addEventListener("keydown", () => audio.unlockAudio(), { capture: true });
+
+    // ---------- about ----------
+    $("about").onclick = () => { const { el } = openModal($("aboutTpl").innerHTML, { className: "cohesion-about" }); setupAbout(el); };
+
+    // ---------- go ----------
+    addEventListener("resize", () => { layoutTable(); });
+    const saved = loadGame();
+    if (saved) { startGame({ state: saved.state, bm: saved.botMoves || 0, ms: saved.ms || 0 }); layoutTable(); }
+    else { state = deal(); layoutTable(); newDeal(); }
+    requestAnimationFrame(() => layoutTable());
+    requestAnimationFrame(frame);
+
+    // for tests: drive the game the same way input does, and read its state
+    window.solitaire = {
+      get state() { return structuredClone(state); },
+      get info() { return { over, bot: bot.on, botMoves, history: history.length, record: { ...record }, botRecord: { ...botRecord }, plan: nextPlan && { why: nextPlan.why, card: nextPlan.card } }; },
+      load(s) { startGame({ state: structuredClone(s) }); placeCards(true); saveGame(); },
+      deal(seed) { newDeal(seed); },
+      move(m) { return doMove(m); },
+      draw() { return doMove({ type: "draw" }); },
+      tap(c) { const m = tapMove(c); return m ? doMove(m) : false; },
+      undo, setBot,
+      step() { if (bot.on && !over) botStep(); },
+      setManual(m) { manual = m; },
+      setSpeedPos(p) { $("speed").value = p; showSpeed(); },
+      cardBox(c) { return cards[c].el.getBoundingClientRect(); },
+      pileXY, get size() { return { cw, ch, tw, th }; },
+    };
+  </script>
+</body>
+</html>
