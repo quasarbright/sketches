@@ -26,6 +26,24 @@ test("two quick turns make a U-turn, one per step", async ({ page }) => {
   expect(s.game.alive).toBe(true);
 });
 
+test("a turn pressed just after a step applies to that step", async ({ page }) => {
+  const errors = await open(page, { manual: false });
+  await load(page, LINE); // heading right from (10,10)
+  const r = await page.evaluate(async () => {
+    const sg = window.snakeGame;
+    sg.steer("RIGHT"); // start
+    const n = sg.state.steps;
+    while (sg.state.steps === n) await new Promise((r) => setTimeout(r, 1));
+    const after = sg.state; // just stepped right, to (11,10)
+    sg.steer("UP");
+    return { stepsBefore: after.steps, head: sg.state.game.snake[0], steps: sg.state.steps, queue: sg.state.queue };
+  });
+  expect(r.steps).toBe(r.stepsBefore);   // no extra step
+  expect(r.head).toBe(10 + 9 * 20);       // redone: (10,9), up from where it was
+  expect(r.queue).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test("swipes steer; a short drag doesn't", async ({ page }) => {
   await open(page);
   const b = await page.locator("#board").boundingBox();

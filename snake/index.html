@@ -330,10 +330,13 @@
       set(k, v) { try { localStorage.setItem(k, v); } catch {} },
     };
     const BEST_KEY = "quasarbright:snake-best", GAME_KEY = "quasarbright:snake-game", MUTE_KEY = "quasarbright:snake-muted";
-    const HUMAN_RATE = 9; // steps a second when you play
+    const HUMAN_RATE = 10; // steps a second when you play
+    const GRACE = 0.35;   // a turn pressed this early in a step still applies to that step
 
     // ---------- state ----------
     let game, prev = null;     // prev: the snake one step earlier, for drawing the slide between cells
+    let before = null;         // the whole state one step earlier, for a turn pressed just after a step
+    let eatenEgg = -1;         // the egg the last step ate, drawn until the head slides onto it
     let steps = 0, botSteps = 0, best = +store.get(BEST_KEY) || 0;
     let started = false;       // the snake waits for your first turn (or the bot)
     let paused = false, over = false;
@@ -381,13 +384,27 @@
       let dir;
       if (bot.on) { plan = decide(game); dir = plan.dir; botSteps++; }
       else { dir = queue.shift() || game.dir; plan = null; }
-      prev = game.snake;
-      const before = game;
-      game = step(game, dir);
+      const next = step(game, dir);
       steps++;
-      if (!game.alive) return crash();
-      if (game.eaten > before.eaten) ate();
+      if (!next.alive) { game = next; acc = 1; return crash(); } // the head has just reached its cell
+      before = game;
+      prev = game.snake;
+      game = next;
+      eatenEgg = game.eaten > before.eaten ? before.egg : -1;
+      if (eatenEgg >= 0) ate();
       if (game.won) return win();
+    }
+
+    // A turn pressed just after a step (while the head has only started sliding into its new
+    // cell) redoes that step in the new direction, so it shows right away instead of a step
+    // later. Only when that step didn't eat or win, and the redone step doesn't crash.
+    function turnNow(dir) {
+      if (bot.on || !running() || acc >= GRACE || !before || queue.length !== 1 || queue[0] !== dir) return;
+      if (eatenEgg >= 0 || game.won || dir === before.dir || dir === OPPOSITE[before.dir]) return;
+      const redo = step(before, dir);
+      if (!redo.alive || redo.eaten > before.eaten) return;
+      game = redo;
+      queue.shift();
     }
 
     function ate() {
@@ -403,7 +420,7 @@
     function draw() {
       if (!g || !game) return;
       const t = running() && !fast() && !reduceMotion ? Math.min(1, acc) : 1;
-      drawBoard(g, size, { game, prev, t, plan: bot.on || (over && plan) ? plan : null, dead: !game.alive });
+      drawBoard(g, size, { game, prev, t, plan: bot.on || (over && plan) ? plan : null, dead: !game.alive, eaten: eatenEgg });
     }
 
     // whole percents, except a decimal under 10% so the start doesn't read 0%; 100% only when full
@@ -540,7 +557,7 @@
 
     // ---------- game flow ----------
     function startGame(g0, { steps: s = 0, botSteps: b = 0 } = {}) {
-      game = g0; prev = null; plan = null;
+      game = g0; prev = null; plan = null; before = null; eatenEgg = -1;
       steps = s; botSteps = b;
       started = false; paused = false; over = false; queue = []; acc = 0;
       $("over").hidden = true;
@@ -622,7 +639,7 @@
       if (bot.on) setBot(false); // steering yourself takes over from the bot
       if (paused) setPaused(false);
       const lastDir = queue.length ? queue[queue.length - 1] : game.dir;
-      if (dir !== lastDir && dir !== OPPOSITE[lastDir] && queue.length < 3) { queue.push(dir); audio.play("turn"); }
+      if (dir !== lastDir && dir !== OPPOSITE[lastDir] && queue.length < 3) { queue.push(dir); audio.play("turn"); turnNow(dir); }
       if (!started) {
         // the first press starts the game; pressing the way it's facing (or straight back) just goes
         started = true; lastFrame = performance.now(); acc = 0;
