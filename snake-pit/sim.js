@@ -148,7 +148,7 @@ export class World {
     };
     this.nextId++;
     // family tree: every snake that ever lived, with its genes after each split
-    this.tree.set(s.id, { id: s.id, parent: -1, born: this.step, died: -1, history: [{ step: this.step, genes, hue: s.hue }] });
+    this.tree.set(s.id, { id: s.id, parent: -1, born: this.step, died: -1, genes, hue: s.hue, splits: 0 });
     for (const i of body) { this.occ[i] = s.id + 1; if (this.food[i]) { this.food[i] = 0; this.foodCount--; } }
     this.snakes.push(s);
     return s;
@@ -266,22 +266,19 @@ export class World {
     const front = s.body.slice(0, h);
     const back = s.body.slice(h).reverse(); // old tail tip becomes the new head
     for (const i of back) this.occ[i] = 0;
+    // the front half is the same snake and keeps its genes; the back half is a new snake
+    // with a mutated copy
     s.body = front;
     s.trail = [];
-    const parentGenes = s.genes;
-    s.genes = mutateGenes(parentGenes, this.p.mutation, this.rand);
-    s.hue = geneHue(s.genes);
-    s.drain = this.p.drainBase + this.p.drainBrain * brainSize(s.genes);
-    s.generation++;
 
     const b0 = back[0], b1 = back[1];
     const dx = (b0 % this.cols) - (b1 % this.cols), dy = ((b0 / this.cols) | 0) - ((b1 / this.cols) | 0);
     const dir = dy === -1 ? 0 : dx === 1 ? 1 : dy === 1 ? 2 : 3;
-    const child = this.addSnake(back, dir, mutateGenes(parentGenes, this.p.mutation, this.rand), s.energy, s.generation, s.founder);
+    const child = this.addSnake(back, dir, mutateGenes(s.genes, this.p.mutation, this.rand), s.energy, s.generation + 1, s.founder);
     this.stats.births++;
     child.parent = s.id;
     this.tree.get(child.id).parent = s.id;
-    this.tree.get(s.id).history.push({ step: this.step, genes: s.genes, hue: s.hue });
+    this.tree.get(s.id).splits++;
     this.events.push({ type: "split", at: front[front.length - 1], child: child.id, parent: s.id });
   }
 

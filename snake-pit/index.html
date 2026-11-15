@@ -79,6 +79,8 @@
     .tree-head h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 1.1rem; color: var(--text); }
     .tree-hint { font-size: .78rem; color: var(--muted); flex: 1; min-width: 200px; }
     .tree-head .check { margin: 0; font-size: .8rem; }
+    .tree-zoom { display: flex; gap: 4px; }
+    .tree-zoom .btn { padding: 2px 9px; font-size: .8rem; min-width: 28px; }
     #treeCanvas { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
     body.tree-open .control-bar { bottom: calc(var(--tree-h) + 40px); }
     .tree-tip {
@@ -96,6 +98,10 @@
     .tree-tip-genes .bar { height: 4px; border-radius: 2px; background: rgba(236,227,211,.12); position: relative; }
     .tree-tip-genes .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--accent); }
     .tree-tip-genes .val { color: var(--text); text-align: right; }
+
+    /* ?background: just the pit, running at 15 steps/s */
+    html[data-background] .pit-label, html[data-background] .control-bar,
+    html[data-background] .tree-drawer, html[data-background] .tree-tip { display: none !important; }
 
     @media (max-width: 700px) {
       :root { --tree-h: 44vh; }
@@ -152,8 +158,9 @@
           and no food.</li>
         <li>Running into a wall or any body, its own or someone else's, kills it. A snake that dies
           leaves one egg behind.</li>
-        <li>The longer a snake gets, the more likely it splits in half. The back half turns around,
-          so its old tail tip becomes its new head.</li>
+        <li>The longer a snake gets, the more likely it splits in half. The front half stays the
+          same snake with the same genes. The back half turns around, so its old tail tip becomes
+          its new head, and it's a new snake with a slightly mutated copy of the genes.</li>
       </ol>
       <div class="section-label">how a snake decides</div>
       <p>Each step a snake has three choices: turn left, go straight, or turn right. It scores
@@ -176,7 +183,13 @@
   <div class="tree-drawer" id="treeDrawer" hidden>
     <div class="tree-head">
       <h2>Family tree</h2>
-      <span class="tree-hint">Each line is a snake, from birth to death. A branch is a split. Hover a line to see its genes; scroll to zoom in time.</span>
+      <span class="tree-hint">Each line is a snake, from birth to death. A branch is a split: the new line is the back half, with mutated genes. Hover a line to see its genes; scroll to move through time.</span>
+      <div class="tree-zoom">
+        <button class="btn" id="zoomOut" aria-label="zoom out" data-tooltip="Zoom out: show twice as many steps">&minus;</button>
+        <button class="btn" id="zoomIn" aria-label="zoom in" data-tooltip="Zoom in: show half as many steps">+</button>
+        <button class="btn" id="zoomAll" data-tooltip="Show everything: from the first step to now">all</button>
+        <button class="btn" id="zoomReset" data-tooltip="Reset: the last 3000 steps, following the present">reset</button>
+      </div>
       <label class="check" title="Also draw snakes that died without any living descendants (from the last few thousand steps).">
         <input type="checkbox" id="treeDead" /> show dead ends
       </label>
@@ -212,7 +225,9 @@
       const { w, h } = viewport();
       // aim for roughly 3000 grid squares regardless of screen size
       const target = Math.max(10, Math.min(22, Math.round(Math.sqrt((w * h) / 3000))));
-      const cols = Math.floor((w - 16) / target), rows = Math.floor((h - 16) / target);
+      // the background fills the whole frame edge to edge; the page leaves a margin for the rim
+      const bg = isBackground(), m = bg ? 0 : 16;
+      const cols = bg ? Math.ceil(w / target) : Math.floor((w - m) / target), rows = bg ? Math.ceil(h / target) : Math.floor((h - m) / target);
       const opts = {};
       if (!isBackground()) { opts.foodRate = +$("food").value; opts.mutation = +$("mut").value; }
       world = new World(cols, rows, opts);
@@ -262,7 +277,9 @@
       canvas.style.width = w + "px"; canvas.style.height = h + "px";
       // with the family tree open, the pit shrinks to fit above it and the control bar
       const below = treeOpen ? $("treeDrawer").offsetHeight + 30 + 52 : 0, ph = h - below;
-      cs = Math.max(2, Math.floor(Math.min((w - 16) / world.cols, (ph - 16) / world.rows)));
+      // background: cover the frame (any overflow is cropped); page: fit inside with a margin
+      cs = isBackground() ? Math.max(w / world.cols, h / world.rows)
+        : Math.max(2, Math.floor(Math.min((w - 16) / world.cols, (ph - 16) / world.rows)));
       ox = Math.round((w - cs * world.cols) / 2); oy = Math.round((ph - cs * world.rows) / 2);
       if (treeOpen && tree) tree.resize();
       buildSoil();
@@ -277,7 +294,7 @@
       s.fillStyle = "#14110d"; s.fillRect(0, 0, W, H);
       const pw = cs * world.cols, ph = cs * world.rows;
       s.fillStyle = "#1a1612";
-      roundRect(s, ox, oy, pw, ph, cs * 0.6); s.fill();
+      if (isBackground()) s.fillRect(0, 0, W, H); else { roundRect(s, ox, oy, pw, ph, cs * 0.6); s.fill(); }
       let seed = 7;
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
       const n = Math.round((pw * ph) / 90);
@@ -286,8 +303,10 @@
         s.fillStyle = rnd() < 0.5 ? "rgba(70,56,40,.35)" : "rgba(10,8,6,.45)";
         s.beginPath(); s.arc(x, y, r, 0, Math.PI * 2); s.fill();
       }
-      s.strokeStyle = "#3a3127"; s.lineWidth = 2;
-      roundRect(s, ox - 1, oy - 1, pw + 2, ph + 2, cs * 0.6); s.stroke();
+      if (!isBackground()) {
+        s.strokeStyle = "#3a3127"; s.lineWidth = 2;
+        roundRect(s, ox - 1, oy - 1, pw + 2, ph + 2, cs * 0.6); s.stroke();
+      }
     }
 
     function roundRect(c, x, y, w, h, r) {
@@ -556,6 +575,10 @@
         resize();
       });
       $("treeDead").addEventListener("change", () => tree.setShowDead($("treeDead").checked));
+      $("zoomIn").addEventListener("click", () => tree.zoomIn());
+      $("zoomOut").addEventListener("click", () => tree.zoomOut());
+      $("zoomAll").addEventListener("click", () => tree.zoomAll());
+      $("zoomReset").addEventListener("click", () => tree.zoomReset());
       newWorld(); sync();
     } else {
       newWorld();
