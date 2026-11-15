@@ -129,3 +129,34 @@ test("joining shows only free colors", async ({ context }) => {
   const bob = await device(context, "bob", "#" + code);
   await expect(bob.locator("#join .color:disabled")).toHaveCount(2);
 });
+
+test("several tabs of one browser sit down as different people", async ({ context }) => {
+  const open = async (hash = "") => {
+    const page = await context.newPage();
+    await page.route(/fonts\.(googleapis|gstatic)\.com|jsdelivr/, (r) => r.abort());
+    await page.goto("index.html?net=local" + hash);
+    return page;
+  };
+  const h = await open();
+  await h.fill("#createForm [name=name]", "Host");
+  await h.click("#createForm button[type=submit]");
+  await expect(h.locator("#table")).toBeVisible();
+  const code = await h.evaluate(() => location.hash.slice(1));
+  const seat = async (name) => {
+    const p = await open("#" + code);
+    await expect(p.locator("#join")).toBeVisible();
+    await p.fill("#joinForm [name=name]", name);
+    await p.click("#joinForm button[type=submit]");
+    await expect(p.locator(".prow.me")).toContainText(name);
+    return p;
+  };
+  const ann = await seat("Ann");
+  await seat("Bob");
+  await expect(h.locator(".prow")).toHaveCount(3);
+  // a reload keeps each tab its own seat, and the host tab still hosts
+  await ann.reload();
+  await expect(ann.locator(".prow.me")).toContainText("Ann");
+  await h.reload();
+  await expect(h.locator(".prow.me")).toContainText("Host");
+  await expect(h.locator(".prow.me")).toContainText("host");
+});

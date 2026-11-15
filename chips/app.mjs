@@ -17,7 +17,31 @@ import { transport } from "./net.mjs";
 
 const qs = new URLSearchParams(location.search);
 const net = transport(qs.get("net"));
-const NS = "chips:" + (qs.get("ns") ? qs.get("ns") + ":" : ""); // ?ns= keeps test tabs apart
+// Storage namespace. Each open tab claims a numbered slot (a Web Lock held while the tab lives);
+// slot 0 is the plain namespace, so a lone tab behaves as always, and every extra tab gets its own,
+// so several tabs on one phone sit at the table as different people. ?ns= sets it outright (tests).
+let NS = "chips:";
+async function claimSlot() {
+  if (qs.get("ns")) { NS = "chips:" + qs.get("ns") + ":"; return; }
+  if (!navigator.locks) return;
+  let want = null;
+  try { want = sessionStorage.getItem("chips:slot"); } catch {}
+  const grab = (n) => new Promise((res) => {
+    navigator.locks.request("chips-slot-" + n, { ifAvailable: true }, (lock) => {
+      if (lock) held.add(n);
+      res(!!lock);
+      return lock ? new Promise(() => {}) : undefined; // hold it until the tab goes away
+    }).catch(() => res(false));
+  });
+  let slot = +want || 0;
+  // after a reload the old page may still hold this tab's slot for a moment: wait for it
+  const tries = want == null ? 1 : 8;
+  for (let i = 0; i < tries && !(await grab(slot)); i++) if (i < tries - 1) await new Promise((r) => setTimeout(r, 150));
+  if (!held.has(slot)) for (slot = 0; slot < 50 && !(await grab(slot)); slot++);
+  try { sessionStorage.setItem("chips:slot", slot); } catch {}
+  if (slot) NS = "chips:tab" + slot + ":";
+}
+const held = new Set();
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(NS + k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(NS + k, JSON.stringify(v)); } catch {} },
@@ -917,4 +941,4 @@ function toastEntry(e) {
 // for the browser tests: send a raw request, as a tampered page could
 window.chipsTest = { act };
 
-boot();
+claimSlot().then(boot, boot);
