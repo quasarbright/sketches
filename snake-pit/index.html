@@ -166,66 +166,77 @@
     <about-modal label="about">
       <h2 class="title">Snake Pit</h2>
       <p class="intro">A pit full of snakes, all playing snake at once. None of them were trained.
-        Each one plays by a handful of numbers I call its genes, and snakes that eat enough split in
-        two and hand a slightly changed copy of their genes to the new half. Over a few thousand
+        Each snake plays by a handful of numbers I call its genes. Snakes that eat enough split in
+        two and hand a slightly changed copy of their genes to the new half, so over a few thousand
         steps the genes drift toward whatever keeps a snake fed.</p>
 
       <div class="section-label">the rules</div>
       <ol>
+        <li>The pit starts with 30 snakes, each with random genes.</li>
         <li>Every step, every snake moves one square. Eating an egg makes it one square longer.</li>
         <li>Moving burns energy. Each time a snake has burned one square's worth, its tail tip dies.
           With no food it shrinks to nothing and starves. A dead tail tip leaves a faint shed skin.</li>
-        <li>Running into a wall or any body, its own included, kills a snake. A dead snake leaves
-          one egg.</li>
-        <li>Long snakes split in half.</li>
+        <li>Running into a wall or any snake's body, its own included, kills a snake. A dead snake
+          leaves one egg.</li>
+        <li>A long enough snake can split in two.</li>
       </ol>
 
       <div class="section-label">picking a move</div>
       <p>A snake can turn left, go straight, or turn right. It gives each of those three squares a
-        score and moves into the highest one. The score has three parts:</p>
+        score and moves into the one that scores highest. Five genes go into the score:</p>
       <ul>
-        <li>a pull toward the nearest egg it can see, stronger the closer that square is to the egg:
-          <code>appetite</code> ÷ (1 + distance). It only sees eggs within <code>sight</code>
-          squares.</li>
-        <li>a push away from a wall or body straight ahead of that square:
-          <code>caution</code> ÷ how many squares away it is. It only looks <code>wariness</code>
-          squares ahead.</li>
-        <li>a bit of randomness, scaled by <code>jitter</code>.</li>
+        <li>How far away it can spot an egg, in squares, is <code>sight</code>. How strongly it's
+          drawn to the nearest egg it spots is <code>appetite</code>. A square gains
+          <code>appetite</code> ÷ (1 + its distance to that egg), so squares closer to the egg
+          score higher.</li>
+        <li>How many squares straight ahead it looks for walls and bodies is <code>wariness</code>.
+          How strongly it avoids them is <code>caution</code>. A square loses <code>caution</code> ÷
+          the distance from it to the first wall or body ahead.</li>
+        <li><code>jitter</code> adds a random amount, so close calls don't always go the same way.</li>
       </ul>
       <p>A square with a wall or a body in it is never picked unless all three are blocked, which
-        is how snakes die: boxed in. Here is one snake deciding, with each step's three scores:</p>
+        is how snakes die: boxed in. Below, one snake picks its moves. Before each step it pauses on
+        its three squares with their scores; the highlighted square is the one it picks, a red ×
+        is blocked, and the circled egg is the one it's heading for.</p>
       <canvas class="sp-viz sp-viz-decide"></canvas>
       <p class="sp-viz-caption sp-cap-decide">&nbsp;</p>
 
       <div class="section-label">senses cost food</div>
-      <p>If seeing farther and steering harder were free, every snake would evolve the maximum of
-        all four. So they aren't free. Each move burns 0.02 of a square, plus 0.06 times the size of
-        those four genes (each scaled to 0 to 1). A snake with every sense maxed burns 7 times as
-        much as one with none. Two snakes with no food at all, starting the same length:</p>
+      <p>Call <code>sight</code>, <code>appetite</code>, <code>wariness</code> and
+        <code>caution</code> a snake's senses. If better senses were free, every snake would evolve
+        all four to the maximum, so they cost energy. Every move burns 0.02 of a square, plus 0.06
+        times the combined strength of the four senses, which runs from 0 with all of them off to 2
+        with all of them maxed. So a snake with every sense maxed burns 0.14 a move, 7 times as
+        much as one with none. Below are two snakes with no food at all, starting the same length:
+        on the left every sense is maxed, on the right they're nearly off.</p>
       <div class="sp-viz-pair">
         <figure><canvas class="sp-viz sp-viz-sharp"></canvas><figcaption class="sp-cap-sharp">&nbsp;</figcaption></figure>
         <figure><canvas class="sp-viz sp-viz-dull"></canvas><figcaption class="sp-cap-dull">&nbsp;</figcaption></figure>
       </div>
 
       <div class="section-label">splitting</div>
-      <p>Once a snake is at least 12 squares long, each step it has a chance to split:
-        0.02 × (length ÷ <code>maturity</code>)². So <code>maturity</code> is the length a snake
-        aims for before having kids. The front half stays the same snake with the same genes. The
-        back half turns around, so its old tail tip becomes its head, and it's a new snake with every
-        gene nudged a little at random. Genes set a snake's color, so the new half comes out a
-        slightly different color:</p>
+      <p>The last gene, <code>maturity</code>, is the length a snake grows to before it's likely to
+        have kids. Once a snake is at least 12 squares long, each step it splits with chance
+        0.02 × (length ÷ <code>maturity</code>)². A snake at exactly its <code>maturity</code>
+        length splits on 2% of steps, and one twice that long on 8%.</p>
+      <p>The front half stays the same snake with the same genes. The back half turns around, so
+        its old tail tip becomes its head, and it's a new snake with every gene nudged a little at
+        random. A snake's color is worked out from its genes, so relatives look alike and the new
+        half comes out a slightly different shade. Below, a 14-square snake splits, and the new half
+        is outlined:</p>
       <canvas class="sp-viz sp-viz-split"></canvas>
       <p class="sp-viz-caption sp-cap-split">&nbsp;</p>
 
       <div class="section-label">evolution</div>
       <p>Nothing scores the snakes or picks winners. Snakes whose genes keep them fed long enough to
-        split leave more copies, and the rest starve or get boxed in. That alone moves the averages
-        in the corner. In my runs <code>jitter</code> falls close to zero, <code>caution</code>
-        stays low, and <code>maturity</code> drops below 12, so snakes split the moment the rules
-        allow.</p>
-      <p>The <b>tree</b> button shows the family tree: every snake is a line from birth to death,
-        and a split starts a new line off its parent's. Within a few thousand steps, one of the 30
-        starting snakes is usually the ancestor of the whole pit.</p>
+        split leave more copies, and the rest starve or get boxed in. The bars in the top left show
+        each gene's average over every living snake, and that selection alone moves them. In my
+        runs <code>jitter</code> falls close to zero, <code>caution</code> stays low, and
+        <code>maturity</code> drops below 12, so snakes split as soon as they're 12 long.</p>
+      <p>The <b>tree</b> button opens the family tree: every snake is a line from the step it was
+        born to the step it died, and each split starts a new line branching off its parent's.
+        Within a few thousand steps, one of the 30 starting snakes is usually the ancestor of every
+        snake in the pit.</p>
       <p>This is a remake of my 2019 genetic steering sketch, where creatures evolved how hard to
         chase food and avoid poison.</p>
     </about-modal>
@@ -728,7 +739,7 @@
       const pair = [
         { canvas: el.querySelector(".sp-viz-sharp"), cap: el.querySelector(".sp-cap-sharp"), name: "every sense maxed",
           genes: gene({ appetite: 1, sight: 20, caution: 1, wariness: 10, jitter: 0.2 }) },
-        { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "no senses",
+        { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "senses nearly off",
           genes: gene({ caution: 0.05, wariness: 1, jitter: 0.2 }) },
       ];
       const pairReset = () => {
@@ -791,13 +802,14 @@
         }
 
         // 2
-        const pt = Math.min(1, (now - pairAt) / STEP_MS);
         if (now - pairAt > STEP_MS && !pairDoneAt) {
           pairAt = now;
           for (const p of pair) if (p.v.world.snakes.length) { viewStep(p.v); p.steps++; }
           if (!pair[0].v.world.snakes.length) pairDoneAt = now;
         }
         if (pairDoneAt && now - pairDoneAt > 2200) pairReset();
+        // progress through the step, measured after any step taken this frame
+        const pt = Math.min(1, (now - pairAt) / STEP_MS);
         for (const p of pair) {
           drawView(p.v, p.v.shown, pairDoneAt ? 1 : pt);
           const s = p.v.world.snakes[0], drain = p.snake.drain;
@@ -806,7 +818,6 @@
 
         // 3
         const S = split;
-        const st = Math.min(1, (now - S.at) / STEP_MS);
         if (now - S.at > STEP_MS) {
           S.at = now; viewStep(S.v);
           // the split can happen on any tick, including the first one in viewStart
@@ -817,6 +828,7 @@
           const alive = (id) => S.v.world.snakes.some((s) => s.id === id);
           if (S.after > 14 || !alive(S.parent.id) || (S.child !== null && !alive(S.child))) splitReset();
         }
+        const st = Math.min(1, (now - S.at) / STEP_MS);
         // the new half is outlined until it has moved away, once the split is on screen
         const shownChild = S.child !== null && S.v.shown.snakes.has(S.child);
         S.v.hover = shownChild ? S.child : -1;
