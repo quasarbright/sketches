@@ -139,8 +139,8 @@ export function rankMoves(state, seen, depth = DEPTH) {
   const v = view(state);
   const hidden0 = v.tab.reduce((a, c) => a + c.down, 0);
   const now = score(v, hidden0);
-  let ranked = [], d;
-  for (d = depth; d <= depth + 4; d += 2) {
+  let ranked = [];
+  for (let d = depth; d <= depth + 4; d += 2) {
     const memo = new Map();
     ranked = [];
     for (const m of viewMoves(v)) {
@@ -155,15 +155,7 @@ export function rankMoves(state, seen, depth = DEPTH) {
     ranked.sort((a, b) => b.value - a.value);
     if (ranked.length && ranked[0].value > now) break;
   }
-  return { ranked, now, depth: Math.min(d, depth + 4) };
-}
-
-// The best score reachable within `depth` moves from here, the same search rankMoves runs after
-// each move. Comparing a move's line against this one move shorter tells whether the move itself
-// adds anything, or only takes a step before a line that was there anyway.
-export function reach(state, seen, depth = DEPTH) {
-  const v = view(state);
-  return search(v, depth, v.tab.reduce((a, c) => a + c.down, 0), seen, new Map());
+  return { ranked, now };
 }
 
 export function decide(state, seen, depth = DEPTH) {

@@ -332,7 +332,7 @@
 
   <script type="module">
     import { deal, apply, legal, won, hiddenCount, foundCount, fitsTab, fitsFound, suitOf, rankOf, cardName, SUITS, RANKS } from "./game.mjs";
-    import { decide, rankMoves, reach, view, key } from "./bot.mjs";
+    import { decide, rankMoves, view, key } from "./bot.mjs";
     import { faceSVG, backSVG, suitDefs } from "./faces.mjs";
     import { openModal } from "../shared/cohesion.js";
     import * as audio from "./audio.mjs";
@@ -795,13 +795,15 @@
     // neither helps, whatever the AI would do, which may be to draw. Within each group it takes
     // the one the AI scores highest, and it skips moves the AI thinks get nowhere.
     function hintMove() {
-      const { ranked, now, depth } = rankMoves(state, seen);
+      const { ranked, now } = rankMoves(state, seen);
       const wasteTop = state.waste.at(-1);
-      // moving a run between columns without turning a card over or emptying the column only
-      // counts if the line after it beats what's reachable without it (else it's a wasted move)
-      let without;
-      const useful = (r) => r.m.from.pile !== "tab" || r.m.to.pile !== "tab" || r.why !== "build" || r.m.n === state.tab[r.m.from.i].up.length
-        || r.value > (without ??= reach(state, seen, depth - 1));
+      // a move between columns is only worth pointing out if it turns a face-down card over, or
+      // leaves a face-up card on top that can go home
+      const useful = (r) => {
+        if (r.m.from.pile !== "tab" || r.m.to.pile !== "tab") return true;
+        const col = state.tab[r.m.from.i], under = col.up[col.up.length - r.m.n - 1];
+        return under === undefined ? col.down.length > 0 : fitsFound(under, state.found);
+      };
       const ready = (r) => r.value > now && (r.m.from.pile === "tab" || (r.m.from.pile === "pool" && r.card === wasteTop)) && useful(r);
       const pick = ranked.find((r) => ready(r) && r.m.to.pile === "found") || ranked.find((r) => ready(r) && r.m.to.pile === "tab");
       if (!pick) return decide(state, seen);
