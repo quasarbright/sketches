@@ -132,6 +132,7 @@
     /* under the table: how to play, or what the bot is doing */
     .k-strip { height: 52px; flex: none; display: grid; place-items: center; width: 100%; }
     .k-hint { font: 600 .92rem var(--font-ui); color: var(--muted); text-align: center; }
+    .k-hint.is-hinting { color: var(--bot); }
     .k-think { display: flex; align-items: center; gap: 10px; font: 600 .92rem var(--font-ui); color: var(--text); white-space: nowrap; }
     .k-think::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--bot); box-shadow: 0 0 10px var(--bot); }
     .k-think-sub { color: var(--muted); font-weight: 500; }
@@ -185,21 +186,23 @@
       .k-score { top: 58px; left: 0; right: 0; transform: none; justify-content: center; padding: 6px 4px; }
       .k-stat { min-width: 0; flex: 1; padding: 0 10px; }
       .k-stage { padding-left: 8px; padding-right: 8px; }
-      .k-controls { gap: 4px; }
-      .k-ctl:has(.is-round) { width: 66px; }
+      .k-controls { gap: 2px; }
+      .k-ctl:has(.is-round) { width: 54px; }
       .k-ctl > span { font-size: .66rem; letter-spacing: 0; }
-      .k-ctl .k-btn.is-round { width: 48px; height: 48px; }
-      .k-bot-btn { min-width: 0; width: 132px; height: 48px; font-size: .86rem; padding: 0 10px; gap: 5px; }
+      .k-ctl .k-btn.is-round { width: 46px; height: 46px; }
+      .k-bot-btn { min-width: 0; width: 124px; height: 46px; font-size: .84rem; padding: 0 8px; gap: 5px; }
+      .k-bot-btn svg.k-ico { display: none; }
       .k-bot-btn svg.k-ico { width: 20px; height: 20px; }
-      .k-speed { gap: 6px; }
-      .k-speed input { width: 64px; }
-      .k-speed output { width: 5.5ch; }
+      .k-speed { gap: 4px; font-size: .68rem; }
+      .k-speed input { width: 42px; }
+      .k-speed output { width: 4.5ch; font-size: .68rem; }
       .k-think { font-size: .85rem; }
       .k-think-sub { display: none; }
       .k-hint { font-size: .85rem; }
       .so-index { font-size: 17px; }
     }
-    @media (max-width: 360px) { .k-bot-btn { width: 118px; font-size: .8rem; } .k-bot-btn svg.k-ico { display: none; } .k-ctl:has(.is-round) { width: 60px; } }
+    @media (max-width: 360px) { .k-bot-btn { width: 112px; font-size: .78rem; } .k-ctl:has(.is-round) { width: 52px; } .k-speed input { width: 40px; } }
+    @media (max-width: 340px) { .k-controls { gap: 2px; } .k-bot-btn { width: 104px; font-size: .74rem; } .k-ctl:has(.is-round) { width: 48px; } .k-ctl .k-btn.is-round { width: 42px; height: 42px; } .k-speed input { width: 32px; } }
     @media (prefers-reduced-motion: reduce) { .k-card-end { animation: none !important; } }
   </style>
 </head>
@@ -249,6 +252,11 @@
         <button class="k-btn is-round" id="undo" title="take back the last move (Z)">
           <svg class="k-ico" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
         </button><span>Undo</span>
+      </div>
+      <div class="k-ctl">
+        <button class="k-btn is-round" id="hintBtn" title="show what the AI would play here, without playing it (H)">
+          <svg class="k-ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21.5h4"/><path d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.2.9 2V16h6v-.1c0-.8.3-1.5.9-2A6.5 6.5 0 0 0 12 2.5z"/></svg>
+        </button><span>Hint</span>
       </div>
       <div class="k-ctl">
         <button class="k-btn is-coral k-bot-btn" id="botBtn" title="hand the cards to the bot; press it again, or move a card yourself, to take over (B)">
@@ -431,6 +439,9 @@
     let hover = null;      // card under the pointer that can be picked up
     let tilt = { x: 0, y: 0 };
     let nextPlan = null;   // the bot's next move, for the highlight
+    let hintPlan = null;   // what the AI would play, shown when you ask for a hint (never played)
+    // the move to highlight: the bot's next one while it plays, otherwise a hint you asked for
+    const shownPlan = () => bot.on ? (fast() ? null : nextPlan) : hintPlan;
     function placeCards(instant = false, stagger = false) {
       const at = (c, x, y, z, faceDown) => {
         const k = cards[c], t = k.tgt;
@@ -462,8 +473,11 @@
       if (hover !== null && !drag && !held) { const t = cards[hover].tgt; t.lift = 1; t.tx = tilt.x; t.ty = tilt.y; }
       // the bot's next card lifts a little
       for (const k of cards) k.el.classList.remove("is-next", "is-up");
-      if (nextPlan && nextPlan.card != null && nextPlan.why !== "draw" && bot.on && !fast()) {
-        const k = cards[nextPlan.card];
+      const sp = shownPlan();
+      // a hint to draw lights up the top of the stock
+      const glow = !sp ? null : sp.why === "draw" ? (bot.on ? null : state.stock.at(-1) ?? null) : sp.card;
+      if (glow != null) {
+        const k = cards[glow];
         k.el.classList.add("is-next"); k.tgt.lift = Math.max(k.tgt.lift, 0.6);
       }
       for (const k of cards) { k.el.style.zIndex = k.tgt.z; if (k.tgt.lift > 0.5) k.el.classList.add("is-up"); }
@@ -510,10 +524,11 @@
     // ---------- the bot's next move, drawn as an arc ----------
     function drawArrow() {
       const svg = $("arrow");
-      if (!nextPlan || nextPlan.card == null || !nextPlan.to || nextPlan.why === "draw" || !bot.on || fast() || over) { if (svg.innerHTML) svg.innerHTML = ""; return; }
-      const k = cards[nextPlan.card];
+      const sp = shownPlan();
+      if (!sp || sp.card == null || !sp.to || sp.why === "draw" || over) { if (svg.innerHTML) svg.innerHTML = ""; return; }
+      const k = cards[sp.card];
       const from = { x: k.cur.x + cw / 2, y: k.cur.y + ch * 0.3 };
-      const dest = destXY(nextPlan.to);
+      const dest = destXY(sp.to);
       if (!dest) { svg.innerHTML = ""; return; }
       const mx = (from.x + dest.x) / 2, my = Math.min(from.y, dest.y) - Math.max(30, Math.abs(dest.x - from.x) * 0.25);
       svg.setAttribute("viewBox", `0 0 ${tw} ${th}`);
@@ -558,6 +573,7 @@
       return true;
     }
     function afterMove() {
+      clearHint();
       hover = hover !== null && canPick(hover) ? hover : null;
       placeCards();
       renderHud();
@@ -587,7 +603,7 @@
       if (over && !won(state) && history.length) { over = false; $("over").hidden = true; startClock(); }
       if (!history.length || over) return audio.play("bump");
       if (bot.on) setBot(false);
-      finishing = false; held = null; drag = null;
+      finishing = false; held = null; drag = null; clearHint();
       state = { ...history.pop(), moves: state.moves + 1 };
       audio.play("pickup"); setTimeout(() => audio.play("place"), 150);
       placeCards(); renderHud(); saveGame();
@@ -752,7 +768,7 @@
       bot.on = on;
       finishing = false;
       botUi();
-      if (on) { showSpeed(); if (over) newDeal(); plan(); acc = 1; }
+      if (on) { clearHint(); showSpeed(); if (over) newDeal(); plan(); acc = 1; }
       else nextPlan = null;
       placeCards(); renderHud();
     }
@@ -765,6 +781,32 @@
     }
     $("botBtn").onclick = () => setBot(!bot.on);
 
+    // ---------- hints ----------
+    // Asks the AI what it would play here and shows it the way it shows its own next move (the
+    // card lifts and glows, a dotted arc points where it goes), without playing it.
+    const HINT_DEFAULT = $("hint").textContent;
+    function planText(p, who) {
+      if (!p.move) return who === "bot" ? "Stuck: every move leads back somewhere it's been" : "The AI doesn't see a move that gets anywhere";
+      if (p.why === "draw") return `Draw from the stock: the AI is after the ${cardName(p.card)}`;
+      return (WHY[p.why] || [""])[0] + (who === "bot" || !WHY[p.why]?.[1] ? "" : " · " + WHY[p.why][1]);
+    }
+    function showHint() {
+      if (over || bot.on || finishing) return audio.play("bump");
+      held = null; drag = null;
+      hintPlan = decide(state, seen);
+      $("hint").textContent = planText(hintPlan, "you");
+      $("hint").classList.add("is-hinting");
+      placeCards();
+    }
+    function clearHint() {
+      if (!hintPlan) return;
+      hintPlan = null;
+      $("hint").textContent = HINT_DEFAULT;
+      $("hint").classList.remove("is-hinting");
+      placeCards();
+    }
+    $("hintBtn").onclick = showHint;
+
     const WHY = {
       uncover: ["Turning over a face-down card", "every one is a new card to play"],
       foundation: ["Sending a card home", ""],
@@ -774,7 +816,7 @@
     };
     function plan() {
       nextPlan = over ? null : decide(state, seen);
-      const [text, sub] = nextPlan?.move ? (nextPlan.why === "draw" ? [`Drawing for the ${cardName(nextPlan.card)}`, ""] : WHY[nextPlan.why] || ["", ""]) : ["Stuck: every move leads back somewhere it's been", ""];
+      const [text, sub] = nextPlan?.move ? (nextPlan.why === "draw" ? [`Drawing for the ${cardName(nextPlan.card)}`, ""] : WHY[nextPlan.why] || ["", ""]) : [planText({ move: null }, "bot"), ""];
       $("thinkText").textContent = text;
       $("thinkSub").textContent = sub ? "· " + sub : "";
     }
@@ -887,7 +929,7 @@
       state = s; history = []; seen = new Set([key(view(state))]); held = null; drag = null;
       botMoves = bm; elapsed = ms; clockFrom = 0; over = false; finishing = false;
       $("over").hidden = true;
-      nextPlan = null;
+      nextPlan = null; clearHint();
       if (bot.on) plan();
       renderHud();
     }
@@ -909,6 +951,7 @@
       else if (e.key === "m" || e.key === "M") toggleSound();
       else if (e.key === "n" || e.key === "N") newDeal();
       else if (e.key === "z" || e.key === "Z") undo();
+      else if (e.key === "h" || e.key === "H") showHint();
       else if (e.key === " " && !e.target.closest?.("button")) { e.preventDefault(); if (!doMove({ type: "draw" })) audio.play("bump"); }
     });
 
@@ -937,7 +980,7 @@
     // for tests: drive the game the same way input does, and read its state
     window.solitaire = {
       get state() { return structuredClone(state); },
-      get info() { return { over, bot: bot.on, botMoves, history: history.length, record: { ...record }, botRecord: { ...botRecord }, plan: nextPlan && { why: nextPlan.why, card: nextPlan.card } }; },
+      get info() { return { over, bot: bot.on, botMoves, history: history.length, record: { ...record }, botRecord: { ...botRecord }, plan: nextPlan && { why: nextPlan.why, card: nextPlan.card }, hint: hintPlan && { why: hintPlan.why, card: hintPlan.card, move: hintPlan.move } }; },
       load(s) { startGame({ state: structuredClone(s) }); placeCards(true); saveGame(); },
       deal(seed) { newDeal(seed); },
       move(m) { return doMove(m); },

@@ -207,3 +207,21 @@ test("nothing on the page overflows the viewport", async ({ page }) => {
   expect(out).toEqual([]);
 });
 
+
+test("the hint shows the AI's move without playing it, and clears on the next move", async ({ page }) => {
+  const errors = await open(page);
+  await page.evaluate(() => solitaire.deal(4));
+  const before = await state(page);
+  await page.locator("#hintBtn").click();
+  const hint = (await info(page)).hint;
+  expect(hint && hint.move).toBeTruthy();
+  expect(await state(page)).toEqual(before);
+  expect((await info(page)).history).toBe(0);
+  await expect(page.locator(".k-card.is-next")).toHaveCount(1);
+  await expect(page.locator("#hint")).toHaveClass(/is-hinting/);
+  await page.evaluate((m) => solitaire.move(m), hint.move);
+  expect((await info(page)).hint).toBeNull();
+  await expect(page.locator(".k-card.is-next")).toHaveCount(0);
+  await expect(page.locator("#hint")).not.toHaveClass(/is-hinting/);
+  expect(errors).toEqual([]);
+});
