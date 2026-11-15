@@ -75,7 +75,7 @@
     [data-background] :is(.ms-title, .ms-readout, .control-bar) { display: none !important; }
     [data-background] .ms-bg-name {
       display: block; position: fixed; left: 22px; bottom: 18px; z-index: 5; pointer-events: none;
-      font: 400 1.6rem/1 var(--font-display); letter-spacing: .04em; color: #f7a840;
+      font: 700 24px/1 var(--font-ui); color: #f7a840;
       text-shadow: 0 0 6px #000, 0 0 14px #000, 0 2px 4px #000;
     }
     @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } .control-bar { flex-wrap: wrap; justify-content: center; row-gap: 6px; width: calc(100vw - 24px); max-width: 380px; } }
@@ -216,10 +216,12 @@
       if (!keepSeed) seed = (Math.random() * 2 ** 31) | 0;
       cell = set.cell;
       // keep clear of the title and readout above and the control bar below
-      const W = innerWidth, H = innerHeight, margin = Math.max(12, cell);
-      const top = BG ? margin : W < 600 ? 92 : 104, bottom = BG ? margin : W < 600 ? 128 : 82; // a phone's control bar takes two rows
-      cols = Math.max(4, Math.floor((W - 2 * margin) / cell));
-      rows = Math.max(4, Math.floor((H - top - bottom) / cell));
+      const W = innerWidth, H = innerHeight, margin = BG ? 0 : Math.max(12, cell);
+      const top = BG ? 0 : W < 600 ? 92 : 104, bottom = BG ? 0 : W < 600 ? 128 : 82; // a phone's control bar takes two rows
+      // a background covers the whole screen, the last partial row and column cut off at the edges
+      const fit = BG ? Math.ceil : Math.floor;
+      cols = Math.max(4, fit((W - 2 * margin) / cell));
+      rows = Math.max(4, fit((H - top - bottom) / cell));
       ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
       maze = generate(cols, rows, { style: set.style, loops: set.loops / 100, seed });
       start = 0; goal = cols * rows - 1;
@@ -362,8 +364,8 @@
     function resized() {
       size();
       const W = innerWidth, H = innerHeight;
-      const top = BG ? Math.max(12, cell) : W < 600 ? 92 : 104, bottom = BG ? Math.max(12, cell) : W < 600 ? 128 : 82;
-      const fits = cols * cell <= W && rows * cell <= H - top - bottom + cell;
+      const top = BG ? 0 : W < 600 ? 92 : 104, bottom = BG ? 0 : W < 600 ? 128 : 82;
+      const fits = BG ? cols * cell >= W && rows * cell >= H : cols * cell <= W && rows * cell <= H - top - bottom + cell;
       if (W !== builtW || !fits || Math.abs(H - builtH) > 160) { builtW = W; builtH = H; newMaze(true); return; }
       ox = Math.round((W - cols * cell) / 2); oy = top + Math.round((H - top - bottom - rows * cell) / 2);
       drawWalls();
@@ -372,13 +374,24 @@
 
     // ?background: run algorithm after algorithm on fresh mazes, no UI
     let bgTimer = 0;
+    // the background goes through every algorithm in a shuffled order, a new shuffle each round
+    const bgOrder = [];
+    let bgLast = null;
+    const bgAlgo = () => {
+      if (!bgOrder.length) {
+        const ids = ["astar", "bfs", "dfs", "greedy", "bidirectional", "deadend", "tremaux"];
+        for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+        if (ids[0] === bgLast) [ids[0], ids[1]] = [ids[1], ids[0]]; // no repeat across rounds
+        bgOrder.push(...ids);
+      }
+      return (bgLast = bgOrder.shift());
+    };
     // (called every frame once a run is done; only the first call schedules the next one)
     function bgNext() {
       if (bgTimer) return;
       bgTimer = setTimeout(() => {
         bgTimer = 0;
-        const ids = ["astar", "bfs", "dfs", "greedy", "bidirectional", "deadend", "tremaux"];
-        set.algo = ids[(ids.indexOf(set.algo) + 1) % ids.length];
+        set.algo = bgAlgo();
         newMaze(); setRunning(true);
       }, 2500);
     }
@@ -391,7 +404,7 @@
 
     showLoops(); showCell(); showSpeed();
     size(); newMaze();
-    if (BG) { set.speed = 256; setRunning(true); }
+    if (BG) { set.algo = bgAlgo(); set.speed = 256; reset(); setRunning(true); }
     requestAnimationFrame(frame);
 
     // for tests
