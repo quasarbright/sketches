@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { apply, newTable, player, pot, total, lastUndoable, COLORS } from "./core.mjs";
+import { apply, newTable, player, pot, total, headIndex, refundShares, publicState, COLORS } from "./core.mjs";
 
 function table() {
   let s = newTable({ code: "ABCDE", host: { name: "Host", color: COLORS[0] }, start: 100 });
@@ -97,27 +97,71 @@ test("pots come and go; a pot with chips can't be removed", () => {
   assert.equal(s.pots[0].name, "Kitty");
 });
 
-test("undo reverses a chip move, but not if the chips are already spent", () => {
+test("rewind goes back to any entry, restore goes forward, and a new move drops what was rewound", async () => {
   let s = table();
   const potId = s.pots[0].id;
+  const before = s.head;
   s = ok(apply(s, { type: "transfer", from: P("pa"), to: POT(potId), amount: 40 }, "pa"));
-  const bet = lastUndoable(s);
-  err(apply(s, { type: "undo", entry: bet.id }, "pa"), /host/);
-  s = ok(apply(s, { type: "undo", entry: bet.id }, s.hostId));
+  const bet = s.head;
+  s = ok(apply(s, { type: "addPot" }, s.hostId));
+  s = ok(apply(s, { type: "transfer", from: P("pb"), to: POT(s.pots[1].id), amount: 10 }, "pb"));
+  const last = s.head, n = s.log.length;
+  err(apply(s, { type: "goto", entry: before }, "pa"), /host/);
+
+  s = ok(apply(s, { type: "goto", entry: before }, s.hostId));
   assert.equal(player(s, "pa").chips, 100);
+  assert.equal(player(s, "pb").chips, 100);
+  assert.equal(s.pots.length, 1);
   assert.equal(pot(s, potId).chips, 0);
-  err(apply(s, { type: "undo", entry: bet.id }, s.hostId), /Already/);
-  s = ok(apply(s, { type: "transfer", from: P("pa"), to: P("pb"), amount: 100 }, "pa"));
-  const gift = lastUndoable(s);
-  s = ok(apply(s, { type: "transfer", from: P("pb"), to: POT(potId), amount: 200 }, "pb"));
-  err(apply(s, { type: "undo", entry: gift.id }, s.hostId), /give back/);
+  assert.equal(s.log.length, n, "rewinding adds nothing to the activity");
+
+  s = ok(apply(s, { type: "goto", entry: last }, s.hostId));
+  assert.equal(player(s, "pb").chips, 90);
+  assert.equal(s.pots.length, 2);
+
+  s = ok(apply(s, { type: "goto", entry: bet }, s.hostId));
+  assert.equal(headIndex(s), n - 3);
+  s = ok(apply(s, { type: "transfer", from: P("pa"), to: P("pb"), amount: 5 }, "pa"));
+  assert.equal(s.log.length, n - 1, "the two rewound entries are gone");
+  assert.equal(s.head, s.log.at(-1).id);
+  assert.ok(!(last in s.snaps));
+  assert.equal(total(s), 300);
+  assert.ok(!("snaps" in publicState(s)));
+});
+
+test("refund gives a pot back to whoever put chips in", () => {
+  let s = table();
+  const potId = s.pots[0].id;
+  s = ok(apply(s, { type: "transfer", from: P("pa"), to: POT(potId), amount: 30 }, "pa"));
+  s = ok(apply(s, { type: "transfer", from: P("pb"), to: POT(potId), amount: 50 }, "pb"));
+  s = ok(apply(s, { type: "transfer", from: P("pa"), to: POT(potId), amount: 20 }, s.hostId));
+  assert.deepEqual(refundShares(s, potId), [["pa", 50], ["pb", 50]]);
+  err(apply(s, { type: "refund", pot: potId }, "pa"), /host/);
+  s = ok(apply(s, { type: "refund", pot: potId }, s.hostId));
+  assert.equal(player(s, "pa").chips, 100);
+  assert.equal(player(s, "pb").chips, 100);
+  assert.equal(pot(s, potId).chips, 0);
+  err(apply(s, { type: "refund", pot: potId }, s.hostId), /Nobody/);
+});
+
+test("a partly paid-out pot refunds in proportion; an emptied pot forgets who paid", () => {
+  let s = table();
+  const potId = s.pots[0].id;
+  s = ok(apply(s, { type: "transfer", from: P("pa"), to: POT(potId), amount: 60 }, "pa"));
+  s = ok(apply(s, { type: "transfer", from: P("pb"), to: POT(potId), amount: 30 }, "pb"));
+  s = ok(apply(s, { type: "transfer", from: POT(potId), to: P(s.hostId), amount: 45 }, s.hostId));
+  assert.deepEqual(refundShares(s, potId), [["pa", 30], ["pb", 15]]);
+  s = ok(apply(s, { type: "award", pot: potId, winners: ["pa"] }, s.hostId));
+  assert.deepEqual(refundShares(s, potId), []);
+  s = ok(apply(s, { type: "transfer", from: P("pb"), to: POT(potId), amount: 7 }, "pb"));
+  assert.deepEqual(refundShares(s, potId), [["pb", 7]]);
 });
 
 test("set chips, edit me, remove player", () => {
   let s = table();
   s = ok(apply(s, { type: "setChips", target: P("pa"), amount: 500 }, s.hostId));
   assert.equal(player(s, "pa").chips, 500);
-  s = ok(apply(s, { type: "undo", entry: lastUndoable(s).id }, s.hostId));
+  s = ok(apply(s, { type: "goto", entry: s.log.at(-2).id }, s.hostId));
   assert.equal(player(s, "pa").chips, 100);
   s = ok(apply(s, { type: "editMe", name: "Annie", color: COLORS[5] }, "pa"));
   assert.equal(player(s, "pa").name, "Annie");

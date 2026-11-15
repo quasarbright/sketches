@@ -42,7 +42,7 @@ async function peerHost(code, { onConn, onStatus }) {
         // a reload: the old session still holds the id for a few seconds
         peer.destroy();
         if (++tries < 15) setTimeout(start, 2000);
-        else onStatus("error", "This table is open somewhere else.");
+        else onStatus("error", "This table is already open in another tab or on another device. Close it there, then reload.");
       } else if (e.type === "network" || e.type === "server-error" || e.type === "socket-error" || e.type === "socket-closed") {
         onStatus("connecting");
       }

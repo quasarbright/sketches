@@ -11,21 +11,27 @@
 
 import {
   COLORS, COLOR_NAMES, MAX_NAME, apply, newTable, player, pot, stack, sameRef, freeColors, total,
-  cleanName, lastUndoable, setOnline, randomId,
+  cleanName, setOnline, randomId, headIndex, canRewindTo, publicState, refundShares,
 } from "./core.mjs";
 import { transport } from "./net.mjs";
 
 const qs = new URLSearchParams(location.search);
 const net = transport(qs.get("net"));
-// Storage namespace. Each open tab claims a numbered slot (a Web Lock held while the tab lives);
-// slot 0 is the plain namespace, so a lone tab behaves as always, and every extra tab gets its own,
-// so several tabs on one phone sit at the table as different people. ?ns= sets it outright (tests).
-let NS = "chips:";
+// Device-wide settings (not per tab, not per table).
+const SETTINGS_KEY = "chips:settings";
+function settings() { try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; } }
+function saveSettings(x) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings(), ...x })); } catch {} }
+
+// Storage namespace. Normally every tab on a device is the same person. With the "each tab is a
+// different player" setting on (for testing on one phone), each open tab claims a numbered slot (a
+// Web Lock held while the tab lives): slot 0 is the plain namespace, every extra tab gets its own.
+// ?ns= sets it outright (the browser tests).
+let NS = "chips:", tabSlot = 0;
 async function claimSlot() {
   if (qs.get("ns")) { NS = "chips:" + qs.get("ns") + ":"; return; }
-  if (!navigator.locks) return;
+  if (!settings().tabsArePlayers || !navigator.locks) return;
   let want = null;
-  try { want = sessionStorage.getItem("chips:slot"); } catch {}
+  try { want = sessionStorage.getItem("chips:slot") || null; } catch {}
   const grab = (n) => new Promise((res) => {
     navigator.locks.request("chips-slot-" + n, { ifAvailable: true }, (lock) => {
       if (lock) held.add(n);
@@ -39,6 +45,7 @@ async function claimSlot() {
   for (let i = 0; i < tries && !(await grab(slot)); i++) if (i < tries - 1) await new Promise((r) => setTimeout(r, 150));
   if (!held.has(slot)) for (slot = 0; slot < 50 && !(await grab(slot)); slot++);
   try { sessionStorage.setItem("chips:slot", slot); } catch {}
+  tabSlot = slot;
   if (slot) NS = "chips:tab" + slot + ":";
 }
 const held = new Set();
@@ -69,6 +76,7 @@ let screen = null;
 function show(name) {
   screen = name;
   for (const s of SCREENS) $("#" + s).hidden = s !== name;
+  $("#cornerSettings").hidden = name === "table";
   scrollTo(0, 0);
   if (name === "table") requestAnimationFrame(fitDock);
 }
@@ -130,7 +138,6 @@ function showLanding() {
   $("#recent [data-list]").innerHTML = recent.map((r) =>
     `<a href="#${esc(r.code)}">${chipHTML(r.color || "#888", "sm")}<span><b>${esc(r.code)}</b> · ${esc(r.title || "")}</span><small>${r.host ? "hosting" : "playing"}</small></a>`).join("");
   show("landing");
-  if (!prof.name) setTimeout(() => f.name.focus(), 50);
 }
 
 $("#createForm").addEventListener("submit", (e) => {
@@ -146,6 +153,19 @@ $("#createForm").addEventListener("submit", (e) => {
   store.set("host:" + code, { state, tokens: {} });
   history.pushState(null, "", "#" + code);
   startHost({ state, tokens: {} });
+});
+
+$("#codeForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = e.target, raw = f.code.value.trim();
+  // a pasted link works too: take what's after the #
+  const c = (raw.includes("#") ? raw.slice(raw.lastIndexOf("#") + 1) : raw).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (c.length !== 5) { $("[data-err]", f).textContent = "Codes are 5 letters, like K7QXM."; f.code.focus(); return; }
+  location.hash = c;
+});
+$("#codeForm").code.addEventListener("input", (e) => {
+  $("#codeForm [data-err]").textContent = "";
+  if (/^[a-z0-9]{5}$/i.test(e.target.value.trim())) $("#codeForm").requestSubmit();
 });
 
 $$("[data-home]").forEach((b) => b.addEventListener("click", () => { location.hash = ""; }));
@@ -176,7 +196,7 @@ function persist() { if (isHost) store.set("host:" + code, { state: S, tokens })
 function broadcast(msg) { for (const x of conns) try { x.c.send(msg); } catch {} }
 function commit(next) {
   if (next === S) return;
-  S = next; persist(); broadcast({ t: "state", state: S }); render();
+  S = next; persist(); broadcast({ t: "state", state: publicState(S) }); render();
 }
 
 function hostConn(c) {
@@ -191,7 +211,7 @@ function hostConn(c) {
 
 function seat(x, pid) {
   x.pid = pid;
-  x.c.send({ t: "welcome", you: pid, state: S });
+  x.c.send({ t: "welcome", you: pid, state: publicState(S) });
   commit(setOnline(S, pid, true));
 }
 
@@ -200,7 +220,7 @@ function hostMsg(x, m) {
   const known = typeof m.token === "string" && m.token.length >= 16 && tokens[m.token];
   if (m.t === "hello") {
     if (known && player(S, known)) seat(x, known);
-    else x.c.send({ t: "lobby", state: S });
+    else x.c.send({ t: "lobby", state: publicState(S) });
   } else if (m.t === "join") {
     if (typeof m.token !== "string" || m.token.length < 16) return;
     if (known && player(S, known)) return seat(x, known);
@@ -432,10 +452,6 @@ function render() {
   renderLog();
   $("#total").textContent = `${fmt(total(S))} chips on the table`;
 
-  // undo
-  const u = isHost && lastUndoable(S);
-  $("#undoBtn").hidden = !u;
-
   // toasts for chips that came my way from someone else
   for (const e of S.log) {
     if (seenLog.has(e.id)) continue;
@@ -459,23 +475,22 @@ function partsHTML(parts) {
 }
 
 function renderLog() {
-  const items = S.log.slice(-logLimit).reverse();
+  // the log is a timeline: entries after the head were rewound past, and show crossed out
+  const h = headIndex(S), from = Math.max(0, S.log.length - logLimit);
   const time = (ts) => new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).replace(/\s?[AP]M$/i, "");
-  $("#log").innerHTML = items.map((e) => `<li class="${e.undone ? "undone" : ""}"><span class="t">${time(e.ts)}</span><span class="x">${partsHTML(e.parts)}</span>${
-    isHost && e.delta && !e.undone ? `<button class="undo" data-undo="${e.id}">undo</button>` : ""}</li>`).join("")
+  const btn = (e, i) => !isHost || i === h || !canRewindTo(S, e.id) ? ""
+    : `<button class="tl" data-goto="${e.id}">${i < h ? "rewind to here" : "restore to here"}</button>`;
+  $("#log").innerHTML = S.log.slice(from).map((e, k) => {
+    const i = from + k;
+    return `<li class="${i > h ? "rewound" : ""}"><span class="t">${time(e.ts)}</span><span class="x">${partsHTML(e.parts)}</span>${btn(e, i)}</li>`;
+  }).reverse().join("")
     + (S.log.length > logLimit ? `<li><button class="more" data-more>Show more</button></li>` : "");
 }
 
 $("#log").addEventListener("click", async (e) => {
   if (e.target.closest("[data-more]")) { logLimit += 50; renderLog(); return; }
-  const b = e.target.closest("[data-undo]");
-  if (!b) return;
-  const entry = S.log.find((x) => x.id === b.dataset.undo);
-  if (entry && await confirmSheet("Undo this?", partsHTML(entry.parts), "Undo")) run({ type: "undo", entry: entry.id }, "Undone");
-});
-$("#undoBtn").addEventListener("click", async () => {
-  const e = lastUndoable(S);
-  if (e && await confirmSheet("Undo the last move?", partsHTML(e.parts), "Undo")) run({ type: "undo", entry: e.id }, "Undone");
+  const b = e.target.closest("[data-goto]");
+  if (b) run({ type: "goto", entry: b.dataset.goto });
 });
 
 /* ---------- the dock: send chips from my stack ---------- */
@@ -608,6 +623,7 @@ $("#inviteBtn").addEventListener("click", inviteSheet);
 $("#codeTag").addEventListener("click", inviteSheet);
 $("[data-invite]", $("#nudge")).addEventListener("click", inviteSheet);
 $("#menuBtn").addEventListener("click", menuSheet);
+$$("[data-settings]").forEach((b) => b.addEventListener("click", settingsSheet));
 
 /* ------------------------------------------------------------------ *
  * sheets
@@ -618,7 +634,7 @@ function openSheet(html, { update, onClose } = {}) {
   closeSheet();
   const back = document.createElement("div");
   back.className = "sheet-back";
-  back.innerHTML = `<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  back.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
   const el = $(".sheet", back);
   const close = () => {
     if (sheetClose !== close) return;
@@ -683,14 +699,15 @@ function potSheet(id) {
       <div class="winners" data-winners></div>
       <div class="preview" data-preview></div>
       <button class="btn-big" data-award disabled>Award</button>
+      <button class="btn-soft refund" data-refund>Refund <small data-refund-note></small></button>
     </div>
     <details><summary>Move some chips</summary><div>
       ${amountField("move", null)}
       <div class="dests" data-dests></div>
       <button class="btn-soft" style="width:100%" data-move>Move</button>
     </div></details>
-    <details><summary>Set the exact count</summary><div><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New count" />
+    <details><summary>Set the exact amount</summary><div><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
       <button class="btn-soft" data-set>Set</button></div></div></details>
     <details><summary>Rename</summary><div><div class="row">
       <input class="text" data-rename maxlength="${MAX_NAME}" />
@@ -732,6 +749,11 @@ function potSheet(id) {
     $("[data-max]", el).innerHTML = `All <span class="muted">${fmt(p.chips)}</span>`;
     $("[data-rm-note]", el).textContent = p.chips ? "Award or move its chips first." : S.pots.length === 1 ? "With no pots, it's just players and their chips. You can add one back any time." : "It's empty, so nothing is lost.";
     $("[data-remove]", el).disabled = !!p.chips;
+    const shares = refundShares(S, id);
+    $("[data-refund]", el).disabled = !shares.length;
+    $("[data-refund-note]", el).textContent = shares.length
+      ? shares.map(([w, n]) => `${player(S, w).name} ${fmt(n)}`).join(" · ")
+      : "nothing to give back";
     dests.draw(); preview(); moveBtn();
   };
   $("[data-winners]", el).addEventListener("click", (e) => {
@@ -741,6 +763,9 @@ function potSheet(id) {
       if (winners.size === S.players.length) winners.clear(); else S.players.forEach((q) => winners.add(q.id));
     } else if (winners.has(b.dataset.w)) winners.delete(b.dataset.w); else winners.add(b.dataset.w);
     buzz(6); draw();
+  });
+  $("[data-refund]", el).addEventListener("click", async () => {
+    if (await run({ type: "refund", pot: id })) close();
   });
   $("[data-award]", el).addEventListener("click", async () => {
     if (await run({ type: "award", pot: id, winners: [...winners] })) close();
@@ -778,8 +803,8 @@ function playerSheet(id) {
       ${amountField("move", null)}
       <div class="dests" data-dests></div>
       <button class="btn-big" data-move disabled>Move</button></div>
-    <details><summary>Set the exact count</summary><div><p>For buy-ins, rebuys, or fixing a mistake.</p><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New count" />
+    <details><summary>Set the exact amount</summary><div><p>For buy-ins, rebuys, or fixing a mistake.</p><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
       <button class="btn-soft" data-set>Set</button></div></div></details>
     <details><summary>Take them off the table</summary><div>
       <p data-rm-note></p>
@@ -825,8 +850,8 @@ function meSheet() {
     <label class="field"><span>Name</span><input class="text" data-name maxlength="${MAX_NAME}" /></label>
     <div class="field"><span>Color</span><div class="colors" data-colors></div></div>
     <button class="btn-big" data-save>Save</button>
-    ${isHost ? `<details style="margin-top:18px"><summary>Set your exact count</summary><div><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New count" />
+    ${isHost ? `<details style="margin-top:18px"><summary>Set your exact amount</summary><div><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
       <button class="btn-soft" data-set>Set</button></div></div></details>` : ""}`, {
     update: () => picker.update(S.players.filter((q) => q.id !== me).map((q) => q.color)),
   });
@@ -909,6 +934,24 @@ function menuSheet() {
         setTimeout(() => { location.hash = ""; }, 300);
       }
     }
+  });
+}
+
+function settingsSheet() {
+  const on = !!settings().tabsArePlayers;
+  const { el } = openSheet(`${head("Settings")}
+    <button class="switch-row" role="switch" aria-checked="${on}" data-tabs>
+      <span><b>Each tab is a different player</b><small>For trying out a table alone on one device. When it's off, every tab on this device is you.</small></span>
+      <span class="switch"></span>
+    </button>
+    ${on && !qs.get("ns") ? `<p style="margin:12px 2px 0">This tab is ${tabSlot ? `player tab ${tabSlot + 1}` : "your main tab"}.</p>` : ""}`);
+  $("[data-tabs]", el).addEventListener("click", (e) => {
+    const b = e.currentTarget, next = b.getAttribute("aria-checked") !== "true";
+    b.setAttribute("aria-checked", next);
+    saveSettings({ tabsArePlayers: next });
+    try { sessionStorage.setItem("chips:slot", ""); } catch {}
+    // who this tab is gets decided on load
+    setTimeout(() => location.reload(), 250);
   });
 }
 

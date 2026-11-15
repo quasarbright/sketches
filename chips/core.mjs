@@ -1,9 +1,12 @@
 // The table's rules: a pure reducer the host runs on every request. Nothing here touches the
 // network or the page, so it is the one place that decides who may move whose chips.
 //
-// State (broadcast to everyone):
-//   { code, hostId, start, players:[{id,name,color,chips,online}], pots:[{id,name,chips}],
-//     log:[{id,ts,parts,delta?,undone?}], seq }
+// State (broadcast to everyone, minus `snaps`):
+//   { code, hostId, start, players:[{id,name,color,chips,online}],
+//     pots:[{id,name,chips,from:{playerId:chips put in}}], log:[{id,ts,parts}], head, seq, snaps }
+// The log is a timeline: `head` is the entry the table currently stands at. The host can rewind to
+// any earlier entry (later ones stay, crossed out) and restore forward again; the next thing that
+// happens drops the crossed-out entries. `snaps[entryId]` is the chips and pots right after it.
 // A "ref" names a stack: { k: "p", id } for a player, { k: "pot", id } for a pot.
 
 export const COLORS = [
@@ -19,11 +22,11 @@ const LOG_CAP = 200;
 export const MAX_NAME = 20;
 
 export function newTable({ code, host, start = 1000 }) {
-  const s = { code, hostId: null, start, players: [], pots: [], log: [], seq: 0 };
+  const s = { code, hostId: null, start, players: [], pots: [], log: [], head: null, seq: 0, snaps: {} };
   const id = nextId(s);
   s.hostId = id;
   s.players.push({ id, name: cleanName(host.name), color: host.color, chips: start, online: true });
-  s.pots.push({ id: nextId(s), name: "Pot", chips: 0 });
+  s.pots.push({ id: nextId(s), name: "Pot", chips: 0, from: {} });
   log(s, [pref(s, id), " opened the table with ", amt(start)]);
   return s;
 }
@@ -43,15 +46,45 @@ export const total = (s) => s.players.reduce((t, p) => t + p.chips, 0) + s.pots.
 function pref(s, id) { const p = player(s, id); return { r: "p", id, n: p?.name ?? "?", c: p?.color }; }
 function sref(s, ref) { const x = stack(s, ref); return ref.k === "p" ? pref(s, ref.id) : { r: "pot", id: ref.id, n: x?.name ?? "pot" }; }
 const amt = (a) => ({ a });
-function log(s, parts, delta) {
+function log(s, parts) {
+  s.snaps ||= {};
+  // something new happened: anything that was rewound past is gone for good
+  const h = headIndex(s);
+  for (const e of s.log.splice(h + 1)) delete s.snaps[e.id];
   const e = { id: nextId(s), ts: Date.now(), parts };
-  if (delta) e.delta = delta;
   s.log.push(e);
-  if (s.log.length > LOG_CAP) s.log.splice(0, s.log.length - LOG_CAP);
+  s.head = e.id;
+  s.snaps[e.id] = snapshot(s);
+  if (s.log.length > LOG_CAP) for (const old of s.log.splice(0, s.log.length - LOG_CAP)) delete s.snaps[old.id];
   return e;
 }
-const key = (ref) => ref.k + ":" + ref.id;
-const unkey = (k) => { const i = k.indexOf(":"); return { k: k.slice(0, i), id: k.slice(i + 1) }; };
+const snapshot = (s) => ({
+  chips: Object.fromEntries(s.players.map((p) => [p.id, p.chips])),
+  pots: structuredClone(s.pots),
+});
+// index of the entry the table stands at (the last one, for tables from before the timeline)
+export function headIndex(s) {
+  const i = s.log.findIndex((e) => e.id === s.head);
+  return i < 0 ? s.log.length - 1 : i;
+}
+export const canRewindTo = (s, id) => !!s.snaps?.[id];
+// what everyone but the host sees: the snapshots stay with the host
+export function publicState(s) { const { snaps, ...rest } = s; return rest; }
+
+// a pot remembers who put how much in, so it can be refunded; it forgets once it's empty
+function putIn(p, playerId, n) { p.from ||= {}; p.from[playerId] = (p.from[playerId] || 0) + n; }
+function settle(p) { if (!p.chips) p.from = {}; }
+// who'd get what back if this pot were refunded now: what each put in, scaled down if the pot has
+// since paid some out (rounded down; the odd chips stay), and only for players still at the table
+export function refundShares(s, potId) {
+  const p = pot(s, potId);
+  if (!p) return [];
+  const parts = Object.entries(p.from || {}).filter(([id, n]) => n > 0 && player(s, id));
+  const put = parts.reduce((t, [, n]) => t + n, 0);
+  if (!put) return [];
+  const scale = Math.min(1, p.chips / put);
+  return parts.map(([id, n]) => [id, Math.floor(n * scale)]).filter(([, n]) => n > 0);
+}
 
 const fail = (error) => ({ error });
 
@@ -93,9 +126,10 @@ const reducers = {
       if (!own && !isHost) return "Those aren't your chips.";
       if (a.chips < amount) return own ? `You only have ${a.chips}.` : `${a.name} only has ${a.chips}.`;
       a.chips -= amount; b.chips += amount;
-      const delta = { [key(from)]: -amount, [key(to)]: amount };
-      if (own) log(s, [pref(s, actor), to.k === "pot" ? " bet " : " gave ", amt(amount), " → ", sref(s, to)], delta);
-      else log(s, [pref(s, actor), " moved ", amt(amount), " from ", sref(s, from), " → ", sref(s, to)], delta);
+      if (from.k === "p" && to.k === "pot") putIn(b, from.id, amount);
+      if (from.k === "pot") settle(a);
+      if (own) log(s, [pref(s, actor), to.k === "pot" ? " bet " : " gave ", amt(amount), " → ", sref(s, to)]);
+      else log(s, [pref(s, actor), " moved ", amt(amount), " from ", sref(s, from), " → ", sref(s, to)]);
     },
   },
 
@@ -110,16 +144,15 @@ const reducers = {
       if (!p.chips) return "That pot is empty.";
       const share = Math.floor(p.chips / winners.length);
       if (!share) return `Not enough chips to split ${winners.length} ways.`;
-      const delta = {};
-      for (const id of winners) { player(s, id).chips += share; delta["p:" + id] = share; }
-      const paid = share * winners.length;
-      p.chips -= paid; delta["pot:" + potId] = -paid;
+      for (const id of winners) player(s, id).chips += share;
+      p.chips -= share * winners.length;
+      settle(p);
       const names = [];
       winners.forEach((id, i) => { if (i) names.push(i === winners.length - 1 ? " & " : ", "); names.push(pref(s, id)); });
       const parts = [{ r: "pot", id: potId, n: p.name }, " → ", ...names, " ", amt(share)];
       if (winners.length > 1) parts.push(" each");
       if (p.chips) parts.push(` (${p.chips} left in pot)`);
-      log(s, parts, delta);
+      log(s, parts);
     },
   },
 
@@ -133,7 +166,8 @@ const reducers = {
       const d = amount - x.chips;
       if (!d) return;
       x.chips = amount;
-      log(s, [pref(s, actor), " set ", sref(s, target), " to ", amt(amount), ` (${d > 0 ? "+" : "−"}${Math.abs(d)})`], { [key(target)]: d });
+      if (target.k === "pot") settle(x);
+      log(s, [pref(s, actor), " set ", sref(s, target), " to ", amt(amount), ` (${d > 0 ? "+" : "−"}${Math.abs(d)})`]);
     },
   },
 
@@ -142,7 +176,7 @@ const reducers = {
     run(s, { name }, actor) {
       name = cleanName(name) || defaultPotName(s);
       const id = nextId(s);
-      s.pots.push({ id, name, chips: 0 });
+      s.pots.push({ id, name, chips: 0, from: {} });
       log(s, [pref(s, actor), " added ", { r: "pot", id, n: name }]);
     },
   },
@@ -201,22 +235,36 @@ const reducers = {
     },
   },
 
-  // reverse a logged chip movement, if every stack it touched is still there and can afford it
-  undo: {
+  // give a pot's chips back to whoever put them in
+  refund: {
     host: true,
-    run(s, { entry }, actor) {
-      const e = s.log.find((x) => x.id === entry);
-      if (!e || !e.delta) return "That can't be undone.";
-      if (e.undone) return "Already undone.";
-      const moves = Object.entries(e.delta).map(([k, d]) => [unkey(k), d]);
-      for (const [ref, d] of moves) {
-        const x = stack(s, ref);
-        if (!x) return "A stack it touched is gone.";
-        if (x.chips - d < 0) return `${x.name} doesn't have the chips to give back.`;
-      }
-      for (const [ref, d] of moves) stack(s, ref).chips -= d;
-      e.undone = true;
-      log(s, [pref(s, actor), " undid: ", ...e.parts]);
+    run(s, { pot: potId }) {
+      const p = pot(s, potId);
+      if (!p) return "That pot is gone.";
+      const shares = refundShares(s, potId);
+      if (!shares.length) return "Nobody here put chips in that pot.";
+      for (const [id, n] of shares) { player(s, id).chips += n; p.chips -= n; }
+      p.from = {};
+      settle(p);
+      const parts = [{ r: "pot", id: potId, n: p.name }, " refunded: "];
+      shares.forEach(([id, n], i) => { if (i) parts.push(", "); parts.push(pref(s, id), " ", amt(n)); });
+      if (p.chips) parts.push(` (${p.chips} left in pot)`);
+      log(s, parts);
+    },
+  },
+
+  // move the table to how it stood right after a log entry: back in time (rewind) or, for an
+  // entry that was rewound past, forward again (restore). Players keep their seats either way;
+  // anyone who joined since keeps their chips, anyone who left stays gone.
+  goto: {
+    host: true,
+    run(s, { entry }) {
+      const snap = s.snaps?.[entry];
+      if (!snap) return "Can't go back that far.";
+      if (entry === s.head) return;
+      for (const p of s.players) if (p.id in snap.chips) p.chips = snap.chips[p.id];
+      s.pots = structuredClone(snap.pots);
+      s.head = entry;
     },
   },
 };
@@ -229,8 +277,6 @@ export function defaultPotName(s) {
   }
 }
 
-// the latest log entry the host could still undo
-export const lastUndoable = (s) => [...s.log].reverse().find((e) => e.delta && !e.undone);
 
 // presence isn't an action anyone asks for, so it skips the log
 export function setOnline(state, id, online) {

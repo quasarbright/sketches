@@ -79,6 +79,7 @@
     .btn-soft:disabled { opacity: .45; }
     .btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
     .err { color: var(--danger); font-weight: 600; min-height: 1.4em; margin: 6px 0 12px; font-size: .95rem; }
+    #codeForm .err:empty { display: none; }
     .muted { color: var(--muted); }
 
     /* a poker chip: the player's color with a dashed edge and an inset face */
@@ -123,6 +124,19 @@
     .recent a:hover { text-decoration: none; border-color: var(--accent); }
     .recent a small { color: var(--muted); margin-left: auto; }
     .center { text-align: center; }
+    .code-in { text-transform: uppercase; letter-spacing: .18em; font-weight: 800; }
+    .code-in::placeholder { text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--faint); }
+    .or { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: .85rem; font-weight: 700; margin: 18px 4px; text-transform: uppercase; letter-spacing: .06em; }
+    .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .corner { position: fixed; z-index: 7; top: max(12px, env(safe-area-inset-top)); right: 12px; }
+    @media (max-width: 400px) { .pill-btn .lbl { display: none; } .pill-btn { padding: 0 11px; } .top { gap: 6px; } }
+    .switch-row { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 14px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--panel-2); }
+    .switch-row b { display: block; }
+    .switch-row small { display: block; color: var(--muted); font-size: .85rem; margin-top: 2px; }
+    .switch { flex: none; width: 50px; height: 30px; border-radius: 15px; background: var(--border); position: relative; transition: background .15s; margin-left: auto; }
+    .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--text); transition: transform .15s; }
+    [aria-checked="true"] .switch { background: var(--accent); }
+    [aria-checked="true"] .switch::after { transform: translateX(20px); background: var(--on-accent); }
     .spinner { width: 48px; height: 48px; margin: 40px auto 20px; border-radius: 50%; border: 4px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -195,9 +209,11 @@
     .log li { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); font-size: .93rem; line-height: 1.35; }
     .log li .t { color: var(--faint); font-size: .78rem; flex: none; width: 3.6em; }
     .log li .x { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    .log li.undone .x { text-decoration: line-through; opacity: .5; }
+    .log li.rewound .x { text-decoration: line-through; opacity: .45; }
+    .log li.rewound .t { opacity: .5; }
     .log b.a { color: var(--accent); }
-    .log .undo { flex: none; border: 1px solid var(--border); background: none; border-radius: 8px; font-size: .78rem; padding: 3px 8px; color: var(--muted); }
+    .log .tl { flex: none; border: 1px solid var(--border); background: none; border-radius: 8px; font-size: .78rem; padding: 4px 8px; color: var(--muted); white-space: nowrap; }
+    .log li.rewound .tl { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
     .log .more { border: 0; background: none; color: var(--muted); padding: 10px; width: 100%; font-weight: 700; }
     .total { text-align: center; color: var(--faint); font-size: .85rem; margin: 12px 0 0; }
 
@@ -247,10 +263,9 @@
     .sheet {
       width: 100%; max-width: 560px; max-height: 88dvh; overflow-y: auto; overscroll-behavior: contain;
       background: var(--panel); border: 1px solid var(--border); border-bottom: 0; border-radius: 22px 22px 0 0;
-      padding: 8px 18px calc(22px + var(--safe-b)); animation: up .22s cubic-bezier(.2,.9,.3,1);
+      padding: 18px 18px calc(22px + var(--safe-b)); animation: up .22s cubic-bezier(.2,.9,.3,1);
     }
     @media (min-width: 700px) { .sheet-back { align-items: center; } .sheet { border-radius: 22px; border-bottom: 1px solid var(--border); padding-bottom: 22px; } }
-    .sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: var(--border); margin: 4px auto 14px; }
     .sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .sheet-head h3 { font-size: 1.3rem; font-weight: 800; flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .sheet-head .big { font-weight: 800; font-size: 1.3rem; color: var(--accent); }
@@ -281,6 +296,8 @@
     .winner[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
     .winner .chip { width: 30px; height: 30px; }
     .winner.everyone { grid-column: 1 / -1; justify-content: center; }
+    .refund { width: 100%; margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .refund small { font-weight: 500; color: var(--muted); font-size: .82rem; }
     .preview { color: var(--muted); font-size: .92rem; min-height: 1.4em; margin: 2px 2px 12px; }
 
     .menu-list { display: flex; flex-direction: column; gap: 8px; }
@@ -300,15 +317,28 @@
   </style>
 </head>
 <body>
-  <!-- landing: open a table -->
+  <!-- settings, top right on every screen but the table (whose header has its own) -->
+  <button class="icon-btn corner" id="cornerSettings" data-settings title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+
+  <!-- landing: join with a code, or open a table -->
   <section id="landing" class="screen" hidden>
     <div class="hero">
       <div class="stack" aria-hidden="true">
         <span class="chip" style="--c:#ef4444"><i></i></span><span class="chip" style="--c:#3b82f6"><i></i></span><span class="chip" style="--c:#22c55e"><i></i></span><span class="chip" style="--c:#e7e5e4"><i></i></span>
       </div>
       <h1 class="wordmark">chips</h1>
-      <p>Everyone's chips, on everyone's phone. Open a table and send the link around.</p>
+      <p>Everyone's chips, on everyone's phone.</p>
     </div>
+    <form id="codeForm" class="card" autocomplete="off" novalidate>
+      <label class="field" style="margin:0"><span>Join a table</span>
+        <div class="row">
+          <input class="text code-in" name="code" placeholder="5-letter code" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" />
+          <button class="btn-big" style="width:auto;padding:0 24px" type="submit">Join</button>
+        </div>
+      </label>
+      <div class="err" data-err style="margin-bottom:0"></div>
+    </form>
+    <div class="or"><span>or open your own</span></div>
     <form id="createForm" class="card" autocomplete="off">
       <label class="field"><span>Your name</span><input class="text" name="name" maxlength="20" required enterkeyhint="done" /></label>
       <div class="field"><span>Your color</span><div class="colors" data-colors></div></div>
@@ -367,16 +397,14 @@
       <span class="wordmark">chips</span>
       <button class="code-tag" id="codeTag" title="Invite players"></button>
       <span class="sp"></span>
-      <button class="icon-btn" id="undoBtn" title="Undo the last chip move" hidden>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
-      </button>
       <button class="pill-btn" id="inviteBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
-        Invite
+        <span class="lbl">Invite</span>
       </button>
       <button class="icon-btn" id="menuBtn" title="Menu">
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
       </button>
+      <button class="icon-btn" data-settings title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </header>
     <div class="banner" id="banner" hidden><span class="dot"></span><span data-msg></span></div>
     <div class="wrap" id="wrap">

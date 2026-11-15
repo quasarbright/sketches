@@ -80,7 +80,7 @@ test("with several pots players must pick one; they can also give to a player", 
   await expect(chipsOf(ann, "Ann")).toHaveText("900");
 });
 
-test("players can't move other people's chips; the host can, and can undo", async ({ context }) => {
+test("players can't move other people's chips; the host can, and can rewind and restore", async ({ context }) => {
   const { page: h, code } = await host(context);
   const ann = await join(context, code, "ann", "Ann");
   // a player can't open someone else's stack
@@ -100,10 +100,20 @@ test("players can't move other people's chips; the host can, and can undo", asyn
   await expect(potAmt(ann)).toHaveText("300");
   await expect(chipsOf(ann, "Ann")).toHaveText("700");
 
-  await h.click("#undoBtn");
-  await h.click(".sheet [data-ok]");
+  // rewind to before the move: nothing new in the activity, the move is crossed out
+  const rows = await h.locator("#log li").count();
+  await expect(h.locator("#log li").first().locator("[data-goto]")).toHaveCount(0); // the latest is where we are
+  await h.locator("#log li", { hasText: "Ann joined" }).locator("[data-goto]").click();
   await expect(potAmt(ann)).toHaveText("0");
   await expect(chipsOf(ann, "Ann")).toHaveText("1,000");
+  await expect(h.locator("#log li")).toHaveCount(rows);
+  await expect(ann.locator("#log li.rewound")).toHaveCount(1);
+  await expect(ann.locator("#log [data-goto]")).toHaveCount(0); // players only watch
+  await expect(h.locator("#log li.rewound [data-goto]")).toHaveText("restore to here");
+  // and forward again
+  await h.locator("#log li.rewound [data-goto]").click();
+  await expect(potAmt(ann)).toHaveText("300");
+  await expect(ann.locator("#log li.rewound")).toHaveCount(0);
 });
 
 test("the host can remove the only pot, and a reload keeps everyone seated", async ({ context }) => {
@@ -131,6 +141,7 @@ test("joining shows only free colors", async ({ context }) => {
 });
 
 test("several tabs of one browser sit down as different people", async ({ context }) => {
+  await context.addInitScript(() => localStorage.setItem("chips:settings", JSON.stringify({ tabsArePlayers: true })));
   const open = async (hash = "") => {
     const page = await context.newPage();
     await page.route(/fonts\.(googleapis|gstatic)\.com|jsdelivr/, (r) => r.abort());
@@ -159,4 +170,37 @@ test("several tabs of one browser sit down as different people", async ({ contex
   await h.reload();
   await expect(h.locator(".prow.me")).toContainText("Host");
   await expect(h.locator(".prow.me")).toContainText("host");
+});
+
+test("by default every tab is the same person", async ({ context }) => {
+  const { code } = await host(context);
+  const ann = await join(context, code, "ann", "Ann");
+  const again = await device(context, "ann", "#" + code);
+  await expect(again.locator(".prow.me")).toContainText("Ann");
+  await expect(ann.locator(".prow")).toHaveCount(2);
+});
+
+test("the host refunds a pot to whoever put chips in", async ({ context }) => {
+  const { page: h, code } = await host(context);
+  const ann = await join(context, code, "ann", "Ann");
+  const bob = await join(context, code, "bob", "Bob");
+  await ann.fill("#amt", "120"); await ann.click("#sendBtn");
+  await bob.fill("#amt", "30"); await bob.click("#sendBtn");
+  await expect(potAmt(h)).toHaveText("150");
+  await h.click(".pot");
+  await expect(h.locator("[data-refund]")).toContainText("Ann 120 · Bob 30");
+  await h.click("[data-refund]");
+  for (const p of [h, ann, bob]) {
+    await expect(potAmt(p)).toHaveText("0");
+    await expect(chipsOf(p, "Ann")).toHaveText("1,000");
+    await expect(chipsOf(p, "Bob")).toHaveText("1,000");
+  }
+});
+
+test("the home page joins a table by its code", async ({ context }) => {
+  const { code } = await host(context);
+  const p = await device(context, "zed");
+  await p.fill("#codeForm [name=code]", code.toLowerCase());
+  await expect(p.locator("#join")).toBeVisible();
+  await expect(p.locator("#join [data-title]")).toContainText("Host");
 });
