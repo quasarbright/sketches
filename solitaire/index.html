@@ -790,10 +790,23 @@
       if (p.why === "draw") return `Draw from the stock: the AI is after the ${cardName(p.card)}`;
       return (WHY[p.why] || [""])[0] + (who === "bot" || !WHY[p.why]?.[1] ? "" : " · " + WHY[p.why][1]);
     }
+    // The hint prefers moves you can make right now, in this order: a card home to the four piles,
+    // then a card onto another column (from a column or the top of the waste), and only when
+    // neither helps, whatever the AI would do, which may be to draw. Within each group it takes
+    // the one the AI scores highest, and it skips moves the AI thinks get nowhere.
+    function hintMove() {
+      const { ranked, now } = rankMoves(state, seen);
+      const wasteTop = state.waste.at(-1);
+      const ready = (r) => r.value > now && (r.m.from.pile === "tab" || (r.m.from.pile === "pool" && r.card === wasteTop));
+      const pick = ranked.find((r) => ready(r) && r.m.to.pile === "found") || ranked.find((r) => ready(r) && r.m.to.pile === "tab");
+      if (!pick) return decide(state, seen);
+      const from = pick.m.from.pile === "pool" ? { pile: "waste", i: 0 } : pick.m.from;
+      return { move: { type: "move", from, to: pick.m.to, n: pick.m.n }, why: pick.why, card: pick.card, to: pick.m.to };
+    }
     function showHint() {
       if (over || bot.on || finishing) return audio.play("bump");
       held = null; drag = null;
-      hintPlan = decide(state, seen);
+      hintPlan = hintMove();
       $("hint").textContent = planText(hintPlan, "you");
       $("hint").classList.add("is-hinting");
       placeCards();
