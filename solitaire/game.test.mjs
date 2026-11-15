@@ -1,7 +1,7 @@
 // Logic tests for the rules and the bot. Run: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deal, apply, legal, moves, won, foundCount, hiddenCount, autoMove, fitsTab, fitsFound } from "./game.mjs";
+import { deal, apply, legal, moves, won, foundCount, hiddenCount, autoMove, fitsTab, fitsFound, rankOf } from "./game.mjs";
 import { decide, view, key } from "./bot.mjs";
 import { playOut } from "./measure.mjs";
 
@@ -90,6 +90,16 @@ test("the last cards go home on their own once everything is face up", () => {
   const m = autoMove(s);
   assert.ok(m);
   assert.ok(won(apply(s, m).state));
+});
+
+test("the automatic finish sends cards home lowest rank first", () => {
+  const runs = ["K♠ Q♥ J♣ 10♦ 9♠ 8♥ 7♣ 6♦ 5♠", "K♥ Q♠ J♦ 10♣ 9♥ 8♠ 7♦ 6♣ 5♥", "K♦ Q♣ J♥ 10♠ 9♦ 8♣ 7♥ 6♠ 5♦", "K♣ Q♦ J♠ 10♥ 9♣ 8♦ 7♠ 6♥ 5♣"];
+  const card = (t) => c(t.slice(0, -1), "SHDC"["♠♥♦♣".indexOf(t.at(-1))]);
+  let s = { seed: 0, moves: 0, stock: [], waste: [], found: [0, 1, 2, 3].map((u) => [0, 1, 2, 3].map((r) => u * 13 + r)), tab: Array.from({ length: 7 }, (_, i) => ({ down: [], up: runs[i] ? runs[i].split(" ").map(card) : [] })) };
+  const ranks = [];
+  for (let m; (m = autoMove(s)); ) { ranks.push(rankOf(s.tab[m.from.i].up.at(-1))); s = apply(s, m).state; }
+  assert.ok(won(s));
+  assert.deepEqual(ranks, [...ranks].sort((a, b) => a - b));
 });
 
 test("the bot wins a good share of deals", { timeout: 120000 }, () => {

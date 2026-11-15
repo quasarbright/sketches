@@ -331,7 +331,7 @@
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { deal, apply, legal, won, hiddenCount, foundCount, fitsTab, fitsFound, suitOf, rankOf, cardName, SUITS, RANKS } from "./game.mjs";
+    import { deal, apply, legal, won, autoMove, cardsOf, hiddenCount, foundCount, fitsTab, fitsFound, suitOf, rankOf, cardName, SUITS, RANKS } from "./game.mjs";
     import { decide, rankMoves, view, key } from "./bot.mjs";
     import { faceSVG, backSVG, suitDefs } from "./faces.mjs";
     import { openModal } from "../shared/cohesion.js";
@@ -590,10 +590,12 @@
       finishing = true;
       const step = () => {
         if (!finishing || over || bot.on) { finishing = false; return; }
-        const p = decide(state, seen);
+        // once the stock is gone too, the cards fly home one at a time, lowest first
+        const home = autoMove(state);
+        const p = home ? { move: home } : decide(state, seen);
         if (!p.move) { finishing = false; return; }
         doMove(p.move, "finish");
-        if (!over) setTimeout(step, p.move.type === "draw" ? 40 : 110);
+        if (!over) setTimeout(step, home ? 170 : p.move.type === "draw" ? 40 : 110);
         else finishing = false;
       };
       setTimeout(step, 250);
@@ -835,7 +837,8 @@
       draw: ["Drawing", ""],
     };
     function plan() {
-      nextPlan = over ? null : decide(state, seen);
+      const home = over ? null : autoMove(state);
+      nextPlan = over ? null : home ? { move: home, why: "foundation", card: cardsOf(state, home.from)[0], to: home.to } : decide(state, seen);
       const [text, sub] = nextPlan?.move ? (nextPlan.why === "draw" ? [`Drawing for the ${cardName(nextPlan.card)}`, ""] : WHY[nextPlan.why] || ["", ""]) : [planText({ move: null }, "bot"), ""];
       $("thinkText").textContent = text;
       $("thinkSub").textContent = sub ? "· " + sub : "";

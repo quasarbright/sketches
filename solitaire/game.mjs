@@ -144,12 +144,15 @@ export function moves(state) {
 }
 
 // When every card is face up and the stock and waste are empty, the rest is automatic: the next
-// card that can go to a foundation, or null.
+// card that can go to a foundation, lowest rank first (so the cards go home in a climbing run), or
+// null. The lowest card left is always on top of its column, so this never gets stuck.
 export function autoMove(state) {
   if (hiddenCount(state) || state.stock.length || state.waste.length) return null;
+  let best = null;
   for (let i = 0; i < 7; i++) {
     const c = top(state.tab[i].up);
-    if (c !== undefined && fitsFound(c, state.found)) return { type: "move", from: { pile: "tab", i }, to: { pile: "found", i: suitOf(c) }, n: 1 };
+    if (c !== undefined && fitsFound(c, state.found) && (best === null || rankOf(c) < rankOf(best.c) || (rankOf(c) === rankOf(best.c) && c < best.c))) best = { c, i };
   }
+  if (best) return { type: "move", from: { pile: "tab", i: best.i }, to: { pile: "found", i: suitOf(best.c) }, n: 1 };
   return null;
 }
