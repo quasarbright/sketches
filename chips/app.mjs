@@ -706,8 +706,8 @@ function potSheet(id) {
       <div class="dests" data-dests></div>
       <button class="btn-soft" style="width:100%" data-move>Move</button>
     </div></details>
-    <details><summary>Set the exact amount</summary><div><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
+    <details><summary>Change the pot's chip count</summary><div><p>Type its new total. The difference is added or taken away, not moved from anyone, so the table total changes.</p><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New total" />
       <button class="btn-soft" data-set>Set</button></div></div></details>
     <details><summary>Rename</summary><div><div class="row">
       <input class="text" data-rename maxlength="${MAX_NAME}" />
@@ -803,12 +803,12 @@ function playerSheet(id) {
       ${amountField("move", null)}
       <div class="dests" data-dests></div>
       <button class="btn-big" data-move disabled>Move</button></div>
-    <details><summary>Set the exact amount</summary><div><p>For buy-ins, rebuys, or fixing a mistake.</p><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
+    <details><summary>Change their chip count</summary><div><p>Type their new total. The difference is added or taken away, not moved from anyone, so the table total changes. For buy-ins, rebuys, or fixing a mistake.</p><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New total" />
       <button class="btn-soft" data-set>Set</button></div></div></details>
     <details><summary>Take them off the table</summary><div>
       <p data-rm-note></p>
-      <button class="btn-soft btn-danger" style="width:100%" data-remove>Remove player</button></div></details>`, {
+      <button class="btn-soft btn-danger" style="width:100%" data-remove>Kick from table</button></div></details>`, {
     update: () => { if (!player(S, id)) return false; draw(); },
   });
   const dests = sheetDests($("[data-dests]", el), ref, () => moveBtn());
@@ -837,7 +837,7 @@ function playerSheet(id) {
   });
   $("[data-remove]", el).addEventListener("click", async () => {
     const p = player(S, id);
-    if (await confirmSheet(`Remove ${p.name}?`, esc($("[data-rm-note]", el)?.textContent || ""), "Remove", true)) run({ type: "removePlayer", id });
+    if (await confirmSheet(`Kick ${p.name} from the table?`, esc($("[data-rm-note]", el)?.textContent || ""), "Kick from table", true)) run({ type: "removePlayer", id });
   });
   draw();
 }
@@ -850,8 +850,8 @@ function meSheet() {
     <label class="field"><span>Name</span><input class="text" data-name maxlength="${MAX_NAME}" /></label>
     <div class="field"><span>Color</span><div class="colors" data-colors></div></div>
     <button class="btn-big" data-save>Save</button>
-    ${isHost ? `<details style="margin-top:18px"><summary>Set your exact amount</summary><div><div class="row">
-      <input class="text" data-amt="set" inputmode="numeric" placeholder="New amount" />
+    ${isHost ? `<details style="margin-top:18px"><summary>Change your chip count</summary><div><p>Type your new total. The difference is added or taken away, so the table total changes.</p><div class="row">
+      <input class="text" data-amt="set" inputmode="numeric" placeholder="New total" />
       <button class="btn-soft" data-set>Set</button></div></div></details>` : ""}`, {
     update: () => picker.update(S.players.filter((q) => q.id !== me).map((q) => q.color)),
   });
