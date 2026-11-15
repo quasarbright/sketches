@@ -15,6 +15,9 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
   // view: how many steps fit across, and the step at the right edge (null = follow now)
   const RESET_WINDOW = 3000, MIN_WINDOW = 60;
   let windowSteps = RESET_WINDOW, windowShown = RESET_WINDOW, viewEnd = null, endShown = null, liveT = 0;
+  // "all" mode: always show from step 0 to now, even as now keeps moving
+  let allMode = false, beforeAll = null;
+  let onAllChange = () => {};
   let showDead = false;
   let mouse = null, hover = null, tipKey = "";
   let layout = null, layoutKey = "";
@@ -79,8 +82,11 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
     // the pit shows the step before the sim's latest, plus its tween
     const T = Math.max(0, world.step - 1 + t);
     liveT = T;
+    if (allMode) { windowSteps = Math.max(MIN_WINDOW, T); viewEnd = null; }
     windowSteps = Math.max(MIN_WINDOW, Math.min(Math.max(MIN_WINDOW, T), windowSteps));
     windowShown += (windowSteps - windowShown) * ease;
+    // once caught up with a moving target, lock on so the start stays at step 0
+    if (allMode && Math.abs(windowShown - windowSteps) < Math.max(2, windowSteps * 0.02)) windowShown = windowSteps;
     if (viewEnd !== null) {
       viewEnd = Math.max(Math.min(windowSteps, T), viewEnd);
       if (viewEnd >= T) viewEnd = null; // panned back to the present: follow it again
@@ -164,13 +170,15 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
     // time axis
     ctx.fillStyle = "#a39580"; ctx.font = "11px 'Spline Sans Mono', monospace";
     const tick = niceStep(span / 5);
+    const label = viewEnd === null ? `step ${Math.floor(T)}` : `step ${Math.floor(end)} of ${Math.floor(T)}`;
+    const labelW = ctx.measureText(label).width;
     ctx.textAlign = "center";
     for (let s = Math.ceil(t0 / tick) * tick; s <= end; s += tick) {
       const x = X(s);
-      if (x < M.left + 20 || x > W - M.right - 70) continue;
+      if (x < M.left + 20 || x + ctx.measureText(String(s)).width / 2 > W - M.right - labelW - 14) continue;
       ctx.fillText(s, x, H - 6);
     }
-    ctx.textAlign = "right"; ctx.fillText(viewEnd === null ? `step ${Math.floor(T)}` : `step ${Math.floor(end)} of ${Math.floor(T)}`, W - M.right, H - 6);
+    ctx.textAlign = "right"; ctx.fillText(label, W - M.right, H - 6);
 
     showTip(world);
   }
@@ -214,6 +222,7 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const plotW = W - M.left - M.right, end = viewEnd === null ? liveT : viewEnd;
+    setAll(false);
     if (e.ctrlKey) {
       const f = Math.exp(e.deltaY * 0.01), mx = Math.max(0, Math.min(1, ((mouse ? mouse.x : W) - M.left) / plotW));
       const at = end - windowSteps * (1 - mx);
@@ -226,11 +235,22 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
   }, { passive: false });
 
   function zoomTo(w, endAt) {
-    windowSteps = Math.max(MIN_WINDOW, Math.min(Math.max(MIN_WINDOW, liveT), w));
+    // zooming out past the whole history turns on "all", so it keeps showing everything
+    if (w >= liveT) { setAll(true); return; }
+    setAll(false);
+    windowSteps = Math.max(MIN_WINDOW, w);
     viewEnd = endAt === null || endAt >= liveT ? null : endAt;
+  }
+  function setAll(on) {
+    if (on === allMode) return;
+    if (on) beforeAll = { windowSteps, viewEnd };
+    allMode = on;
+    onAllChange(allMode);
   }
   // zoom about the middle of the view, except that following the present keeps following it
   function zoomBy(f) {
+    if (allMode && f > 1) return;
+    if (allMode) { setAll(false); return zoomTo(liveT * f, null); }
     if (viewEnd === null) return zoomTo(windowSteps * f, null);
     const mid = viewEnd - windowSteps / 2;
     zoomTo(windowSteps * f, mid + (windowSteps * f) / 2);
@@ -238,13 +258,21 @@ export function createTreeView({ canvas, tip, getWorld, onHover }) {
 
   return {
     frame,
+    get view() { return { windowSteps, windowShown, viewEnd, endShown, liveT, allMode }; },
     zoomIn() { zoomBy(0.5); },
     zoomOut() { zoomBy(2); },
-    zoomAll() { zoomTo(liveT, null); },
-    zoomReset() { zoomTo(RESET_WINDOW, null); },
+    // toggle: on shows everything and stays that way; off goes back to the view before
+    zoomAll() {
+      if (allMode) {
+        const b = beforeAll; setAll(false);
+        windowSteps = b ? b.windowSteps : RESET_WINDOW; viewEnd = b ? b.viewEnd : null;
+      } else setAll(true);
+    },
+    zoomReset() { setAll(false); windowSteps = RESET_WINDOW; viewEnd = null; },
+    set onAllChange(f) { onAllChange = f; },
     resize() { resize(); layoutKey = ""; },
     setShowDead(v) { showDead = v; },
     close() { mouse = null; hover = null; tip.hidden = true; onHover(-1); },
-    reset() { mouse = null; hover = null; tip.hidden = true; onHover(-1); disp.clear(); rhShown = 0; windowSteps = windowShown = RESET_WINDOW; viewEnd = endShown = null; layoutKey = ""; },
+    reset() { mouse = null; hover = null; tip.hidden = true; onHover(-1); disp.clear(); rhShown = 0; windowSteps = windowShown = RESET_WINDOW; viewEnd = endShown = null; layoutKey = ""; setAll(false); },
   };
 }

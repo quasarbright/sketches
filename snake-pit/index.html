@@ -187,7 +187,7 @@
       <div class="tree-zoom">
         <button class="btn" id="zoomOut" aria-label="zoom out" data-tooltip="Zoom out: show twice as many steps">&minus;</button>
         <button class="btn" id="zoomIn" aria-label="zoom in" data-tooltip="Zoom in: show half as many steps">+</button>
-        <button class="btn" id="zoomAll" data-tooltip="Show everything: from the first step to now">all</button>
+        <button class="btn" id="zoomAll" aria-pressed="false" data-tooltip="Show everything: from step 0 to now, and keep showing all of it as time goes on. Click again to go back.">all</button>
         <button class="btn" id="zoomReset" data-tooltip="Reset: the last 3000 steps, following the present">reset</button>
       </div>
       <label class="check" title="Also draw snakes that died without any living descendants (from the last few thousand steps).">
@@ -578,6 +578,7 @@
       $("zoomIn").addEventListener("click", () => tree.zoomIn());
       $("zoomOut").addEventListener("click", () => tree.zoomOut());
       $("zoomAll").addEventListener("click", () => tree.zoomAll());
+      tree.onAllChange = (on) => { $("zoomAll").classList.toggle("btn-primary", on); $("zoomAll").setAttribute("aria-pressed", on); };
       $("zoomReset").addEventListener("click", () => tree.zoomReset());
       newWorld(); sync();
     } else {
@@ -589,6 +590,7 @@
       setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
       drawAt: (t) => draw(t, performance.now()),
       treeDraw: () => tree && tree.frame(performance.now(), 1),
+      get treeView() { return tree && tree.view; },
       // head point + facing and tail point of every drawn snake at tween time t (for tests)
       ends: (t) => {
         const out = {};
