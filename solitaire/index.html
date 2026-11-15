@@ -889,7 +889,8 @@
     }
     // You've lost when no card you can see, and no card in the deck (however many times you go
     // through it), can move anywhere new. Moving a card back off a foundation doesn't count.
-    const noMovesLeft = () => !rankMoves(state, seen).ranked.some((r) => r.m.from.pile !== "found");
+    // lost when the AI, looking at every card you can see and every card in the deck, finds nothing worth doing
+    const noMovesLeft = () => !decide(state, seen).move;
     function youStuck() {
       over = true; finishing = false;
       stopClock();
@@ -916,7 +917,7 @@
         $("overWins").textContent = `${r.won}/${r.played}`;
         $("overWinsLabel").textContent = byBot ? "Bot won" : "Won";
         $("overWho").textContent = how !== "won"
-          ? (byBot ? "Every move it has left leads back to a position it's already been in." : "No card you can see, and no card in the deck, can move anywhere new, so this deal can't be won from here. Undo to try another way, or deal again.")
+          ? (byBot ? "Nothing it can see, and nothing in the deck, opens up a move that gets anywhere." : "Nothing you can see, and nothing in the deck, opens up a move that gets anywhere: no card can go home, and no card can be turned over. Undo to try another way, or deal again.")
           : byBot && botMoves < state.moves ? "The bot made some of the moves, so this one doesn't count toward your record." : "";
         $("overUndo").hidden = how === "won" || byBot;
         $("over").hidden = false;

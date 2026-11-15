@@ -143,8 +143,8 @@ test("finishing a deal yourself shows the end card and counts toward your record
 
 test("when nothing can move anywhere new, you get the loss screen, and Undo from it plays on", async ({ page }) => {
   await open(page);
-  // black twos to eights on top, aces buried, one useless card left in the stock
-  const tops = [c("2", "S"), c("2", "C"), c("4", "S"), c("4", "C"), c("6", "S"), c("6", "C"), c("8", "S")];
+  // black jacks, fours, sixes and an eight on top, aces buried, one useless card left in the stock
+  const tops = [c("J", "S"), c("J", "C"), c("4", "S"), c("4", "C"), c("6", "S"), c("6", "C"), c("8", "S")];
   // the 3♥ on its foundation could go back onto a black 4, but that doesn't count as a way out
   const home = [c("A", "H"), c("2", "H"), c("3", "H")];
   const rest = [...Array(52).keys()].filter((k) => !tops.includes(k) && !home.includes(k) && k !== c("10", "C"));
@@ -159,6 +159,21 @@ test("when nothing can move anywhere new, you get the loss screen, and Undo from
   const s = await state(page);
   expect(s.stock).toEqual([c("10", "C")]);
   expect((await info(page)).over).toBe(false);
+});
+
+test("legal moves that get nowhere still end the deal", async ({ page }) => {
+  await open(page);
+  // the 9♥ can shuffle between the two black 10s forever, but nothing else moves anywhere useful
+  const tops = [c("10", "S"), c("J", "C"), c("4", "S"), c("4", "C"), c("6", "S"), c("10", "C"), c("Q", "S")];
+  const home = [c("A", "H"), c("2", "H"), c("3", "H")];
+  const extra = [c("9", "H"), c("K", "D")];
+  const rest = [...Array(52).keys()].filter((k) => !tops.includes(k) && !home.includes(k) && !extra.includes(k));
+  const tab = tops.map((t, i) => ({ down: rest.slice(i * 6, i * 6 + 6), up: i === 0 ? [t, c("9", "H")] : [t] }));
+  tab[6].down = rest.slice(36);
+  await page.evaluate((p) => window.solitaire.load(p), { seed: 1, moves: 0, stock: [c("K", "D")], waste: [], found: [[], home, [], []], tab });
+  await page.evaluate(() => window.solitaire.draw());
+  await expect(page.locator("#over")).toBeVisible();
+  await expect(page.locator("#overTitle")).toHaveText("Game over");
 });
 
 test("the bot finishing a deal at normal speed shows the end card too", async ({ page }) => {
