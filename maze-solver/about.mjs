@@ -45,7 +45,7 @@ function diagram(cv, cap, { algos, loops = 0, style = "corridors", seed = 3, rat
 export function setupAbout(el) {
   const specs = {
     blind: { algos: ["bfs", "dfs"], seed: 8, rate: 50 },
-    aimed: { algos: ["astar", "greedy"], loops: 0.3, seed: 391, rate: 35 }, // a maze where greedy wanders: 146 cells for a 97-cell route, A* 89 for 43
+    aimed: { algos: ["astar", "greedy"], loops: 1, seed: 423, rate: 50 }, // very loopy: A* looks at 300 cells for a 41-cell route, greedy 115 for 69
     walkers: { algos: ["wall", "tremaux"], seed: 6, rate: 30 },
     fill: { algos: ["deadend"], style: "branchy", seed: 2, rate: 60 },
   };
