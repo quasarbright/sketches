@@ -77,6 +77,12 @@
     .cohesion-about .title { font-family: var(--font-display); font-weight: 400; }
     .pit-swatch { display: inline-block; width: .8em; height: .8em; border-radius: 50%; vertical-align: -.05em; }
 
+    .sp-viz { display: block; width: 100%; max-width: 440px; margin: 10px auto 0; border-radius: 8px; }
+    .sp-viz-caption, .sp-viz-pair figcaption { font-size: .8rem; color: var(--muted); text-align: center; margin: 4px 0 0; min-height: 2.4em; }
+    .sp-viz-pair { display: flex; gap: 14px; justify-content: center; }
+    .sp-viz-pair figure { margin: 0; flex: 1; max-width: 210px; }
+    .sp-viz-pair .sp-viz { margin-top: 10px; }
+    .cohesion-about ul { padding-left: 1.2em; }
     /* ---- family tree drawer ---- */
     :root { --tree-h: min(320px, 38vh); }
     .tree-drawer {
@@ -159,34 +165,67 @@
     <button class="btn" id="treeBtn" title="show the family tree: every snake's line of descent, with each split as a branch">tree</button>
     <about-modal label="about">
       <h2 class="title">Snake Pit</h2>
-      <p class="intro">Every snake here is playing snake against all the others, in the same box.
-        None of them were trained. Each one has a few numbers I call genes that decide how it plays,
-        and the ones that play well enough to split pass slightly changed copies on to their kids.</p>
+      <p class="intro">A pit full of snakes, all playing snake at once. None of them were trained.
+        Each one plays by a handful of numbers I call its genes, and snakes that eat enough split in
+        two and hand a slightly changed copy of their genes to the new half. Over a few thousand
+        steps the genes drift toward whatever keeps a snake fed.</p>
+
       <div class="section-label">the rules</div>
       <ol>
         <li>Every step, every snake moves one square. Eating an egg makes it one square longer.</li>
-        <li>Moving costs energy. Each time a snake has spent a full unit, its tail tip dies. That's
-          starving: no food means it shrinks to nothing. A dead tail tip leaves a faint shed skin
-          and no food.</li>
-        <li>Running into a wall or any body, its own or someone else's, kills it. A snake that dies
-          leaves one egg behind.</li>
-        <li>The longer a snake gets, the more likely it splits in half. The front half stays the
-          same snake with the same genes. The back half turns around, so its old tail tip becomes
-          its new head, and it's a new snake with a slightly mutated copy of the genes.</li>
+        <li>Moving burns energy. Each time a snake has burned one square's worth, its tail tip dies.
+          With no food it shrinks to nothing and starves. A dead tail tip leaves a faint shed skin.</li>
+        <li>Running into a wall or any body, its own included, kills a snake. A dead snake leaves
+          one egg.</li>
+        <li>Long snakes split in half.</li>
       </ol>
-      <div class="section-label">how a snake decides</div>
-      <p>Each step a snake has three choices: turn left, go straight, or turn right. It scores
-        each one and takes the best. The score adds a pull toward the nearest egg it can see, a push
-        away from any wall or body it can see straight ahead, and a bit of randomness.</p>
-      <p>Six genes set those weights: <code>appetite</code> is how hard it pulls toward food,
-        <code>sight</code> is how far away it can see an egg, <code>caution</code> is how hard it
-        avoids danger, <code>wariness</code> is how far ahead it sees danger, <code>maturity</code>
-        is the length where splitting gets likely, and <code>jitter</code> is the randomness.</p>
-      <div class="section-label">brains cost food</div>
-      <p>The first four genes are the snake's brain, and running a brain costs energy. A snake with
-        sharp senses and strong drives starves faster than a dull one, so evolution has to trade
-        better play against needing more food. A snake's color comes from its genes, so a family
-        stays roughly one color until it drifts.</p>
+
+      <div class="section-label">picking a move</div>
+      <p>A snake can turn left, go straight, or turn right. It gives each of those three squares a
+        score and moves into the highest one. The score has three parts:</p>
+      <ul>
+        <li>a pull toward the nearest egg it can see, stronger the closer that square is to the egg:
+          <code>appetite</code> ÷ (1 + distance). It only sees eggs within <code>sight</code>
+          squares.</li>
+        <li>a push away from a wall or body straight ahead of that square:
+          <code>caution</code> ÷ how many squares away it is. It only looks <code>wariness</code>
+          squares ahead.</li>
+        <li>a bit of randomness, scaled by <code>jitter</code>.</li>
+      </ul>
+      <p>A square with a wall or a body in it is never picked unless all three are blocked, which
+        is how snakes die: boxed in. Here is one snake deciding, with each step's three scores:</p>
+      <canvas class="sp-viz sp-viz-decide"></canvas>
+      <p class="sp-viz-caption sp-cap-decide">&nbsp;</p>
+
+      <div class="section-label">senses cost food</div>
+      <p>If seeing farther and steering harder were free, every snake would evolve the maximum of
+        all four. So they aren't free. Each move burns 0.02 of a square, plus 0.06 times the size of
+        those four genes (each scaled to 0 to 1). A snake with every sense maxed burns 7 times as
+        much as one with none. Two snakes with no food at all, starting the same length:</p>
+      <div class="sp-viz-pair">
+        <figure><canvas class="sp-viz sp-viz-sharp"></canvas><figcaption class="sp-cap-sharp">&nbsp;</figcaption></figure>
+        <figure><canvas class="sp-viz sp-viz-dull"></canvas><figcaption class="sp-cap-dull">&nbsp;</figcaption></figure>
+      </div>
+
+      <div class="section-label">splitting</div>
+      <p>Once a snake is at least 12 squares long, each step it has a chance to split:
+        0.02 × (length ÷ <code>maturity</code>)². So <code>maturity</code> is the length a snake
+        aims for before having kids. The front half stays the same snake with the same genes. The
+        back half turns around, so its old tail tip becomes its head, and it's a new snake with every
+        gene nudged a little at random. Genes set a snake's color, so the new half comes out a
+        slightly different color:</p>
+      <canvas class="sp-viz sp-viz-split"></canvas>
+      <p class="sp-viz-caption sp-cap-split">&nbsp;</p>
+
+      <div class="section-label">evolution</div>
+      <p>Nothing scores the snakes or picks winners. Snakes whose genes keep them fed long enough to
+        split leave more copies, and the rest starve or get boxed in. That alone moves the averages
+        in the corner. In my runs <code>jitter</code> falls close to zero, <code>caution</code>
+        stays low, and <code>maturity</code> drops below 12, so snakes split the moment the rules
+        allow.</p>
+      <p>The <b>tree</b> button shows the family tree: every snake is a line from birth to death,
+        and a split starts a new line off its parent's. Within a few thousand steps, one of the 30
+        starting snakes is usually the ancestor of the whole pit.</p>
       <p>This is a remake of my 2019 genetic steering sketch, where creatures evolved how hard to
         chase food and avoid poison.</p>
     </about-modal>
@@ -213,8 +252,9 @@
   <mike-footer overlay></mike-footer>
 
   <script type="module">
-    import { World, GENES } from "./sim.js";
-    import { isBackground } from "../shared/cohesion.js";
+    import { World, GENES, DEFAULTS } from "./sim.js";
+    import { isBackground, onAboutModalToggle } from "../shared/cohesion.js";
+    const DEFAULT_DRAIN = { base: DEFAULTS.drainBase, brain: DEFAULTS.drainBrain };
     import { createTreeView } from "./tree.js";
 
     const $ = (id) => document.getElementById(id);
@@ -395,8 +435,9 @@
       // body at full width, then a taper over the last 2.5 cells
       // the snake hovered in the family tree gets a pale outline
       if (s.id === hoverSnake) {
-        ctx.strokeStyle = "rgba(246,234,208,.9)"; ctx.lineWidth = w + Math.max(4, cs * 0.32);
+        ctx.strokeStyle = "rgba(246,234,208,.9)"; ctx.lineWidth = w + Math.max(3, Math.min(6, cs * 0.3));
         strokeAlong(path, sHead, sTail);
+        ctx.strokeStyle = body;
       }
       const taperFrom = Math.max(sHead, sTail - 2.5);
       if (taperFrom > sHead) { ctx.lineWidth = w; strokeAlong(path, sHead, taperFrom); }
@@ -597,6 +638,200 @@
       newWorld();
     }
     window.addEventListener("resize", resize);
+    // ---- about-modal diagrams ----
+    // Each one is a tiny World from sim.js, drawn with the same drawSnake/drawEgg as the pit by
+    // pointing the renderer's globals at it for the duration of a draw.
+    function withView(v, fn) {
+      const save = { world, ctx, cs, ox, oy, hoverSnake };
+      world = v.world; ctx = v.ctx; cs = v.cs; ox = 0; oy = 0; hoverSnake = v.hover ?? -1;
+      try { return fn(); } finally { ({ world, ctx, cs, ox, oy, hoverSnake } = save); }
+    }
+
+    function makeView(canvas, w) {
+      const d = Math.min(2, window.devicePixelRatio || 1), cssW = canvas.clientWidth || 300;
+      const cell = cssW / w.cols;
+      canvas.style.height = cell * w.rows + "px";
+      canvas.width = Math.round(cssW * d); canvas.height = Math.round(cell * w.rows * d);
+      const c = canvas.getContext("2d"); c.setTransform(d, 0, 0, d, 0, 0);
+      return { world: w, ctx: c, cs: cell, canvas, shown: null, next: null, hover: -1 };
+    }
+
+    // snapshot the view's world, knowing its next move (so turns curve without jumping)
+    function viewStep(v) {
+      withView(v, () => { v.world.tick(); v.shown = v.next; v.next = snapshot(v.shown); });
+      if (v.shown) for (const s of v.shown.snakes.values()) { const n = v.next.snakes.get(s.id); s.nextDir = n ? n.dir : s.dir; }
+    }
+    function viewStart(v) {
+      withView(v, () => { v.world.events.length = 0; v.shown = snapshot(null); v.world.tick(); v.next = snapshot(v.shown); });
+      for (const s of v.shown.snakes.values()) { const n = v.next.snakes.get(s.id); s.nextDir = n ? n.dir : s.dir; }
+    }
+
+    function drawView(v, snap, t, overlay) {
+      withView(v, () => {
+        const W = v.world.cols * v.cs, H = v.world.rows * v.cs;
+        ctx.fillStyle = "#1a1612"; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = "rgba(236,227,211,.05)"; ctx.lineWidth = 1;
+        for (let x = 1; x < v.world.cols; x++) { ctx.beginPath(); ctx.moveTo(x * cs, 0); ctx.lineTo(x * cs, H); ctx.stroke(); }
+        for (let y = 1; y < v.world.rows; y++) { ctx.beginPath(); ctx.moveTo(0, y * cs); ctx.lineTo(W, y * cs); ctx.stroke(); }
+        for (let i = 0; i < snap.food.length; i++) if (snap.food[i]) drawEgg(i, 1);
+        if (overlay) overlay();
+        for (const s of snap.snakes.values()) drawSnake(s, t);
+        ctx.strokeStyle = "#3a3127"; ctx.lineWidth = 2; ctx.strokeRect(1, 1, W - 2, H - 2);
+      });
+    }
+
+    // a snake's starting cells: run left along a row, then back along the row below
+    function serpentine(x, y, len, run) {
+      const cells = [];
+      for (let k = 0; k < len; k++) cells.push(k < run ? [x + k, y] : [x + run - 1 - (k - run), y + 1]);
+      return cells;
+    }
+    const gene = (o) => ({ appetite: 0, sight: 0, caution: 0, wariness: 0, maturity: 40, jitter: 0, ...o });
+    const noSim = { startSnakes: 0, startFoodDensity: 0, foodRate: 0, drainBase: 0, drainBrain: 0, minSplit: 999 };
+    function placeSnake(w, cells, dir, genes) {
+      return w.addSnake(cells.map(([x, y]) => w.idx(x, y)), dir, genes, 0, 0, -1);
+    }
+
+    let vizRAF = 0;
+    function startViz(el) {
+      cancelAnimationFrame(vizRAF);
+      const dirName = ["up", "right", "down", "left"];
+
+      // 1. picking a move: step, then hold on the three scored squares for the next step
+      const decide = { canvas: el.querySelector(".sp-viz-decide"), cap: el.querySelector(".sp-cap-decide") };
+      const decideReset = () => {
+        const w = new World(12, 8, noSim);
+        placeSnake(w, serpentine(5, 4, 4, 4), 3, gene({ appetite: 1, sight: 8, caution: 0.6, wariness: 4 }));
+        decide.v = makeView(decide.canvas, w); decide.steps = 0; decide.at = performance.now();
+        decide.phase = "hold"; refillEggs(w); decideScore(); decide.snap = withView(decide.v, () => snapshot(null));
+        decide.snap.snakes.forEach((s) => { s.nextDir = decide.best ?? s.dir; });
+      };
+      const refillEggs = (w) => { let n = 0; for (const f of w.food) n += f; while (n++ < 3) w.spawnFood(); };
+      // the real scoring function, for each of the three squares the snake could move into
+      const decideScore = () => {
+        const w = decide.v.world, s = w.snakes[0];
+        decide.opts = []; decide.best = null;
+        if (!s) return;
+        w.findTarget(s);
+        let best = -Infinity;
+        for (const [d, label] of [[(s.dir + 3) % 4, "left"], [s.dir, "straight"], [(s.dir + 1) % 4, "right"]]) {
+          const v = w.score(s, d, s.body[0]);
+          const hx = s.body[0] % w.cols + DIRV[d][0], hy = ((s.body[0] / w.cols) | 0) + DIRV[d][1];
+          decide.opts.push({ d, label, v, hx, hy });
+          if (v > best) { best = v; decide.best = d; }
+        }
+        decide.target = s.target;
+      };
+      decideReset();
+
+      // 2. senses cost food: same length, no food, sharp vs dull
+      const pair = [
+        { canvas: el.querySelector(".sp-viz-sharp"), cap: el.querySelector(".sp-cap-sharp"), name: "every sense maxed",
+          genes: gene({ appetite: 1, sight: 20, caution: 1, wariness: 10, jitter: 0.2 }) },
+        { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "no senses",
+          genes: gene({ caution: 0.05, wariness: 1, jitter: 0.2 }) },
+      ];
+      const pairReset = () => {
+        for (const p of pair) {
+          const w = new World(8, 8, { ...noSim, drainBase: DEFAULT_DRAIN.base, drainBrain: DEFAULT_DRAIN.brain });
+          p.snake = placeSnake(w, serpentine(1, 3, 10, 6), 3, p.genes);
+          p.v = makeView(p.canvas, w); viewStart(p.v); p.steps = 0;
+        }
+        pairAt = performance.now(); pairDoneAt = 0;
+      };
+      let pairAt = 0, pairDoneAt = 0;
+      pairReset();
+
+      // 3. splitting: a long snake with low maturity, until it splits and both halves move off
+      const split = { canvas: el.querySelector(".sp-viz-split"), cap: el.querySelector(".sp-cap-split") };
+      const splitReset = () => {
+        const w = new World(12, 8, { ...noSim, minSplit: 12, splitRate: 0.02, mutation: 0.3 });
+        split.parent = placeSnake(w, serpentine(2, 3, 14, 8), 3, gene({ caution: 1, wariness: 5, maturity: 4, jitter: 0.15 }));
+        split.v = makeView(split.canvas, w); viewStart(split.v);
+        split.child = null; split.after = 0; split.at = performance.now();
+      };
+      splitReset();
+
+      const STEP_MS = 420;
+      const frame = (now) => {
+        // 1
+        const D = decide, holdMs = 1100, moveMs = 380;
+        if (D.phase === "hold" && now - D.at > holdMs) {
+          D.v.world.tick(); D.steps++; D.v.world.events.length = 0; refillEggs(D.v.world);
+          const dead = !D.v.world.snakes.length;
+          decideScore();
+          D.snap = withView(D.v, () => snapshot(D.snap));
+          D.snap.snakes.forEach((s) => { s.nextDir = D.best ?? s.dir; });
+          D.phase = "move"; D.at = now;
+          if (dead || D.steps > 40) decideReset();
+        } else if (D.phase === "move" && now - D.at > moveMs) { D.phase = "hold"; D.at = now; }
+        const t1 = D.phase === "move" ? Math.min(1, (now - D.at) / moveMs) : 1;
+        drawView(D.v, D.snap, t1, D.phase === "hold" ? () => {
+          const c = ctx, k = cs;
+          if (D.target >= 0) { c.strokeStyle = "rgba(233,217,166,.7)"; c.lineWidth = 1.5; c.beginPath(); c.arc(cx(D.target), cy(D.target), k * 0.42, 0, 7); c.stroke(); }
+          c.font = `600 ${Math.max(9, k * 0.34)}px 'Spline Sans Mono', monospace`; c.textAlign = "center"; c.textBaseline = "middle";
+          for (const o of D.opts) {
+            const x = o.hx * k, y = o.hy * k, best = o.d === D.best && o.v > -Infinity;
+            if (o.v === -Infinity) {
+              if (o.hx < 0 || o.hy < 0 || o.hx >= D.v.world.cols || o.hy >= D.v.world.rows) continue;
+              c.strokeStyle = "#e0556b"; c.lineWidth = 2;
+              c.beginPath(); c.moveTo(x + k * .25, y + k * .25); c.lineTo(x + k * .75, y + k * .75); c.moveTo(x + k * .75, y + k * .25); c.lineTo(x + k * .25, y + k * .75); c.stroke();
+              continue;
+            }
+            c.fillStyle = best ? "rgba(233,217,166,.22)" : "rgba(236,227,211,.07)";
+            c.strokeStyle = best ? "#e9d9a6" : "rgba(236,227,211,.35)"; c.lineWidth = best ? 2 : 1;
+            c.beginPath(); c.roundRect(x + 2, y + 2, k - 4, k - 4, 4); c.fill(); c.stroke();
+            c.fillStyle = best ? "#f6ead0" : "#a39580"; c.fillText(o.v.toFixed(2), x + k / 2, y + k / 2);
+          }
+        } : null);
+        if (D.opts.length) {
+          const parts = D.opts.map((o) => `${o.label} ${o.v === -Infinity ? "blocked" : o.v.toFixed(2)}`);
+          const best = D.opts.find((o) => o.d === D.best);
+          D.cap.textContent = `${parts.join(", ")}: it goes ${best ? best.label : "nowhere"}.`;
+        }
+
+        // 2
+        const pt = Math.min(1, (now - pairAt) / STEP_MS);
+        if (now - pairAt > STEP_MS && !pairDoneAt) {
+          pairAt = now;
+          for (const p of pair) if (p.v.world.snakes.length) { viewStep(p.v); p.steps++; }
+          if (!pair[0].v.world.snakes.length) pairDoneAt = now;
+        }
+        if (pairDoneAt && now - pairDoneAt > 2200) pairReset();
+        for (const p of pair) {
+          drawView(p.v, p.v.shown, pairDoneAt ? 1 : pt);
+          const s = p.v.world.snakes[0], drain = p.snake.drain;
+          p.cap.innerHTML = `${p.name}: burns ${drain.toFixed(2)} a move, a square every ${Math.round(1 / drain)} moves<br>${s ? `${s.body.length} squares left` : "starved"}`;
+        }
+
+        // 3
+        const S = split;
+        const st = Math.min(1, (now - S.at) / STEP_MS);
+        if (now - S.at > STEP_MS) {
+          S.at = now; viewStep(S.v);
+          // the split can happen on any tick, including the first one in viewStart
+          const kid = S.v.world.snakes.find((s) => s.id !== S.parent.id);
+          if (kid && S.child === null) { S.child = kid.id; S.after = 0; }
+          if (S.child !== null) S.after++;
+          // start over after a while, or as soon as either half dies (a new half can be born boxed in)
+          const alive = (id) => S.v.world.snakes.some((s) => s.id === id);
+          if (S.after > 14 || !alive(S.parent.id) || (S.child !== null && !alive(S.child))) splitReset();
+        }
+        // the new half is outlined until it has moved away, once the split is on screen
+        const shownChild = S.child !== null && S.v.shown.snakes.has(S.child);
+        S.v.hover = shownChild ? S.child : -1;
+        drawView(S.v, S.v.shown, st);
+        const ps = S.v.shown.snakes.get(S.parent.id);
+        S.cap.textContent = !shownChild
+          ? `${ps ? ps.body.length : 0} squares long, ${ps && ps.body.length >= 12 ? "can split any step now" : "too short to split"}`
+          : "front half: same snake, same genes. Back half (outlined): new snake, mutated genes";
+
+        vizRAF = requestAnimationFrame(frame);
+      };
+      vizRAF = requestAnimationFrame(frame);
+    }
+    onAboutModalToggle((el) => startViz(el), () => cancelAnimationFrame(vizRAF));
+
     window.snakePit = {
       get world() { return world; }, tick, newWorld,
       setPaused: (p) => { paused = p; }, clearHusks: () => { husks.length = 0; },
