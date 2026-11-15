@@ -61,6 +61,14 @@
     .cohesion-about .ms-dia { display: block; margin: 12px auto 4px; max-width: 100%; height: auto !important; border-radius: 10px; background: var(--bg); }
     .cohesion-about .ms-cap { font-size: .82rem; color: var(--muted); text-align: center; margin: 0 0 1.1em; }
     .cohesion-about .cy { color: var(--path); }
+    /* background mode: the running algorithm's name in the corner, like the sorting visualizer */
+    .ms-bg-name { display: none; }
+    [data-background] :is(.ms-title, .ms-readout, .control-bar) { display: none !important; }
+    [data-background] .ms-bg-name {
+      display: block; position: fixed; left: 22px; bottom: 18px; z-index: 5; pointer-events: none;
+      font: 400 1.6rem/1 var(--font-display); letter-spacing: .04em; color: #f7a840;
+      text-shadow: 0 0 6px #000, 0 0 14px #000, 0 2px 4px #000;
+    }
     @media (max-width: 600px) { .ms-title { font-size: 1.25rem; } .ms-readout { top: 42px; font-size: .74rem; } .control-bar .btn { white-space: nowrap; padding-left: 10px; padding-right: 10px; } .control-bar { flex-wrap: wrap; justify-content: center; row-gap: 6px; width: calc(100vw - 24px); max-width: 380px; } }
   </style>
 </head>
@@ -69,6 +77,7 @@
 
   <h1 class="ms-title">Maze Solver</h1>
   <div class="ms-readout" id="readout"></div>
+  <div class="ms-bg-name" id="bgName"></div>
 
   <control-panel floating title="Controls">
     <div class="control">
@@ -249,7 +258,7 @@
         if (skipping) { const t0 = performance.now(); do stepOnce(); while (!run.done && performance.now() - t0 < 12); }
         else { const sp = set.speed; acc = Math.min(acc + dt * sp, 1 + sp * 0.1); while (acc >= 1 && !run.done) { acc -= 1; stepOnce(); } }
       }
-      if (run.done && BG) bgNext();
+      if (BG) { if (run.done) bgNext(); const n = SOLVERS[set.algo].name; if ($("bgName").textContent !== n) $("bgName").textContent = n; }
       drawGlow(now);
       showReadout();
       requestAnimationFrame(frame);
