@@ -264,7 +264,8 @@ export class World {
 
     const h = Math.ceil(n / 2);
     const front = s.body.slice(0, h);
-    const back = s.body.slice(h).reverse(); // old tail tip becomes the new head
+    // the back half keeps going the same way, with its new head where the cut was
+    const back = s.body.slice(h);
     for (const i of back) this.occ[i] = 0;
     // the front half is the same snake and keeps its genes; the back half is a new snake
     // with a mutated copy

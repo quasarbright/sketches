@@ -219,8 +219,8 @@
         have kids. Once a snake is at least 12 squares long, each step it splits with chance
         0.02 × (length ÷ <code>maturity</code>)². A snake at exactly its <code>maturity</code>
         length splits on 2% of steps, and one twice that long on 8%.</p>
-      <p>The front half stays the same snake with the same genes. The back half turns around, so
-        its old tail tip becomes its head, and it's a new snake with every gene nudged a little at
+      <p>The front half stays the same snake with the same genes. The back half becomes a new snake
+        heading the same way, with its head where the cut was, and every gene nudged a little at
         random. A snake's color is worked out from its genes, so relatives look alike and the new
         half comes out a slightly different shade. Below, a 14-square snake splits, and the new half
         is outlined:</p>
@@ -232,7 +232,9 @@
         split leave more copies, and the rest starve or get boxed in. The bars in the top left show
         each gene's average over every living snake, and that selection alone moves them. In my
         runs <code>jitter</code> falls close to zero, <code>caution</code> stays low, and
-        <code>maturity</code> drops below 12, so snakes split as soon as they're 12 long.</p>
+        <code>maturity</code> usually comes down from the 22 it averages at the start. In
+        some runs it falls below 12, the shortest length that can split, so snakes there have kids
+        as soon as the rules allow.</p>
       <p>The <b>tree</b> button opens the family tree: every snake is a line from the step it was
         born to the step it died, and each split starts a new line branching off its parent's.
         Within a few thousand steps, one of the 30 starting snakes is usually the ancestor of every
@@ -740,12 +742,13 @@
         { canvas: el.querySelector(".sp-viz-sharp"), cap: el.querySelector(".sp-cap-sharp"), name: "every sense maxed",
           genes: gene({ appetite: 1, sight: 20, caution: 1, wariness: 10, jitter: 0.2 }) },
         { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "senses nearly off",
-          genes: gene({ caution: 0.05, wariness: 1, jitter: 0.2 }) },
+          genes: gene({ caution: 0.3, wariness: 2, jitter: 0.2 }) },
       ];
       const pairReset = () => {
         for (const p of pair) {
-          const w = new World(8, 8, { ...noSim, drainBase: DEFAULT_DRAIN.base, drainBrain: DEFAULT_DRAIN.brain });
-          p.snake = placeSnake(w, serpentine(1, 3, 10, 6), 3, p.genes);
+          // start stretched along two walls (not folded back on itself), heading along the top
+          const w = new World(9, 9, { ...noSim, drainBase: DEFAULT_DRAIN.base, drainBrain: DEFAULT_DRAIN.brain });
+          p.snake = placeSnake(w, [[5, 1], [4, 1], [3, 1], [2, 1], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6]], 1, p.genes);
           p.v = makeView(p.canvas, w); viewStart(p.v); p.steps = 0;
         }
         pairAt = performance.now(); pairDoneAt = 0;
