@@ -207,8 +207,9 @@
         all four to the maximum, so they cost energy. Every move burns 0.02 of a square, plus 0.06
         times the combined strength of the four senses, which runs from 0 with all of them off to 2
         with all of them maxed. So a snake with every sense maxed burns 0.14 a move, 7 times as
-        much as one with none. Below are two snakes with no food at all, starting the same length:
-        on the left every sense is maxed, on the right they're nearly off.</p>
+        much as one with none. Below are two snakes with no food, starting the same length and
+        driven around the same loop, so the only difference is how fast they shrink: on the left
+        every sense is maxed, on the right every sense is off.</p>
       <div class="sp-viz-pair">
         <figure><canvas class="sp-viz sp-viz-sharp"></canvas><figcaption class="sp-cap-sharp">&nbsp;</figcaption></figure>
         <figure><canvas class="sp-viz sp-viz-dull"></canvas><figcaption class="sp-cap-dull">&nbsp;</figcaption></figure>
@@ -740,15 +741,20 @@
       // 2. senses cost food: same length, no food, sharp vs dull
       const pair = [
         { canvas: el.querySelector(".sp-viz-sharp"), cap: el.querySelector(".sp-cap-sharp"), name: "every sense maxed",
-          genes: gene({ appetite: 1, sight: 20, caution: 1, wariness: 10, jitter: 0.2 }) },
-        { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "senses nearly off",
-          genes: gene({ caution: 0.3, wariness: 2, jitter: 0.2 }) },
+          genes: gene({ appetite: 1, sight: 20, caution: 1, wariness: 10 }) },
+        { canvas: el.querySelector(".sp-viz-dull"), cap: el.querySelector(".sp-cap-dull"), name: "senses off",
+          genes: gene({}) },
       ];
       const pairReset = () => {
         for (const p of pair) {
-          // start stretched along two walls (not folded back on itself), heading along the top
+          // both drive the same clockwise loop one square in from the walls, so the only
+          // difference between them is how fast they shrink
           const w = new World(9, 9, { ...noSim, drainBase: DEFAULT_DRAIN.base, drainBrain: DEFAULT_DRAIN.brain });
           p.snake = placeSnake(w, [[5, 1], [4, 1], [3, 1], [2, 1], [1, 1], [1, 2], [1, 3], [1, 4], [1, 5], [1, 6]], 1, p.genes);
+          p.snake.steer = (w, s) => {
+            const x = s.body[0] % w.cols, y = (s.body[0] / w.cols) | 0;
+            return y === 1 && x < 7 ? 1 : x === 7 && y < 7 ? 2 : y === 7 && x > 1 ? 3 : 0;
+          };
           p.v = makeView(p.canvas, w); viewStart(p.v); p.steps = 0;
         }
         pairAt = performance.now(); pairDoneAt = 0;
@@ -766,7 +772,7 @@
       };
       splitReset();
 
-      const STEP_MS = 420;
+      const STEP_MS = 420, PAIR_STEP_MS = 220;
       const frame = (now) => {
         // 1
         const D = decide, holdMs = 1100, moveMs = 380;
@@ -805,18 +811,18 @@
         }
 
         // 2
-        if (now - pairAt > STEP_MS && !pairDoneAt) {
+        if (now - pairAt > PAIR_STEP_MS && !pairDoneAt) {
           pairAt = now;
           for (const p of pair) if (p.v.world.snakes.length) { viewStep(p.v); p.steps++; }
           if (!pair[0].v.world.snakes.length) pairDoneAt = now;
         }
         if (pairDoneAt && now - pairDoneAt > 2200) pairReset();
         // progress through the step, measured after any step taken this frame
-        const pt = Math.min(1, (now - pairAt) / STEP_MS);
+        const pt = Math.min(1, (now - pairAt) / PAIR_STEP_MS);
         for (const p of pair) {
           drawView(p.v, p.v.shown, pairDoneAt ? 1 : pt);
           const s = p.v.world.snakes[0], drain = p.snake.drain;
-          p.cap.innerHTML = `${p.name}: burns ${drain.toFixed(2)} a move, a square every ${Math.round(1 / drain)} moves<br>${s ? `${s.body.length} squares left` : "starved"}`;
+          p.cap.innerHTML = `${p.name}: burns ${drain.toFixed(2)} a move, a square every ${Math.round(1 / drain)} moves<br>${s ? `${s.body.length} square${s.body.length === 1 ? "" : "s"} left` : "starved"}`;
         }
 
         // 3

@@ -216,12 +216,16 @@ export class World {
 
   moveSnake(s) {
     const head = s.body[0];
-    this.findTarget(s);
-    const options = [(s.dir + 3) % 4, s.dir, (s.dir + 1) % 4];
     let bestDir = s.dir, best = -Infinity;
-    for (const d of options) {
-      const v = this.score(s, d, head);
-      if (v > best) { best = v; bestDir = d; }
+    if (s.steer) {
+      // a scripted path (only the about-modal diagrams use this); everything else is the same
+      bestDir = s.steer(this, s); best = 0;
+    } else {
+      this.findTarget(s);
+      for (const d of [(s.dir + 3) % 4, s.dir, (s.dir + 1) % 4]) {
+        const v = this.score(s, d, head);
+        if (v > best) { best = v; bestDir = d; }
+      }
     }
     if (best === -Infinity) { this.kill(s, "trapped"); return; }
 
