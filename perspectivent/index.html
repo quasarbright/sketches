@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Perspectiven't — a camera playground</title>
+
+  <!-- the import map must come before every module script (Firefox ignores a late one) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="../shared/cohesion.css" />
+  <script type="module" src="../shared/cohesion.js"></script>
+
+  <!-- identity: a drafting table. Graphite and chalk, a red screen line and blue back plane from
+       the perspective-drawing diagrams the whole thing is about -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg:        #14161a;   /* graphite */
+      --panel:     #1b1e23;
+      --panel-2:   #23272e;
+      --border:    #2f343c;
+      --text:      #e9e4d8;   /* chalk */
+      --muted:     #9a978e;
+      --faint:     #5f6066;
+      --accent:    #e8553d;   /* the screen line / vanishing point red */
+      --accent-hi: #ff7258;
+      --on-accent: #14161a;
+      --plane:     #5aa9e6;   /* the back plane, and parallel rays */
+      --font-ui:      "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+      --font-display: "Instrument Serif", Georgia, serif;
+    }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
+    #c { position: fixed; inset: 0; display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+    .pv-title {
+      position: fixed; top: 16px; left: 20px; z-index: 3; pointer-events: none;
+      font-family: var(--font-display); font-style: italic; font-size: 2rem; line-height: 1;
+      color: var(--text);
+      text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.7);
+    }
+    .pv-hint {
+      position: fixed; top: 58px; left: 20px; z-index: 3; pointer-events: none;
+      font-size: .82rem; color: var(--text); max-width: min(420px, calc(100vw - 40px));
+      text-shadow: 0 1px 3px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,.9);
+    }
+    .pv-hint kbd {
+      font-family: var(--font-mono); font-size: .74rem; padding: 1px 5px; border-radius: 4px;
+      background: rgba(20,22,26,.8); border: 1px solid var(--border); color: var(--text);
+    }
+    .pv-crosshair {
+      position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+      z-index: 2; pointer-events: none; opacity: 0; transition: opacity .2s;
+    }
+    .pv-crosshair::before, .pv-crosshair::after {
+      content: ""; position: absolute; background: var(--text); box-shadow: 0 0 2px #000;
+    }
+    .pv-crosshair::before { left: 4px; top: 0; width: 2px; height: 10px; }
+    .pv-crosshair::after { left: 0; top: 4px; width: 10px; height: 2px; }
+    body.pv-locked .pv-crosshair { opacity: .7; }
+
+    control-panel.floating[collapsed] { width: auto; }
+    control-panel.floating { width: 300px; max-height: calc(100vh - 100px); overflow-y: auto; }
+    .control-panel > .panel-header .panel-title { font-family: var(--font-display); font-style: italic; font-size: 1.2rem; font-weight: 400; }
+    .pv-diagram { display: block; width: 100%; height: 150px; border-radius: var(--radius-sm); background: #111317; }
+    .pv-caption { margin: 6px 0 12px; font-size: .8rem; color: var(--muted); min-height: 2.4em; }
+    .pv-caption b { color: var(--text); font-weight: 500; }
+
+    .pv-field {
+      display: flex; align-items: center; gap: 6px; margin-top: 4px;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 0 8px; transition: border-color .15s;
+    }
+    .pv-field:focus-within { border-color: var(--muted); }
+    .pv-field.pv-active { border-color: var(--accent); }
+    .pv-field .pv-fz { font-family: var(--font-mono); font-size: .85rem; color: var(--muted); white-space: nowrap; }
+    .pv-field input {
+      flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text);
+      font-family: var(--font-mono); font-size: .9rem; padding: 7px 0;
+    }
+    .pv-field.pv-bad { border-color: var(--danger); }
+    .pv-error { color: var(--danger); font-size: .76rem; margin: 4px 0 0; min-height: 0; }
+    .pv-error:empty { display: none; }
+    .pv-axis-row[hidden] { display: none; }
+
+    .pv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+    .pv-chip {
+      font-family: var(--font-ui); font-size: .8rem; padding: 5px 10px; border-radius: 999px;
+      border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
+    }
+    .pv-chip:hover { border-color: var(--muted); }
+    .pv-chip.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    .pv-chip .pv-chip-f { font-family: var(--font-mono); font-size: .72rem; opacity: .75; margin-left: 4px; }
+
+    .pv-about-diagram { display: block; width: 100%; max-width: 440px; height: 170px; margin: 12px auto 4px; border-radius: var(--radius-sm); background: #111317; }
+    .pv-about-caption { text-align: center; font-size: .8rem; color: var(--muted); margin: 0 0 14px; min-height: 1.2em; }
+    .pv-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
+    .pv-bar svg { width: 16px; height: 16px; }
+
+    /* touch controls: only on coarse pointers */
+    .pv-touch { display: none; }
+    @media (pointer: coarse) { .pv-touch { display: block; } }
+    .pv-stick {
+      position: fixed; left: 24px; bottom: 64px; width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(27,30,35,.5); border: 1px solid var(--border); z-index: 3; touch-action: none;
+    }
+    .pv-stick-knob {
+      position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px;
+      border-radius: 50%; background: rgba(233,228,216,.25); border: 1px solid var(--muted);
+    }
+    .pv-jump {
+      position: fixed; right: 24px; bottom: 76px; width: 72px; height: 72px; border-radius: 50%;
+      background: rgba(27,30,35,.5); border: 1px solid var(--border); color: var(--text); z-index: 3;
+      font-family: var(--font-ui); font-size: .8rem; touch-action: none;
+    }
+    .pv-nogl {
+      position: fixed; inset: 0; display: none; place-items: center; text-align: center; padding: 24px;
+      color: var(--text); z-index: 10;
+    }
+
+    @media (max-width: 700px) {
+      .pv-title { font-size: 1.6rem; top: 14px; left: 16px; }
+      .pv-hint { top: 48px; left: 16px; }
+      control-panel.floating { width: min(300px, calc(100vw - 32px)); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="pv-crosshair"></div>
+  <div class="pv-title">Perspectiven't</div>
+  <div class="pv-hint" id="hint"></div>
+
+  <control-panel floating title="Lens">
+    <canvas class="pv-diagram" id="diagram"
+      title="Side view of the camera. Each line is the path a ray of light takes from the eye, through the red screen, into the world. Everything on one line lands on the same spot of the picture."></canvas>
+    <p class="pv-caption" id="caption"></p>
+
+    <div class="control">
+      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their sideways offset divided by f of their distance z (in meters). Bigger f means smaller on screen.">divide by</span></div>
+      <label class="pv-field" id="fxField"><span class="pv-fz" id="fxLabel">f(z) =</span>
+        <input id="fx" spellcheck="false" autocomplete="off" value="z"
+          title="Type any function of distance z: try 1/z, log(1+z), z^2, sin(z)+2" /></label>
+      <p class="pv-error" id="fxErr"></p>
+      <div class="pv-axis-row" id="fyRow" hidden>
+        <label class="pv-field" id="fyField"><span class="pv-fz">y: f(z) =</span>
+          <input id="fy" spellcheck="false" autocomplete="off" value="z"
+            title="The function used for up-down positions" /></label>
+        <p class="pv-error" id="fyErr"></p>
+      </div>
+    </div>
+
+    <div class="pv-chips" id="chips"></div>
+
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="Rays start on a plane at the eye and go through the screen. At 0 the plane is a single point (a normal camera), at 1 it's as big as the screen (parallel rays), and bigger than that the rays meet somewhere ahead.">back plane size</span>
+        <span class="value" id="sVal">0</span>
+      </div>
+      <input type="range" id="s" min="0" max="3" step="0.005" value="0"
+        title="Rays start on a plane at the eye and go through the screen. At 0 the plane is a single point (a normal camera), at 1 it's as big as the screen (parallel rays), and bigger than that the rays meet somewhere ahead." />
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does.">screen distance</span>
+        <span class="value" id="dVal">10 m</span>
+      </div>
+      <input type="range" id="d" min="0" max="100" step="0.1" value="33.3"
+        title="How far ahead the screen is. Things at this distance keep their size whatever the lens does." />
+    </div>
+
+    <label class="check" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">
+      <input type="checkbox" id="split" /> separate lens for x and y</label>
+  </control-panel>
+
+  <div class="control-bar pv-bar">
+    <button class="btn" id="mode" title="Switch between walking (with gravity and jumping) and flying (F)"></button>
+    <button class="btn" id="reset" title="Go back to the start of the tracks (R)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      start</button>
+    <about-modal label="about">
+      <h2 class="title">Perspectiven't</h2>
+      <p class="intro">A camera decides how big things look from how far away they are. A normal
+        camera divides by distance. This lets you swap that rule for any function you like and
+        walk around inside the result.</p>
+
+      <div class="section-label">how a normal camera works</div>
+      <p>Light from a point in the world travels in a straight line to your eye. The picture is
+        where those lines cross a <span style="color:var(--accent)">screen</span> in front of you.
+        A thing twice as far away needs a line that's twice as shallow to reach the eye, so it
+        lands half as far from the center: on the screen, a point's offset is its real offset
+        divided by its distance $z$.</p>
+      <canvas class="pv-about-diagram" data-demo="pinhole"></canvas>
+      <p class="pv-about-caption">Rays fanning out from the eye. Everything on one ray lands on the same spot.</p>
+
+      <div class="section-label">a plane behind the screen</div>
+      <p>The lines don't have to start at a single point. Start them from a
+        <span style="color:var(--plane)">plane</span> at the eye instead, and send each one through
+        the matching spot on the screen. When the plane shrinks to nothing you have the normal
+        camera. When it's as big as the screen the rays are parallel, nothing shrinks with
+        distance, and you get an <b>orthographic</b> view, the kind used in technical drawings.
+        Make the plane bigger than the screen and the rays converge again, this time in front of
+        you, so far things look bigger. That's <b>reverse perspective</b>, and nothing past the
+        meeting point can be seen at all.</p>
+      <canvas class="pv-about-diagram" data-demo="plane"></canvas>
+      <p class="pv-about-caption" data-caption="plane"></p>
+      <p>Following one ray: it starts at $s\,u$ on a plane $s$ times the screen's size and reaches
+        $u$ at the screen distance $D$, so at depth $z$ it's at $u\,(s + (1-s)\,z/D)$. Dividing by
+        that is the same as dividing by $f(z) = sD + (1-s)\,z$. As $s$ slides from 0 to 1, $f$
+        slides from $z$ to a constant, which is how the camera can morph smoothly from perspective
+        to orthographic instead of cutting between them.</p>
+
+      <div class="section-label">any function of distance</div>
+      <p>Once the camera is "divide by $f(z)$", nothing says $f$ has to be a straight line. Divide
+        by $\sqrt z$ and things shrink more slowly than normal. Divide by $z^2$ and they shrink
+        faster. Divide by $1/z$, which is multiplying by distance, and the world turns inside out.
+        The rays aren't straight any more, and straight edges in the world come out curved.</p>
+      <canvas class="pv-about-diagram" data-demo="functions"></canvas>
+      <p class="pv-about-caption" data-caption="functions"></p>
+      <p>Everything is scaled so that things at the screen distance keep their size, which is why
+        switching lenses doesn't make the thing you're looking at jump. Where $f$ is zero or
+        negative, no ray reaches, so that part of the world disappears.</p>
+
+      <div class="section-label">two lenses at once</div>
+      <p>Side-to-side and up-down positions are divided separately, so they can use different
+        functions. Orthographic across and perspective up and down makes the rails stay parallel
+        while the telegraph poles still shrink.</p>
+
+      <div class="section-label">drawing it</div>
+      <p>Each corner of every shape goes through $f$ on the graphics card, and the shapes are cut
+        into small pieces so the curves come out smooth. For the plane-behind-the-screen family,
+        the math is an ordinary projection matrix, so those views are exact.</p>
+    </about-modal>
+  </div>
+
+  <div class="pv-touch">
+    <div class="pv-stick" id="stick"><div class="pv-stick-knob" id="knob"></div></div>
+    <button class="pv-jump" id="jump">jump</button>
+  </div>
+
+  <div class="pv-nogl" id="nogl">This needs WebGL 2. Try a recent Chrome, Firefox or Safari, or
+    turn on hardware acceleration in your browser's settings.</div>
+
+  <mike-footer overlay></mike-footer>
+
+  <script type="module" src="./main.mjs"></script>
+</body>
+</html>
