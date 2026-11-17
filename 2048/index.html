@@ -163,6 +163,11 @@
     /* under the board: how to play, or what the bot thought */
     .g-strip { height: 66px; flex: none; display: grid; place-items: center; width: 100%; }
     .g-hint { font: 600 .92rem var(--font-ui); color: var(--muted); text-align: center; transition: opacity .3s; }
+    .g-hint .hint-touch { display: none; }
+    @media (hover: none) and (pointer: coarse) {
+      .g-hint .hint-keys { display: none; }
+      .g-hint .hint-touch { display: inline; }
+    }
     .g-hint kbd { font: 600 .8rem var(--font-mono); background: var(--panel-2); border-radius: 6px; padding: 2px 6px; box-shadow: 0 2px 0 #0c0a19; color: var(--text); }
     .g-think { display: flex; gap: 8px; align-items: flex-end; }
     .g-think-move { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 62px; }
@@ -266,7 +271,7 @@
     </div>
 
     <div class="g-strip">
-      <div class="g-hint" id="hint">Slide with <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>, <kbd>WASD</kbd> or a swipe</div>
+      <div class="g-hint" id="hint"><span class="hint-keys">Slide with <kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd>, <kbd>WASD</kbd> or a swipe</span><span class="hint-touch">Swipe to slide the tiles</span></div>
       <div class="g-think" id="think" hidden></div>
     </div>
 
