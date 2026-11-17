@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {
   parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens,
-  LUT, sampleLens, PRESETS,
+  LUT, sampleLens, PRESETS, linearS, lensNear, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
 
@@ -23,7 +23,7 @@ try {
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x14161a);
+renderer.setClearColor(0x232a35); // sky: a blue-gray, so a real void reads differently from it
 
 const scene = new THREE.Scene();
 // The camera object only supplies the view matrix. Projection happens in the lens shader.
@@ -42,7 +42,7 @@ const lutTex = new THREE.DataTexture(lutData, LUT.N, 1, THREE.RGBAFormat, THREE.
 lutTex.minFilter = lutTex.magFilter = THREE.NearestFilter;
 lutTex.needsUpdate = true;
 
-const NEAR = 0.05, FAR = LUT.zMax;
+const FAR = LUT.zMax;
 const lensUniforms = {
   lensLUT: { value: lutTex },
   lensHalf: { value: new THREE.Vector2(1, 1) },
@@ -78,6 +78,9 @@ vec4 lensProject(vec4 mv) {
 `;
 
 function lensify(mat, extra) {
+  // three.js caches compiled programs by onBeforeCompile's source text, which is the same for
+  // every material here, so materials with extra shader code need their own key
+  mat.customProgramCacheKey = () => "lens:" + (extra ? extra.toString() : "");
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, lensUniforms);
     sh.vertexShader = sh.vertexShader
@@ -113,11 +116,23 @@ function axisFn(ax) {
   if (a.s != null) return backPlaneF(a.s, state.D);
   return parseExpr(a.src);
 }
+// back-plane size of an axis: from the slider, or recognized from a typed straight line
+function effS(ax) {
+  const a = state[ax];
+  if (a.s != null) return a.s;
+  try { return linearS(parseExpr(a.src), state.D); } catch { return null; }
+}
+let nearNow = NEAR;
 function targetSamples() {
   const gx = normalizedLens(axisFn("x"), state.D);
   const gy = normalizedLens(axisFn(state.split ? "y" : "x"), state.D);
   if (!gx || !gy) return null;
-  return sampleLens(gx, gy, undefined, NEAR);
+  const near = lensNear(gx, gy);
+  return { data: sampleLens(gx, gy, undefined, near), near };
+}
+function setNear(n) {
+  nearNow = n;
+  lensUniforms.lensRange.value.x = n;
 }
 function uploadShown() {
   for (let i = 0; i < LUT.N; i++) {
@@ -127,14 +142,17 @@ function uploadShown() {
   lutTex.needsUpdate = true;
 }
 function applyLens(animate) {
-  const to = targetSamples();
-  if (!to) return;
+  const t = targetSamples();
+  if (!t) return;
   if (animate) {
-    morph = { from: shown.slice(), to, t0: performance.now(), dur: 900 };
+    // while morphing, cut the view at whichever eye plane is further forward
+    morph = { from: shown.slice(), to: t.data, near: t.near, t0: performance.now(), dur: 900 };
+    setNear(Math.max(nearNow, t.near));
   } else {
     morph = null;
-    shown.set(to);
+    shown.set(t.data);
     uploadShown();
+    setNear(t.near);
   }
 }
 function stepMorph(now) {
@@ -144,7 +162,7 @@ function stepMorph(now) {
   const { from, to } = morph;
   for (let i = 0; i < shown.length; i++) shown[i] = from[i] + (to[i] - from[i]) * k;
   uploadShown();
-  if (u >= 1) morph = null;
+  if (u >= 1) { setNear(morph.near); morph = null; }
   return true;
 }
 
@@ -175,7 +193,7 @@ function addBox(w, h, d, x, y, z, color, { collide = false, seg = 0.5, mat } = {
 // ground: a grid that follows you, dense near you and coarse far away (sinh-spaced rows), with
 // grid lines drawn per pixel in world space so they never swim.
 const groundGeo = (() => {
-  const n = 220, c = 3, A = Math.asinh(4000 / c);
+  const n = 320, c = 3, A = Math.asinh(4000 / c);
   const g = new THREE.PlaneGeometry(2, 2, n, n);
   g.rotateX(-Math.PI / 2);
   const p = g.attributes.position;
@@ -187,7 +205,7 @@ const groundGeo = (() => {
   g.computeBoundingSphere();
   return g;
 })();
-const ground = new THREE.Mesh(groundGeo, lambert(COL.ground, (sh) => {
+const groundMat = lambert(COL.ground, (sh) => {
   sh.vertexShader = sh.vertexShader
     .replace("#include <common>", "#include <common>\nvarying vec3 vGroundW;")
     .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvGroundW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
@@ -202,12 +220,21 @@ const ground = new THREE.Mesh(groundGeo, lambert(COL.ground, (sh) => {
         return line * fade;
       }`)
     .replace("#include <dithering_fragment>", /* glsl */`
-      float minor = pvGrid(vGroundW.xz, 1.0, 0.0);
-      float major = pvGrid(vGroundW.xz, 10.0, 0.6);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42, 0.41, 0.39), minor * 0.35);
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.62, 0.60, 0.56), major * 0.55);
+      if (gl_FrontFacing) {
+        float minor = pvGrid(vGroundW.xz, 1.0, 0.0);
+        float major = pvGrid(vGroundW.xz, 10.0, 0.6);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42, 0.41, 0.39), minor * 0.35);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.62, 0.60, 0.56), major * 0.55);
+      } else {
+        // the underside, seen by rays that start below ground: earth in section, hatched the way
+        // a drafting drawing marks a cut
+        float hatch = pvGrid(vec2(vGroundW.x + vGroundW.z, 0.0), 1.5, 0.5);
+        gl_FragColor.rgb = mix(vec3(0.20, 0.15, 0.12), vec3(0.36, 0.28, 0.22), hatch);
+      }
       #include <dithering_fragment>`);
-}));
+});
+groundMat.side = THREE.DoubleSide;
+const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.receiveShadow = true;
 scene.add(ground);
 
@@ -319,7 +346,7 @@ const COURSE = [
 ];
 for (const [x, , z, w, top] of COURSE) addBox(w, 0.5, w, x, top - 0.5, z, COL.ochre, { collide: true });
 // pillars holding the steps up
-for (const [x, , z, w, top] of COURSE) if (top > 1) addBox(0.3, top - 0.5, 0.3, x, 0, z, COL.pole, { seg: 1 });
+for (const [x, , z, w, top] of COURSE) addBox(0.3, top - 0.5, 0.3, x, 0, z, COL.pole, { seg: 1 });
 // the tower: a hollow-looking block with a lookout deck at 12 m
 addBox(6, 11.5, 6, 34, 0, -54, COL.chalk, { collide: true });
 addBox(7, 0.5, 7, 34, 11.5, -54, COL.ochre, { collide: true });
@@ -350,10 +377,31 @@ const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 });
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.03;
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.06;
 scene.add(sun, sun.target);
 const SUN_DIR = new THREE.Vector3(0.45, 1, 0.3).normalize();
+
+// the cut: the eye plane slices through the world, and where it slices through the earth (rays
+// that start below the ground, which happens with orthographic-like lenses) it's drawn in section,
+// hatched like a cut in a technical drawing. It's a big square riding just past the eye plane.
+const cutMat = lensify(new THREE.MeshBasicMaterial({ color: 0x3a2d23 }), (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vCutW;")
+    .replace("#include <fog_vertex>", "#include <fog_vertex>\nvCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+  sh.fragmentShader = sh.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying vec3 vCutW;")
+    .replace("#include <dithering_fragment>", /* glsl */`
+      if (vCutW.y > 0.0) discard;
+      vec2 q = vec2(vCutW.x + vCutW.z + vCutW.y, 0.0) / 0.6;
+      float d = abs(fract(q.x - 0.5) - 0.5) / max(fwidth(q.x), 1e-5);
+      float hatch = 1.0 - clamp(d - 0.6, 0.0, 1.0);
+      gl_FragColor.rgb = mix(vec3(0.20, 0.155, 0.12), vec3(0.42, 0.33, 0.25), hatch);
+      #include <dithering_fragment>`);
+});
+const cut = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), cutMat);
+cut.frustumCulled = false;
+scene.add(cut);
 
 // an invisible body so you cast a shadow (and can see where you'll land)
 const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.2, 4, 8),
@@ -395,6 +443,7 @@ function setMode(m) {
   }
   player.mode = m;
   $("jump").textContent = m === "walk" ? "jump" : "up";
+  $("down").hidden = m === "walk";
   updateModeButton();
   updateHint();
 }
@@ -451,7 +500,7 @@ function floorAt(x, z) {
 }
 
 const touchMove = { x: 0, y: 0 };
-let touchJump = false;
+let touchJump = false, touchDown = false;
 
 function update(dt) {
   const fwdIn = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) - touchMove.y;
@@ -481,7 +530,7 @@ function update(dt) {
     player.onGround = grounded;
   } else {
     const speed = fast ? 60 : 15;
-    const up = (keys.has("Space") || touchJump ? 1 : 0) - (keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC") ? 1 : 0);
+    const up = (keys.has("Space") || touchJump ? 1 : 0) - (keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC") || touchDown ? 1 : 0);
     const f = new THREE.Vector3(0, 0, -1).applyQuaternion(player.q);
     const r = new THREE.Vector3(1, 0, 0).applyQuaternion(player.q);
     const u = new THREE.Vector3(0, 1, 0).applyQuaternion(player.q);
@@ -509,6 +558,9 @@ function update(dt) {
   camera.updateMatrixWorld();
 
   body.position.set(player.pos.x, player.pos.y + HEIGHT / 2, player.pos.z);
+  cut.position.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), nearNow + 0.02);
+  cut.quaternion.copy(camera.quaternion);
+  cut.scale.setScalar(20000);
   // the ground grid follows you in 8 m steps (its lines are drawn in world space)
   ground.position.set(Math.round(player.pos.x / 8) * 8, 0, Math.round(player.pos.z / 8) * 8);
   sun.target.position.copy(player.pos);
@@ -534,7 +586,7 @@ canvas.addEventListener("pointerdown", (e) => {
   } else {
     dragging = { id: e.pointerId, x: e.clientX, y: e.clientY };
   }
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch {} // throws while the pointer is locked
 });
 canvas.addEventListener("pointermove", (e) => {
   if (locked) { look(e.movementX, e.movementY); return; }
@@ -572,6 +624,10 @@ document.addEventListener("pointerlockchange", () => {
   jump.addEventListener("pointerdown", (e) => { touchJump = true; jump.setPointerCapture(e.pointerId); });
   const up = () => { touchJump = false; };
   jump.addEventListener("pointerup", up); jump.addEventListener("pointercancel", up);
+  const down = $("down");
+  down.addEventListener("pointerdown", (e) => { touchDown = true; down.setPointerCapture(e.pointerId); });
+  const up2 = () => { touchDown = false; };
+  down.addEventListener("pointerup", up2); down.addEventListener("pointercancel", up2);
 }
 
 const ICON_WALK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>`;
@@ -604,13 +660,14 @@ $("reset").addEventListener("click", resetPlayer);
 const D_MIN = 1, D_MAX = 1000;
 const dFromSlider = (v) => D_MIN * Math.pow(D_MAX / D_MIN, v / 100);
 const sliderFromD = (d) => 100 * Math.log(d / D_MIN) / Math.log(D_MAX / D_MIN);
-const fmtD = (d) => (d < 10 ? d.toFixed(1) : Math.round(d)) + " m";
+const fmtD = (d) => (d < 9.95 ? d.toFixed(1) : Math.round(d)) + " m";
 
 const chipsEl = $("chips");
 for (const p of PRESETS) {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = p.id; b.title = p.tip;
-  b.innerHTML = `${p.label}<span class="pv-chip-f">${p.src}</span>`;
+  // the formula goes on the chip unless the label already is the formula
+  b.innerHTML = p.label === p.src || /[√²]/.test(p.label) ? p.label : `${p.label}<span class="pv-chip-f">${p.src}</span>`;
   b.addEventListener("click", () => choosePreset(p));
   chipsEl.appendChild(b);
 }
@@ -619,7 +676,7 @@ for (const p of PRESETS) {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = "mixed";
   b.title = "Orthographic side to side, perspective up and down: the rails stay parallel while the poles still shrink.";
-  b.innerHTML = `ortho x, perspective y`;
+  b.textContent = "orthographic x, perspective y";
   b.addEventListener("click", () => {
     if (!state.split) { state.split = true; $("split").checked = true; }
     state.x = { src: "1", s: 1 }; state.y = { src: "z", s: 0 };
@@ -634,15 +691,22 @@ function setAxis(ax, v) {
   if (!state.split) state.y = { ...v };
 }
 function choosePreset(p) {
-  const ax = activeAxis();
-  setAxis(ax, { src: p.src, s: p.s ?? null });
+  setAxis(activeAxis(), { src: p.src, s: p.s ?? null });
+  clearErrors();
   syncPanel();
   applyLens(true);
 }
+function clearErrors() {
+  for (const a of ["x", "y"]) {
+    $(a === "x" ? "fxErr" : "fyErr").textContent = "";
+    $(a === "x" ? "fxField" : "fyField").classList.remove("pv-bad");
+  }
+}
 
-function sameLens(a, b) {
-  if (a.s != null && b.s != null) return Math.abs(a.s - b.s) < 1e-6;
-  return a.src.replace(/\s/g, "") === b.src.replace(/\s/g, "");
+function sameLens(ax, p) {
+  const s = effS(ax);
+  if (p.s != null && s != null) return Math.abs(s - p.s) < 1e-6;
+  return state[ax].src.replace(/\s/g, "") === p.src.replace(/\s/g, "");
 }
 
 function syncPanel() {
@@ -651,33 +715,37 @@ function syncPanel() {
     const st = state[a];
     if (st.s != null) st.src = backPlaneText(st.s, state.D);
     const inp = $(a === "x" ? "fx" : "fy");
-    if (document.activeElement !== inp) inp.value = st.src;
+    if (document.activeElement !== inp) {
+      // a half-typed lens that was never applied goes back to the one in use, error and all
+      if (inp.value !== st.src) { inp.value = st.src; clearErrors(); }
+    }
   }
   $("fyRow").hidden = !state.split;
+  $("axisPick").hidden = !state.split;
+  for (const b of $("axisPick").children) b.classList.toggle("is-on", b.dataset.axis === ax);
   $("fxLabel").textContent = state.split ? "x: f(z) =" : "f(z) =";
   $("fxField").classList.toggle("pv-active", state.split && ax === "x");
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
-  const cur = state[ax];
+  const mixedOn = state.split && sameLens("x", { src: "1", s: 1 }) && sameLens("y", { src: "z", s: 0 });
   for (const b of chipsEl.children) {
     const id = b.dataset.id;
-    let on;
-    if (id === "mixed") on = state.split && sameLens(state.x, { src: "1", s: 1 }) && sameLens(state.y, { src: "z", s: 0 });
-    else {
-      const p = PRESETS.find((q) => q.id === id);
-      on = sameLens(cur, { src: p.src, s: p.s ?? null }) && !(state.split && id !== "mixed" && false);
-    }
-    b.classList.toggle("is-on", on);
+    if (id === "mixed") { b.classList.toggle("is-on", mixedOn); continue; }
+    const p = PRESETS.find((q) => q.id === id);
+    b.classList.toggle("is-on", !mixedOn && sameLens(ax, { src: p.src, s: p.s ?? null }));
   }
-  const sEl = $("s");
-  if (cur.s != null) { sEl.value = cur.s; $("sVal").textContent = sLabel(cur.s); }
-  else $("sVal").textContent = "–";
+  const s = effS(ax);
+  const row = $("sRow");
+  row.classList.toggle("pv-na", s == null);
+  if (s != null) { $("s").value = Math.min(3, Math.max(0, s)); $("sVal").textContent = sLabel(s); }
+  else $("sVal").textContent = "rays are curved";
+  $("d").value = sliderFromD(state.D);
   $("dVal").textContent = fmtD(state.D);
   updateCaption();
 }
 function sLabel(s) {
-  if (s === 0) return "0 (a point)";
-  if (s === 1) return "1 (screen size)";
-  return `${s.toFixed(2)}×`;
+  if (Math.abs(s) < 1e-9) return "0 (a point)";
+  if (Math.abs(s - 1) < 1e-9) return "1 (screen size)";
+  return `${+s.toFixed(2)}×`;
 }
 
 function onField(ax) {
@@ -698,25 +766,34 @@ for (const ax of ["x", "y"]) {
   inp.addEventListener("blur", () => syncPanel());
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Escape") inp.blur(); });
 }
+for (const b of $("axisPick").children) {
+  b.addEventListener("click", () => { state.active = b.dataset.axis; syncPanel(); redrawDiagram(); });
+}
 
 $("s").addEventListener("input", (e) => {
   let s = +e.target.value;
   for (const snap of [0, 1]) if (Math.abs(s - snap) < 0.04) s = snap;
   setAxis(activeAxis(), { src: "", s });
+  clearErrors();
   syncPanel();
   applyLens(false);
 });
 $("d").addEventListener("input", (e) => {
-  const D = dFromSlider(+e.target.value);
-  // keep typed lenses valid: refuse a distance where the lens isn't positive
-  for (const a of ["x", "y"]) {
-    const st = state[a];
-    if (st.s == null && compileLens(st.src, D).error) return;
-  }
+  let D = dFromSlider(+e.target.value);
+  // a typed lens has to stay positive at the screen: stop at the last distance where it is
+  const bad = (d) => ["x", "y"].some((a) => state[a].s == null && compileLens(state[a].src, d).error);
+  if (bad(D)) {
+    let lo = state.D, hi = D; // lo is valid
+    for (let i = 0; i < 40; i++) { const m = Math.sqrt(lo * hi); if (bad(m)) hi = m; else lo = m; }
+    // stop a little short: right at the edge f(D) is nearly 0 and the view degenerates
+    D = Math.max(Math.min(state.D, lo), lo * 0.9);
+    $("dErr").textContent = `f(z) isn't positive past ${fmtD(lo)}, so the screen can't go further.`;
+  } else $("dErr").textContent = "";
   state.D = D;
   syncPanel();
   applyLens(false);
 });
+$("d").addEventListener("change", () => { $("dErr").textContent = ""; });
 $("split").addEventListener("change", (e) => {
   state.split = e.target.checked;
   if (!state.split) { state.y = { ...state.x }; state.active = "x"; applyLens(true); }
@@ -727,24 +804,26 @@ $("split").addEventListener("change", (e) => {
 /* ---------------- diagram + caption ---------------- */
 const diag = $("diagram");
 function updateCaption() {
-  const ax = state.split ? "y" : "x";
+  const ax = activeAxis();
   const st = state[ax];
+  const s = effS(ax);
   let c;
-  if (st.s != null) {
-    if (st.s === 0) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
-    else if (st.s < 1) c = `The rays start on a plane <b>${st.s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
-    else if (st.s === 1) c = "The back plane is <b>as big as the screen</b>, so rays are parallel and nothing shrinks: orthographic.";
-    else c = `The back plane is <b>bigger than the screen</b>, so rays meet <b>${fmtD(convergenceDepth(st.s, state.D))}</b> ahead. Past that point nothing is seen.`;
+  if (s != null) {
+    if (Math.abs(s) < 1e-9) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
+    else if (s < 0) c = "The back plane is flipped, so rays cross <b>behind</b> you.";
+    else if (s < 1) c = `The rays start on a plane <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
+    else if (Math.abs(s - 1) < 1e-9) c = "The back plane is <b>as big as the screen</b>, so rays are parallel and nothing shrinks.";
+    else c = `The back plane is <b>bigger than the screen</b>, so rays meet <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Nothing past that is seen.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
-  if (state.split) c += " Solid rays are up-down (y), dashed are side to side (x).";
+  if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 function drawPanelDiagram() {
-  const ax = state.split ? "y" : "x";
+  const ax = activeAxis();
   const r = diag.getBoundingClientRect();
   if (!r.width) return;
   const dpr = Math.min(devicePixelRatio, 2);
@@ -752,12 +831,13 @@ function drawPanelDiagram() {
   const ctx = diag.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   // during a morph the back plane size is in between; show it only when the lens is at rest
-  const st = state[ax];
+  const s = effS(ax);
+  const comp = ax === "x" ? 0 : 1;
   drawDiagram(ctx, r.width, r.height, {
     D: state.D, fov: FOV,
-    gy: lutFn(shown, 1),
-    gx: state.split ? lutFn(shown, 0) : null,
-    s: !morph && st.s != null ? st.s : null,
+    gy: lutFn(shown, comp),
+    gx: state.split ? lutFn(shown, 1 - comp) : null,
+    s: !morph && s != null ? s : null,
   });
 }
 
@@ -802,9 +882,12 @@ document.addEventListener("cohesion-modal-open", (e) => {
           : `Back plane size ${s.toFixed(2)}.`;
         if (cap.textContent !== txt) cap.textContent = txt;
       } else if (demo === "functions") {
-        const period = 3.5, k = Math.floor(t / period) % fns.length;
-        const cur = fns[k];
-        drawDiagram(ctx, r.width, r.height, { D, fov: FOV, gy: normalizedLens(cur.f, D), s: null });
+        // hold each function, then morph to the next the way the lens does
+        const period = 3.5, k = Math.floor(t / period) % fns.length, into = (t % period) / 0.9;
+        const cur = fns[k], prev = fns[(k + fns.length - 1) % fns.length];
+        const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
+        const u = Math.min(1, into), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+        drawDiagram(ctx, r.width, r.height, { D, fov: FOV, gy: (z) => ga(z) + (gb(z) - ga(z)) * e, s: null });
         const cap = el.querySelector('[data-caption="functions"]');
         const txt = `Divide by ${cur.name}.`;
         if (cap.textContent !== txt) cap.textContent = txt;
@@ -852,6 +935,13 @@ chipsEl.addEventListener("click", redrawDiagram);
 new ResizeObserver(redrawDiagram).observe(diag);
 
 if (matchMedia("(max-width: 700px)").matches) document.querySelector("control-panel")?.setAttribute("collapsed", "");
+// on touch screens the open panel covers most of the view, so a tap outside it closes it
+document.addEventListener("pointerdown", (e) => {
+  if (e.pointerType !== "touch") return;
+  const panel = document.querySelector("control-panel");
+  if (panel && !panel.hasAttribute("collapsed") && !panel.contains(e.target)) panel.setAttribute("collapsed", "");
+}, true);
+if (isBg) document.body.classList.add("pv-background");
 resetPlayer();
 applyLens(false);
 syncPanel();

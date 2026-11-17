@@ -215,3 +215,38 @@ export const PRESETS = [
   { id: "square", label: "z²", src: "z^2",
     tip: "Shrinks with distance squared: perspective, exaggerated." },
 ];
+
+/* ---------------- recognizing straight-ray lenses ---------------- */
+
+// If f is a straight line a + b*z (checked at a few depths), it's a back-plane lens: dividing by
+// a + b*z is the same as dividing by s*D + (1 - s)*z with s = f(0) / f(D). Returns s, or null.
+export function linearS(f, D) {
+  const zs = [0, 1, 3.7, 25, D];
+  const v = zs.map(f);
+  if (!v.every(Number.isFinite) || !(v[4] > 0)) return null;
+  const b = v[1] - v[0];
+  for (let i = 2; i < zs.length; i++) {
+    const want = v[0] + b * zs[i];
+    if (Math.abs(v[i] - want) > 1e-9 * Math.max(1, Math.abs(want))) return null;
+  }
+  const s = v[0] / v[4];
+  return Math.abs(s) < 1e-12 ? 0 : s;
+}
+
+/* ---------------- how far behind the eye the view can reach ---------------- */
+
+// A camera's "eye plane" sits at z = 0, but for lenses that stay positive behind it (orthographic,
+// a back plane between 0 and 1) cutting the world there slices through the floor under you. Those
+// lenses get their cut pulled back to BEHIND m. Anything that goes non-positive or blows up back
+// there keeps the cut just in front of the eye.
+export const BEHIND = -1.5;
+export const NEAR = 0.05;
+export function lensNear(gx, gy) {
+  for (let z = BEHIND; z <= NEAR; z += 0.05) {
+    for (const g of [gx, gy]) {
+      const v = g(z);
+      if (!(v > 1e-3) || !Number.isFinite(v) || v > 1e3) return NEAR;
+    }
+  }
+  return BEHIND;
+}

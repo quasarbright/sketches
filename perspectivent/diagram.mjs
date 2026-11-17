@@ -22,11 +22,14 @@ export function lutFn(arr, comp) {
 export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
   ctx.clearRect(0, 0, W, H);
   const padL = 18, padR = 10;
-  const zMax = 3.2 * D;
-  const h = D * Math.tan(fov / 2);
+  // a fixed scale for screens up to 10 m away, so moving the screen visibly moves it; past that
+  // the view zooms out to keep it in frame
+  const zMax = Math.max(32, 3.2 * D);
+  const t = Math.tan(fov / 2);
+  const h = D * t;                       // the screen's half-height
+  const yMax = 0.9 * zMax * t;           // a normal camera's rays leave through the right corners
   const X = (z) => padL + (z / zMax) * (W - padL - padR);
-  const yScale = (H / 2 - 12) / (2.2 * h);
-  const Y = (y) => H / 2 - y * yScale;
+  const Y = (y) => H / 2 - y * ((H / 2 - 6) / yMax);
 
   // axis
   ctx.strokeStyle = COL.axis; ctx.lineWidth = 1;
@@ -44,8 +47,8 @@ export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
         const gz = g(Math.max(z, 1e-3));
         if (!(gz > 0)) { if (started) break; else continue; }
         const y = u * h * gz;
-        if (Math.abs(y) > 2.6 * h) { // off the top: finish the line at the edge and move on
-          if (started) { ctx.lineTo(X(z), Y(Math.sign(y) * 2.6 * h)); break; }
+        if (Math.abs(y) > 1.2 * yMax) { // off the top: finish the line at the edge and move on
+          if (started) { ctx.lineTo(X(z), Y(Math.sign(y) * 1.2 * yMax)); break; }
           continue;
         }
         if (!started) { ctx.moveTo(X(z), Y(y)); started = true; } else ctx.lineTo(X(z), Y(y));
@@ -64,7 +67,7 @@ export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
   // the back plane (or eye point)
   ctx.strokeStyle = COL.plane; ctx.fillStyle = COL.plane;
   if (s != null && s > 0.01) {
-    const top = Math.min(s * h, 2.6 * h);
+    const top = Math.min(s * h, 1.2 * yMax);
     ctx.beginPath(); ctx.moveTo(X(0), Y(top)); ctx.lineTo(X(0), Y(-top)); ctx.stroke();
   } else {
     ctx.beginPath(); ctx.arc(X(0), Y(0), 3, 0, 7); ctx.fill();
@@ -78,9 +81,16 @@ export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
     }
   }
 
-  ctx.font = "10px 'JetBrains Mono', monospace"; ctx.fillStyle = COL.text;
-  ctx.textAlign = "center"; ctx.textBaseline = "top";
-  ctx.fillText("screen", X(D), Y(-h) + 4);
-  ctx.textAlign = "left";
-  ctx.fillText("eye", X(0) + 4, H - 14);
+  // labels sit on little backing plates so rays don't run through them
+  ctx.font = "10px 'JetBrains Mono', monospace"; ctx.textBaseline = "middle";
+  const label = (txt, x, y, align, color) => {
+    const w = ctx.measureText(txt).width;
+    const x0 = align === "left" ? x : align === "right" ? x - w : x - w / 2;
+    ctx.fillStyle = "rgba(17,19,23,0.92)";
+    ctx.fillRect(x0 - 3, y - 7, w + 6, 14);
+    ctx.fillStyle = color; ctx.textAlign = "left";
+    ctx.fillText(txt, x0, y);
+  };
+  label("screen", X(D), Math.min(H - 8, Y(-h) + 11), "center", COL.screen);
+  label("eye", X(0) - 2, 9, "left", COL.plane);
 }
