@@ -558,9 +558,17 @@ function update(dt) {
   camera.updateMatrixWorld();
 
   body.position.set(player.pos.x, player.pos.y + HEIGHT / 2, player.pos.z);
-  cut.position.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), nearNow + 0.02);
-  cut.quaternion.copy(camera.quaternion);
-  cut.scale.setScalar(20000);
+  // only lenses whose rays start behind the eye reach underground; size the square to just cover
+  // the screen at its depth (a huge one loses precision and paints the wrong side of the line)
+  cut.visible = nearNow < 0;
+  if (cut.visible) {
+    const dz = nearNow + 0.02;
+    const gx = lutFn(shown, 0)(dz), gy = lutFn(shown, 1)(dz);
+    const hh = state.D * Math.tan(FOV / 2);
+    cut.position.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), dz);
+    cut.quaternion.copy(camera.quaternion);
+    cut.scale.set(3 * hh * camera.aspect * Math.max(gx, 1e-3), 3 * hh * Math.max(gy, 1e-3), 1);
+  }
   // the ground grid follows you in 8 m steps (its lines are drawn in world space)
   ground.position.set(Math.round(player.pos.x / 8) * 8, 0, Math.round(player.pos.z / 8) * 8);
   sun.target.position.copy(player.pos);
