@@ -118,7 +118,7 @@ test("backPlaneText", () => {
   assert.equal(backPlaneText(1.5, 20), "30 - 0.5z");
 });
 
-import { linearS, lensNear, BEHIND, NEAR } from "./lens.mjs";
+import { linearS } from "./lens.mjs";
 
 test("linearS recognizes straight lines and recovers the back plane size", () => {
   const D = 10;
@@ -130,13 +130,4 @@ test("linearS recognizes straight lines and recovers the back plane size", () =>
   assert.equal(linearS(parseExpr("1/z"), D), null);
   assert.equal(linearS(parseExpr("z^2"), D), null);
   assert.equal(linearS(parseExpr("log(1+z)"), D), null);
-});
-
-test("lensNear pulls the cut back only for lenses that stay positive behind the eye", () => {
-  const D = 10, g = (src) => normalizedLens(parseExpr(src), D);
-  assert.equal(lensNear(g("1"), g("1")), BEHIND);
-  assert.equal(lensNear(g("5 + 0.5z"), g("5 + 0.5z")), BEHIND);
-  assert.equal(lensNear(g("z"), g("z")), NEAR);
-  assert.equal(lensNear(g("1/z"), g("1/z")), NEAR);
-  assert.equal(lensNear(g("1"), g("z")), NEAR);   // both axes have to agree
 });

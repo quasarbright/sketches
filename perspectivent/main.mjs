@@ -1,7 +1,8 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens,
-  LUT, sampleLens, PRESETS, linearS, lensNear, NEAR,
+  LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
 
@@ -23,7 +24,7 @@ try {
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setClearColor(0x232a35); // sky: a blue-gray, so a real void reads differently from it
+renderer.setClearColor(0xdde8f1); // the sky's horizon color, behind the sky dome
 
 const scene = new THREE.Scene();
 // The camera object only supplies the view matrix. Projection happens in the lens shader.
@@ -46,6 +47,7 @@ const FAR = LUT.zMax;
 const lensUniforms = {
   lensLUT: { value: lutTex },
   lensHalf: { value: new THREE.Vector2(1, 1) },
+  lensShift: { value: 0 },
   lensRange: { value: new THREE.Vector4(NEAR, FAR, LUT.a0, LUT.a1) },
   lensC: { value: LUT.C },
 };
@@ -53,6 +55,7 @@ const lensUniforms = {
 const LENS_PARS = /* glsl */`
 uniform sampler2D lensLUT;
 uniform vec2 lensHalf;
+uniform float lensShift;  // how far the camera's sensor is raised to stay above the ground
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 varying float vLensDepth;
@@ -71,7 +74,7 @@ vec4 lensProject(vec4 mv) {
   float w = g.y;
   float zl = 2.0 * (z - lensRange.x) / (lensRange.y - lensRange.x) - 1.0;
   vLensDepth = (z - lensRange.x) / (lensRange.y - lensRange.x);
-  vec4 p = vec4(mv.x / lensHalf.x * (w / g.x), mv.y / lensHalf.y, zl * w, w);
+  vec4 p = vec4(mv.x / lensHalf.x * (w / g.x), (mv.y - lensShift) / lensHalf.y, zl * w, w);
   if (g.x <= 0.0) p.z = 2.0 * abs(w) + 1.0;   // no ray reaches this side-to-side: clip it
   return p;
 }
@@ -122,17 +125,11 @@ function effS(ax) {
   if (a.s != null) return a.s;
   try { return linearS(parseExpr(a.src), state.D); } catch { return null; }
 }
-let nearNow = NEAR;
 function targetSamples() {
   const gx = normalizedLens(axisFn("x"), state.D);
   const gy = normalizedLens(axisFn(state.split ? "y" : "x"), state.D);
   if (!gx || !gy) return null;
-  const near = lensNear(gx, gy);
-  return { data: sampleLens(gx, gy, undefined, near), near };
-}
-function setNear(n) {
-  nearNow = n;
-  lensUniforms.lensRange.value.x = n;
+  return sampleLens(gx, gy, undefined, NEAR);
 }
 function uploadShown() {
   for (let i = 0; i < LUT.N; i++) {
@@ -145,14 +142,11 @@ function applyLens(animate) {
   const t = targetSamples();
   if (!t) return;
   if (animate) {
-    // while morphing, cut the view at whichever eye plane is further forward
-    morph = { from: shown.slice(), to: t.data, near: t.near, t0: performance.now(), dur: 900 };
-    setNear(Math.max(nearNow, t.near));
+    morph = { from: shown.slice(), to: t, t0: performance.now(), dur: 900 };
   } else {
     morph = null;
-    shown.set(t.data);
+    shown.set(t);
     uploadShown();
-    setNear(t.near);
   }
 }
 function stepMorph(now) {
@@ -162,7 +156,7 @@ function stepMorph(now) {
   const { from, to } = morph;
   for (let i = 0; i < shown.length; i++) shown[i] = from[i] + (to[i] - from[i]) * k;
   uploadShown();
-  if (u >= 1) { setNear(morph.near); morph = null; }
+  if (u >= 1) morph = null;
   return true;
 }
 
@@ -171,15 +165,27 @@ function stepMorph(now) {
  * Everything is cut into small pieces so curved lenses bend edges smoothly.
  * ===================================================================== */
 const COL = {
-  ground: 0x1d2026, ballast: 0x5b5852, tie: 0x6b513c, rail: 0xc3c8cf, pole: 0x7a5f45,
+  ground: 0x5f8a43, ballast: 0x8c877e, tie: 0x6b513c, rail: 0xc3c8cf, pole: 0x7a5f45,
   chalk: 0xe9e4d8, ochre: 0xd6a756, board: 0x23262c, red: 0xe8553d, blue: 0x5aa9e6,
 };
 const lambert = (color, extra) => lensify(new THREE.MeshLambertMaterial({ color }), extra);
 const colliders = []; // { min: Vector3, max: Vector3 }
 
+// Curved lenses (1/z) bend the lower rays up out of the ground, so they meet things from below.
+// The ground hides a sunken box from there, unless the box still has a bottom face under it.
+function openBottom(geo) {
+  const g = geo.groups[3], idx = Array.from(geo.index.array); // BoxGeometry's -y face
+  idx.splice(g.start, g.count);
+  geo.setIndex(idx); geo.clearGroups();
+  return geo;
+}
+
 function addBox(w, h, d, x, y, z, color, { collide = false, seg = 0.5, mat } = {}) {
+  const onGround = y === 0;
+  if (onGround) { y = -0.05; h += 0.05; } // sink into the ground so no seam shows at its foot
   const geo = new THREE.BoxGeometry(w, h, d,
     Math.max(1, Math.ceil(w / seg)), Math.max(1, Math.ceil(h / seg)), Math.max(1, Math.ceil(d / seg)));
+  if (onGround) openBottom(geo);
   const m = new THREE.Mesh(geo, mat || lambert(color));
   m.position.set(x, y + h / 2, z);
   m.castShadow = m.receiveShadow = true;
@@ -219,20 +225,19 @@ const groundMat = lambert(COL.ground, (sh) => {
         float fade = 1.0 - smoothstep(0.15, 0.5, max(fw.x, fw.y)); // drop lines finer than a pixel
         return line * fade;
       }`)
+    .replace("#include <normal_fragment_begin>", "#include <normal_fragment_begin>\nnormal *= faceDirection;")
     .replace("#include <dithering_fragment>", /* glsl */`
-      if (gl_FrontFacing) {
-        float minor = pvGrid(vGroundW.xz, 1.0, 0.0);
-        float major = pvGrid(vGroundW.xz, 10.0, 0.6);
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.42, 0.41, 0.39), minor * 0.35);
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.62, 0.60, 0.56), major * 0.55);
-      } else {
-        // the underside, seen by rays that start below ground: earth in section, hatched the way
-        // a drafting drawing marks a cut
-        float hatch = pvGrid(vec2(vGroundW.x + vGroundW.z, 0.0), 1.5, 0.5);
-        gl_FragColor.rgb = mix(vec3(0.20, 0.15, 0.12), vec3(0.36, 0.28, 0.22), hatch);
-      }
+      // a little variation so the grass isn't flat paint, then a faint grid
+      float n = fract(sin(dot(floor(vGroundW.xz * 0.5), vec2(12.9898, 78.233))) * 43758.5453);
+      gl_FragColor.rgb *= 0.94 + 0.08 * n;
+      float minor = pvGrid(vGroundW.xz, 1.0, 0.0);
+      float major = pvGrid(vGroundW.xz, 10.0, 0.6);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 1.18, minor * 0.5);
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * 1.35, major * 0.6);
       #include <dithering_fragment>`);
 });
+// Curved lenses (1/z) bend rays so they come up to the ground from below. The point they hit is
+// still the same patch of grass, so both sides look and light the same.
 groundMat.side = THREE.DoubleSide;
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.receiveShadow = true;
@@ -329,13 +334,62 @@ async function buildSigns() {
 }
 buildSigns();
 
-// a field of chalk pillars on the left, for depth cues
+// a suburb on the left, behind the power lines: two rows of houses with gable roofs, facing the
+// tracks, and a tree in most yards. All of it is merged into one mesh with per-vertex colors.
 {
-  const rnd = mulberry(7);
-  for (let i = 0; i < 70; i++) {
-    const x = -14 - rnd() * 60, z = 20 - rnd() * 260, h = 1 + rnd() * rnd() * 14, w = 1 + rnd() * 2;
-    addBox(w, h, w, x, 0, z, COL.chalk, { collide: true });
+  const rnd = mulberry(11);
+  const WALLS = [0xe8dcc0, 0xa9b89a, 0x9fb7c9, 0xa65a46, 0xecebe6, 0xe3c76a, 0xc9b49a];
+  const ROOFS = [0x4a3f3a, 0x5b5f66, 0x6e3b2e, 0x3f4a52];
+  const parts = [];
+  const tint = (geo, hex) => {
+    const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[3 * i] = c.r; a[3 * i + 1] = c.g; a[3 * i + 2] = c.b; }
+    geo.setAttribute("color", new THREE.BufferAttribute(a, 3));
+    return geo;
+  };
+  const part = (geo, hex, x, y, z) => {
+    geo = geo.index ? geo.toNonIndexed() : geo;
+    for (const k of Object.keys(geo.attributes)) if (!["position", "normal", "uv"].includes(k)) geo.deleteAttribute(k);
+    if (!geo.attributes.uv) geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    geo.translate(x, y, z);
+    parts.push(tint(geo, hex));
+  };
+  const box = (w, h, d, open = false) => {
+    const g = new THREE.BoxGeometry(w, h, d, Math.ceil(w / 0.5), Math.ceil(h / 0.5), Math.ceil(d / 0.5));
+    return open ? openBottom(g) : g;
+  };
+  function house(x, z) {
+    const w = 7 + rnd() * 3, d = 8 + rnd() * 4, floors = rnd() < 0.45 ? 2 : 1, h = floors * 2.9 + 0.3;
+    const wall = WALLS[Math.floor(rnd() * WALLS.length)], roof = ROOFS[Math.floor(rnd() * ROOFS.length)];
+    part(box(w, h + 0.05, d, true), wall, x, h / 2 - 0.05, z);
+    colliders.push({ min: new THREE.Vector3(x - w / 2, 0, z - d / 2), max: new THREE.Vector3(x + w / 2, h, z + d / 2) });
+    // gable roof, ridge running along the tracks, with a little overhang
+    const rh = 1.6 + rnd() * 1.2, ow = w / 2 + 0.4;
+    const tri = new THREE.Shape();
+    tri.moveTo(-ow, 0); tri.lineTo(ow, 0); tri.lineTo(0, rh); tri.lineTo(-ow, 0);
+    const roofGeo = new THREE.ExtrudeGeometry(tri, { depth: d + 0.8, steps: Math.ceil(d / 0.5), bevelEnabled: false });
+    part(roofGeo, roof, x, h, z - d / 2 - 0.4);
+    // the side facing the tracks (+x): a door and windows on each floor
+    const fx = x + w / 2 + 0.03;
+    part(box(0.08, 2.1, 1.0, true), 0x5a3d2b, fx, 1.05, z + (rnd() - 0.5) * (d - 3));
+    for (let f = 0; f < floors; f++) {
+      for (const dz of [-d / 3.2, d / 3.2]) part(box(0.08, 1.2, 1.3), 0x2c3a46, fx, 1.6 + f * 2.9, z + dz);
+    }
+    if (rnd() < 0.5) part(box(0.7, 1.6, 0.7), 0x7b6a5e, x - w / 4, h + rh * 0.55, z + d / 4);
+    // a tree in the yard, between the house and the tracks
+    if (rnd() < 0.75) {
+      const tx = x + w / 2 + 1.6 + rnd() * 1.4, tz = z + (rnd() - 0.5) * d, th = 2 + rnd() * 1.5;
+      part(new THREE.CylinderGeometry(0.15, 0.22, th, 6, Math.ceil(th / 0.5), true), 0x6b4f3a, tx, th / 2, tz);
+      const r = 1.6 + rnd() * 1.2;
+      part(new THREE.IcosahedronGeometry(r, 2), rnd() < 0.5 ? 0x4f7d3a : 0x3f6d34, tx, th + r * 0.8, tz);
+    }
   }
+  for (let z = 6; z > -760; z -= 20 + rnd() * 8) house(-14 - rnd() * 1.5, z);
+  for (let z = -4; z > -760; z -= 22 + rnd() * 8) house(-33 - rnd() * 3, z);
+  const geo = mergeGeometries(parts);
+  const suburb = new THREE.Mesh(geo, lensify(new THREE.MeshLambertMaterial({ vertexColors: true })));
+  suburb.castShadow = suburb.receiveShadow = true;
+  scene.add(suburb);
 }
 
 // a jumping course on the right: steps up to a lookout tower
@@ -351,13 +405,49 @@ for (const [x, , z, w, top] of COURSE) addBox(0.3, top - 0.5, 0.3, x, 0, z, COL.
 addBox(6, 11.5, 6, 34, 0, -54, COL.chalk, { collide: true });
 addBox(7, 0.5, 7, 34, 11.5, -54, COL.ochre, { collide: true });
 
-// landmarks far down the line: a red arch over the track and a blue monolith
-{
-  const z = -900;
-  addBox(3, 40, 3, -12, 0, z, COL.red, { seg: 2 });
-  addBox(3, 40, 3, 12, 0, z, COL.red, { seg: 2 });
-  addBox(27, 4, 3, 0, 40, z, COL.red, { seg: 2 });
-  addBox(30, 160, 30, 40, 0, -2400, COL.blue, { seg: 8 });
+// the sky: pale at the horizon and deeper blue overhead. It's infinitely far away, so each pixel
+// asks the lens where its ray is heading out there (its position at a very far depth) and takes
+// the color for that direction. A sphere mesh doesn't work: lenses like z² bend its huge
+// triangles into fans with gaps between them.
+const SKY_R = 4500;
+const skyUniforms = {
+  skyG: { value: new THREE.Vector2(1, 1) },     // the lens at SKY_R, x and y
+  skyHalf: { value: new THREE.Vector2(1, 1) },
+  skyShift: { value: 0 },
+  skyRot: { value: new THREE.Matrix3() },
+  horizon: { value: new THREE.Color(0xdde8f1) },
+  mid: { value: new THREE.Color(0xa9c8e6) },
+  zenith: { value: new THREE.Color(0x5f97cf) },
+};
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: skyUniforms, depthTest: false, depthWrite: false,
+  vertexShader: /* glsl */`
+    varying vec2 vNdc;
+    void main() { vNdc = position.xy; gl_Position = vec4(position.xy, 1.0, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform vec2 skyG, skyHalf;
+    uniform float skyShift;
+    uniform mat3 skyRot;
+    uniform vec3 horizon, mid, zenith;
+    varying vec2 vNdc;
+    void main() {
+      vec3 c = horizon;
+      if (skyG.x > 0.0 && skyG.y > 0.0) { // no ray gets this far when they meet in front
+        vec3 d = skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y + skyShift, -${SKY_R.toFixed(1)});
+        float e = max(0.0, normalize(d).y); // sine of the elevation
+        c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
+      }
+      gl_FragColor = vec4(c, 1.0);
+      #include <colorspace_fragment>
+    }`,
+}));
+sky.renderOrder = -1;
+scene.add(sky);
+function updateSky() {
+  skyUniforms.skyG.value.set(lutFn(shown, 0)(SKY_R), lutFn(shown, 1)(SKY_R));
+  skyUniforms.skyHalf.value.copy(lensUniforms.lensHalf.value);
+  skyUniforms.skyShift.value = lensUniforms.lensShift.value;
+  skyUniforms.skyRot.value.setFromMatrix4(camera.matrixWorld);
 }
 
 for (const o of scene.children) o.frustumCulled = false;
@@ -372,7 +462,7 @@ function mulberry(a) {
 }
 
 /* lights */
-scene.add(new THREE.HemisphereLight(0xdfe4ee, 0x2a2c30, 1.4));
+scene.add(new THREE.HemisphereLight(0xcfe2f5, 0x4a5a32, 1.5));
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -381,27 +471,6 @@ sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.06;
 scene.add(sun, sun.target);
 const SUN_DIR = new THREE.Vector3(0.45, 1, 0.3).normalize();
-
-// the cut: the eye plane slices through the world, and where it slices through the earth (rays
-// that start below the ground, which happens with orthographic-like lenses) it's drawn in section,
-// hatched like a cut in a technical drawing. It's a big square riding just past the eye plane.
-const cutMat = lensify(new THREE.MeshBasicMaterial({ color: 0x3a2d23 }), (sh) => {
-  sh.vertexShader = sh.vertexShader
-    .replace("#include <common>", "#include <common>\nvarying vec3 vCutW;")
-    .replace("#include <fog_vertex>", "#include <fog_vertex>\nvCutW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
-  sh.fragmentShader = sh.fragmentShader
-    .replace("#include <common>", "#include <common>\nvarying vec3 vCutW;")
-    .replace("#include <dithering_fragment>", /* glsl */`
-      if (vCutW.y > 0.0) discard;
-      vec2 q = vec2(vCutW.x + vCutW.z + vCutW.y, 0.0) / 0.6;
-      float d = abs(fract(q.x - 0.5) - 0.5) / max(fwidth(q.x), 1e-5);
-      float hatch = 1.0 - clamp(d - 0.6, 0.0, 1.0);
-      gl_FragColor.rgb = mix(vec3(0.20, 0.155, 0.12), vec3(0.42, 0.33, 0.25), hatch);
-      #include <dithering_fragment>`);
-});
-const cut = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), cutMat);
-cut.frustumCulled = false;
-scene.add(cut);
 
 // an invisible body so you cast a shadow (and can see where you'll land)
 const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.2, 4, 8),
@@ -558,21 +627,32 @@ function update(dt) {
   camera.updateMatrixWorld();
 
   body.position.set(player.pos.x, player.pos.y + HEIGHT / 2, player.pos.z);
-  // only lenses whose rays start behind the eye reach underground; size the square to just cover
-  // the screen at its depth (a huge one loses precision and paints the wrong side of the line)
-  cut.visible = nearNow < 0;
-  if (cut.visible) {
-    const dz = nearNow + 0.02;
-    const gx = lutFn(shown, 0)(dz), gy = lutFn(shown, 1)(dz);
-    const hh = state.D * Math.tan(FOV / 2);
-    cut.position.copy(camera.position).addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), dz);
-    cut.quaternion.copy(camera.quaternion);
-    cut.scale.set(3 * hh * camera.aspect * Math.max(gx, 1e-3), 3 * hh * Math.max(gy, 1e-3), 1);
-  }
+  updateSensorShift();
   // the ground grid follows you in 8 m steps (its lines are drawn in world space)
   ground.position.set(Math.round(player.pos.x / 8) * 8, 0, Math.round(player.pos.z / 8) * 8);
   sun.target.position.copy(player.pos);
   sun.position.copy(player.pos).addScaledVector(SUN_DIR, 100);
+}
+
+// A lens with parallel or converging rays needs a sensor (the back plane) as big as what it sees,
+// centered on your eye. Bigger than your eye height, its bottom would be underground and the rays
+// from there would start inside the earth. A real camera can't do that, so the sensor slides up
+// (a lens shift, as in architectural cameras) until its lowest corner clears the floor under you.
+// A normal camera's sensor is a point, so it never moves.
+const _up = new THREE.Vector3(), _right = new THREE.Vector3();
+function updateSensorShift() {
+  const hh = state.D * Math.tan(FOV / 2);
+  const gy = lutFn(shown, 1)(NEAR), gx = lutFn(shown, 0)(NEAR);
+  let b = 0;
+  if (gy > 0 && gy < 6) { // curved lenses like 1/z have no finite sensor: their rays come in from far away
+    const halfH = hh * gy, halfW = hh * camera.aspect * Math.max(0, Math.min(gx, 6));
+    _up.set(0, 1, 0).applyQuaternion(camera.quaternion);
+    _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+    const lowest = camera.position.y - Math.abs(_up.y) * halfH - Math.abs(_right.y) * halfW;
+    const clear = 0.01; // the bottom edge of the view sits on the ground, never below it
+    if (lowest < clear && _up.y > 0.05) b = (clear - lowest) / _up.y;
+  }
+  lensUniforms.lensShift.value = b;
 }
 
 /* input */
@@ -929,6 +1009,8 @@ function frame(now) {
   const morphing = stepMorph(now);
   const hh = state.D * Math.tan(FOV / 2);
   lensUniforms.lensHalf.value.set(hh * camera.aspect, hh);
+  camera.updateMatrixWorld();
+  updateSky();
   renderer.render(scene, camera);
   if (morphing || diagramDirty) { drawPanelDiagram(); diagramDirty = morphing; }
   if (!morphing && morph === null && wasMorphing) syncPanel();

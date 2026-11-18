@@ -233,20 +233,7 @@ export function linearS(f, D) {
   return Math.abs(s) < 1e-12 ? 0 : s;
 }
 
-/* ---------------- how far behind the eye the view can reach ---------------- */
+/* ---------------- the eye plane ---------------- */
 
-// A camera's "eye plane" sits at z = 0, but for lenses that stay positive behind it (orthographic,
-// a back plane between 0 and 1) cutting the world there slices through the floor under you. Those
-// lenses get their cut pulled back to BEHIND m. Anything that goes non-positive or blows up back
-// there keeps the cut just in front of the eye.
-export const BEHIND = -1.5;
+// The view starts just in front of the eye; nothing behind you is ever drawn.
 export const NEAR = 0.05;
-export function lensNear(gx, gy) {
-  for (let z = BEHIND; z <= NEAR; z += 0.05) {
-    for (const g of [gx, gy]) {
-      const v = g(z);
-      if (!(v > 1e-3) || !Number.isFinite(v) || v > 1e3) return NEAR;
-    }
-  }
-  return BEHIND;
-}
