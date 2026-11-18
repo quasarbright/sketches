@@ -42,7 +42,7 @@
       --font-display: "Instrument Serif", Georgia, serif;
     }
     html, body { height: 100%; margin: 0; overflow: hidden; background: var(--bg); }
-    #c { position: fixed; inset: 0; display: block; width: 100vw; height: 100vh; touch-action: none; }
+    #c { position: fixed; left: 0; top: 0; display: block; width: 100vw; height: 100vh; touch-action: none; }
 
     .pv-title {
       position: fixed; top: 16px; left: 20px; z-index: 3; pointer-events: none;
@@ -220,7 +220,7 @@
     <div class="control">
       <div class="control-head">
         <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen size</span>
-        <span class="value" id="hVal">4.1 m · to the ground</span>
+        <span class="value" id="hVal">4.1 m · to ground</span>
       </div>
       <datalist id="hTicks"><option id="hTick" value="-10"></option><option id="hGroundTick" value="-10"></option></datalist>
       <input type="range" id="h" min="0" max="100" step="0.1" value="54" list="hTicks"

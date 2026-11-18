@@ -928,8 +928,9 @@ function syncPanel() {
   $("dNote").textContent = parallel ? "Parallel rays: the picture is the same at any distance." : "";
   $("h").value = sliderFromH(state.H);
   const onGround = Math.abs(state.H - groundH()) < 1e-3;
+  // the ground snap says more than "same as the back plane" (which the back plane's own 1:1 says)
   $("hVal").textContent = fmtD(2 * state.H) +
-    (s != null && Math.abs(s - 1) < 1e-9 ? " · 1:1" : onGround ? " · to the ground" : "");
+    (onGround ? " · to ground" : s != null && Math.abs(s - 1) < 1e-9 ? " · = back plane" : "");
   $("hGroundTick").value = sliderFromH(groundH());
   // tick marks where the two sizes match: 1 on the back plane, the plane's size on the screen
   $("hTick").value = s != null && s > 0 ? sliderFromH(s * state.H) : -10;
@@ -1120,12 +1121,21 @@ document.addEventListener("cohesion-modal-close", (e) => {
 /* =====================================================================
  * main loop
  * ===================================================================== */
+// The view stops above the button bar, so the bottom of the picture (where orthographic shows the
+// ground line and the track bed) is never hidden behind it. On phones it also starts below the
+// title and hint. The ?background variant keeps the whole window.
 function resize() {
-  const w = innerWidth, h = innerHeight;
+  const cv = renderer.domElement, bg = document.body.classList.contains("pv-background");
+  const top = !bg && innerWidth <= 700 ? Math.ceil($("hint").getBoundingClientRect().bottom) + 8 : 0;
+  const bottom = bg ? 0 : Math.ceil(innerHeight - document.querySelector(".pv-bar").getBoundingClientRect().top) + 8;
+  const w = innerWidth, h = Math.max(1, innerHeight - top - bottom);
+  cv.style.top = top + "px"; cv.style.height = h + "px";
+  document.querySelector(".pv-crosshair").style.top = top + h / 2 + "px";
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
 }
 addEventListener("resize", resize);
+{ const ro = new ResizeObserver(() => resize()); ro.observe($("hint")); ro.observe(document.querySelector(".pv-bar")); }
 resize();
 
 let last = performance.now();
@@ -1158,7 +1168,7 @@ document.addEventListener("pointerdown", (e) => {
   const panel = document.querySelector("control-panel");
   if (panel && !panel.hasAttribute("collapsed") && !panel.contains(e.target)) panel.setAttribute("collapsed", "");
 }, true);
-if (isBg) document.body.classList.add("pv-background");
+if (isBg) { document.body.classList.add("pv-background"); resize(); }
 resetPlayer();
 applyLens(false);
 syncPanel();
