@@ -443,12 +443,18 @@ scene.add(sky);
 // The earth is solid. Every lens sends its rays out from your eye (a point for a normal camera,
 // a plane the size of the screen for orthographic), always centered on your eye so the eye is in
 // the same place for every lens. Rays that start below the ground are inside the earth, so they
-// see the ground right there and nothing beyond it.
+// see the ground and nothing beyond it. Which patch of ground: the one where the ray's line
+// crosses the surface, the same rule as for every ray that starts above it, so the ground (grid,
+// track bed and all) runs on unbroken. A ray running level never crosses it: plain grass.
 const earthUniforms = {
   earthG: { value: new THREE.Vector2(0, 0) },   // the lens at the eye plane, x and y
+  earthDG: { value: new THREE.Vector2(0, 0) },  // and how fast it changes with depth there
   earthHalf: { value: new THREE.Vector2(1, 1) },
   earthWorld: { value: new THREE.Matrix4() },
   earthColor: { value: new THREE.Color(EARTH_COLOR) },
+  ballastColor: { value: new THREE.Color(COL.ballast) },
+  tieColor: { value: new THREE.Color(COL.tie) },
+  railColor: { value: new THREE.Color(COL.rail) },
 };
 const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
   uniforms: earthUniforms, depthTest: true, depthWrite: true,
@@ -456,14 +462,44 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
     varying vec2 vNdc;
     void main() { vNdc = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
   fragmentShader: /* glsl */`
-    uniform vec2 earthG, earthHalf;
+    uniform vec2 earthG, earthDG, earthHalf;
     uniform mat4 earthWorld;
-    uniform vec3 earthColor;
+    uniform vec3 earthColor, ballastColor, tieColor, railColor;
     varying vec2 vNdc;
+    float pvGrid(vec2 p, float spacing, float width) {
+      vec2 q = p / spacing;
+      vec2 fw = fwidth(q);
+      vec2 d = abs(fract(q - 0.5) - 0.5) / max(fw, 1e-5);
+      float line = 1.0 - clamp(min(d.x, d.y) - width, 0.0, 1.0);
+      float fade = 1.0 - smoothstep(0.15, 0.5, max(fw.x, fw.y));
+      return line * fade;
+    }
     void main() {
       vec4 start = earthWorld * vec4(vNdc.x * earthHalf.x * earthG.x, vNdc.y * earthHalf.y * earthG.y, -${NEAR.toFixed(3)}, 1.0);
-      if (start.y >= 0.0) discard;
-      gl_FragColor = vec4(earthColor, 1.0);
+      // the track bed is solid too (the same heights you walk on), and a hair above the surface
+      // counts, so no sliver shows where the real surface is clipped
+      bool onTrack = start.z < ${TRACK_START.toFixed(1)} && start.z > ${(TRACK_START - TRACK_LEN).toFixed(1)};
+      float floorY = onTrack && abs(start.x) < 1.3 ? 0.41 : onTrack && abs(start.x) < 1.7 ? 0.25 : 0.0;
+      if (start.y >= floorY + 0.02) discard;
+      vec3 dir = mat3(earthWorld) * vec3(vNdc.x * earthHalf.x * earthDG.x, vNdc.y * earthHalf.y * earthDG.y, -1.0);
+      vec3 c = earthColor;
+      if (abs(dir.y) < 1e-5) { // looking level: the bed's own cross-section
+        if (floorY > 0.0 && start.y > 0.0) c = start.y > 0.25 ? tieColor : ballastColor;
+        gl_FragColor = vec4(c, 1.0);
+      #include <colorspace_fragment>
+      gl_FragDepth = 0.0; return; }
+      vec2 p = start.xz - dir.xz * ((start.y - floorY) / dir.y);
+      float n = fract(sin(dot(floor(p * 0.5), vec2(12.9898, 78.233))) * 43758.5453);
+      c *= 0.94 + 0.08 * n;
+      c = mix(c, c * 1.18, pvGrid(p, 1.0, 0.0) * 0.5);
+      c = mix(c, c * 1.35, pvGrid(p, 10.0, 0.6) * 0.6);
+      if (abs(p.x) < 1.7 && p.y < ${TRACK_START.toFixed(1)} && p.y > ${(TRACK_START - TRACK_LEN).toFixed(1)}) {
+        c = ballastColor;
+        float tz = mod(${(TRACK_START - 0.3).toFixed(2)} - p.y + 0.12, 0.65);
+        if (abs(p.x) < 1.3 && tz < 0.24) c = tieColor;
+        if (abs(abs(p.x) - ${(GAUGE / 2).toFixed(4)}) < 0.04) c = railColor;
+      }
+      gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
       gl_FragDepth = 0.0;
     }`,
@@ -477,6 +513,8 @@ function updateSky() {
   skyUniforms.skyRot.value.setFromMatrix4(camera.matrixWorld);
   const ex = lutFn(shown, 0)(NEAR), ey = lutFn(shown, 1)(NEAR);
   earthUniforms.earthG.value.set(Number.isFinite(ex) ? ex : 0, Number.isFinite(ey) ? ey : 0);
+  const dx = (lutFn(shown, 0)(2 * NEAR) - ex) / NEAR, dy = (lutFn(shown, 1)(2 * NEAR) - ey) / NEAR;
+  earthUniforms.earthDG.value.set(Number.isFinite(dx) ? dx : 0, Number.isFinite(dy) ? dy : 0);
   earthUniforms.earthHalf.value.copy(lensUniforms.lensHalf.value);
   earthUniforms.earthWorld.value.copy(camera.matrixWorld);
 }
