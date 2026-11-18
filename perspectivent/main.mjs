@@ -906,6 +906,10 @@ function updateCaption() {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
+  // a level parallel view sees the ground edge-on, which looks like a bug unless it's said
+  if (ax === "y" || !state.split) {
+    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on: look down or step sideways to see the world move.";
+  }
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));

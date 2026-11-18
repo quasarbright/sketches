@@ -48,12 +48,13 @@
       position: fixed; top: 16px; left: 20px; z-index: 3; pointer-events: none;
       font-family: var(--font-display); font-style: italic; font-size: 2rem; line-height: 1;
       color: var(--text);
-      text-shadow: 0 2px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.7);
+      background: rgba(17,19,23,.72); border-radius: 8px; padding: 2px 10px 6px; margin-left: -10px;
     }
     .pv-hint {
       position: fixed; top: 58px; left: 20px; z-index: 3; pointer-events: none;
       font-size: .82rem; color: var(--text); max-width: min(420px, calc(100vw - 40px));
-      text-shadow: 0 1px 3px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,.9);
+      background: rgba(17,19,23,.72); border-radius: 6px; /* a plate: the sky can be nearly white */
+      padding: 3px 8px; margin-left: -8px; width: max-content;
     }
     .pv-hint kbd {
       font-family: var(--font-mono); font-size: .74rem; padding: 1px 5px; border-radius: 4px;
@@ -71,6 +72,8 @@
     body.pv-locked .pv-crosshair { opacity: .7; }
 
     control-panel.floating[collapsed] { width: auto; }
+    /* nearly opaque: the sky behind it can be almost white, which washes out the gray labels */
+    .control-panel.floating { background: color-mix(in srgb, var(--panel) 95%, transparent); }
     control-panel.floating { width: 300px; max-height: calc(100vh - 100px); overflow-y: auto; }
     .control-panel > .panel-header .panel-title { font-family: var(--font-display); font-style: italic; font-size: 1.2rem; font-weight: 400; }
     .pv-diagram { display: block; width: 100%; height: 150px; border-radius: var(--radius-sm); background: #111317; }
@@ -116,9 +119,10 @@
     .pv-axis-pick button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
     .pv-axis-pick button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: 0; }
     .pv-axis-pick button.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-    /* the footer floats over a busy scene: full strength with a heavy shadow (as in differential-growth-3d) */
+    /* the footer floats over the scene, which can be nearly white sky: full strength on a dark plate */
     mike-footer[overlay] { opacity: 1 !important; color: var(--text) !important;
-      text-shadow: 0 1px 3px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,1); }
+      left: 50% !important; right: auto !important; bottom: 6px !important; transform: translateX(-50%);
+      width: max-content; padding: 3px 10px !important; background: rgba(17,19,23,.72); border-radius: 6px; }
     mike-footer[overlay] a { color: var(--accent-hi); }
     body.pv-background .pv-title, body.pv-background .pv-hint, body.pv-background .pv-crosshair,
     body.pv-background .pv-touch { display: none !important; }
@@ -138,7 +142,7 @@
     }
     .pv-jump {
       position: fixed; right: 24px; bottom: 112px; width: 72px; height: 72px; border-radius: 50%;
-      background: rgba(27,30,35,.5); border: 1px solid var(--border); color: var(--text); z-index: 3;
+      background: rgba(27,30,35,.72); border: 1px solid var(--border); color: var(--text); z-index: 3;
       font-family: var(--font-ui); font-size: .8rem; touch-action: none;
     }
     .pv-nogl {
