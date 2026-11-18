@@ -114,10 +114,11 @@ function lensify(mat, extra) {
  * lens state (what the panel edits)
  * ===================================================================== */
 const state = {
-  D: 2.6,         // screen distance (m)
-  H: 1.5,         // half the screen's height (m): the screen is 3 m tall, so an orthographic
-                  // plane that size centered on your eye (1.65 m up) stays above the ground.
-                  // With D = 2.6 a normal camera sees 60° top to bottom.
+  D: 3.57,        // screen distance (m)
+  H: 2.06,        // half the screen's height (m). You start standing on the track bed (0.41 m) with
+                  // your eye 1.65 m above that, so a 4.1 m screen centered on your eye has its bottom
+                  // edge on the ground: orthographic opens with the rails and ties along the bottom.
+                  // With D = 3.57 a normal camera sees 60° top to bottom.
   split: false,
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
@@ -322,6 +323,20 @@ const TRACK_START = 30, TRACK_LEN = 3000, GAUGE = 1.435;
   const wg = new THREE.BufferGeometry();
   wg.setAttribute("position", new THREE.Float32BufferAttribute(wirePts, 3));
   scene.add(new THREE.LineSegments(wg, lensify(new THREE.LineBasicMaterial({ color: 0x15171b }))));
+}
+
+// a signal gantry over the track, 10 m ahead of where you start. Its signal hangs over the middle
+// of the track, so even the narrow orthographic window on a phone (under 2 m wide) opens with
+// something standing in it. Any distance works for orthographic; 10 m keeps it from looming in
+// perspective.
+{
+  const z = 6, post = 2.6, top = 4.4;
+  for (const x of [-post, post]) addBox(0.2, top + 0.3, 0.2, x, 0, z, COL.pole, { collide: true, seg: 0.5 });
+  addBox(2 * post + 0.2, 0.3, 0.2, 0, top, z, COL.pole);
+  addBox(0.08, 0.3, 0.08, 0, top - 0.3, z, COL.pole);
+  addBox(0.46, 1.1, 0.24, 0, top - 1.4, z, 0x1d1f23);
+  for (const [y, c] of [[3.78, 0xd8362b], [3.32, 0x2fb45a]])
+    addBox(0.24, 0.24, 0.04, 0, y - 0.12, z + 0.13, 0, { mat: lensify(new THREE.MeshBasicMaterial({ color: c })) });
 }
 
 // distance signs on the right of the track, all the same size, so far ones are only readable
@@ -582,6 +597,7 @@ const player = {
   mode: "walk",
 };
 let levelAnim = null;          // smooth roll back to level when you land from flying
+let lastFloor = NaN;           // the floor under you, to notice stepping on or off the track bed
 const keys = new Set();
 let locked = false;
 
@@ -705,6 +721,9 @@ function update(dt) {
     player.pos.y = Math.max(player.pos.y, floorAt(player.pos.x, player.pos.z));
   }
 
+  // stepping on or off the track bed moves the "bottom on the ground" snap on the screen-size slider
+  { const g = floorAt(player.pos.x, player.pos.z); if (g !== lastFloor) { lastFloor = g; syncPanel(); } }
+
   // camera
   camera.position.set(player.pos.x, player.pos.y + EYE, player.pos.z);
   if (player.mode === "walk") {
@@ -821,6 +840,9 @@ const fmtD = (d) => (d < 9.95 ? d.toFixed(1) : Math.round(d)) + " m";
 const H_MIN = 0.25, H_MAX = 25; // half heights; the slider shows the full height
 const hFromSlider = (v) => H_MIN * Math.pow(H_MAX / H_MIN, v / 100);
 const sliderFromH = (h) => 100 * Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
+// the screen size whose bottom edge sits on the ground (y = 0), for where you're standing now
+const groundH = () => floorAt(player.pos.x, player.pos.z) + EYE;
+const S_MAX = 3; // the back plane is at most 3× the screen, however the screen is resized
 
 const chipsEl = $("chips");
 for (const p of PRESETS) {
@@ -905,7 +927,10 @@ function syncPanel() {
   const parallel = [ "x", state.split ? "y" : "x" ].every((a) => { const v = effS(a); return v != null && Math.abs(v - 1) < 1e-9; });
   $("dNote").textContent = parallel ? "Parallel rays: the picture is the same at any distance." : "";
   $("h").value = sliderFromH(state.H);
-  $("hVal").textContent = fmtD(2 * state.H) + " tall" + (s != null && Math.abs(s - 1) < 1e-9 ? " · 1:1" : "");
+  const onGround = Math.abs(state.H - groundH()) < 1e-3;
+  $("hVal").textContent = fmtD(2 * state.H) +
+    (s != null && Math.abs(s - 1) < 1e-9 ? " · 1:1" : onGround ? " · to the ground" : "");
+  $("hGroundTick").value = sliderFromH(groundH());
   // tick marks where the two sizes match: 1 on the back plane, the plane's size on the screen
   $("hTick").value = s != null && s > 0 ? sliderFromH(s * state.H) : -10;
   updateCaption();
@@ -974,7 +999,8 @@ $("h").addEventListener("input", (e) => {
   let H = hFromSlider(v);
   const s0 = effS(activeAxis());
   if (s0 != null && s0 > 0 && Math.abs(v - sliderFromH(s0 * H0)) < 2.5) H = s0 * H0;
-  for (const a of ["x", "y"]) if (state[a].s != null) state[a] = { src: "", s: state[a].s * H0 / H };
+  else if (Math.abs(v - sliderFromH(groundH())) < 2.5) H = groundH();
+  for (const a of ["x", "y"]) if (state[a].s != null) state[a] = { src: "", s: Math.min(S_MAX, state[a].s * H0 / H) };
   if (!state.split) state.y = { ...state.x };
   state.H = H;
   syncPanel();
@@ -1006,7 +1032,7 @@ function updateCaption() {
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
   // a level parallel view sees the ground edge-on, which looks like a bug unless it's said
   if (ax === "y" || !state.split) {
-    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on: look down or step sideways to see the world move.";
+    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on along the bottom: look down to see it laid out, or walk to see the world slide past.";
   }
   $("caption").innerHTML = c;
 }
