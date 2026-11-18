@@ -19,15 +19,15 @@ export function lutFn(arr, comp) {
   };
 }
 
-export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
+export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null }) {
   ctx.clearRect(0, 0, W, H);
   const padL = 18, padR = 10;
   // a fixed scale for screens up to 10 m away, so moving the screen visibly moves it; past that
   // the view zooms out to keep it in frame
   const zMax = Math.max(32, 3.2 * D);
-  const t = Math.tan(fov / 2);
-  const h = D * t;                       // the screen's half-height
-  const yMax = 0.9 * zMax * t;           // a normal camera's rays leave through the right corners
+  // h is the screen's half-height; the height scale is fixed too (a 60° camera's rays leave
+  // through the right corners), widening only when the screen itself would not fit
+  const yMax = Math.max(0.9 * zMax * Math.tan(Math.PI / 6), 1.25 * h, 1.25 * (s ?? 0) * h);
   const X = (z) => padL + (z / zMax) * (W - padL - padR);
   const Y = (y) => H / 2 - y * ((H / 2 - 6) / yMax);
 
@@ -64,10 +64,12 @@ export function drawDiagram(ctx, W, H, { D, fov, gy, gx = null, s = null }) {
   ctx.strokeStyle = COL.screen; ctx.lineWidth = 2.5; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(X(D), Y(h)); ctx.lineTo(X(D), Y(-h)); ctx.stroke();
 
-  // the back plane (or eye point)
+  // the back plane (or eye point): where the rays start, read off the lens itself at the eye, so
+  // curved lenses show theirs too (1/z's is infinitely big)
   ctx.strokeStyle = COL.plane; ctx.fillStyle = COL.plane;
-  if (s != null && s > 0.01) {
-    const top = Math.min(s * h, 1.2 * yMax);
+  const g0 = s != null ? s : gy(0);
+  if (!(g0 <= 0.01)) {
+    const top = Math.min(Number.isFinite(g0) ? g0 * h : Infinity, 1.2 * yMax);
     ctx.beginPath(); ctx.moveTo(X(0), Y(top)); ctx.lineTo(X(0), Y(-top)); ctx.stroke();
   } else {
     ctx.beginPath(); ctx.arc(X(0), Y(0), 3, 0, 7); ctx.fill();

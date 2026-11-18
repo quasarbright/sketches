@@ -203,12 +203,21 @@
 
     <div class="control">
       <div class="control-head">
-        <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does.">screen distance</span>
-        <span class="value" id="dVal">10 m</span>
+        <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing.">screen distance</span>
+        <span class="value" id="dVal">5.2 m</span>
       </div>
       <input type="range" id="d" min="0" max="100" step="0.1" value="33.3"
-        title="How far ahead the screen is. Things at this distance keep their size whatever the lens does." />
+        title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing." />
       <p class="pv-error" id="dErr"></p>
+    </div>
+
+    <div class="control">
+      <div class="control-head">
+        <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen size</span>
+        <span class="value" id="hVal">6.0 m tall</span>
+      </div>
+      <input type="range" id="h" min="0" max="100" step="0.1" value="50"
+        title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall." />
     </div>
 
     <label class="check" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">
@@ -260,7 +269,7 @@
       <div class="section-label">any function of distance</div>
       <p>Once the camera is "divide by $f(z)$", nothing says $f$ has to be a straight line. Divide
         by $\sqrt z$ and things shrink more slowly than normal. Divide by $z^2$ and they shrink
-        faster. Divide by <span style="white-space:nowrap">$1/z$,</span> which is multiplying by distance, and the world turns inside out.
+        faster. Divide by <span style="white-space:nowrap">$1/z$,</span> which is multiplying by distance, and the world turns inside out. The reverse button uses $1/(z + 5)$ instead: its rays start on a plane at your eye a couple of times bigger than the screen and bend in toward each other, meeting only infinitely far away. Plain $1/z$ would need that plane to be infinitely big.
         The rays aren't straight any more, and straight edges in the world come out curved.</p>
       <canvas class="pv-about-diagram" data-demo="functions"></canvas>
       <p class="pv-about-caption" data-caption="functions"></p>

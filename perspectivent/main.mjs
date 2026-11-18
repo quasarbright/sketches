@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { TessellateModifier } from "three/addons/modifiers/TessellateModifier.js";
 import {
   parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens,
   LUT, sampleLens, PRESETS, linearS, NEAR,
@@ -68,6 +69,17 @@ vec2 lensG(float z) {
 }
 vec4 lensProject(vec4 mv) {
   float z = -mv.z;
+  if (z < lensRange.x) {
+    // Behind the eye plane. The card clips a triangle where clip z + w crosses zero, and finds
+    // that point by straight-line blending between its corners. With w = g(z) going negative
+    // behind the eye, a corner back there passed the test and the cut landed near w = 0, which
+    // smeared triangles across the whole screen. So back here w stays at its value on the eye
+    // plane, and z + w is negative in proportion to how far behind the corner is.
+    vec2 g0 = lensG(lensRange.x);
+    float w0 = g0.y;
+    vLensDepth = 0.0;
+    return vec4(mv.x / lensHalf.x * (w0 / g0.x), mv.y / lensHalf.y, -w0 * (1.0 + (lensRange.x - z)), w0);
+  }
   vec2 g = lensG(z);
   float w = g.y;
   float zl = 2.0 * (z - lensRange.x) / (lensRange.y - lensRange.x) - 1.0;
@@ -102,7 +114,9 @@ function lensify(mat, extra) {
  * lens state (what the panel edits)
  * ===================================================================== */
 const state = {
-  D: 10,          // screen distance (m)
+  D: 5.2,         // screen distance (m)
+  H: 3,           // half the screen's height (m): the screen is 6 m tall, about a storey
+                  // and a half (with D = 5.2 a normal camera sees 60° top to bottom)
   split: false,
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
@@ -171,6 +185,12 @@ const colliders = []; // { min: Vector3, max: Vector3 }
 
 // Curved lenses (1/z) bend the lower rays up out of the ground, so they meet things from below.
 // The ground hides a sunken box from there, unless the box still has a bottom face under it.
+// Every lens but the normal camera bends straight edges, and the graphics card cuts triangles at
+// the eye plane as if edges stayed straight. A long triangle that crosses the eye plane gets cut
+// in the wrong place and smears across the screen, so everything is made of pieces about half a
+// meter across.
+const fine = (geo, edge = 0.5) => new TessellateModifier(edge, 12).modify(geo);
+
 function openBottom(geo) {
   const g = geo.groups[3], idx = Array.from(geo.index.array); // BoxGeometry's -y face
   idx.splice(g.start, g.count);
@@ -245,7 +265,7 @@ scene.add(ground);
 const TRACK_START = 30, TRACK_LEN = 3000, GAUGE = 1.435;
 {
   const len = TRACK_LEN, zc = TRACK_START - len / 2;
-  const ballast = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, len, 2, 1, len / 2), lambert(COL.ballast));
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, len, 8, 1, len * 2), lambert(COL.ballast));
   ballast.position.set(0, 0.125, zc); ballast.receiveShadow = true; scene.add(ballast);
 
   const tieGeo = new THREE.BoxGeometry(2.6, 0.16, 0.24, 6, 1, 1);
@@ -263,7 +283,7 @@ const TRACK_START = 30, TRACK_LEN = 3000, GAUGE = 1.435;
   [[-0.075, 0], [0.075, 0], [0.075, 0.015], [0.015, 0.03], [0.012, 0.12], [0.035, 0.13],
    [0.035, 0.17], [-0.035, 0.17], [-0.035, 0.13], [-0.012, 0.12], [-0.015, 0.03], [-0.075, 0.015]]
     .forEach(([x, y], i) => (i ? prof.lineTo(x, y) : prof.moveTo(x, y)));
-  const railGeo = new THREE.ExtrudeGeometry(prof, { depth: len, steps: len, bevelEnabled: false });
+  const railGeo = new THREE.ExtrudeGeometry(prof, { depth: len, steps: len * 2, bevelEnabled: false });
   const railMat = lambert(COL.rail);
   for (const sx of [-1, 1]) {
     const r = new THREE.Mesh(railGeo, railMat);
@@ -366,7 +386,7 @@ buildSigns();
     const tri = new THREE.Shape();
     tri.moveTo(-ow, 0); tri.lineTo(ow, 0); tri.lineTo(0, rh); tri.lineTo(-ow, 0);
     const roofGeo = new THREE.ExtrudeGeometry(tri, { depth: d + 0.8, steps: Math.ceil(d / 0.5), bevelEnabled: false });
-    part(roofGeo, roof, x, h, z - d / 2 - 0.4);
+    part(fine(roofGeo), roof, x, h, z - d / 2 - 0.4);
     // the side facing the tracks (+x): a door and windows on each floor
     const fx = x + w / 2 + 0.03;
     part(box(0.08, 2.1, 1.0, true), 0x5a3d2b, fx, 1.05, z + (rnd() - 0.5) * (d - 3));
@@ -379,7 +399,7 @@ buildSigns();
       const tx = x + w / 2 + 1.6 + rnd() * 1.4, tz = z + (rnd() - 0.5) * d, th = 2 + rnd() * 1.5;
       part(new THREE.CylinderGeometry(0.15, 0.22, th, 6, Math.ceil(th / 0.5), true), 0x6b4f3a, tx, th / 2, tz);
       const r = 1.6 + rnd() * 1.2;
-      part(new THREE.IcosahedronGeometry(r, 2), rnd() < 0.5 ? 0x4f7d3a : 0x3f6d34, tx, th + r * 0.8, tz);
+      part(fine(new THREE.IcosahedronGeometry(r, 2)), rnd() < 0.5 ? 0x4f7d3a : 0x3f6d34, tx, th + r * 0.8, tz);
     }
   }
   for (let z = 6; z > -760; z -= 20 + rnd() * 8) house(-14 - rnd() * 1.5, z);
@@ -796,6 +816,9 @@ const D_MIN = 1, D_MAX = 1000;
 const dFromSlider = (v) => D_MIN * Math.pow(D_MAX / D_MIN, v / 100);
 const sliderFromD = (d) => 100 * Math.log(d / D_MIN) / Math.log(D_MAX / D_MIN);
 const fmtD = (d) => (d < 9.95 ? d.toFixed(1) : Math.round(d)) + " m";
+const H_MIN = 0.25, H_MAX = 25; // half heights; the slider shows the full height
+const hFromSlider = (v) => H_MIN * Math.pow(H_MAX / H_MIN, v / 100);
+const sliderFromH = (h) => 100 * Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
 
 const chipsEl = $("chips");
 for (const p of PRESETS) {
@@ -875,6 +898,8 @@ function syncPanel() {
   else $("sVal").textContent = "rays are curved";
   $("d").value = sliderFromD(state.D);
   $("dVal").textContent = fmtD(state.D);
+  $("h").value = sliderFromH(state.H);
+  $("hVal").textContent = fmtD(2 * state.H) + " tall";
   updateCaption();
 }
 function sLabel(s) {
@@ -929,6 +954,13 @@ $("d").addEventListener("input", (e) => {
   applyLens(false);
 });
 $("d").addEventListener("change", () => { $("dErr").textContent = ""; });
+// the screen's size alone: a normal camera sees more or less, orthographic sees a bigger or
+// smaller window, and nothing else moves
+$("h").addEventListener("input", (e) => {
+  state.H = hFromSlider(+e.target.value);
+  syncPanel();
+  redrawDiagram();
+});
 $("split").addEventListener("change", (e) => {
   state.split = e.target.checked;
   if (!state.split) { state.y = { ...state.x }; state.active = "x"; applyLens(true); }
@@ -973,7 +1005,7 @@ function drawPanelDiagram() {
   const s = effS(ax);
   const comp = ax === "x" ? 0 : 1;
   drawDiagram(ctx, r.width, r.height, {
-    D: state.D, fov: FOV,
+    D: state.D, h: state.H,
     gy: lutFn(shown, comp),
     gx: state.split ? lutFn(shown, 1 - comp) : null,
     s: !morph && s != null ? s : null,
@@ -1005,7 +1037,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const demo = cv.dataset.demo;
       if (demo === "pinhole") {
-        drawDiagram(ctx, r.width, r.height, { D, fov: FOV, gy: normalizedLens(backPlaneF(0, D), D), s: 0 });
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(0, D), D), s: 0 });
       } else if (demo === "plane") {
         // sweep the back plane 0 → 1.6 → 0 with holds at the named values
         const period = 12, u = (t % period) / period;
@@ -1013,7 +1045,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const seg = u * (keysS.length - 1), i = Math.floor(seg), f = seg - i;
         const ease = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
         const s = keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
-        drawDiagram(ctx, r.width, r.height, { D, fov: FOV, gy: normalizedLens(backPlaneF(s, D), D), s });
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
         const cap = el.querySelector('[data-caption="plane"]');
         const txt = s < 0.02 ? "Back plane size 0: one point, a normal camera."
           : Math.abs(s - 1) < 0.02 ? "Back plane size 1: parallel rays, orthographic."
@@ -1026,7 +1058,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const cur = fns[k], prev = fns[(k + fns.length - 1) % fns.length];
         const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
         const u = Math.min(1, into), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-        drawDiagram(ctx, r.width, r.height, { D, fov: FOV, gy: (z) => ga(z) + (gb(z) - ga(z)) * e, s: null });
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => ga(z) + (gb(z) - ga(z)) * e, s: null });
         const cap = el.querySelector('[data-caption="functions"]');
         const txt = `Divide by ${cur.name}.`;
         if (cap.textContent !== txt) cap.textContent = txt;
@@ -1058,8 +1090,7 @@ function frame(now) {
   last = now;
   update(dt);
   const morphing = stepMorph(now);
-  const hh = state.D * Math.tan(FOV / 2);
-  lensUniforms.lensHalf.value.set(hh * camera.aspect, hh);
+  lensUniforms.lensHalf.value.set(state.H * camera.aspect, state.H);
   camera.updateMatrixWorld();
   updateSky();
   renderer.render(scene, camera);

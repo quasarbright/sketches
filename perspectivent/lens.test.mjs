@@ -154,9 +154,11 @@ test("every lens and every morph frame is centered on the eye", () => {
       const gx = lut[2 * i], gy = lut[2 * i + 1];
       if (z < NEAR || !(gy > 0) || !(gx > 0)) continue; // not seen
       for (const y of [-1.7, -0.2, 0.3, 1.1, 2.5]) { // the board of the 10 m sign is ~1 m above the eye
-        const { sy } = screenPos(0, y, gx, gy, h, h);
-        assert.equal(Math.sign(sy), Math.sign(y), `z=${z} y=${y}`);
-        checked++;
+        for (const H of [0.25, 2, h, 25]) { // every screen size the slider allows
+          const { sy } = screenPos(0, y, gx, gy, H, H);
+          assert.equal(Math.sign(sy), Math.sign(y), `z=${z} y=${y} H=${H}`);
+          checked++;
+        }
       }
     }
   }
