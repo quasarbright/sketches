@@ -414,7 +414,7 @@ scene.add(body);
  * moving around
  * ===================================================================== */
 const EYE = 1.65, RADIUS = 0.3, HEIGHT = 1.8;
-const START = { pos: new THREE.Vector3(0, 0.41, 16), yaw: 0, pitch: -0.12 };
+const START = { pos: new THREE.Vector3(0, 0.41, 16), yaw: 0, pitch: 0 };
 const player = {
   pos: START.pos.clone(), vel: new THREE.Vector3(), onGround: false,
   yaw: START.yaw, pitch: START.pitch,
