@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseExpr, backPlaneF, convergenceDepth, backPlaneText, normalizedLens, compileLens,
-  LUT, lutDepth, sampleLens, PRESETS,
+  LUT, lutDepth, sampleLens, PRESETS, NEAR,
 } from "./lens.mjs";
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -130,4 +130,43 @@ test("linearS recognizes straight lines and recovers the back plane size", () =>
   assert.equal(linearS(parseExpr("1/z"), D), null);
   assert.equal(linearS(parseExpr("z^2"), D), null);
   assert.equal(linearS(parseExpr("log(1+z)"), D), null);
+});
+
+import { screenPos } from "./lens.mjs";
+import { readFileSync } from "node:fs";
+
+// Mike, 2026-11-18: the eye must be in the same place for every lens. Something above eye height
+// in perspective (the 10 m sign's board) must stay above the middle of the screen in every lens
+// and every frame of a morph between lenses, and something below must stay below.
+test("every lens and every morph frame is centered on the eye", () => {
+  const D = 10, h = D * Math.tan(Math.PI / 6);
+  const lenses = PRESETS.map((p) => sampleLens(...[0, 1].map(() => normalizedLens(parseExpr(p.src), D))));
+  lenses.push(sampleLens(normalizedLens(parseExpr("1"), D), normalizedLens(parseExpr("z"), D))); // split
+  lenses.push(sampleLens(normalizedLens(backPlaneF(1.5, D), D), normalizedLens(backPlaneF(1.5, D), D)));
+  const frames = [];
+  for (const a of lenses) for (const b of lenses) for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    frames.push(a.map((v, i) => v + (b[i] - v) * t));
+  }
+  let checked = 0;
+  for (const lut of frames) {
+    for (let i = 0; i < LUT.N; i += 7) {
+      const z = lutDepth(i);
+      const gx = lut[2 * i], gy = lut[2 * i + 1];
+      if (z < NEAR || !(gy > 0) || !(gx > 0)) continue; // not seen
+      for (const y of [-1.7, -0.2, 0.3, 1.1, 2.5]) { // the board of the 10 m sign is ~1 m above the eye
+        const { sy } = screenPos(0, y, gx, gy, h, h);
+        assert.equal(Math.sign(sy), Math.sign(y), `z=${z} y=${y}`);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 100000);
+});
+
+test("the shaders add nothing to y: lens, sky and earth all use the eye-centered mapping", () => {
+  const src = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.match(src, /vec4 p = vec4\(mv\.x \/ lensHalf\.x \* \(w \/ g\.x\), mv\.y \/ lensHalf\.y, /);
+  assert.match(src, /vNdc\.y \* skyHalf\.y \* skyG\.y, -/);
+  assert.match(src, /vNdc\.y \* earthHalf\.y \* earthG\.y, -/);
+  assert.doesNotMatch(src, /lensShift|sensorShift/i);
 });

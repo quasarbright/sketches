@@ -237,3 +237,13 @@ export function linearS(f, D) {
 
 // The view starts just in front of the eye; nothing behind you is ever drawn.
 export const NEAR = 0.05;
+
+/* ---------------- where a point lands on the screen ---------------- */
+
+// The projection the vertex shader does (main.mjs lensProject mirrors this exactly): a point at
+// view-space (x, y), depth z, lands at x / (halfX * gx(z)), y / (halfY * gy(z)) in -1..1 screen
+// units. Nothing is added to y, so every lens is centered on the eye: a point above eye height
+// lands above the middle of the screen in every lens, and one below lands below.
+export function screenPos(x, y, gx, gy, halfX, halfY) {
+  return { sx: x / (halfX * gx), sy: y / (halfY * gy) };
+}

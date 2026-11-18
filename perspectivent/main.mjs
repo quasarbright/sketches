@@ -47,7 +47,6 @@ const FAR = LUT.zMax;
 const lensUniforms = {
   lensLUT: { value: lutTex },
   lensHalf: { value: new THREE.Vector2(1, 1) },
-  lensShift: { value: 0 },
   lensRange: { value: new THREE.Vector4(NEAR, FAR, LUT.a0, LUT.a1) },
   lensC: { value: LUT.C },
 };
@@ -55,7 +54,6 @@ const lensUniforms = {
 const LENS_PARS = /* glsl */`
 uniform sampler2D lensLUT;
 uniform vec2 lensHalf;
-uniform float lensShift;  // how far the camera's sensor is raised to stay above the ground
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 varying float vLensDepth;
@@ -74,7 +72,7 @@ vec4 lensProject(vec4 mv) {
   float w = g.y;
   float zl = 2.0 * (z - lensRange.x) / (lensRange.y - lensRange.x) - 1.0;
   vLensDepth = (z - lensRange.x) / (lensRange.y - lensRange.x);
-  vec4 p = vec4(mv.x / lensHalf.x * (w / g.x), (mv.y - lensShift) / lensHalf.y, zl * w, w);
+  vec4 p = vec4(mv.x / lensHalf.x * (w / g.x), mv.y / lensHalf.y, zl * w, w);
   if (g.x <= 0.0) p.z = 2.0 * abs(w) + 1.0;   // no ray reaches this side-to-side: clip it
   return p;
 }
@@ -410,10 +408,10 @@ addBox(7, 0.5, 7, 34, 11.5, -54, COL.ochre, { collide: true });
 // the color for that direction. A sphere mesh doesn't work: lenses like z² bend its huge
 // triangles into fans with gaps between them.
 const SKY_R = 4500;
+const EARTH_COLOR = 0x5b8a3e; // the grass as it looks lit from above
 const skyUniforms = {
   skyG: { value: new THREE.Vector2(1, 1) },     // the lens at SKY_R, x and y
   skyHalf: { value: new THREE.Vector2(1, 1) },
-  skyShift: { value: 0 },
   skyRot: { value: new THREE.Matrix3() },
   horizon: { value: new THREE.Color(0xdde8f1) },
   mid: { value: new THREE.Color(0xa9c8e6) },
@@ -426,14 +424,13 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
     void main() { vNdc = position.xy; gl_Position = vec4(position.xy, 1.0, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform vec2 skyG, skyHalf;
-    uniform float skyShift;
     uniform mat3 skyRot;
     uniform vec3 horizon, mid, zenith;
     varying vec2 vNdc;
     void main() {
       vec3 c = horizon;
       if (skyG.x > 0.0 && skyG.y > 0.0) { // no ray gets this far when they meet in front
-        vec3 d = skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y + skyShift, -${SKY_R.toFixed(1)});
+        vec3 d = skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
         float e = max(0.0, normalize(d).y); // sine of the elevation
         c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
       }
@@ -443,11 +440,45 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
 }));
 sky.renderOrder = -1;
 scene.add(sky);
+// The earth is solid. Every lens sends its rays out from your eye (a point for a normal camera,
+// a plane the size of the screen for orthographic), always centered on your eye so the eye is in
+// the same place for every lens. Rays that start below the ground are inside the earth, so they
+// see the ground right there and nothing beyond it.
+const earthUniforms = {
+  earthG: { value: new THREE.Vector2(0, 0) },   // the lens at the eye plane, x and y
+  earthHalf: { value: new THREE.Vector2(1, 1) },
+  earthWorld: { value: new THREE.Matrix4() },
+  earthColor: { value: new THREE.Color(EARTH_COLOR) },
+};
+const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: earthUniforms, depthTest: true, depthWrite: true,
+  vertexShader: /* glsl */`
+    varying vec2 vNdc;
+    void main() { vNdc = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform vec2 earthG, earthHalf;
+    uniform mat4 earthWorld;
+    uniform vec3 earthColor;
+    varying vec2 vNdc;
+    void main() {
+      vec4 start = earthWorld * vec4(vNdc.x * earthHalf.x * earthG.x, vNdc.y * earthHalf.y * earthG.y, -${NEAR.toFixed(3)}, 1.0);
+      if (start.y >= 0.0) discard;
+      gl_FragColor = vec4(earthColor, 1.0);
+      #include <colorspace_fragment>
+      gl_FragDepth = 0.0;
+    }`,
+}));
+earth.renderOrder = -1;
+scene.add(earth);
+
 function updateSky() {
   skyUniforms.skyG.value.set(lutFn(shown, 0)(SKY_R), lutFn(shown, 1)(SKY_R));
   skyUniforms.skyHalf.value.copy(lensUniforms.lensHalf.value);
-  skyUniforms.skyShift.value = lensUniforms.lensShift.value;
   skyUniforms.skyRot.value.setFromMatrix4(camera.matrixWorld);
+  const ex = lutFn(shown, 0)(NEAR), ey = lutFn(shown, 1)(NEAR);
+  earthUniforms.earthG.value.set(Number.isFinite(ex) ? ex : 0, Number.isFinite(ey) ? ey : 0);
+  earthUniforms.earthHalf.value.copy(lensUniforms.lensHalf.value);
+  earthUniforms.earthWorld.value.copy(camera.matrixWorld);
 }
 
 for (const o of scene.children) o.frustumCulled = false;
@@ -627,32 +658,10 @@ function update(dt) {
   camera.updateMatrixWorld();
 
   body.position.set(player.pos.x, player.pos.y + HEIGHT / 2, player.pos.z);
-  updateSensorShift();
   // the ground grid follows you in 8 m steps (its lines are drawn in world space)
   ground.position.set(Math.round(player.pos.x / 8) * 8, 0, Math.round(player.pos.z / 8) * 8);
   sun.target.position.copy(player.pos);
   sun.position.copy(player.pos).addScaledVector(SUN_DIR, 100);
-}
-
-// A lens with parallel or converging rays needs a sensor (the back plane) as big as what it sees,
-// centered on your eye. Bigger than your eye height, its bottom would be underground and the rays
-// from there would start inside the earth. A real camera can't do that, so the sensor slides up
-// (a lens shift, as in architectural cameras) until its lowest corner clears the floor under you.
-// A normal camera's sensor is a point, so it never moves.
-const _up = new THREE.Vector3(), _right = new THREE.Vector3();
-function updateSensorShift() {
-  const hh = state.D * Math.tan(FOV / 2);
-  const gy = lutFn(shown, 1)(NEAR), gx = lutFn(shown, 0)(NEAR);
-  let b = 0;
-  if (gy > 0 && gy < 6) { // curved lenses like 1/z have no finite sensor: their rays come in from far away
-    const halfH = hh * gy, halfW = hh * camera.aspect * Math.max(0, Math.min(gx, 6));
-    _up.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    _right.set(1, 0, 0).applyQuaternion(camera.quaternion);
-    const lowest = camera.position.y - Math.abs(_up.y) * halfH - Math.abs(_right.y) * halfW;
-    const clear = 0.01; // the bottom edge of the view sits on the ground, never below it
-    if (lowest < clear && _up.y > 0.05) b = (clear - lowest) / _up.y;
-  }
-  lensUniforms.lensShift.value = b;
 }
 
 /* input */
