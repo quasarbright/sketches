@@ -74,10 +74,11 @@
     control-panel.floating[collapsed] { width: auto; }
     /* nearly opaque: the sky behind it can be almost white, which washes out the gray labels */
     .control-panel.floating { background: color-mix(in srgb, var(--panel) 95%, transparent); }
-    control-panel.floating { width: 300px; max-height: calc(100vh - 100px); overflow-y: auto; }
+    control-panel.floating { width: 300px; max-height: calc(100vh - 32px); overflow-y: auto;
+      scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
     .control-panel > .panel-header .panel-title { font-family: var(--font-display); font-style: italic; font-size: 1.2rem; font-weight: 400; }
-    .pv-diagram { display: block; width: 100%; height: 150px; border-radius: var(--radius-sm); background: #111317; }
-    .pv-caption { margin: 6px 0 12px; font-size: .8rem; line-height: 1.35; color: var(--muted); min-height: calc(3 * 1.35em); }
+    .pv-diagram { display: block; width: 100%; height: 118px; border-radius: var(--radius-sm); background: #111317; }
+    .pv-caption { margin: 6px 0 12px; font-size: .8rem; line-height: 1.35; color: var(--muted); min-height: calc(2 * 1.35em); }
     .pv-caption b { color: var(--text); font-weight: 500; }
 
     .pv-field {
@@ -95,6 +96,8 @@
     .pv-field.pv-bad { border-color: var(--danger); }
     .pv-error { color: var(--danger); font-size: .76rem; margin: 4px 0 0; min-height: 0; }
     .pv-error:empty { display: none; }
+    .pv-note { color: var(--muted); font-size: .76rem; margin: 4px 0 0; }
+    .pv-note:empty { display: none; }
     .pv-axis-row[hidden] { display: none; }
 
     .pv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
@@ -209,6 +212,7 @@
       <input type="range" id="d" min="0" max="100" step="0.1" value="33.3"
         title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing." />
       <p class="pv-error" id="dErr"></p>
+      <p class="pv-note" id="dNote"></p>
     </div>
 
     <div class="control">

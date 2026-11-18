@@ -508,7 +508,8 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
         gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
       gl_FragDepth = 0.0; return; }
-      vec2 p = start.xz - dir.xz * ((start.y - floorY) / dir.y);
+      // painted as one flat plan of the ground and track at y = 0, so ties stay straight bars
+      vec2 p = start.xz - dir.xz * (start.y / dir.y);
       float n = fract(sin(dot(floor(p * 0.5), vec2(12.9898, 78.233))) * 43758.5453);
       c *= 0.94 + 0.08 * n;
       c = mix(c, c * 1.18, pvGrid(p, 1.0, 0.0) * 0.5);
@@ -898,6 +899,10 @@ function syncPanel() {
   else $("sVal").textContent = "rays are curved";
   $("d").value = sliderFromD(state.D);
   $("dVal").textContent = fmtD(state.D);
+  // with parallel rays on both axes the screen's distance can't change the picture; say so, or a
+  // slider that does nothing looks broken
+  const parallel = [ "x", state.split ? "y" : "x" ].every((a) => { const v = effS(a); return v != null && Math.abs(v - 1) < 1e-9; });
+  $("dNote").textContent = parallel ? "Parallel rays: the picture is the same at any distance." : "";
   $("h").value = sliderFromH(state.H);
   $("hVal").textContent = fmtD(2 * state.H) + " tall";
   updateCaption();
