@@ -27,7 +27,8 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null }) {
   const zMax = Math.max(32, 3.2 * D);
   // h is the screen's half-height; the height scale is fixed too (a 60° camera's rays leave
   // through the right corners), widening only when the screen itself would not fit
-  const yMax = Math.max(0.9 * zMax * Math.tan(Math.PI / 6), 1.25 * h, 1.25 * (s ?? 0) * h);
+  // the height scale follows the screen and the back plane, so both always read clearly
+  const yMax = 2.2 * Math.max(h, Math.min((s ?? 0), 3) * h);
   const X = (z) => padL + (z / zMax) * (W - padL - padR);
   const Y = (y) => H / 2 - y * ((H / 2 - 6) / yMax);
 

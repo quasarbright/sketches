@@ -114,9 +114,10 @@ function lensify(mat, extra) {
  * lens state (what the panel edits)
  * ===================================================================== */
 const state = {
-  D: 5.2,         // screen distance (m)
-  H: 3,           // half the screen's height (m): the screen is 6 m tall, about a storey
-                  // and a half (with D = 5.2 a normal camera sees 60° top to bottom)
+  D: 2.6,         // screen distance (m)
+  H: 1.5,         // half the screen's height (m): the screen is 3 m tall, so an orthographic
+                  // plane that size centered on your eye (1.65 m up) stays above the ground.
+                  // With D = 2.6 a normal camera sees 60° top to bottom.
   split: false,
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
@@ -904,13 +905,17 @@ function syncPanel() {
   const parallel = [ "x", state.split ? "y" : "x" ].every((a) => { const v = effS(a); return v != null && Math.abs(v - 1) < 1e-9; });
   $("dNote").textContent = parallel ? "Parallel rays: the picture is the same at any distance." : "";
   $("h").value = sliderFromH(state.H);
-  $("hVal").textContent = fmtD(2 * state.H) + " tall";
+  $("hVal").textContent = fmtD(2 * state.H) + " tall" + (s != null && Math.abs(s - 1) < 1e-9 ? " · 1:1" : "");
+  // tick marks where the two sizes match: 1 on the back plane, the plane's size on the screen
+  $("hTick").value = s != null && s > 0 ? sliderFromH(s * state.H) : -10;
   updateCaption();
 }
+// the back plane's own height, and how it compares with the screen's
 function sLabel(s) {
-  if (Math.abs(s) < 1e-9) return "0 (a point)";
-  if (Math.abs(s - 1) < 1e-9) return "1 (screen size)";
-  return `${+s.toFixed(2)}×`;
+  if (Math.abs(s) < 1e-9) return "a point";
+  const m = fmtD(2 * s * state.H);
+  if (Math.abs(s - 1) < 1e-9) return m + " · 1:1";
+  return `${m} · ${+s.toFixed(2)}×`;
 }
 
 function onField(ax) {
@@ -937,7 +942,7 @@ for (const b of $("axisPick").children) {
 
 $("s").addEventListener("input", (e) => {
   let s = +e.target.value;
-  for (const snap of [0, 1]) if (Math.abs(s - snap) < 0.04) s = snap;
+  for (const snap of [0, 1]) if (Math.abs(s - snap) < 0.06) s = snap;
   setAxis(activeAxis(), { src: "", s });
   clearErrors();
   syncPanel();
@@ -961,10 +966,19 @@ $("d").addEventListener("input", (e) => {
 $("d").addEventListener("change", () => { $("dErr").textContent = ""; });
 // the screen's size alone: a normal camera sees more or less, orthographic sees a bigger or
 // smaller window, and nothing else moves
+// The screen's size alone. The back plane keeps its own size in meters, so its ratio to the screen
+// changes (orthographic stops being orthographic), except that the slider snaps to where the two
+// sizes match.
 $("h").addEventListener("input", (e) => {
-  state.H = hFromSlider(+e.target.value);
+  const v = +e.target.value, H0 = state.H;
+  let H = hFromSlider(v);
+  const s0 = effS(activeAxis());
+  if (s0 != null && s0 > 0 && Math.abs(v - sliderFromH(s0 * H0)) < 2.5) H = s0 * H0;
+  for (const a of ["x", "y"]) if (state[a].s != null) state[a] = { src: "", s: state[a].s * H0 / H };
+  if (!state.split) state.y = { ...state.x };
+  state.H = H;
   syncPanel();
-  redrawDiagram();
+  applyLens(false);
 });
 $("split").addEventListener("change", (e) => {
   state.split = e.target.checked;
