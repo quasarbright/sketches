@@ -214,6 +214,8 @@ export const PRESETS = [
     tip: "Shrinks with the square root of distance: halfway between perspective and orthographic." },
   { id: "square", label: "z²", src: "z^2",
     tip: "Shrinks with distance squared: perspective, exaggerated." },
+  { id: "wobble", label: "wobble", src: "z + log(z)*sin(z)",
+    tip: "Perspective with a wobble: sizes swell and shrink in waves about 6 m apart, and in some stretches farther things look bigger. f is negative closer than 0.37 m, so nothing that near is drawn." },
 ];
 
 /* ---------------- recognizing straight-ray lenses ---------------- */
