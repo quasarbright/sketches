@@ -157,8 +157,14 @@
     .pv-down { bottom: 196px !important; }
     .pv-down[hidden] { display: none; }
     @media (max-width: 700px) {
-      control-panel.floating:not([collapsed]) { max-height: calc(100dvh - 290px); }
-      .pv-diagram { height: 120px; }
+      /* open, the panel reaches down to the button bar (a tap outside closes it), and a shadow at
+         its bottom edge says there's more below until you've scrolled to the end */
+      control-panel.floating:not([collapsed]) { max-height: calc(100dvh - 120px);
+        background:
+          linear-gradient(rgba(27,30,35,0), var(--panel) 70%) center bottom / 100% 44px no-repeat local,
+          linear-gradient(to top, rgba(0,0,0,.6), rgba(0,0,0,0)) center bottom / 100% 26px no-repeat scroll,
+          var(--panel); }
+      .pv-diagram { height: 104px; }
       .pv-bar .btn { min-height: 42px; }
       .pv-title { font-size: 1.6rem; top: 14px; left: 16px; }
       .pv-hint { top: 48px; left: 16px; }
