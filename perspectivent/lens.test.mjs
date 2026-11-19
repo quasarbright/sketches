@@ -240,7 +240,7 @@ test("every preset's back plane clears the rails at the default settings", () =>
     assert.ok(h > 0.3, `${p.id}: screen still usable`);
   }
   assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
-  assert.match(MAIN, /function choosePreset\(p\) \{\s*setAxis\(.*\);\s*fitScreen\(\);/);
+  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*setAxis\(.*\);\s*fitScreen\(\);/);
   assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
 });
 
@@ -255,4 +255,18 @@ test("converging rays cross and keep going: the world past the crossing is upsid
   assert.match(MAIN, /float w = abs\(g\.y\), sy = g\.y < 0\.0 \? -1\.0 : 1\.0;/);
   assert.doesNotMatch(MAIN, /g\.x <= 0\.0/);
   assert.doesNotMatch(MAIN, /Nothing past that is seen/);
+});
+
+// Mike, 2026-11-19: "one where the screen is a lat-long rectangle on the sphere", with sliders for
+// angular width, angular height and radius. Across the picture is longitude and up is latitude, in
+// the world (vertex shader), the sky and the ground painted behind, all with the same mapping.
+test("the sphere lens maps longitude across and latitude up, everywhere it draws", () => {
+  assert.match(MAIN, /float lon = atan\(mv\.x, -mv\.z\), lat = asin\(clamp\(mv\.y \/ r, -1\.0, 1\.0\)\);/);
+  assert.match(MAIN, /return vec4\(lon \/ lensSphere\.y, lat \/ lensSphere\.z,/);
+  assert.match(MAIN, /float lon = vNdc\.x \* skySphere\.y, lat = vNdc\.y \* skySphere\.z;/);
+  assert.match(MAIN, /float lon = vNdc\.x \* earthSphere\.y, lat = vNdc\.y \* earthSphere\.z;/);
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.match(html, /id="aw" min="10" max="360"/, "all the way around");
+  assert.match(html, /id="ah" min="10" max="180"/, "straight down to straight up");
+  assert.match(html, /id="rad"/, "a radius slider");
 });

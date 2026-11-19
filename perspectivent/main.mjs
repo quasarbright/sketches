@@ -55,6 +55,8 @@ const lensUniforms = {
   lensRange: { value: new THREE.Vector4(NEAR, FAR, LUT.a0, LUT.a1) },
   lensC: { value: LUT.C },
   lensOn: { value: 1 },   // 0 while drawing the side view: an ordinary perspective camera
+  // the lat-long sphere lens: x = on, y and z = half its angular width and height (radians)
+  lensSphere: { value: new THREE.Vector3(0, 1, 1) },
 };
 
 const LENS_PARS = /* glsl */`
@@ -63,8 +65,10 @@ uniform vec2 lensHalf;
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 uniform float lensOn;
+uniform vec3 lensSphere;
 varying float vLensDepth;
 varying vec2 vLensSign;
+varying vec4 vLensDir;
 vec2 lensG(float z) {
   float t = (asinh(z / lensC) - lensRange.z) / (lensRange.w - lensRange.z);
   float fi = clamp(t, 0.0, 1.0) * ${(LUT.N - 1).toFixed(1)};
@@ -75,7 +79,19 @@ vec2 lensG(float z) {
   return mix(a, b, fract(fi));
 }
 vec4 lensProject(vec4 mv) {
+  vLensDir = vec4(0.0);
   if (lensOn < 0.5) { vLensDepth = -1.0; vLensSign = vec2(1.0); return projectionMatrix * mv; }
+  if (lensSphere.x > 0.5) {
+    // The screen is a latitude-longitude rectangle on a sphere around the eye: across the picture
+    // is the direction's longitude (left-right angle), up the picture its latitude (elevation).
+    float r = length(mv.xyz);
+    vLensSign = vec2(1.0);
+    if (r < lensRange.x) return vec4(0.0, 0.0, 2.0, 1.0);
+    float lon = atan(mv.x, -mv.z), lat = asin(clamp(mv.y / r, -1.0, 1.0));
+    vLensDir = vec4(mv.xyz, lon);
+    vLensDepth = (r - lensRange.x) / (lensRange.y - lensRange.x);
+    return vec4(lon / lensSphere.y, lat / lensSphere.z, 2.0 * vLensDepth - 1.0, 1.0);
+  }
   float z = -mv.z;
   if (z < lensRange.x) {
     // Behind the eye plane. The card clips a triangle where clip z + w crosses zero, and finds
@@ -120,8 +136,15 @@ function lensify(mat, extra) {
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;")
-      .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;")
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere;")
+      .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;\n"
+        // On the sphere a triangle is drawn straight between its corners, which is only right when
+        // it covers a small patch of longitude. One straddling the seam straight behind you (its
+        // longitudes jump from +180° to -180°) would be drawn across the whole picture, and ones
+        // right below or above you wrap around the pole. Where the drawn direction is off from the
+        // true one by more than about 3°, drop it: the flat ground painted behind shows instead.
+        + "if (lensSphere.x > 0.5 && vLensDepth > -0.5) { vec3 dd = normalize(vLensDir.xyz);"
+        + " if (abs(atan(dd.x, -dd.z) - vLensDir.w) * max(length(dd.xz), 0.05) > 0.06) discard; }")
       .replace("#include <dithering_fragment>",
         "#include <dithering_fragment>\ngl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
     if (extra) extra(sh);
@@ -146,6 +169,9 @@ const state = {
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
   y: { src: "z", s: 0 },
+  // the lat-long sphere lens, which isn't a divide-by-f(z) lens: when on, the screen is a patch of
+  // a sphere around the eye, aw° wide and ah° tall, R meters out
+  sphere: false, aw: 160, ah: 90, R: 3,
 };
 // what's currently on the GPU, possibly mid-morph between two lenses
 const shown = new Float32Array(LUT.N * 2);
@@ -529,6 +555,7 @@ const skyUniforms = {
   skyG: { value: new THREE.Vector2(1, 1) },     // the lens at SKY_R, x and y
   skyHalf: { value: new THREE.Vector2(1, 1) },
   skyRot: { value: new THREE.Matrix3() },
+  skySphere: { value: new THREE.Vector3(0, 1, 1) }, // the lat-long sphere lens (see lensSphere)
   horizon: { value: new THREE.Color(0xdde8f1) },
   mid: { value: new THREE.Color(0xa9c8e6) },
   zenith: { value: new THREE.Color(0x5f97cf) },
@@ -541,12 +568,16 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
   fragmentShader: /* glsl */`
     uniform vec2 skyG, skyHalf;
     uniform mat3 skyRot;
+    uniform vec3 skySphere;
     uniform vec3 horizon, mid, zenith;
     varying vec2 vNdc;
     void main() {
       vec3 c = horizon;
-      if (abs(skyG.x) > 1e-6 && abs(skyG.y) > 1e-6) { // (crossed rays come in with g < 0: flipped)
-        vec3 d = skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
+      bool sphere = skySphere.x > 0.5;
+      if (sphere || (abs(skyG.x) > 1e-6 && abs(skyG.y) > 1e-6)) { // (crossed rays come in with g < 0: flipped)
+        float lon = vNdc.x * skySphere.y, lat = vNdc.y * skySphere.z;
+        vec3 d = skyRot * (sphere ? vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon))
+          : vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)}));
         float e = max(0.0, normalize(d).y); // sine of the elevation
         c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
       }
@@ -567,6 +598,7 @@ const earthUniforms = {
   earthDG: { value: new THREE.Vector2(0, 0) },  // and how fast it changes with depth there
   earthHalf: { value: new THREE.Vector2(1, 1) },
   earthWorld: { value: new THREE.Matrix4() },
+  earthSphere: { value: new THREE.Vector3(0, 1, 1) }, // the lat-long sphere lens (see lensSphere)
   earthColor: { value: new THREE.Color(EARTH_COLOR) },
   ballastColor: { value: new THREE.Color(COL.ballast) },
   tieColor: { value: new THREE.Color(COL.tie) },
@@ -580,6 +612,7 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
   fragmentShader: /* glsl */`
     uniform vec2 earthG, earthDG, earthHalf;
     uniform mat4 earthWorld;
+    uniform vec3 earthSphere;
     uniform vec3 earthColor, ballastColor, tieColor, railColor;
     varying vec2 vNdc;
     float pvGrid(vec2 p, float spacing, float width) {
@@ -591,6 +624,28 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
       return line * fade;
     }
     void main() {
+      // The sphere lens's rays all start at your eye, above the ground. There the earth is only a
+      // backdrop: the ground and track painted flat, behind everything, filling the spots right
+      // below you and straight behind you that the sphere can't draw as triangles.
+      bool sphere = earthSphere.x > 0.5;
+      if (sphere) {
+        float lon = vNdc.x * earthSphere.y, lat = vNdc.y * earthSphere.z;
+        vec3 sd = mat3(earthWorld) * vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
+        if (sd.y > -1e-4) discard;
+        vec4 eye = earthWorld * vec4(0.0, 0.0, 0.0, 1.0);
+        vec2 q = eye.xz - sd.xz * (eye.y / sd.y);
+        vec3 k = earthColor;
+        if (abs(q.x) < 1.7 && q.y < ${TRACK_START.toFixed(1)} && q.y > ${(TRACK_START - TRACK_LEN).toFixed(1)}) {
+          k = ballastColor;
+          float tz = mod(${(TRACK_START - 0.3).toFixed(2)} - q.y + 0.12, 0.65);
+          if (abs(q.x) < 1.3 && tz < 0.24) k = tieColor;
+          if (abs(abs(q.x) - ${(GAUGE / 2).toFixed(4)}) < 0.04) k = railColor;
+        }
+        gl_FragColor = vec4(k, 1.0);
+        #include <colorspace_fragment>
+        gl_FragDepth = 1.0;
+        return;
+      }
       vec4 start = earthWorld * vec4(vNdc.x * earthHalf.x * earthG.x, vNdc.y * earthHalf.y * earthG.y, -${NEAR.toFixed(3)}, 1.0);
       // the track bed is solid too (the same heights you walk on), and a hair above the surface
       // counts, so no sliver shows where the real surface is clipped
@@ -891,8 +946,10 @@ const chipsEl = $("chips");
 for (const p of PRESETS) {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = p.id; b.title = p.tip;
-  // the formula goes on the chip unless the label already is the formula
-  b.innerHTML = p.label === p.src || /[√²]/.test(p.label) ? p.label : `${p.label}<span class="pv-chip-f">${p.src}</span>`;
+  // names only, so the chips stay a few rows; the formula is in the field above once picked, and
+  // in the tooltip
+  b.textContent = p.label;
+  b.title = `f(z) = ${p.src}. ${p.tip}`;
   b.addEventListener("click", () => choosePreset(p));
   chipsEl.appendChild(b);
 }
@@ -901,13 +958,22 @@ for (const p of PRESETS) {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = "mixed";
   b.title = "Orthographic side to side, perspective up and down: the rails stay parallel while the poles still shrink.";
-  b.textContent = "orthographic x, perspective y";
+  b.textContent = "ortho x, persp y";
   b.addEventListener("click", () => {
+    state.sphere = false;
     if (!state.split) { state.split = true; $("split").checked = true; }
     state.x = { src: "1", s: 1 }; state.y = { src: "z", s: 0 };
     fitScreen();
     syncPanel(); applyLens(true);
   });
+  chipsEl.appendChild(b);
+}
+{
+  const b = document.createElement("button");
+  b.className = "pv-chip"; b.dataset.id = "sphere";
+  b.title = "The screen is a latitude-longitude rectangle on a sphere around your eye: across is the angle left and right, up is the angle up and down. Make it 360° wide to see all the way around.";
+  b.textContent = "sphere";
+  b.addEventListener("click", () => { state.sphere = true; syncPanel(); });
   chipsEl.appendChild(b);
 }
 
@@ -924,6 +990,7 @@ function fitScreen() {
   state.H = H;
 }
 function choosePreset(p) {
+  state.sphere = false;
   setAxis(activeAxis(), { src: p.src, s: p.s ?? null });
   fitScreen();
   clearErrors();
@@ -960,9 +1027,16 @@ function syncPanel() {
   $("fxLabel").textContent = state.split ? "x: f(z) =" : "f(z) =";
   $("fxField").classList.toggle("pv-active", state.split && ax === "x");
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
+  for (const id of ["fRow", "sRow", "dRow", "hRow", "splitRow"]) $(id).hidden = state.sphere;
+  $("sphereRows").hidden = !state.sphere;
+  $("aw").value = state.aw; $("awVal").textContent = state.aw + "°";
+  $("ah").value = state.ah; $("ahVal").textContent = state.ah + "°";
+  $("rad").value = sliderFromR(state.R); $("radVal").textContent = fmtD(state.R);
   const mixedOn = state.split && sameLens("x", { src: "1", s: 1 }) && sameLens("y", { src: "z", s: 0 });
   for (const b of chipsEl.children) {
     const id = b.dataset.id;
+    if (id === "sphere") { b.classList.toggle("is-on", state.sphere); continue; }
+    if (state.sphere) { b.classList.remove("is-on"); continue; }
     if (id === "mixed") { b.classList.toggle("is-on", mixedOn); continue; }
     const p = PRESETS.find((q) => q.id === id);
     b.classList.toggle("is-on", !mixedOn && sameLens(ax, { src: p.src, s: p.s ?? null }));
@@ -1068,6 +1142,13 @@ $("h").addEventListener("input", (e) => {
   syncPanel();
   applyLens(false);
 });
+// the sphere lens: its angular size, and how far out the curved screen is
+const R_MIN = 0.5, R_MAX = 30;
+const rFromSlider = (v) => R_MIN * Math.pow(R_MAX / R_MIN, v / 100);
+function sliderFromR(r) { return 100 * Math.log(r / R_MIN) / Math.log(R_MAX / R_MIN); }
+$("aw").addEventListener("input", (e) => { state.aw = +e.target.value; syncPanel(); });
+$("ah").addEventListener("input", (e) => { state.ah = +e.target.value; syncPanel(); });
+$("rad").addEventListener("input", (e) => { state.R = rFromSlider(+e.target.value); syncPanel(); });
 $("split").addEventListener("change", (e) => {
   state.split = e.target.checked;
   if (!state.split) { state.y = { ...state.x }; state.active = "x"; applyLens(true); }
@@ -1092,6 +1173,7 @@ function updateCaption() {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
+  if (state.sphere) c = `The screen is a <b>${state.aw}° × ${state.ah}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -1196,7 +1278,46 @@ const rayPos = new Float32Array(N_RAYS * RAY_STEPS * 2 * 3);
 const rayGeo = new LineSegmentsGeometry();
 const rays = new LineSegments2(rayGeo, fat(0xffd23f, 2));
 rays.frustumCulled = false;
-helpers.add(planeFill, planeEdge, screenFill, screenEdge, figBody, figHead, eyeDot, rays);
+// the sphere lens's screen: a curved lat-long patch, rebuilt as its angles change
+const SPH_U = 48, SPH_V = 24;
+const sphereGeo = new THREE.BufferGeometry();
+sphereGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((SPH_U + 1) * (SPH_V + 1) * 3), 3));
+{
+  const idx = [];
+  for (let j = 0; j < SPH_V; j++) for (let i = 0; i < SPH_U; i++) {
+    const a = j * (SPH_U + 1) + i, b = a + 1, c = a + SPH_U + 1, d = c + 1;
+    idx.push(a, b, d, a, d, c);
+  }
+  sphereGeo.setIndex(idx);
+}
+const sphereFill = new THREE.Mesh(sphereGeo, flat(0xe8553d, 0.3));
+sphereFill.frustumCulled = false;
+const sphereEdgeGeo = new LineSegmentsGeometry();
+const sphereEdge = new LineSegments2(sphereEdgeGeo, fat(0xff5a3c, 3));
+sphereEdge.frustumCulled = false;
+const sphereDir = (lon, lat, out = []) => {
+  out[0] = Math.cos(lat) * Math.sin(lon); out[1] = Math.sin(lat); out[2] = -Math.cos(lat) * Math.cos(lon);
+  return out;
+};
+let sphereKey = "";
+function updateSpherePatch() {
+  const key = `${state.aw},${state.ah},${state.R}`;
+  if (key === sphereKey) return;
+  sphereKey = key;
+  const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2), d = [];
+  const at = (u, v) => sphereDir(u * hl, v * hv, d).map((c) => c * state.R);
+  const pos = sphereGeo.attributes.position;
+  for (let j = 0; j <= SPH_V; j++) for (let i = 0; i <= SPH_U; i++) {
+    pos.setXYZ(j * (SPH_U + 1) + i, ...at(-1 + 2 * i / SPH_U, -1 + 2 * j / SPH_V));
+  }
+  pos.needsUpdate = true;
+  const edge = [];
+  const run = (n, f) => { for (let i = 0; i < n; i++) edge.push(...f(i / n), ...f((i + 1) / n)); };
+  run(SPH_U, (t) => at(-1 + 2 * t, -1)); run(SPH_U, (t) => at(-1 + 2 * t, 1));
+  run(SPH_V, (t) => at(-1, -1 + 2 * t)); run(SPH_V, (t) => at(1, -1 + 2 * t));
+  sphereEdgeGeo.setPositions(edge);
+}
+helpers.add(planeFill, planeEdge, screenFill, screenEdge, sphereFill, sphereEdge, figBody, figHead, eyeDot, rays);
 helpers.traverse((o) => o.layers.set(INSET));
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -1219,6 +1340,9 @@ function updateInset(aspect) {
   }
   eyeDot.position.copy(eye);
   figHead.position.copy(eye);
+  for (const o of [screenFill, screenEdge]) o.visible = !state.sphere;
+  for (const o of [sphereFill, sphereEdge]) { o.visible = state.sphere; o.position.copy(eye); o.quaternion.copy(q); }
+  if (state.sphere) return updateInsetSphere(aspect, eye, q, fwd);
   figBody.position.set(player.pos.x, player.pos.y + 0.72, player.pos.z);
   // the rays through the screen's corners, edge middles and center, as far as they go
   // long enough to show converging rays crossing and carrying on
@@ -1257,6 +1381,31 @@ function updateInset(aspect) {
   insetCam.updateProjectionMatrix();
   insetCam.updateMatrixWorld();
 }
+// the sphere lens: straight rays out from the eye through the patch's corners, edge middles and
+// center, and the camera far enough back to see the whole patch
+function updateInsetSphere(aspect, eye, q, fwd) {
+  updateSpherePatch();
+  for (const o of [planeFill, planeEdge]) o.visible = false;
+  const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2);
+  const len = Math.max(14, 2.5 * state.R), d = [];
+  let k = 0;
+  for (const ux of RAY_U) for (const uy of RAY_U) {
+    sphereDir(ux * hl, uy * hv, d);
+    const tip = _v.set(d[0] * len, d[1] * len, d[2] * len).applyMatrix4(camera.matrixWorld).toArray();
+    for (let i = 0; i < RAY_STEPS; i++) { // one real segment, the rest folded into the eye dot
+      rayPos.set(i === 0 ? eye.toArray() : tip, k); rayPos.set(tip, k + 3); k += 6;
+    }
+  }
+  rayGeo.setPositions(rayPos);
+  const dist = 3.2 + 2.6 * state.R;
+  _q.setFromEuler(new THREE.Euler(0, player.yaw, 0, "YXZ"));
+  insetCam.position.copy(eye).add(_v.set(0.95, 0.55, 0.55).multiplyScalar(dist).applyQuaternion(_q));
+  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, state.R * 0.3));
+  insetFog.near = dist * 0.8; insetFog.far = dist * 3;
+  insetCam.aspect = aspect;
+  insetCam.updateProjectionMatrix();
+  insetCam.updateMatrixWorld();
+}
 const panelEl = document.querySelector("control-panel");
 const dctx = diag.getContext("2d");
 const _size = new THREE.Vector2();
@@ -1288,7 +1437,8 @@ function renderInset() {
     dctx.fillStyle = color; dctx.fillText(txt, x - tw / 2, y);
   };
   const top = (o, sy) => _w.set(0, 0.5 * sy, 0).applyQuaternion(o.quaternion).multiplyScalar(o.scale.y).add(o.position);
-  tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
+  if (state.sphere) tag("screen", _w.fromArray(sphereDir(0, THREE.MathUtils.degToRad(state.ah / 2))).multiplyScalar(state.R).applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
+  else tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
   tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
   insetFog.near = noFog.near; insetFog.far = noFog.far;
   lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
@@ -1324,9 +1474,12 @@ function frame(now) {
   update(dt);
   const morphing = stepMorph(now);
   lensUniforms.lensHalf.value.set(state.H * camera.aspect, state.H);
+  lensUniforms.lensSphere.value.set(state.sphere ? 1 : 0, THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
+  skyUniforms.skySphere.value.copy(lensUniforms.lensSphere.value);
   camera.updateMatrixWorld();
   updateSky();
   renderInset();
+  earthUniforms.earthSphere.value.copy(lensUniforms.lensSphere.value);
   renderer.shadowMap.needsUpdate = true; // once a frame, for the main view; the side view reuses it
   renderer.render(scene, camera);
   if (!morphing && morph === null && wasMorphing) syncPanel();

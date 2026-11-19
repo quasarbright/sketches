@@ -77,7 +77,7 @@
     control-panel.floating { width: 300px; max-height: calc(100vh - 32px); overflow-y: auto;
       scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
     .control-panel > .panel-header .panel-title { font-family: var(--font-display); font-style: italic; font-size: 1.2rem; font-weight: 400; }
-    .pv-diagram { display: block; width: 100%; height: 130px; border-radius: var(--radius-sm); background: #111317; }
+    .pv-diagram { display: block; width: 100%; height: 118px; border-radius: var(--radius-sm); background: #111317; }
     .pv-caption { margin: 6px 0 12px; font-size: .8rem; line-height: 1.35; color: var(--muted); min-height: calc(2 * 1.35em); }
     .pv-caption b { color: var(--text); font-weight: 500; }
 
@@ -98,11 +98,12 @@
     .pv-error:empty { display: none; }
     .pv-note { color: var(--muted); font-size: .76rem; margin: 4px 0 0; }
     .pv-note:empty { display: none; }
-    .pv-axis-row[hidden] { display: none; }
+    .pv-axis-row[hidden], .control[hidden], .check[hidden] { display: none; }
+    #sphereRows:not([hidden]) { display: flex; flex-direction: column; gap: 16px; }
 
-    .pv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+    .pv-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 12px; }
     .pv-chip {
-      font-family: var(--font-ui); font-size: .8rem; padding: 5px 10px; border-radius: 999px;
+      font-family: var(--font-ui); font-size: .78rem; padding: 4px 9px; border-radius: 999px;
       border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer;
     }
     .pv-chip:hover { border-color: var(--muted); }
@@ -114,10 +115,10 @@
     .pv-na input[type=range] { opacity: .35; }
     .pv-na .value { color: var(--faint); }
     .control-head .name, .control-head .value { white-space: nowrap; }
-    .pv-axis-pick { display: flex; gap: 0; margin: 2px 0 8px; }
+    .pv-axis-pick { display: flex; gap: 0; align-self: center; }
     .pv-axis-pick[hidden] { display: none; }
     .pv-axis-pick button {
-      flex: 1; font-family: var(--font-ui); font-size: .78rem; padding: 5px 8px; cursor: pointer;
+      font-family: var(--font-ui); font-size: .74rem; padding: 3px 8px; cursor: pointer; white-space: nowrap;
       background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
     }
     .pv-axis-pick button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
@@ -186,11 +187,11 @@
       title="Side view of the camera. Each line is the path a ray of light takes from the eye, through the red screen, into the world. Everything on one line lands on the same spot of the picture."></canvas>
     <p class="pv-caption" id="caption"></p>
 
-    <div class="control">
-      <div class="pv-axis-pick" id="axisPick" hidden title="Which direction the presets and the back plane slider change">
-        <button data-axis="x">x: side to side</button><button data-axis="y">y: up and down</button>
-      </div>
-      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their sideways offset divided by f of their distance z (in meters). Bigger f means smaller on screen.">divide by</span></div>
+    <div class="control" id="fRow">
+      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their sideways offset divided by f of their distance z (in meters). Bigger f means smaller on screen.">divide by</span>
+        <div class="pv-axis-pick" id="axisPick" hidden title="Which direction the presets and the back plane slider change">
+          <button data-axis="x">x: across</button><button data-axis="y">y: up and down</button>
+        </div></div>
       <label class="pv-field" id="fxField"><span class="pv-fz" id="fxLabel">f(z) =</span>
         <input id="fx" spellcheck="false" autocomplete="off" value="z"
           title="Type any function of distance z: try 1/z, log(1+z), z^2, sin(z)+2" /></label>
@@ -205,6 +206,34 @@
 
     <div class="pv-chips" id="chips"></div>
 
+    <div id="sphereRows" hidden>
+      <div class="control">
+        <div class="control-head">
+          <span class="name" title="How far around the screen reaches, left to right. 360° is all the way around you.">angular width</span>
+          <span class="value" id="awVal">160°</span>
+        </div>
+        <input type="range" id="aw" min="10" max="360" step="1" value="160"
+          title="How far around the screen reaches, left to right. 360° is all the way around you." />
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <span class="name" title="How far the screen reaches up and down. 180° is from straight down to straight up.">angular height</span>
+          <span class="value" id="ahVal">90°</span>
+        </div>
+        <input type="range" id="ah" min="10" max="180" step="1" value="90"
+          title="How far the screen reaches up and down. 180° is from straight down to straight up." />
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <span class="name" title="How far the curved screen is from your eye.">sphere radius</span>
+          <span class="value" id="radVal">3.0 m</span>
+        </div>
+        <input type="range" id="rad" min="0" max="100" step="0.1" value="40"
+          title="How far the curved screen is from your eye." />
+        <p class="pv-note">Every ray starts at your eye, so the radius moves the screen in the side view but doesn't change the picture.</p>
+      </div>
+    </div>
+
     <div class="control" id="sRow">
       <div class="control-head">
         <span class="name" title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">back plane height</span>
@@ -216,7 +245,7 @@
       <p class="pv-note" id="sNote"></p>
     </div>
 
-    <div class="control">
+    <div class="control" id="dRow">
       <div class="control-head">
         <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing.">screen distance</span>
         <span class="value" id="dVal">2.4 m</span>
@@ -227,7 +256,7 @@
       <p class="pv-note" id="dNote"></p>
     </div>
 
-    <div class="control">
+    <div class="control" id="hRow">
       <div class="control-head">
         <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen height</span>
         <span class="value" id="hVal">2.8 m tall</span>
@@ -238,7 +267,7 @@
       <p class="pv-note" id="hNote">The tallest screen that stays above the rails at your feet.</p>
     </div>
 
-    <label class="check" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">
+    <label class="check" id="splitRow" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">
       <input type="checkbox" id="split" /> separate lens for x and y</label>
   </control-panel>
 
