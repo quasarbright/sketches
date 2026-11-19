@@ -218,8 +218,8 @@ export const PRESETS = [
     tip: "Shrinks with the square root of distance: halfway between perspective and orthographic." },
   { id: "square", label: "z²", src: "z^2",
     tip: "Shrinks with distance squared: perspective, exaggerated." },
-  { id: "exp", label: "exp", src: "exp(z)",
-    tip: "Shrinks exponentially with distance: a few meters past the screen, everything has shrunk to a dot." },
+  { id: "exp", label: "1.1ᶻ", src: "1.1^z",
+    tip: "Exponential: every meter farther away divides by another 1.1, so things shrink slowly up close and to a dot a few hundred meters out." },
   { id: "wobble", label: "wobble", src: "z + log(z)*sin(z)",
     tip: "Perspective with a wobble: sizes swell and shrink in waves about 6 m apart, and in some stretches farther things look bigger. f is negative closer than 0.37 m, so nothing that near is drawn." },
 ];
