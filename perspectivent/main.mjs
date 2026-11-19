@@ -186,7 +186,7 @@ const state = {
   // sphereWorld: the latitude and longitude lines stay fixed to the world and looking around moves
   // the patch's center over them, instead of the whole patch turning with you
   sphere: false, aw: 160, ah: 90, ahFit: true, sphereWorld: false,
-  poleStop: "rows", // world grid near a pole: "rows" past it stay at the pole, or "center" stops short
+  poleStop: "center", // world grid near a pole: the center stops so the patch's edge is at the pole (Mike's pick), or "rows" past it stay at the pole
 };
 // what's currently on the GPU, possibly mid-morph between two lenses
 const shown = new Float32Array(LUT.N * 2);
@@ -607,6 +607,7 @@ const skyUniforms = {
   skyG: { value: new THREE.Vector2(1, 1) },     // the lens at SKY_R, x and y
   skyHalf: { value: new THREE.Vector2(1, 1) },
   skyRot: { value: new THREE.Matrix3() },
+  skyEye: { value: new THREE.Vector3() },       // where you are, so the clouds pass overhead as you move
   skySphere: { value: new THREE.Vector3(0, 1, 1) }, // the lat-long sphere lens (see lensSphere)
   skySphereC: { value: new THREE.Vector3(0, 0, 0) },
   horizon: { value: new THREE.Color(0xdde8f1) },
@@ -631,7 +632,13 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
   fragmentShader: /* glsl */`
     uniform vec2 skyG, skyHalf;
     uniform mat3 skyRot;
-    uniform vec3 skySphere, skySphereC;
+    uniform vec3 skySphere, skySphereC, skyEye;
+    float vhash(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 q) {
+      vec2 i = floor(q), f = fract(q);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(vhash(i), vhash(i + vec2(1, 0)), f.x), mix(vhash(i + vec2(0, 1)), vhash(i + vec2(1, 1)), f.x), f.y);
+    }
     uniform vec3 horizon, mid, zenith;
     ${SPHERE_PIX}
     varying vec2 vNdc;
@@ -643,6 +650,15 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
           : skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
         float e = max(0.0, normalize(d).y); // sine of the elevation
         c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
+        // Clouds: one flat layer 600 m up, three octaves of value noise where each ray meets it.
+        // Painted in the sky pass (one cheap pass, no geometry), faded out toward the horizon.
+        if (e > 0.02) {
+          vec3 nd = normalize(d);
+          vec2 p = (skyEye.xz + nd.xz * ((600.0 - skyEye.y) / nd.y)) / 900.0;
+          float n = 0.55 * vnoise(p) + 0.3 * vnoise(p * 2.3 + 7.1) + 0.15 * vnoise(p * 5.1 + 3.7);
+          float a = smoothstep(0.5, 0.72, n) * smoothstep(0.02, 0.22, e);
+          c = mix(c, vec3(0.97, 0.98, 1.0), a * 0.9);
+        }
       }
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
@@ -752,6 +768,7 @@ function updateSky() {
   skyUniforms.skyG.value.set(lutFn(shown, 0)(SKY_R), lutFn(shown, 1)(SKY_R));
   skyUniforms.skyHalf.value.copy(lensUniforms.lensHalf.value);
   skyUniforms.skyRot.value.setFromMatrix4(camera.matrixWorld);
+  skyUniforms.skyEye.value.copy(camera.position);
   const ex = lutFn(shown, 0)(NEAR), ey = lutFn(shown, 1)(NEAR);
   earthUniforms.earthG.value.set(Number.isFinite(ex) ? ex : 0, Number.isFinite(ey) ? ey : 0);
   const dx = (lutFn(shown, 0)(2 * NEAR) - ex) / NEAR, dy = (lutFn(shown, 1)(2 * NEAR) - ey) / NEAR;
