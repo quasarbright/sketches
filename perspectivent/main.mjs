@@ -697,13 +697,18 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
         vec3 sd = spherePix(vNdc, earthSphere, earthSphereC, mat3(earthWorld));
         if (sd.y > -1e-4) discard;
         vec4 eye = earthWorld * vec4(0.0, 0.0, 0.0, 1.0);
-        vec2 q = eye.xz - sd.xz * (eye.y / sd.y);
+        // at the heights of the tie tops, then the bed, then the grass, so where it meets the real
+        // track the two line up
+        vec2 q = eye.xz - sd.xz * ((eye.y - 0.41) / sd.y);
+        float tz = mod(${(TRACK_START - 0.3).toFixed(2)} - q.y + 0.12, 0.65);
+        bool along = q.y < ${TRACK_START.toFixed(1)} && q.y > ${(TRACK_START - TRACK_LEN).toFixed(1)};
         vec3 k = earthColor;
-        if (abs(q.x) < 1.7 && q.y < ${TRACK_START.toFixed(1)} && q.y > ${(TRACK_START - TRACK_LEN).toFixed(1)}) {
-          k = ballastColor;
-          float tz = mod(${(TRACK_START - 0.3).toFixed(2)} - q.y + 0.12, 0.65);
-          if (abs(q.x) < 1.3 && tz < 0.24) k = tieColor;
-          if (abs(abs(q.x) - ${(GAUGE / 2).toFixed(4)}) < 0.04) k = railColor;
+        if (along && abs(q.x) < 1.3 && tz < 0.24) k = tieColor;
+        else {
+          q = eye.xz - sd.xz * ((eye.y - 0.25) / sd.y);
+          along = q.y < ${TRACK_START.toFixed(1)} && q.y > ${(TRACK_START - TRACK_LEN).toFixed(1)};
+          if (along && abs(q.x) < 1.7) k = ballastColor;
+          else q = eye.xz - sd.xz * (eye.y / sd.y);
         }
         gl_FragColor = vec4(k, 1.0);
         #include <colorspace_fragment>
@@ -1531,12 +1536,21 @@ function renderInset() {
   dctx.drawImage(renderer.domElement, 0, renderer.domElement.height - ch, cw, ch, 0, 0, cw, ch);
   // labels, on plates like the rest of the page's text over the scene
   dctx.font = `600 ${12 * pr}px 'JetBrains Mono', monospace`; dctx.textBaseline = "middle";
+  // labels already placed: a new one that would overlap one moves clear of it (above, or below
+  // when there's no room above)
+  const placed = [];
   const tag = (txt, p, color, dy) => {
     _v.copy(p).project(insetCam);
     if (_v.z > 1 || Math.abs(_v.x) > 1 || Math.abs(_v.y) > 1) return;
     const x = (_v.x * 0.5 + 0.5) * cw;
-    const y = Math.min(ch - 9 * pr, Math.max(9 * pr, (-_v.y * 0.5 + 0.5) * ch + dy * pr));
+    let y = Math.min(ch - 9 * pr, Math.max(9 * pr, (-_v.y * 0.5 + 0.5) * ch + dy * pr));
     const tw = dctx.measureText(txt).width;
+    for (const o of placed) {
+      if (Math.abs(x - o.x) < (tw + o.tw) / 2 + 8 * pr && Math.abs(y - o.y) < 18 * pr) {
+        y = o.y - 18 * pr >= 9 * pr ? o.y - 18 * pr : o.y + 18 * pr;
+      }
+    }
+    placed.push({ x, y, tw });
     dctx.fillStyle = "rgba(17,19,23,0.88)"; dctx.fillRect(x - tw / 2 - 4 * pr, y - 8 * pr, tw + 8 * pr, 16 * pr);
     dctx.fillStyle = color; dctx.fillText(txt, x - tw / 2, y);
   };
