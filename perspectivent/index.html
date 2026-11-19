@@ -201,18 +201,19 @@
 
     <div class="control" id="sRow">
       <div class="control-head">
-        <span class="name" title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">back plane size</span>
+        <span class="name" title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">back plane height</span>
         <span class="value" id="sVal">a point</span>
       </div>
       <datalist id="sTicks"><option value="1"></option></datalist>
       <input type="range" id="s" min="0" max="3" step="0.005" value="0" list="sTicks"
         title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead." />
+      <p class="pv-note" id="sNote"></p>
     </div>
 
     <div class="control">
       <div class="control-head">
         <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing.">screen distance</span>
-        <span class="value" id="dVal">3.6 m</span>
+        <span class="value" id="dVal">2.4 m</span>
       </div>
       <input type="range" id="d" min="0" max="100" step="0.1" value="33.3"
         title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing." />
@@ -222,12 +223,13 @@
 
     <div class="control">
       <div class="control-head">
-        <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen size</span>
-        <span class="value" id="hVal">4.1 m · to ground</span>
+        <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen height</span>
+        <span class="value" id="hVal">2.8 m tall</span>
       </div>
       <datalist id="hTicks"><option id="hTick" value="-10"></option><option id="hGroundTick" value="-10"></option></datalist>
-      <input type="range" id="h" min="0" max="100" step="0.1" value="54" list="hTicks"
+      <input type="range" id="h" min="0" max="100" step="0.1" value="37.4" list="hTicks"
         title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall." />
+      <p class="pv-note" id="hNote">The tallest screen that stays above the rails at your feet.</p>
     </div>
 
     <label class="check" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">

@@ -19,7 +19,7 @@ export function lutFn(arr, comp) {
   };
 }
 
-export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null }) {
+export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground = null }) {
   ctx.clearRect(0, 0, W, H);
   const padL = 18, padR = 10;
   // a fixed scale for screens up to 10 m away, so moving the screen visibly moves it; past that
@@ -31,6 +31,14 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null }) {
   const yMax = 2.2 * Math.max(h, Math.min((s ?? 0), 3) * h);
   const X = (z) => padL + (z / zMax) * (W - padL - padR);
   const Y = (y) => H / 2 - y * ((H / 2 - 6) / yMax);
+
+  // the ground under your feet (when looking level), so you can see where the eye and screen sit
+  if (ground != null && Y(-ground) < H) {
+    ctx.fillStyle = "rgba(95,138,67,0.22)";
+    ctx.fillRect(0, Y(-ground), W, H - Y(-ground));
+    ctx.strokeStyle = "rgba(120,170,90,0.8)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, Y(-ground)); ctx.lineTo(W, Y(-ground)); ctx.stroke();
+  }
 
   // axis
   ctx.strokeStyle = COL.axis; ctx.lineWidth = 1;
@@ -96,4 +104,5 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null }) {
   };
   label("screen", X(D), Math.min(H - 8, Y(-h) + 11), "center", COL.screen);
   label("eye", X(0) - 2, 9, "left", COL.plane);
+  if (ground != null && Y(-ground) + 8 < H) label("ground", X(zMax) - 2, Y(-ground) + 9, "right", "rgba(150,195,115,1)");
 }

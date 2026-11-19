@@ -172,3 +172,36 @@ test("the shaders add nothing to y: lens, sky and earth all use the eye-centered
   assert.match(src, /vNdc\.y \* earthHalf\.y \* earthG\.y, -/);
   assert.doesNotMatch(src, /lensShift|sensorShift/i);
 });
+
+// Mike, three times: orthographic must not look into the ground. The orthographic window is the
+// screen itself, centered on the eye, so its bottom edge must be above the ties you stand on (the
+// track bed at the start) and the rails on them, not merely above the grass.
+const MAIN = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+test("the default screen and back plane stay above the ground and the rails", () => {
+  const H = +MAIN.match(/^\s*H: ([\d.]+),/m)[1];
+  const EYE = +MAIN.match(/const EYE = ([\d.]+)/)[1];
+  const RAIL_H = +MAIN.match(/const RAIL_H = ([\d.]+)/)[1];
+  // looking level is the lowest the plane's edge gets; tilting it raises its bottom edge
+  assert.ok(EYE - H >= RAIL_H + 0.05, `bottom edge ${(EYE - H).toFixed(2)} m above your feet, rails ${RAIL_H} m`);
+  assert.ok(H >= 1, "and still big enough to see through");
+});
+
+// Mike, 2026-11-19: "I can literally see the character shadow like third person in first person
+// ortho camera." You are only an eye: nothing follows you around except the camera, the sun's
+// shadow box and the ground grid, and none of those cast a shadow of you.
+test("nothing but the camera, sun and ground grid follows the player (no body, no body shadow)", () => {
+  const followers = [...MAIN.matchAll(/([\w.]+)\.position\.(?:set|copy)\((?:Math\.round\()?player\.pos/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(followers)].sort(), ["camera", "ground", "sun", "sun.target"].sort());
+  assert.doesNotMatch(MAIN, /CapsuleGeometry[\s\S]{0,200}castShadow = true/);
+});
+
+// Mike, 2026-11-19: "panning the camera should not move the eye or the center of the back plane".
+// The back plane is centered on the camera (the lens shader divides camera-space x and y, adding
+// nothing; see the test above), so it's enough that looking around never moves the camera.
+test("looking around never moves the eye", () => {
+  const sets = [...MAIN.matchAll(/\bcamera\.position\.(\w+)\(/g)];
+  assert.equal(sets.length, 1, "the camera is placed in exactly one spot");
+  assert.match(MAIN, /camera\.position\.set\(player\.pos\.x, player\.pos\.y \+ EYE, player\.pos\.z\)/);
+  const look = MAIN.slice(MAIN.indexOf("function look("), MAIN.indexOf("\n}\n", MAIN.indexOf("function look(")));
+  assert.doesNotMatch(look, /pos/, "look() only turns you");
+});
