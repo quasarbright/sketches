@@ -25,6 +25,7 @@ try {
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
 renderer.setClearColor(0xdde8f1); // the sky's horizon color, behind the sky dome
 
 const scene = new THREE.Scene();
@@ -50,6 +51,7 @@ const lensUniforms = {
   lensHalf: { value: new THREE.Vector2(1, 1) },
   lensRange: { value: new THREE.Vector4(NEAR, FAR, LUT.a0, LUT.a1) },
   lensC: { value: LUT.C },
+  lensOn: { value: 1 },   // 0 while drawing the side view: an ordinary perspective camera
 };
 
 const LENS_PARS = /* glsl */`
@@ -57,6 +59,7 @@ uniform sampler2D lensLUT;
 uniform vec2 lensHalf;
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
+uniform float lensOn;
 varying float vLensDepth;
 vec2 lensG(float z) {
   float t = (asinh(z / lensC) - lensRange.z) / (lensRange.w - lensRange.z);
@@ -68,6 +71,7 @@ vec2 lensG(float z) {
   return mix(a, b, fract(fi));
 }
 vec4 lensProject(vec4 mv) {
+  if (lensOn < 0.5) { vLensDepth = -1.0; return projectionMatrix * mv; }
   float z = -mv.z;
   if (z < lensRange.x) {
     // Behind the eye plane. The card clips a triangle where clip z + w crosses zero, and finds
@@ -104,7 +108,7 @@ function lensify(mat, extra) {
     sh.fragmentShader = sh.fragmentShader
       .replace("#include <common>", "#include <common>\nvarying float vLensDepth;")
       .replace("#include <dithering_fragment>",
-        "#include <dithering_fragment>\ngl_FragDepth = clamp(vLensDepth, 0.0, 1.0);");
+        "#include <dithering_fragment>\ngl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
     if (extra) extra(sh);
   };
   return mat;
@@ -592,10 +596,8 @@ const START = { pos: new THREE.Vector3(0, 0.41, 16), yaw: 0, pitch: 0 };
 const player = {
   pos: START.pos.clone(), vel: new THREE.Vector3(), onGround: false,
   yaw: START.yaw, pitch: START.pitch,
-  q: new THREE.Quaternion(),   // fly orientation
   mode: "walk",
 };
-let levelAnim = null;          // smooth roll back to level when you land from flying
 const keys = new Set();
 let locked = false;
 
@@ -604,17 +606,9 @@ function walkQuat(yaw, pitch, out = new THREE.Quaternion()) {
 }
 function setMode(m) {
   if (m === player.mode) return;
-  if (m === "fly") {
-    walkQuat(player.yaw, player.pitch, player.q);
-    player.vel.set(0, 0, 0);
-  } else {
-    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(player.q);
-    const from = player.q.clone();
-    player.yaw = Math.atan2(-f.x, -f.z);
-    player.pitch = Math.asin(THREE.MathUtils.clamp(f.y, -1, 1));
-    levelAnim = { from, t0: performance.now(), dur: 350 };
-    player.vel.set(0, 0, 0);
-  }
+  // walking and flying both turn by yaw and pitch only, so up in the world is always up on the
+  // screen (Mike, 2026-11-19): switching modes never changes where you look
+  player.vel.set(0, 0, 0);
   player.mode = m;
   $("jump").textContent = m === "walk" ? "jump" : "up";
   $("down").hidden = m === "walk";
@@ -624,20 +618,12 @@ function setMode(m) {
 function resetPlayer() {
   player.pos.copy(START.pos); player.vel.set(0, 0, 0);
   player.yaw = START.yaw; player.pitch = START.pitch;
-  walkQuat(player.yaw, player.pitch, player.q);
-  levelAnim = null;
 }
 
 function look(dx, dy) {
   const k = 0.0022;
-  if (player.mode === "walk") {
-    player.yaw -= dx * k;
-    player.pitch = THREE.MathUtils.clamp(player.pitch - dy * k, -1.55, 1.55);
-  } else {
-    const qy = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0).applyQuaternion(player.q), -dx * k);
-    const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0).applyQuaternion(player.q), -dy * k);
-    player.q.premultiply(qy).premultiply(qx).normalize();
-  }
+  player.yaw -= dx * k;
+  player.pitch = THREE.MathUtils.clamp(player.pitch - dy * k, -1.55, 1.55);
 }
 
 function collide(axis, pos, vel) {
@@ -705,32 +691,20 @@ function update(dt) {
   } else {
     const speed = fast ? 60 : 15;
     const up = (keys.has("Space") || touchJump ? 1 : 0) - (keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC") || touchDown ? 1 : 0);
-    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(player.q);
-    const r = new THREE.Vector3(1, 0, 0).applyQuaternion(player.q);
-    const u = new THREE.Vector3(0, 1, 0).applyQuaternion(player.q);
+    // forward is where you look; sideways and up/down stay level with the world
+    const q = walkQuat(player.yaw, player.pitch);
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+    const r = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+    const u = new THREE.Vector3(0, 1, 0);
     const v = f.multiplyScalar(fwdIn).add(r.multiplyScalar(sideIn)).add(u.multiplyScalar(up));
     if (v.lengthSq() > 1) v.normalize();
     player.pos.addScaledVector(v, speed * dt);
-    const roll = (keys.has("KeyE") ? 1 : 0) - (keys.has("KeyQ") ? 1 : 0);
-    if (roll) {
-      const qr = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, -1).applyQuaternion(player.q), roll * 1.6 * dt);
-      player.q.premultiply(qr).normalize();
-    }
     player.pos.y = Math.max(player.pos.y, floorAt(player.pos.x, player.pos.z));
   }
 
-  // stepping on or off the track bed moves the "bottom on the ground" snap on the screen-size slider
-
   // camera
   camera.position.set(player.pos.x, player.pos.y + EYE, player.pos.z);
-  if (player.mode === "walk") {
-    const target = walkQuat(player.yaw, player.pitch);
-    if (levelAnim) {
-      const u = Math.min(1, (performance.now() - levelAnim.t0) / levelAnim.dur);
-      camera.quaternion.slerpQuaternions(levelAnim.from, target, 1 - Math.pow(1 - u, 3));
-      if (u >= 1) levelAnim = null;
-    } else camera.quaternion.copy(target);
-  } else camera.quaternion.copy(player.q);
+  walkQuat(player.yaw, player.pitch, camera.quaternion);
   camera.updateMatrixWorld();
 
   // the ground grid follows you in 8 m steps (its lines are drawn in world space)
@@ -819,7 +793,7 @@ function updateHint() {
   } else if (player.mode === "walk") {
     h = `${kbd("WASD")} walk · ${kbd("Space")} jump · ${kbd("F")} fly · ${kbd("Esc")} free the mouse`;
   } else {
-    h = `${kbd("WASD")} fly · ${kbd("Space")}/${kbd("Ctrl")} up and down · ${kbd("Q")}${kbd("E")} roll · ${kbd("Shift")} fast · ${kbd("F")} walk`;
+    h = `${kbd("WASD")} fly · ${kbd("Space")}/${kbd("Ctrl")} up and down · ${kbd("Shift")} fast · ${kbd("F")} walk`;
   }
   $("hint").innerHTML = h;
 }
@@ -1037,30 +1011,12 @@ function updateCaption() {
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
   // a level parallel view sees the ground edge-on, which looks like a bug unless it's said
   if (ax === "y" || !state.split) {
-    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on along the bottom: look down to see it laid out, or walk to see the world slide past.";
+    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on, so you won't see it: look down to see it laid out, or walk to see the world slide past.";
   }
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-function drawPanelDiagram() {
-  const ax = activeAxis();
-  const r = diag.getBoundingClientRect();
-  if (!r.width) return;
-  const dpr = Math.min(devicePixelRatio, 2);
-  if (diag.width !== Math.round(r.width * dpr)) { diag.width = Math.round(r.width * dpr); diag.height = Math.round(r.height * dpr); }
-  const ctx = diag.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  // during a morph the back plane size is in between; show it only when the lens is at rest
-  const s = effS(ax);
-  const comp = ax === "x" ? 0 : 1;
-  drawDiagram(ctx, r.width, r.height, {
-    D: state.D, h: state.H, ground: EYE,
-    gy: lutFn(shown, comp),
-    gx: state.split ? lutFn(shown, 1 - comp) : null,
-    s: !morph && s != null ? s : null,
-  });
-}
 
 /* =====================================================================
  * about-modal diagrams (the same drawing code, with lenses that animate on their own)
@@ -1123,6 +1079,131 @@ document.addEventListener("cohesion-modal-close", (e) => {
 });
 
 /* =====================================================================
+ * the side view: an ordinary camera off to your side, showing where your eye (or back plane) and
+ * the screen are in the world, and the rays leaving them. Drawn into a corner of the main canvas
+ * with the lens switched off, copied into the panel, then the main view is drawn over it.
+ * ===================================================================== */
+const INSET = 1; // layer for things only the side view sees
+const insetCam = new THREE.PerspectiveCamera(40, 2, 0.1, 3000);
+insetCam.layers.enable(INSET);
+const helpers = new THREE.Group();
+scene.add(helpers);
+const rectGeo = new THREE.BufferGeometry().setFromPoints(
+  [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]].map(([x, y]) => new THREE.Vector3(x, y, 0)));
+const flat = (color, opacity) => new THREE.MeshBasicMaterial({
+  color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
+const planeFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0x5aa9e6, 0.35));
+const planeEdge = new THREE.LineLoop(rectGeo, new THREE.LineBasicMaterial({ color: 0x5aa9e6 }));
+const screenFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xe8553d, 0.16));
+const screenEdge = new THREE.LineLoop(rectGeo, new THREE.LineBasicMaterial({ color: 0xe8553d }));
+// you: a plain figure whose head holds the eye (the side view only; it casts no shadow)
+const figMat = new THREE.MeshLambertMaterial({ color: 0x8d929b });
+const figBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.0, 4, 10), figMat);
+const figHead = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 10), figMat);
+const eyeDot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8),
+  new THREE.MeshBasicMaterial({ color: 0x5aa9e6, depthTest: false }));
+eyeDot.renderOrder = 10;
+const RAY_U = [-1, 0, 1], RAY_STEPS = 48, N_RAYS = RAY_U.length ** 2;
+const rayPos = new Float32Array(N_RAYS * RAY_STEPS * 2 * 3);
+const rayGeo = new THREE.BufferGeometry();
+rayGeo.setAttribute("position", new THREE.BufferAttribute(rayPos, 3));
+const rays = new THREE.LineSegments(rayGeo,
+  new THREE.LineBasicMaterial({ color: 0xf4efe4, transparent: true, opacity: 0.85 }));
+rays.frustumCulled = false;
+helpers.add(planeFill, planeEdge, screenFill, screenEdge, figBody, figHead, eyeDot, rays);
+helpers.traverse((o) => o.layers.set(INSET));
+
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
+function updateInset(aspect) {
+  const hx = state.H * camera.aspect, hy = state.H;
+  const gx = lutFn(shown, 0), gy = lutFn(shown, 1);
+  const eye = camera.position, q = camera.quaternion;
+  const fwd = _w.set(0, 0, -1).applyQuaternion(q);
+  // the back plane: where the rays start, read off the lens at the eye (a point for a camera)
+  // (exactly the back-plane size when the lens has one, so a normal camera shows a point)
+  const sx = effS("x"), sy = effS(state.split ? "y" : "x");
+  const g0x = !morph && sx != null ? sx : Math.max(0, gx(NEAR)), g0y = !morph && sy != null ? sy : Math.max(0, gy(NEAR));
+  const px = Math.min(400, 2 * hx * g0x), py = Math.min(400, 2 * hy * g0y);
+  const isPlane = px > 0.03 && py > 0.03;
+  for (const o of [planeFill, planeEdge]) {
+    o.visible = isPlane; o.position.copy(eye); o.quaternion.copy(q); o.scale.set(px || 1, py || 1, 1);
+  }
+  for (const o of [screenFill, screenEdge]) {
+    o.position.copy(eye).addScaledVector(fwd, state.D); o.quaternion.copy(q); o.scale.set(2 * hx, 2 * hy, 1);
+  }
+  eyeDot.position.copy(eye);
+  figHead.position.copy(eye);
+  figBody.position.set(player.pos.x, player.pos.y + 0.72, player.pos.z);
+  // the rays through the screen's corners, edge middles and center, as far as they go
+  const zEnd = Math.max(14, 3.2 * state.D);
+  let k = 0;
+  for (const ux of RAY_U) for (const uy of RAY_U) {
+    let prev = null;
+    for (let i = 0; i <= RAY_STEPS; i++) {
+      const z = NEAR + (zEnd - NEAR) * Math.pow(i / RAY_STEPS, 1.4);
+      const a = gx(z), b = gy(z);
+      let cur = null;
+      if (a > 0 && b > 0 && Math.abs(ux * hx * a) < 300 && Math.abs(uy * hy * b) < 300)
+        cur = _v.set(ux * hx * a, uy * hy * b, -z).applyMatrix4(camera.matrixWorld).toArray();
+      if (i > 0) {
+        const p0 = prev && cur ? prev : [0, 0, 0], p1 = prev && cur ? cur : [0, 0, 0];
+        if (!(prev && cur)) { // a gap: a zero-length segment at the eye, hidden in the dot
+          eye.toArray(p0); eye.toArray(p1);
+        }
+        rayPos.set(p0, k); rayPos.set(p1, k + 3); k += 6;
+      }
+      prev = cur;
+    }
+  }
+  rayGeo.attributes.position.needsUpdate = true;
+  // off to your right, a little above and behind, upright, looking at the space in front of you
+  const s0 = Math.max(1, py / (2 * hy));
+  const dist = 3.5 + 1.1 * state.D + 1.8 * state.H * Math.min(s0, 3);
+  _q.setFromEuler(new THREE.Euler(0, player.yaw, 0, "YXZ"));
+  insetCam.position.copy(eye).add(_v.set(0.95, 0.42, 0.55).multiplyScalar(dist).applyQuaternion(_q));
+  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, state.D * 0.5));
+  insetCam.aspect = aspect;
+  insetCam.updateProjectionMatrix();
+  insetCam.updateMatrixWorld();
+}
+const panelEl = document.querySelector("control-panel");
+const dctx = diag.getContext("2d");
+const _size = new THREE.Vector2();
+function renderInset() {
+  if (!panelEl || panelEl.hasAttribute("collapsed") || isBg) return;
+  const r = diag.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const w = Math.round(r.width), h = Math.round(r.height), pr = renderer.getPixelRatio();
+  const cw = Math.round(w * pr), ch = Math.round(h * pr);
+  if (cw > renderer.domElement.width || ch > renderer.domElement.height) return;
+  updateInset(w / h);
+  lensUniforms.lensOn.value = 0; sky.visible = earth.visible = false;
+  renderer.setScissorTest(true);
+  renderer.setViewport(0, 0, w, h); renderer.setScissor(0, 0, w, h);
+  renderer.setClearColor(0xb4cfe6);
+  renderer.render(scene, insetCam);
+  if (diag.width !== cw || diag.height !== ch) { diag.width = cw; diag.height = ch; }
+  dctx.drawImage(renderer.domElement, 0, renderer.domElement.height - ch, cw, ch, 0, 0, cw, ch);
+  // labels, on plates like the rest of the page's text over the scene
+  dctx.font = `${10 * pr}px 'JetBrains Mono', monospace`; dctx.textBaseline = "middle";
+  const tag = (txt, p, color, dy) => {
+    _v.copy(p).project(insetCam);
+    if (_v.z > 1 || Math.abs(_v.x) > 1 || Math.abs(_v.y) > 1) return;
+    const x = (_v.x * 0.5 + 0.5) * cw, y = (-_v.y * 0.5 + 0.5) * ch + dy * pr;
+    const tw = dctx.measureText(txt).width;
+    dctx.fillStyle = "rgba(17,19,23,0.85)"; dctx.fillRect(x - tw / 2 - 3 * pr, y - 7 * pr, tw + 6 * pr, 14 * pr);
+    dctx.fillStyle = color; dctx.fillText(txt, x - tw / 2, y);
+  };
+  const top = (o, sy) => _w.set(0, 0.5 * sy, 0).applyQuaternion(o.quaternion).multiplyScalar(o.scale.y).add(o.position);
+  tag("screen", top(screenEdge, 1), "#ff7258", -10);
+  tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 10 : -14);
+  lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
+  renderer.setScissorTest(false);
+  renderer.getSize(_size); renderer.setViewport(0, 0, _size.x, _size.y);
+  renderer.setClearColor(0xdde8f1);
+}
+
+/* =====================================================================
  * main loop
  * ===================================================================== */
 // The view stops above the button bar, so the bottom of the picture (where orthographic shows the
@@ -1143,7 +1224,6 @@ addEventListener("resize", resize);
 resize();
 
 let last = performance.now();
-let diagramDirty = true;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
@@ -1152,14 +1232,15 @@ function frame(now) {
   lensUniforms.lensHalf.value.set(state.H * camera.aspect, state.H);
   camera.updateMatrixWorld();
   updateSky();
+  renderInset();
+  renderer.shadowMap.needsUpdate = true; // once a frame, for the main view; the side view reuses it
   renderer.render(scene, camera);
-  if (morphing || diagramDirty) { drawPanelDiagram(); diagramDirty = morphing; }
   if (!morphing && morph === null && wasMorphing) syncPanel();
   wasMorphing = morphing;
   requestAnimationFrame(frame);
 }
 let wasMorphing = false;
-const redrawDiagram = () => { diagramDirty = true; };
+const redrawDiagram = () => {}; // the side view redraws every frame
 for (const id of ["s", "d", "fx", "fy", "split"]) $(id).addEventListener("input", redrawDiagram);
 $("split").addEventListener("change", redrawDiagram);
 chipsEl.addEventListener("click", redrawDiagram);

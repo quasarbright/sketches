@@ -191,7 +191,12 @@ test("the default screen and back plane stay above the ground and the rails", ()
 // shadow box and the ground grid, and none of those cast a shadow of you.
 test("nothing but the camera, sun and ground grid follows the player (no body, no body shadow)", () => {
   const followers = [...MAIN.matchAll(/([\w.]+)\.position\.(?:set|copy)\((?:Math\.round\()?player\.pos/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(followers)].sort(), ["camera", "ground", "sun", "sun.target"].sort());
+  assert.deepEqual([...new Set(followers)].sort(), ["camera", "figBody", "ground", "sun", "sun.target"].sort());
+  // the only figure of you is in the side view's own layer, which the main camera and the sun's
+  // shadow camera never draw
+  assert.match(MAIN, /helpers\.add\([^)]*figBody/);
+  assert.match(MAIN, /helpers\.traverse\(\(o\) => o\.layers\.set\(INSET\)\)/);
+  assert.doesNotMatch(MAIN, /fig\w*\.castShadow/);
   assert.doesNotMatch(MAIN, /CapsuleGeometry[\s\S]{0,200}castShadow = true/);
 });
 
@@ -204,4 +209,15 @@ test("looking around never moves the eye", () => {
   assert.match(MAIN, /camera\.position\.set\(player\.pos\.x, player\.pos\.y \+ EYE, player\.pos\.z\)/);
   const look = MAIN.slice(MAIN.indexOf("function look("), MAIN.indexOf("\n}\n", MAIN.indexOf("function look(")));
   assert.doesNotMatch(look, /pos/, "look() only turns you");
+});
+
+// Mike, 2026-11-19: "in flight mode, the camera should always stay where up in 3D is up in the
+// camera". Both modes turn by yaw and pitch only (pitch clamped short of straight up/down), and
+// the camera's orientation comes from nothing else, so it can never roll.
+test("the camera never rolls, walking or flying", () => {
+  assert.doesNotMatch(MAIN, /camera\.quaternion\.(copy|set|slerp|multiply|premultiply|rotate)/);
+  assert.match(MAIN, /walkQuat\(player\.yaw, player\.pitch, camera\.quaternion\)/);
+  assert.match(MAIN, /new THREE\.Euler\(pitch, yaw, 0, "YXZ"\)/);
+  assert.doesNotMatch(MAIN, /\broll\b|player\.q\b/i);
+  assert.match(MAIN, /player\.pitch = THREE\.MathUtils\.clamp\(player\.pitch - dy \* k, -1\.55, 1\.55\)/);
 });
