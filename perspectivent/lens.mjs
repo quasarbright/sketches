@@ -238,6 +238,21 @@ export function linearS(f, D) {
 // The view starts just in front of the eye; nothing behind you is ever drawn.
 export const NEAR = 0.05;
 
+// How tall the back plane is, as a multiple of the screen: the up-and-down lens at the eye.
+export function planeRatio(f, D) {
+  const g = normalizedLens(f, D);
+  if (!g) return 0;
+  const g0 = g(NEAR);
+  return g0 > 0 && isFinite(g0) ? g0 : 0;
+}
+// The screen's half-height for a lens: the one asked for, unless that would make the back plane
+// (centered on the eye, `ratio` times the screen) reach lower than `clearH` below the eye, in
+// which case the screen shrinks until the plane just clears. Mike: no lens's back plane may cut
+// into the ground or the rails.
+export function fitScreenH(hAsked, ratio, clearH) {
+  return ratio > 0 && ratio * hAsked > clearH ? clearH / ratio : hAsked;
+}
+
 /* ---------------- where a point lands on the screen ---------------- */
 
 // The projection the vertex shader does (main.mjs lensProject mirrors this exactly): a point at

@@ -5,7 +5,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import {
-  parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens,
+  parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens, planeRatio, fitScreenH,
   LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
@@ -129,6 +129,7 @@ const state = {
                   // same size, are centered on your eye, 1.65 m above the ties you stand on. A
                   // 2.8 m screen ends 8 cm above the rail tops: no part of it is in the ground or the
                   // rails, in any lens, looking any way. With D = 2.42 a normal camera sees 60°.
+  Hasked: 1.4,    // the screen size you asked for; H is smaller when a lens needs it (fitScreen)
   split: false,
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
@@ -835,6 +836,7 @@ for (const p of PRESETS) {
   b.addEventListener("click", () => {
     if (!state.split) { state.split = true; $("split").checked = true; }
     state.x = { src: "1", s: 1 }; state.y = { src: "z", s: 0 };
+    fitScreen();
     syncPanel(); applyLens(true);
   });
   chipsEl.appendChild(b);
@@ -845,8 +847,16 @@ function setAxis(ax, v) {
   state[ax] = v;
   if (!state.split) state.y = { ...v };
 }
+// Picking a lens or moving the screen re-fits the screen to the size you asked for, or smaller if
+// that lens's back plane would otherwise reach into the ground or the rails.
+function fitScreen() {
+  const H = fitScreenH(state.Hasked, planeRatio(axisFn(state.split ? "y" : "x"), state.D), CLEAR_H);
+  if (Math.abs(H - state.H) < 1e-9) return;
+  state.H = H;
+}
 function choosePreset(p) {
   setAxis(activeAxis(), { src: p.src, s: p.s ?? null });
+  fitScreen();
   clearErrors();
   syncPanel();
   applyLens(true);
@@ -904,7 +914,7 @@ function syncPanel() {
   $("hVal").textContent = fmtD(2 * state.H) + " tall";
   const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
   $("hNote").textContent = [
-    atClear ? "Tallest that clears the rails." : "",
+    state.H < state.Hasked - 1e-6 ? "Shrunk so this lens's back plane clears the rails." : atClear ? "Tallest that clears the rails." : "",
     same ? "1:1 with the back plane." : "",
   ].filter(Boolean).join(" ");
   // tick marks where the screen's bottom is at your feet, and where it matches the back plane
@@ -967,6 +977,7 @@ $("d").addEventListener("input", (e) => {
     $("dErr").textContent = `f(z) isn't positive past ${fmtD(lo)}, so the screen can't go further.`;
   } else $("dErr").textContent = "";
   state.D = D;
+  fitScreen();
   syncPanel();
   applyLens(false);
 });
@@ -984,7 +995,7 @@ $("h").addEventListener("input", (e) => {
   else if (Math.abs(v - sliderFromH(CLEAR_H)) < 3.5) H = CLEAR_H;
   for (const a of ["x", "y"]) if (state[a].s != null) state[a] = { src: "", s: Math.min(S_MAX, state[a].s * H0 / H) };
   if (!state.split) state.y = { ...state.x };
-  state.H = H;
+  state.H = state.Hasked = H;
   syncPanel();
   applyLens(false);
 });

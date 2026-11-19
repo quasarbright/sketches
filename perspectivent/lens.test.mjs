@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   parseExpr, backPlaneF, convergenceDepth, backPlaneText, normalizedLens, compileLens,
-  LUT, lutDepth, sampleLens, PRESETS, NEAR,
+  LUT, lutDepth, sampleLens, PRESETS, NEAR, planeRatio, fitScreenH,
 } from "./lens.mjs";
 
 const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -220,4 +220,24 @@ test("the camera never rolls, walking or flying", () => {
   assert.match(MAIN, /new THREE\.Euler\(pitch, yaw, 0, "YXZ"\)/);
   assert.doesNotMatch(MAIN, /\broll\b|player\.q\b/i);
   assert.match(MAIN, /player\.pitch = THREE\.MathUtils\.clamp\(player\.pitch - dy \* k, -1\.55, 1\.55\)/);
+});
+
+// Mike, 2026-11-19: "back plane on reverse perspective clips into the ground". Every preset, picked
+// at the default settings, must leave its back plane above the rails: picking one runs fitScreen,
+// which shrinks the screen when the plane would reach too low.
+test("every preset's back plane clears the rails at the default settings", () => {
+  const H = +MAIN.match(/^\s*H: ([\d.]+),/m)[1];
+  const D = +MAIN.match(/^\s*D: ([\d.]+),/m)[1];
+  const EYE = +MAIN.match(/const EYE = ([\d.]+)/)[1];
+  const RAIL_H = +MAIN.match(/const RAIL_H = ([\d.]+)/)[1];
+  const clearH = EYE - RAIL_H - 0.08;
+  for (const p of PRESETS) {
+    const ratio = planeRatio(p.s != null ? backPlaneF(p.s, D) : parseExpr(p.src), D);
+    const h = fitScreenH(H, ratio, clearH);
+    assert.ok(ratio * h <= clearH + 1e-9, `${p.id}: plane reaches ${(EYE - ratio * h).toFixed(2)} m`);
+    assert.ok(h > 0.3, `${p.id}: screen still usable`);
+  }
+  assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
+  assert.match(MAIN, /function choosePreset\(p\) \{\s*setAxis\(.*\);\s*fitScreen\(\);/);
+  assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
 });
