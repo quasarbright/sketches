@@ -123,7 +123,6 @@
     }
     .pv-axis-pick button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
     .pv-axis-pick button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: 0; }
-    .pv-axis-pick.pv-wide button { flex: 1; padding: 6px 8px; font-size: .85rem; }
     .pv-axis-pick button.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
     /* the footer floats over the scene, which can be nearly white sky: full strength on a dark plate */
     mike-footer[overlay] { opacity: 1 !important; color: var(--text) !important;
@@ -225,14 +224,6 @@
         <datalist id="ahTicks"><option id="ahTick" value="90"></option><option value="180"></option></datalist>
         <input type="range" id="ah" min="10" max="180" step="0.1" value="90" list="ahTicks"
           title="How far the screen reaches up and down. 180° is from straight down to straight up. It snaps to where a degree is as tall as it is wide on screen, so nothing looks stretched (undistorted)." />
-      </div>
-      <div class="control">
-        <div class="control-head">
-          <span class="name" title="What happens to the patch when you look around">looking around</span>
-        </div>
-          <div class="pv-axis-pick pv-wide" id="sphereMode">
-            <button data-mode="turn" title="The whole patch turns with you, like a camera: the middle row is always level with your view.">turns the patch</button><button data-mode="world" title="Latitude and longitude stay fixed to the world, with the poles straight up and down. Looking around only moves the patch's center, so looking up wraps the picture around the north pole.">moves its center</button>
-          </div>
       </div>
     </div>
 
