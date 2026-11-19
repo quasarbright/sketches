@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { TessellateModifier } from "three/addons/modifiers/TessellateModifier.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import {
   parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens,
   LUT, sampleLens, PRESETS, linearS, NEAR,
@@ -896,13 +899,13 @@ function syncPanel() {
   // with parallel rays on both axes the screen's distance can't change the picture; say so, or a
   // slider that does nothing looks broken
   const parallel = [ "x", state.split ? "y" : "x" ].every((a) => { const v = effS(a); return v != null && Math.abs(v - 1) < 1e-9; });
-  $("dNote").textContent = parallel ? "Parallel rays: the picture is the same at any distance." : "";
+  $("dNote").textContent = parallel ? "Parallel rays: distance changes nothing." : "";
   $("h").value = sliderFromH(state.H);
   $("hVal").textContent = fmtD(2 * state.H) + " tall";
   const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
   $("hNote").textContent = [
-    atClear ? "The tallest screen that stays above the rails at your feet." : "",
-    same ? "Same height as the back plane (1:1)." : "",
+    atClear ? "Tallest that clears the rails." : "",
+    same ? "1:1 with the back plane." : "",
   ].filter(Boolean).join(" ");
   // tick marks where the screen's bottom is at your feet, and where it matches the back plane
   $("hGroundTick").value = sliderFromH(CLEAR_H);
@@ -917,9 +920,9 @@ function sLabel(s) {
 // and how it compares with the screen, in words
 function sNote(s) {
   if (s == null || Math.abs(s) < 1e-9) return "";
-  const low = s * state.H > CLEAR_H + 1e-3 ? " Its bottom edge is below the rail tops, so it cuts into the ground." : "";
-  if (Math.abs(s - 1) < 1e-9) return "Same height as the screen (1:1), so the rays are parallel." + low;
-  return `${+s.toFixed(2)}× the screen's height.` + low;
+  const low = s * state.H > CLEAR_H + 1e-3 ? " Dips into the ground." : "";
+  if (Math.abs(s - 1) < 1e-9) return "1:1 with the screen: parallel rays." + low;
+  return `${+s.toFixed(2)}× the screen.` + low;
 }
 
 function onField(ax) {
@@ -1003,16 +1006,12 @@ function updateCaption() {
     if (Math.abs(s) < 1e-9) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
     else if (s < 0) c = "The back plane is flipped, so rays cross <b>behind</b> you.";
     else if (s < 1) c = `The rays start on a plane <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
-    else if (Math.abs(s - 1) < 1e-9) c = "The back plane is <b>as big as the screen</b>, so rays are parallel and nothing shrinks.";
+    else if (Math.abs(s - 1) < 1e-9) c = "Rays are <b>parallel</b>, so nothing shrinks. Looking level, the ground is edge-on.";
     else c = `The back plane is <b>bigger than the screen</b>, so rays meet <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Nothing past that is seen.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
-  // a level parallel view sees the ground edge-on, which looks like a bug unless it's said
-  if (ax === "y" || !state.split) {
-    if (s != null && Math.abs(s - 1) < 1e-9) c += " Looking level, the ground is edge-on, so you won't see it: look down to see it laid out, or walk to see the world slide past.";
-  }
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -1085,17 +1084,26 @@ document.addEventListener("cohesion-modal-close", (e) => {
  * ===================================================================== */
 const INSET = 1; // layer for things only the side view sees
 const insetCam = new THREE.PerspectiveCamera(40, 2, 0.1, 3000);
+// The side view fades the world into haze past the figure, so the eye, screen and rays stand out.
+// The main view keeps the same fog with its range pushed out of reach, so both use one shader.
+const FOG_COLOR = 0xc9d9e6;
+const insetFog = new THREE.Fog(FOG_COLOR, 1e8, 2e8);
+const noFog = { near: 1e8, far: 2e8 };
+scene.fog = insetFog;
 insetCam.layers.enable(INSET);
 const helpers = new THREE.Group();
 scene.add(helpers);
-const rectGeo = new THREE.BufferGeometry().setFromPoints(
-  [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]].map(([x, y]) => new THREE.Vector3(x, y, 0)));
+// outlines and rays are drawn as thick lines (plain GL lines are 1 px, too thin to read at panel size)
+const fatMats = [];
+const fat = (color, width) => { const m = new LineMaterial({ color, linewidth: width }); fatMats.push(m); return m; };
+const rectGeo = new LineSegmentsGeometry().setPositions(
+  [-.5, -.5, 0, .5, -.5, 0, .5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, .5, 0, -.5, .5, 0, -.5, -.5, 0]);
 const flat = (color, opacity) => new THREE.MeshBasicMaterial({
   color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
-const planeFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0x5aa9e6, 0.35));
-const planeEdge = new THREE.LineLoop(rectGeo, new THREE.LineBasicMaterial({ color: 0x5aa9e6 }));
-const screenFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xe8553d, 0.16));
-const screenEdge = new THREE.LineLoop(rectGeo, new THREE.LineBasicMaterial({ color: 0xe8553d }));
+const planeFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0x5aa9e6, 0.14));
+const planeEdge = new LineSegments2(rectGeo, fat(0x3d9be9, 2.5));
+const screenFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xe8553d, 0.3));
+const screenEdge = new LineSegments2(rectGeo, fat(0xff5a3c, 3));
 // you: a plain figure whose head holds the eye (the side view only; it casts no shadow)
 const figMat = new THREE.MeshLambertMaterial({ color: 0x8d929b });
 const figBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.0, 4, 10), figMat);
@@ -1105,10 +1113,8 @@ const eyeDot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8),
 eyeDot.renderOrder = 10;
 const RAY_U = [-1, 0, 1], RAY_STEPS = 48, N_RAYS = RAY_U.length ** 2;
 const rayPos = new Float32Array(N_RAYS * RAY_STEPS * 2 * 3);
-const rayGeo = new THREE.BufferGeometry();
-rayGeo.setAttribute("position", new THREE.BufferAttribute(rayPos, 3));
-const rays = new THREE.LineSegments(rayGeo,
-  new THREE.LineBasicMaterial({ color: 0xf4efe4, transparent: true, opacity: 0.85 }));
+const rayGeo = new LineSegmentsGeometry();
+const rays = new LineSegments2(rayGeo, fat(0xffd23f, 2));
 rays.frustumCulled = false;
 helpers.add(planeFill, planeEdge, screenFill, screenEdge, figBody, figHead, eyeDot, rays);
 helpers.traverse((o) => o.layers.set(INSET));
@@ -1155,13 +1161,15 @@ function updateInset(aspect) {
       prev = cur;
     }
   }
-  rayGeo.attributes.position.needsUpdate = true;
+  rayGeo.setPositions(rayPos);
   // off to your right, a little above and behind, upright, looking at the space in front of you
   const s0 = Math.max(1, py / (2 * hy));
-  const dist = 3.5 + 1.1 * state.D + 1.8 * state.H * Math.min(s0, 3);
+  // far enough back to fit the screen and the back plane (40° lens: height / 0.73, plus margin)
+  const dist = 2.2 + 0.9 * state.D + 2.3 * state.H * Math.min(s0, 3);
   _q.setFromEuler(new THREE.Euler(0, player.yaw, 0, "YXZ"));
   insetCam.position.copy(eye).add(_v.set(0.95, 0.42, 0.55).multiplyScalar(dist).applyQuaternion(_q));
-  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, state.D * 0.5));
+  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, state.D * 0.45));
+  insetFog.near = dist * 0.7; insetFog.far = dist * 2.6;
   insetCam.aspect = aspect;
   insetCam.updateProjectionMatrix();
   insetCam.updateMatrixWorld();
@@ -1177,26 +1185,29 @@ function renderInset() {
   const cw = Math.round(w * pr), ch = Math.round(h * pr);
   if (cw > renderer.domElement.width || ch > renderer.domElement.height) return;
   updateInset(w / h);
+  for (const m of fatMats) m.resolution.set(w, h);
   lensUniforms.lensOn.value = 0; sky.visible = earth.visible = false;
   renderer.setScissorTest(true);
   renderer.setViewport(0, 0, w, h); renderer.setScissor(0, 0, w, h);
-  renderer.setClearColor(0xb4cfe6);
+  renderer.setClearColor(FOG_COLOR);
   renderer.render(scene, insetCam);
   if (diag.width !== cw || diag.height !== ch) { diag.width = cw; diag.height = ch; }
   dctx.drawImage(renderer.domElement, 0, renderer.domElement.height - ch, cw, ch, 0, 0, cw, ch);
   // labels, on plates like the rest of the page's text over the scene
-  dctx.font = `${10 * pr}px 'JetBrains Mono', monospace`; dctx.textBaseline = "middle";
+  dctx.font = `600 ${12 * pr}px 'JetBrains Mono', monospace`; dctx.textBaseline = "middle";
   const tag = (txt, p, color, dy) => {
     _v.copy(p).project(insetCam);
     if (_v.z > 1 || Math.abs(_v.x) > 1 || Math.abs(_v.y) > 1) return;
-    const x = (_v.x * 0.5 + 0.5) * cw, y = (-_v.y * 0.5 + 0.5) * ch + dy * pr;
+    const x = (_v.x * 0.5 + 0.5) * cw;
+    const y = Math.min(ch - 9 * pr, Math.max(9 * pr, (-_v.y * 0.5 + 0.5) * ch + dy * pr));
     const tw = dctx.measureText(txt).width;
-    dctx.fillStyle = "rgba(17,19,23,0.85)"; dctx.fillRect(x - tw / 2 - 3 * pr, y - 7 * pr, tw + 6 * pr, 14 * pr);
+    dctx.fillStyle = "rgba(17,19,23,0.88)"; dctx.fillRect(x - tw / 2 - 4 * pr, y - 8 * pr, tw + 8 * pr, 16 * pr);
     dctx.fillStyle = color; dctx.fillText(txt, x - tw / 2, y);
   };
   const top = (o, sy) => _w.set(0, 0.5 * sy, 0).applyQuaternion(o.quaternion).multiplyScalar(o.scale.y).add(o.position);
-  tag("screen", top(screenEdge, 1), "#ff7258", -10);
-  tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 10 : -14);
+  tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
+  tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
+  insetFog.near = noFog.near; insetFog.far = noFog.far;
   lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
   renderer.setScissorTest(false);
   renderer.getSize(_size); renderer.setViewport(0, 0, _size.x, _size.y);
