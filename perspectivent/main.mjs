@@ -57,6 +57,10 @@ const lensUniforms = {
   lensOn: { value: 1 },   // 0 while drawing the side view: an ordinary perspective camera
   // the lat-long sphere lens: x = on, y and z = half its angular width and height (radians)
   lensSphere: { value: new THREE.Vector3(0, 1, 1) },
+  // and its grid: x = 1 when the latitude and longitude lines are fixed to the world (poles straight
+  // up and down) and looking around moves the patch's center to (y, z) = (longitude, latitude);
+  // 0 when the patch turns with you
+  lensSphereC: { value: new THREE.Vector3(0, 0, 0) },
 };
 
 const LENS_PARS = /* glsl */`
@@ -65,7 +69,7 @@ uniform vec2 lensHalf;
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 uniform float lensOn;
-uniform vec3 lensSphere;
+uniform vec3 lensSphere, lensSphereC;
 varying float vLensDepth;
 varying vec2 vLensSign;
 varying vec4 vLensDir;
@@ -84,11 +88,16 @@ vec4 lensProject(vec4 mv) {
   if (lensSphere.x > 0.5) {
     // The screen is a latitude-longitude rectangle on a sphere around the eye: across the picture
     // is the direction's longitude (left-right angle), up the picture its latitude (elevation).
+    // With the grid fixed to the world, the angles are measured in the world's frame instead
+    // (mv * mat3(viewMatrix) turns the view back to world directions), from the patch's center.
     float r = length(mv.xyz);
     vLensSign = vec2(1.0);
     if (r < lensRange.x) return vec4(0.0, 0.0, 2.0, 1.0);
-    float lon = atan(mv.x, -mv.z), lat = asin(clamp(mv.y / r, -1.0, 1.0));
-    vLensDir = vec4(mv.xyz, lon);
+    bool world = lensSphereC.x > 0.5;
+    vec3 d = world ? mv.xyz * mat3(viewMatrix) : mv.xyz;
+    float lon = atan(d.x, -d.z), lat = asin(clamp(d.y / r, -1.0, 1.0));
+    if (world) { lon = mod(lon - lensSphereC.y + PI, 2.0 * PI) - PI; lat -= lensSphereC.z; }
+    vLensDir = vec4(d, lon);
     vLensDepth = (r - lensRange.x) / (lensRange.y - lensRange.x);
     return vec4(lon / lensSphere.y, lat / lensSphere.z, 2.0 * vLensDepth - 1.0, 1.0);
   }
@@ -136,7 +145,7 @@ function lensify(mat, extra) {
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere;")
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere, lensSphereC;")
       .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;\n"
         // On the sphere a triangle is drawn straight between its corners, which is only right when
         // it covers a small patch of longitude. One straddling the seam straight behind you (its
@@ -144,7 +153,8 @@ function lensify(mat, extra) {
         // right below or above you wrap around the pole. Where the drawn direction is off from the
         // true one by more than about 3°, drop it: the flat ground painted behind shows instead.
         + "if (lensSphere.x > 0.5 && vLensDepth > -0.5) { vec3 dd = normalize(vLensDir.xyz);"
-        + " if (abs(atan(dd.x, -dd.z) - vLensDir.w) * max(length(dd.xz), 0.05) > 0.06) discard; }")
+        + " float tl = atan(dd.x, -dd.z); if (lensSphereC.x > 0.5) tl = mod(tl - lensSphereC.y + PI, 2.0 * PI) - PI;"
+        + " if (abs(tl - vLensDir.w) * max(length(dd.xz), 0.05) > 0.06) discard; }")
       .replace("#include <dithering_fragment>",
         "#include <dithering_fragment>\ngl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
     if (extra) extra(sh);
@@ -171,7 +181,12 @@ const state = {
   y: { src: "z", s: 0 },
   // the lat-long sphere lens, which isn't a divide-by-f(z) lens: when on, the screen is a patch of
   // a sphere around the eye, aw° wide and ah° tall, R meters out
-  sphere: false, aw: 160, ah: 90, R: 3,
+  // ahFit: the height follows the width so a degree is as tall as it is wide on screen (nothing
+  // looks stretched), until you drag the height off that snap
+  // sphereWorld: the latitude and longitude lines stay fixed to the world and looking around moves
+  // the patch's center over them, instead of the whole patch turning with you
+  sphere: false, aw: 160, ah: 90, ahFit: true, sphereWorld: false,
+  poleStop: "rows", // world grid near a pole: "rows" past it stay at the pole, or "center" stops short
 };
 // what's currently on the GPU, possibly mid-morph between two lenses
 const shown = new Float32Array(LUT.N * 2);
@@ -314,33 +329,70 @@ scene.add(ground);
 
 // the railroad: ballast, ties, two rails, straight to the horizon
 const TRACK_START = 30, TRACK_LEN = 3000, GAUGE = 1.435;
-{
-  const len = TRACK_LEN, zc = TRACK_START - len / 2;
-  const ballast = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, len, 8, 1, len * 2), lambert(COL.ballast));
-  ballast.position.set(0, 0.125, zc); ballast.receiveShadow = true; scene.add(ballast);
+// The track near you is drawn a second time, cut ten times finer, and moves with you; the long
+// track leaves a gap for it. Very wide lenses (the sphere) bend the rails and ties right under you
+// sharply, and 0.5 m pieces showed there as straight segments with kinks.
+const TIE_GAP = 0.65, NEAR_TRACK = 30.5 * TIE_GAP; // half its length: its ends fall between ties
+const nearTrackUniforms = { nearTrackZ: { value: 1e9 } };
+const outsideNearTrack = (sh) => {
+  sh.uniforms.nearTrackZ = nearTrackUniforms.nearTrackZ;
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nvarying float vTrackZ;")
+    .replace("#include <begin_vertex>", `#include <begin_vertex>
+      { vec4 pvW = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        pvW = instanceMatrix * pvW;
+        #endif
+        vTrackZ = (modelMatrix * pvW).z; }`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying float vTrackZ;\nuniform float nearTrackZ;")
+    .replace("void main() {", `void main() {\nif (abs(vTrackZ - nearTrackZ) < ${NEAR_TRACK.toFixed(4)}) discard;`);
+};
+// ballast, ties and two rails from z0 back len meters, cut into pieces `step` meters long, with
+// `count` ties from tie0 back
+function buildTrack(len, z0, step, fine, tie0, count) {
+  const group = new THREE.Group(), n = Math.round(len / step);
+  const mat = (c) => fine ? lambert(c) : lambert(c, outsideNearTrack);
+  const ballast = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.25, len, fine ? 34 : 8, 1, n), mat(COL.ballast));
+  ballast.position.set(0, 0.125, z0 - len / 2); ballast.receiveShadow = true; group.add(ballast);
 
-  const tieGeo = new THREE.BoxGeometry(2.6, 0.16, 0.24, 6, 1, 1);
-  const spacing = 0.65, count = Math.floor(len / spacing);
-  const ties = new THREE.InstancedMesh(tieGeo, lambert(COL.tie), count);
+  const tieGeo = new THREE.BoxGeometry(2.6, 0.16, 0.24, fine ? 26 : 6, fine ? 2 : 1, fine ? 3 : 1);
+  const ties = new THREE.InstancedMesh(tieGeo, mat(COL.tie), count);
   const mtx = new THREE.Matrix4();
   for (let i = 0; i < count; i++) {
-    mtx.makeTranslation(0, 0.25 + 0.08, TRACK_START - 0.3 - i * spacing);
+    mtx.makeTranslation(0, 0.25 + 0.08, tie0 - i * TIE_GAP);
     ties.setMatrixAt(i, mtx);
   }
-  ties.castShadow = ties.receiveShadow = true; scene.add(ties);
+  ties.castShadow = ties.receiveShadow = true; group.add(ties);
 
-  // rail: a little I-beam profile (head, web, foot), extruded along z in 1 m pieces
+  // rail: a little I-beam profile (head, web, foot), extruded along z
   const prof = new THREE.Shape();
   [[-0.075, 0], [0.075, 0], [0.075, 0.015], [0.015, 0.03], [0.012, 0.12], [0.035, 0.13],
    [0.035, RAIL_H], [-0.035, RAIL_H], [-0.035, 0.13], [-0.012, 0.12], [-0.015, 0.03], [-0.075, 0.015]]
     .forEach(([x, y], i) => (i ? prof.lineTo(x, y) : prof.moveTo(x, y)));
-  const railGeo = new THREE.ExtrudeGeometry(prof, { depth: len, steps: len * 2, bevelEnabled: false });
-  const railMat = lambert(COL.rail);
+  const railGeo = new THREE.ExtrudeGeometry(prof, { depth: len, steps: n, bevelEnabled: false });
+  const railMat = mat(COL.rail);
   for (const sx of [-1, 1]) {
     const r = new THREE.Mesh(railGeo, railMat);
-    r.position.set(sx * GAUGE / 2, 0.41, TRACK_START - len);
-    r.castShadow = r.receiveShadow = true; scene.add(r);
+    r.position.set(sx * GAUGE / 2, 0.41, z0 - len);
+    r.castShadow = r.receiveShadow = true; group.add(r);
   }
+  for (const o of group.children) o.frustumCulled = false;
+  scene.add(group);
+  return group;
+}
+buildTrack(TRACK_LEN, TRACK_START, 0.5, false, TRACK_START - 0.3, Math.floor(TRACK_LEN / TIE_GAP));
+// the fine piece, centered on a tie: it runs exactly over the long track's gap, with ties at the
+// same places
+// (5 cm longer at each end, so its end caps sit inside the long track's rails and bed)
+const nearTrack = buildTrack(2 * NEAR_TRACK + 0.1, NEAR_TRACK + 0.05, 0.05, true, 30 * TIE_GAP, 61);
+function placeNearTrack(z) {
+  // center it on the tie nearest z (tie i sits at TRACK_START - 0.3 - i * TIE_GAP), inside the track
+  const iMax = Math.floor(TRACK_LEN / TIE_GAP) - 31;
+  const i = Math.min(iMax, Math.max(30, Math.round((TRACK_START - 0.3 - z) / TIE_GAP)));
+  const c = TRACK_START - 0.3 - i * TIE_GAP;
+  nearTrackUniforms.nearTrackZ.value = c;
+  nearTrack.position.z = c;
 }
 
 // telegraph poles every 50 m on the left, with sagging wires between them
@@ -556,10 +608,21 @@ const skyUniforms = {
   skyHalf: { value: new THREE.Vector2(1, 1) },
   skyRot: { value: new THREE.Matrix3() },
   skySphere: { value: new THREE.Vector3(0, 1, 1) }, // the lat-long sphere lens (see lensSphere)
+  skySphereC: { value: new THREE.Vector3(0, 0, 0) },
   horizon: { value: new THREE.Color(0xdde8f1) },
   mid: { value: new THREE.Color(0xa9c8e6) },
   zenith: { value: new THREE.Color(0x5f97cf) },
 };
+// a pixel's direction in the world for the sphere lens (sky and ground backdrop)
+const SPHERE_PIX = /* glsl */`
+vec3 spherePix(vec2 ndc, vec3 sph, vec3 cen, mat3 rot) {
+  float lon = ndc.x * sph.y, lat = ndc.y * sph.z;
+  if (cen.x > 0.5) { // fixed to the world: from the center, stopping at the poles
+    lon += cen.y; lat = clamp(lat + cen.z, -1.5707963, 1.5707963);
+    return vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
+  }
+  return rot * vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
+}`;
 const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
   uniforms: skyUniforms, depthTest: false, depthWrite: false,
   vertexShader: /* glsl */`
@@ -568,16 +631,16 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
   fragmentShader: /* glsl */`
     uniform vec2 skyG, skyHalf;
     uniform mat3 skyRot;
-    uniform vec3 skySphere;
+    uniform vec3 skySphere, skySphereC;
     uniform vec3 horizon, mid, zenith;
+    ${SPHERE_PIX}
     varying vec2 vNdc;
     void main() {
       vec3 c = horizon;
       bool sphere = skySphere.x > 0.5;
       if (sphere || (abs(skyG.x) > 1e-6 && abs(skyG.y) > 1e-6)) { // (crossed rays come in with g < 0: flipped)
-        float lon = vNdc.x * skySphere.y, lat = vNdc.y * skySphere.z;
-        vec3 d = skyRot * (sphere ? vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon))
-          : vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)}));
+        vec3 d = sphere ? spherePix(vNdc, skySphere, skySphereC, skyRot)
+          : skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
         float e = max(0.0, normalize(d).y); // sine of the elevation
         c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
       }
@@ -599,6 +662,7 @@ const earthUniforms = {
   earthHalf: { value: new THREE.Vector2(1, 1) },
   earthWorld: { value: new THREE.Matrix4() },
   earthSphere: { value: new THREE.Vector3(0, 1, 1) }, // the lat-long sphere lens (see lensSphere)
+  earthSphereC: { value: new THREE.Vector3(0, 0, 0) },
   earthColor: { value: new THREE.Color(EARTH_COLOR) },
   ballastColor: { value: new THREE.Color(COL.ballast) },
   tieColor: { value: new THREE.Color(COL.tie) },
@@ -612,7 +676,8 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
   fragmentShader: /* glsl */`
     uniform vec2 earthG, earthDG, earthHalf;
     uniform mat4 earthWorld;
-    uniform vec3 earthSphere;
+    uniform vec3 earthSphere, earthSphereC;
+    ${SPHERE_PIX}
     uniform vec3 earthColor, ballastColor, tieColor, railColor;
     varying vec2 vNdc;
     float pvGrid(vec2 p, float spacing, float width) {
@@ -629,8 +694,7 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
       // below you and straight behind you that the sphere can't draw as triangles.
       bool sphere = earthSphere.x > 0.5;
       if (sphere) {
-        float lon = vNdc.x * earthSphere.y, lat = vNdc.y * earthSphere.z;
-        vec3 sd = mat3(earthWorld) * vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
+        vec3 sd = spherePix(vNdc, earthSphere, earthSphereC, mat3(earthWorld));
         if (sd.y > -1e-4) discard;
         vec4 eye = earthWorld * vec4(0.0, 0.0, 0.0, 1.0);
         vec2 q = eye.xz - sd.xz * (eye.y / sd.y);
@@ -1029,9 +1093,13 @@ function syncPanel() {
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
   for (const id of ["fRow", "sRow", "dRow", "hRow", "splitRow"]) $(id).hidden = state.sphere;
   $("sphereRows").hidden = !state.sphere;
+  if (state.ahFit) state.ah = undistortedAh();
   $("aw").value = state.aw; $("awVal").textContent = state.aw + "°";
-  $("ah").value = state.ah; $("ahVal").textContent = state.ah + "°";
-  $("rad").value = sliderFromR(state.R); $("radVal").textContent = fmtD(state.R);
+  $("ah").value = state.ah;
+  // (past 180° tall it can't be: the height stops at straight up and down)
+  $("ahVal").textContent = Math.round(state.ah) + "°" + (state.ahFit && state.aw / camera.aspect <= 180 ? " · undistorted" : "");
+  $("ahTick").value = undistortedAh();
+  for (const b of $("sphereMode").children) b.classList.toggle("is-on", (b.dataset.mode === "world") === state.sphereWorld);
   const mixedOn = state.split && sameLens("x", { src: "1", s: 1 }) && sameLens("y", { src: "z", s: 0 });
   for (const b of chipsEl.children) {
     const id = b.dataset.id;
@@ -1143,12 +1211,34 @@ $("h").addEventListener("input", (e) => {
   applyLens(false);
 });
 // the sphere lens: its angular size, and how far out the curved screen is
-const R_MIN = 0.5, R_MAX = 30;
-const rFromSlider = (v) => R_MIN * Math.pow(R_MAX / R_MIN, v / 100);
-function sliderFromR(r) { return 100 * Math.log(r / R_MIN) / Math.log(R_MAX / R_MIN); }
-$("aw").addEventListener("input", (e) => { state.aw = +e.target.value; syncPanel(); });
-$("ah").addEventListener("input", (e) => { state.ah = +e.target.value; syncPanel(); });
-$("rad").addEventListener("input", (e) => { state.R = rFromSlider(+e.target.value); syncPanel(); });
+for (const b of $("sphereMode").children) {
+  b.addEventListener("click", () => { state.sphereWorld = b.dataset.mode === "world"; syncPanel(); });
+}
+// where the patch's center is on the world's grid: straight ahead, as longitude and latitude
+const _fwd = new THREE.Vector3();
+function sphereCenter() {
+  _fwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  let lat = Math.asin(THREE.MathUtils.clamp(_fwd.y, -1, 1));
+  if (state.poleStop === "center") { // the patch's edge stops at the pole
+    const m = Math.max(0, Math.PI / 2 - THREE.MathUtils.degToRad(state.ah / 2));
+    lat = THREE.MathUtils.clamp(lat, -m, m);
+  }
+  return { lon: Math.atan2(_fwd.x, -_fwd.z), lat };
+}
+// the height at which a degree is as tall as it is wide on screen
+const undistortedAh = () => Math.min(180, Math.max(10, state.aw / camera.aspect));
+const snapTo = (v, pts, r) => { for (const p of pts) if (Math.abs(v - p) <= r) return p; return v; };
+$("aw").addEventListener("input", (e) => {
+  state.aw = snapTo(+e.target.value, [180, 360], 6);
+  if (state.ahFit) state.ah = undistortedAh();
+  syncPanel();
+});
+$("ah").addEventListener("input", (e) => {
+  const v = +e.target.value, u = undistortedAh();
+  state.ahFit = Math.abs(v - u) <= 5;
+  state.ah = state.ahFit ? u : snapTo(v, [180], 5);
+  syncPanel();
+});
 $("split").addEventListener("change", (e) => {
   state.split = e.target.checked;
   if (!state.split) { state.y = { ...state.x }; state.active = "x"; applyLens(true); }
@@ -1173,7 +1263,9 @@ function updateCaption() {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
   if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
-  if (state.sphere) c = `The screen is a <b>${state.aw}° × ${state.ah}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
+  if (state.sphere) c = `The screen is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. ` + (state.sphereWorld
+    ? "Latitude and longitude are fixed to the world, and looking around moves its center."
+    : "Across is the angle left and right, up is the angle up and down.");
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -1299,13 +1391,22 @@ const sphereDir = (lon, lat, out = []) => {
   out[0] = Math.cos(lat) * Math.sin(lon); out[1] = Math.sin(lat); out[2] = -Math.cos(lat) * Math.cos(lon);
   return out;
 };
+const SIDE_R = 3; // how far out the side view draws the sphere's screen (the picture doesn't depend on it)
+// a direction on the patch, u and v from -1 to 1 across and up: in the view's frame when the patch
+// turns with you, in the world's (stopping at the poles) when the grid is fixed to the world
+function patchDir(u, v, d = []) {
+  const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2);
+  if (!state.sphereWorld) return sphereDir(u * hl, v * hv, d);
+  const c = sphereCenter();
+  return sphereDir(c.lon + u * hl, THREE.MathUtils.clamp(c.lat + v * hv, -Math.PI / 2, Math.PI / 2), d);
+}
 let sphereKey = "";
 function updateSpherePatch() {
-  const key = `${state.aw},${state.ah},${state.R}`;
-  if (key === sphereKey) return;
+  const key = `${state.aw},${state.ah},${state.sphereWorld}`;
+  if (key === sphereKey && !state.sphereWorld) return;
   sphereKey = key;
-  const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2), d = [];
-  const at = (u, v) => sphereDir(u * hl, v * hv, d).map((c) => c * state.R);
+  const d = [];
+  const at = (u, v) => patchDir(u, v, d).map((c) => c * SIDE_R);
   const pos = sphereGeo.attributes.position;
   for (let j = 0; j <= SPH_V; j++) for (let i = 0; i <= SPH_U; i++) {
     pos.setXYZ(j * (SPH_U + 1) + i, ...at(-1 + 2 * i / SPH_U, -1 + 2 * j / SPH_V));
@@ -1341,7 +1442,10 @@ function updateInset(aspect) {
   eyeDot.position.copy(eye);
   figHead.position.copy(eye);
   for (const o of [screenFill, screenEdge]) o.visible = !state.sphere;
-  for (const o of [sphereFill, sphereEdge]) { o.visible = state.sphere; o.position.copy(eye); o.quaternion.copy(q); }
+  for (const o of [sphereFill, sphereEdge]) {
+    o.visible = state.sphere; o.position.copy(eye);
+    if (state.sphereWorld) o.quaternion.identity(); else o.quaternion.copy(q);
+  }
   if (state.sphere) return updateInsetSphere(aspect, eye, q, fwd);
   figBody.position.set(player.pos.x, player.pos.y + 0.72, player.pos.z);
   // the rays through the screen's corners, edge middles and center, as far as they go
@@ -1386,21 +1490,21 @@ function updateInset(aspect) {
 function updateInsetSphere(aspect, eye, q, fwd) {
   updateSpherePatch();
   for (const o of [planeFill, planeEdge]) o.visible = false;
-  const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2);
-  const len = Math.max(14, 2.5 * state.R), d = [];
+  const len = Math.max(14, 2.5 * SIDE_R), d = [];
   let k = 0;
   for (const ux of RAY_U) for (const uy of RAY_U) {
-    sphereDir(ux * hl, uy * hv, d);
-    const tip = _v.set(d[0] * len, d[1] * len, d[2] * len).applyMatrix4(camera.matrixWorld).toArray();
+    patchDir(ux, uy, d);
+    _v.set(d[0] * len, d[1] * len, d[2] * len);
+    const tip = (state.sphereWorld ? _v.add(eye) : _v.applyMatrix4(camera.matrixWorld)).toArray();
     for (let i = 0; i < RAY_STEPS; i++) { // one real segment, the rest folded into the eye dot
       rayPos.set(i === 0 ? eye.toArray() : tip, k); rayPos.set(tip, k + 3); k += 6;
     }
   }
   rayGeo.setPositions(rayPos);
-  const dist = 3.2 + 2.6 * state.R;
+  const dist = 3.2 + 2.6 * SIDE_R;
   _q.setFromEuler(new THREE.Euler(0, player.yaw, 0, "YXZ"));
   insetCam.position.copy(eye).add(_v.set(0.95, 0.55, 0.55).multiplyScalar(dist).applyQuaternion(_q));
-  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, state.R * 0.3));
+  insetCam.lookAt(_v.copy(eye).addScaledVector(fwd, SIDE_R * 0.3));
   insetFog.near = dist * 0.8; insetFog.far = dist * 3;
   insetCam.aspect = aspect;
   insetCam.updateProjectionMatrix();
@@ -1437,7 +1541,10 @@ function renderInset() {
     dctx.fillStyle = color; dctx.fillText(txt, x - tw / 2, y);
   };
   const top = (o, sy) => _w.set(0, 0.5 * sy, 0).applyQuaternion(o.quaternion).multiplyScalar(o.scale.y).add(o.position);
-  if (state.sphere) tag("screen", _w.fromArray(sphereDir(0, THREE.MathUtils.degToRad(state.ah / 2))).multiplyScalar(state.R).applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
+  if (state.sphere) {
+    _w.fromArray(patchDir(0, 1)).multiplyScalar(SIDE_R);
+    tag("screen", state.sphereWorld ? _w.add(camera.position) : _w.applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
+  }
   else tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
   tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
   insetFog.near = noFog.near; insetFog.far = noFog.far;
@@ -1474,8 +1581,15 @@ function frame(now) {
   update(dt);
   const morphing = stepMorph(now);
   lensUniforms.lensHalf.value.set(state.H * camera.aspect, state.H);
+  placeNearTrack(player.pos.z);
+  // the window's shape changed: keep an undistorted sphere undistorted
+  if (state.sphere && state.ahFit && Math.abs(undistortedAh() - state.ah) > 0.01) syncPanel();
   lensUniforms.lensSphere.value.set(state.sphere ? 1 : 0, THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
   skyUniforms.skySphere.value.copy(lensUniforms.lensSphere.value);
+  const c = sphereCenter();
+  lensUniforms.lensSphereC.value.set(state.sphere && state.sphereWorld ? 1 : 0, c.lon, c.lat);
+  skyUniforms.skySphereC.value.copy(lensUniforms.lensSphereC.value);
+  earthUniforms.earthSphereC.value.copy(lensUniforms.lensSphereC.value);
   camera.updateMatrixWorld();
   updateSky();
   renderInset();

@@ -258,15 +258,17 @@ test("converging rays cross and keep going: the world past the crossing is upsid
 });
 
 // Mike, 2026-11-19: "one where the screen is a lat-long rectangle on the sphere", with sliders for
-// angular width, angular height and radius. Across the picture is longitude and up is latitude, in
+// angular width and height (the radius went: it changed nothing), and a choice between the patch
+// turning with you and its center moving over a grid fixed to the world. Across the picture is longitude and up is latitude, in
 // the world (vertex shader), the sky and the ground painted behind, all with the same mapping.
 test("the sphere lens maps longitude across and latitude up, everywhere it draws", () => {
-  assert.match(MAIN, /float lon = atan\(mv\.x, -mv\.z\), lat = asin\(clamp\(mv\.y \/ r, -1\.0, 1\.0\)\);/);
+  assert.match(MAIN, /float lon = atan\(d\.x, -d\.z\), lat = asin\(clamp\(d\.y \/ r, -1\.0, 1\.0\)\);/);
   assert.match(MAIN, /return vec4\(lon \/ lensSphere\.y, lat \/ lensSphere\.z,/);
-  assert.match(MAIN, /float lon = vNdc\.x \* skySphere\.y, lat = vNdc\.y \* skySphere\.z;/);
-  assert.match(MAIN, /float lon = vNdc\.x \* earthSphere\.y, lat = vNdc\.y \* earthSphere\.z;/);
+  // the sky and the ground behind use one function for a pixel's direction
+  assert.equal((MAIN.match(/spherePix\(vNdc, /g) || []).length, 2);
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.match(html, /id="aw" min="10" max="360"/, "all the way around");
   assert.match(html, /id="ah" min="10" max="180"/, "straight down to straight up");
-  assert.match(html, /id="rad"/, "a radius slider");
+  assert.doesNotMatch(html, /id="rad"/, "Mike: remove the radius, it does nothing");
+  assert.match(html, /data-mode="turn"/); assert.match(html, /data-mode="world"/);
 });
