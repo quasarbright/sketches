@@ -379,6 +379,62 @@ async function buildSigns() {
 }
 buildSigns();
 
+// a small city ahead and to the right, past the distance signs: a grid of blocks with office
+// towers, taller toward the middle, banded with window rows. Plain boxes with per-face colors,
+// merged into one mesh, so it costs nothing to download.
+{
+  const rnd = mulberry(29);
+  const WALLS = [0xb9b4aa, 0x9ea3a8, 0xc7b79a, 0x8d949c, 0xd5d0c6, 0xa89a88];
+  const GLASS = [0x55677a, 0x5d7186, 0x626a74]; // soft contrast, so far-off window rows don't shimmer
+  const parts = [];
+  const wallC = new THREE.Color(), glassC = new THREE.Color(), roofC = new THREE.Color(0x6d6f73);
+  // a tower: sides in 1.75 m rows, every other row a band of windows
+  function tower(x, z, w, d, h) {
+    wallC.setHex(WALLS[Math.floor(rnd() * WALLS.length)]);
+    glassC.setHex(GLASS[Math.floor(rnd() * GLASS.length)]);
+    const g = new THREE.BoxGeometry(w, h, d, Math.ceil(w / 4), Math.ceil(h / 1.75), Math.ceil(d / 4))
+      .toNonIndexed();
+    g.translate(x, h / 2, z);
+    const pos = g.attributes.position, nrm = g.attributes.normal, n = pos.count;
+    const col = new Float32Array(n * 3);
+    for (let t = 0; t < n; t += 3) {
+      const yc = (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3;
+      const side = Math.abs(nrm.getY(t)) < 0.5;
+      const row = Math.floor(yc / 1.75);
+      const c = !side ? roofC : row > 0 && row % 2 === 1 && yc < h - 1 ? glassC : wallC;
+      for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b], 3 * (t + k));
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    g.deleteAttribute("uv");
+    parts.push(g);
+    colliders.push({ min: new THREE.Vector3(x - w / 2, 0, z - d / 2), max: new THREE.Vector3(x + w / 2, h, z + d / 2) });
+  }
+  const BLOCK = 34, X0 = 70, Z0 = -190;
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 9; j++) {
+    const bx = X0 + i * BLOCK, bz = Z0 - j * BLOCK;
+    // taller toward the middle of the grid
+    const mid = 1 - Math.hypot((i - 2.5) / 3, (j - 4) / 4.5);
+    const lots = rnd() < 0.5 ? 1 : 2;
+    for (let k = 0; k < lots; k++) {
+      const w = lots === 1 ? 16 + rnd() * 8 : 10 + rnd() * 3, d = 16 + rnd() * 8;
+      const x = bx + (lots === 1 ? 0 : (k ? 6.5 : -6.5)), z = bz + (rnd() - 0.5) * 4;
+      const h = 12 + Math.max(0, mid) * (40 + rnd() * 45) + rnd() * 10;
+      tower(x, z, w, d, h);
+      if (h > 40 && rnd() < 0.6) { // a smaller box on the roof
+        const g = new THREE.BoxGeometry(w * 0.4, 3, d * 0.4, 2, 2, 2).toNonIndexed();
+        g.translate(x, h + 1.5, z); g.deleteAttribute("uv");
+        const c = new Float32Array(g.attributes.position.count * 3);
+        for (let q = 0; q < c.length; q += 3) c.set([roofC.r, roofC.g, roofC.b], q);
+        g.setAttribute("color", new THREE.BufferAttribute(c, 3));
+        parts.push(g);
+      }
+    }
+  }
+  const city = new THREE.Mesh(mergeGeometries(parts), lensify(new THREE.MeshLambertMaterial({ vertexColors: true })));
+  city.castShadow = city.receiveShadow = true;
+  scene.add(city);
+}
+
 // a suburb on the left, behind the power lines: two rows of houses with gable roofs, facing the
 // tracks, and a tree in most yards. All of it is merged into one mesh with per-vertex colors.
 {
