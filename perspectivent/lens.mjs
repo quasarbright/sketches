@@ -158,12 +158,16 @@ export const lutDepth = (i) =>
 
 // Normalized lens value g(z) = f(z) / f(D). Things at depth D appear at their screen size, and
 // a non-positive or non-finite g means the point is not seen (rays never reach it).
+const BIG = 1e30;
 export function normalizedLens(f, D) {
   const fD = f(D);
   if (!(fD > 0) || !isFinite(fD)) return null;
   return (z) => {
     const v = f(z) / fD;
-    return isFinite(v) ? v : -1;
+    // past what floats can hold (exp(z) far away, 1/z at the eye): as big as the GPU can take,
+    // keeping the sign, since a negative lens now means crossed rays, not "nothing here"
+    if (isFinite(v)) return Math.max(-BIG, Math.min(BIG, v));
+    return v < 0 ? -BIG : BIG;
   };
 }
 
@@ -214,6 +218,8 @@ export const PRESETS = [
     tip: "Shrinks with the square root of distance: halfway between perspective and orthographic." },
   { id: "square", label: "z²", src: "z^2",
     tip: "Shrinks with distance squared: perspective, exaggerated." },
+  { id: "exp", label: "exp", src: "exp(z)",
+    tip: "Shrinks exponentially with distance: a few meters past the screen, everything has shrunk to a dot." },
   { id: "wobble", label: "wobble", src: "z + log(z)*sin(z)",
     tip: "Perspective with a wobble: sizes swell and shrink in waves about 6 m apart, and in some stretches farther things look bigger. f is negative closer than 0.37 m, so nothing that near is drawn." },
 ];

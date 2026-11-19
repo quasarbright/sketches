@@ -64,6 +64,7 @@ uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 uniform float lensOn;
 varying float vLensDepth;
+varying vec2 vLensSign;
 vec2 lensG(float z) {
   float t = (asinh(z / lensC) - lensRange.z) / (lensRange.w - lensRange.z);
   float fi = clamp(t, 0.0, 1.0) * ${(LUT.N - 1).toFixed(1)};
@@ -74,7 +75,7 @@ vec2 lensG(float z) {
   return mix(a, b, fract(fi));
 }
 vec4 lensProject(vec4 mv) {
-  if (lensOn < 0.5) { vLensDepth = -1.0; return projectionMatrix * mv; }
+  if (lensOn < 0.5) { vLensDepth = -1.0; vLensSign = vec2(1.0); return projectionMatrix * mv; }
   float z = -mv.z;
   if (z < lensRange.x) {
     // Behind the eye plane. The card clips a triangle where clip z + w crosses zero, and finds
@@ -83,17 +84,27 @@ vec4 lensProject(vec4 mv) {
     // smeared triangles across the whole screen. So back here w stays at its value on the eye
     // plane, and z + w is negative in proportion to how far behind the corner is.
     vec2 g0 = lensG(lensRange.x);
-    float w0 = g0.y;
+    float w0 = max(abs(g0.y), 1e-4), s0 = g0.y < 0.0 ? -1.0 : 1.0;
     vLensDepth = 0.0;
-    return vec4(mv.x / lensHalf.x * (w0 / g0.x), mv.y / lensHalf.y, -w0 * (1.0 + (lensRange.x - z)), w0);
+    vLensSign = vec2(g0.x < 0.0 ? -1.0 : 1.0, s0);
+    return vec4(mv.x / lensHalf.x * (w0 / g0.x), s0 * mv.y / lensHalf.y, -w0 * (1.0 + (lensRange.x - z)), w0);
   }
   vec2 g = lensG(z);
-  float w = g.y;
+  // Where f goes negative the rays have crossed (converging lenses, past the point where they
+  // meet): they keep going, out the other side, so the picture there is upside down and mirrored,
+  // like a pinhole camera's. The GPU needs w > 0, so w = |f| and the sign goes on x and y instead.
+  float w = abs(g.y), sy = g.y < 0.0 ? -1.0 : 1.0;
   float zl = 2.0 * (z - lensRange.x) / (lensRange.y - lensRange.x) - 1.0;
   vLensDepth = (z - lensRange.x) / (lensRange.y - lensRange.x);
-  vec4 p = vec4(mv.x / lensHalf.x * (w / g.x), mv.y / lensHalf.y, zl * w, w);
-  if (g.x <= 0.0) p.z = 2.0 * abs(w) + 1.0;   // no ray reaches this side-to-side: clip it
-  return p;
+  // Right around a crossing everything is blown up past the edges of the picture (more than 25×
+  // the screen), so it's dropped: drawing it would only paint a few huge smeared triangles.
+  // A triangle with corners on both sides of the crossing has no picture as one triangle: its
+  // edges run out through infinity and back, but the card would draw them straight across the
+  // screen. Its corners carry different signs, so the blend between them isn't ±1 inside it, and
+  // the fragment shader drops it.
+  vLensSign = vec2(g.x < 0.0 ? -1.0 : 1.0, sy);
+  if (w < 0.04 || abs(g.x) < 0.04) { vLensSign = vec2(0.0); return vec4(0.0, 0.0, 2.0, 1.0); }
+  return vec4(mv.x / lensHalf.x * (w / g.x), sy * mv.y / lensHalf.y, zl * w, w);
 }
 `;
 
@@ -109,7 +120,8 @@ function lensify(mat, extra) {
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;")
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;")
+      .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;")
       .replace("#include <dithering_fragment>",
         "#include <dithering_fragment>\ngl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
     if (extra) extra(sh);
@@ -533,7 +545,7 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
     varying vec2 vNdc;
     void main() {
       vec3 c = horizon;
-      if (skyG.x > 0.0 && skyG.y > 0.0) { // no ray gets this far when they meet in front
+      if (abs(skyG.x) > 1e-6 && abs(skyG.y) > 1e-6) { // (crossed rays come in with g < 0: flipped)
         vec3 d = skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
         float e = max(0.0, normalize(d).y); // sine of the elevation
         c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
@@ -1075,7 +1087,7 @@ function updateCaption() {
     else if (s < 0) c = "The back plane is flipped, so rays cross <b>behind</b> you.";
     else if (s < 1) c = `The rays start on a plane <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
     else if (Math.abs(s - 1) < 1e-9) c = "Rays are <b>parallel</b>, so nothing shrinks. Looking level, the ground is edge-on.";
-    else c = `The back plane is <b>bigger than the screen</b>, so rays meet <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Nothing past that is seen.`;
+    else c = `The back plane is <b>bigger than the screen</b>, so rays cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
@@ -1209,7 +1221,9 @@ function updateInset(aspect) {
   figHead.position.copy(eye);
   figBody.position.set(player.pos.x, player.pos.y + 0.72, player.pos.z);
   // the rays through the screen's corners, edge middles and center, as far as they go
-  const zEnd = Math.max(14, 3.2 * state.D);
+  // long enough to show converging rays crossing and carrying on
+  const sc = effS(state.split ? "y" : "x");
+  const zEnd = Math.min(400, Math.max(14, 3.2 * state.D, sc != null && sc > 1 ? 1.8 * convergenceDepth(sc, state.D) : 0));
   let k = 0;
   for (const ux of RAY_U) for (const uy of RAY_U) {
     let prev = null;
@@ -1217,7 +1231,8 @@ function updateInset(aspect) {
       const z = NEAR + (zEnd - NEAR) * Math.pow(i / RAY_STEPS, 1.4);
       const a = gx(z), b = gy(z);
       let cur = null;
-      if (a > 0 && b > 0 && Math.abs(ux * hx * a) < 300 && Math.abs(uy * hy * b) < 300)
+      // rays keep going after they cross (g < 0); stop only where they shoot off to infinity
+      if (isFinite(a) && isFinite(b) && Math.abs(ux * hx * a) < 300 && Math.abs(uy * hy * b) < 300)
         cur = _v.set(ux * hx * a, uy * hy * b, -z).applyMatrix4(camera.matrixWorld).toArray();
       if (i > 0) {
         const p0 = prev && cur ? prev : [0, 0, 0], p1 = prev && cur ? cur : [0, 0, 0];

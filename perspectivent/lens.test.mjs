@@ -74,9 +74,11 @@ test("compileLens rejects lenses that are not positive at the screen", () => {
   assert.match(compileLens("z +", 20).error, /end/);
 });
 
-test("non-finite lens values sample as clipped", () => {
+test("non-finite lens values stay finite and keep their sign", () => {
   const g = normalizedLens(parseExpr("1/z"), 10);
-  assert.equal(g(0), -1); // 1/0 = Infinity is not seen
+  assert.ok(g(0) >= 1e29); // 1/0 = Infinity: an infinitely big plane, not crossed rays
+  const e = normalizedLens(parseExpr("exp(z)"), 2.42);
+  assert.ok(e(1000) >= 1e29 && Number.isFinite(e(1000))); // exp overflows: shrunk to a dot
   const out = sampleLens(g, g);
   for (const v of out) assert.ok(Number.isFinite(v));
 });
@@ -167,7 +169,7 @@ test("every lens and every morph frame is centered on the eye", () => {
 
 test("the shaders add nothing to y: lens, sky and earth all use the eye-centered mapping", () => {
   const src = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
-  assert.match(src, /vec4 p = vec4\(mv\.x \/ lensHalf\.x \* \(w \/ g\.x\), mv\.y \/ lensHalf\.y, /);
+  assert.match(src, /return vec4\(mv\.x \/ lensHalf\.x \* \(w \/ g\.x\), sy \* mv\.y \/ lensHalf\.y, zl \* w, w\);/);
   assert.match(src, /vNdc\.y \* skyHalf\.y \* skyG\.y, -/);
   assert.match(src, /vNdc\.y \* earthHalf\.y \* earthG\.y, -/);
   assert.doesNotMatch(src, /lensShift|sensorShift/i);
@@ -240,4 +242,17 @@ test("every preset's back plane clears the rails at the default settings", () =>
   assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
   assert.match(MAIN, /function choosePreset\(p\) \{\s*setAxis\(.*\);\s*fitScreen\(\);/);
   assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
+});
+
+// Mike, 2026-11-19: "when the rays converge ... they should keep going and the image could just be
+// inverted". Past the crossing f < 0, and a point lands on the opposite side of the picture. The
+// shader carries that sign on x and y (w must stay positive), and nothing clips it away.
+test("converging rays cross and keep going: the world past the crossing is upside down", () => {
+  const D = 2.42, s = 1.6, zc = convergenceDepth(s, D);
+  const g = normalizedLens(backPlaneF(s, D), D);
+  for (const z of [zc * 0.5, zc * 0.9]) assert.ok(screenPos(0, 1, 1, g(z), 1, 1).sy > 0, `before, z=${z}`);
+  for (const z of [zc * 1.1, zc * 2, zc * 10]) assert.ok(screenPos(0, 1, 1, g(z), 1, 1).sy < 0, `after, z=${z}`);
+  assert.match(MAIN, /float w = abs\(g\.y\), sy = g\.y < 0\.0 \? -1\.0 : 1\.0;/);
+  assert.doesNotMatch(MAIN, /g\.x <= 0\.0/);
+  assert.doesNotMatch(MAIN, /Nothing past that is seen/);
 });
