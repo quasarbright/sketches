@@ -392,7 +392,8 @@ buildSigns();
   function tower(x, z, w, d, h) {
     wallC.setHex(WALLS[Math.floor(rnd() * WALLS.length)]);
     glassC.setHex(GLASS[Math.floor(rnd() * GLASS.length)]);
-    const g = new THREE.BoxGeometry(w, h, d, Math.ceil(w / 4), Math.ceil(h / 1.75), Math.ceil(d / 4))
+    const rows = Math.ceil(h / 1.75), rowH = h / rows;
+    const g = new THREE.BoxGeometry(w, h, d, Math.ceil(w / 4), rows, Math.ceil(d / 4))
       .toNonIndexed();
     g.translate(x, h / 2, z);
     const pos = g.attributes.position, nrm = g.attributes.normal, n = pos.count;
@@ -400,7 +401,7 @@ buildSigns();
     for (let t = 0; t < n; t += 3) {
       const yc = (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3;
       const side = Math.abs(nrm.getY(t)) < 0.5;
-      const row = Math.floor(yc / 1.75);
+      const row = Math.floor(yc / rowH); // both triangles of a row's quad share a color
       const c = !side ? roofC : row > 0 && row % 2 === 1 && yc < h - 1 ? glassC : wallC;
       for (let k = 0; k < 3; k++) col.set([c.r, c.g, c.b], 3 * (t + k));
     }
