@@ -145,7 +145,7 @@ const later = (fn, ms) => { st.timers.push(setTimeout(fn, ms)); };
 function start() {
   stopAll();
   el.querySelector(".wk-end")?.remove();
-  Object.assign(st, { score: 0, best: bestGet(), startedAt: performance.now(), over: false, holes: Array.from({ length: HOLES }, () => ({ kind: null, state: "down", id: 0 })) });
+  Object.assign(st, { score: 0, best: bestGet(), startedAt: performance.now(), over: false, wolfRun: 0, holes: Array.from({ length: HOLES }, () => ({ kind: null, state: "down", id: 0 })) });
   el.querySelectorAll(".wk-hole").forEach((h) => { h.className = "wk-hole"; h.querySelector(".wk-sprite").innerHTML = ""; });
   setScore(0);
   const tick = () => {
@@ -159,13 +159,21 @@ function start() {
   if (st.auto) scheduleSpawn(500);
 }
 
+// About one in four pop-ups is a villager, and never more than three wolves in a row, so every
+// round has some. Exposed for tests.
+export function nextKind(wolfRun, r = Math.random()) { return wolfRun >= 3 || r < 0.25 ? "villager" : "wolf"; }
+
 function progress() { return Math.min(1, (performance.now() - st.startedAt) / ROUND_MS); }
 
 function scheduleSpawn(ms) {
   st.spawnTimer = setTimeout(() => {
     if (!el || st.over) return;
     const free = st.holes.map((h, i) => (h.state === "down" ? i : -1)).filter((i) => i >= 0);
-    if (free.length) spawn(free[Math.floor(Math.random() * free.length)], Math.random() < 0.22 ? "villager" : "wolf");
+    if (free.length) {
+      const kind = nextKind(st.wolfRun);
+      st.wolfRun = kind === "wolf" ? st.wolfRun + 1 : 0;
+      spawn(free[Math.floor(Math.random() * free.length)], kind);
+    }
     const p = progress();
     scheduleSpawn(820 - 420 * p + Math.random() * 260);
   }, ms);
