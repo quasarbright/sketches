@@ -420,7 +420,7 @@ const teamMark = (role) => `<span class="ms-team-mark" aria-label="${esc(TEAMS[R
 function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
   const R = ROLES[role];
   return `<div class="ms-card ms-${size} ${cls}" style="${cardStyle(role)}" ${attrs}>
-    <div class="ms-card-name">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
+    <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}

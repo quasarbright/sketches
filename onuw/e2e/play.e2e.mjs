@@ -231,3 +231,28 @@ test("the host can end the vote when a player has dropped", async () => {
   await t.host.waitForFunction(() => window.__onuw.view.phase === "results");
   await t.ctx.close();
 });
+
+test("card names fit their band, clear of the team letter and the card edge, at phone and desktop sizes", async () => {
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+    const ctx = await browser.newContext({ viewport });
+    const p = await ctx.newPage();
+    await p.goto(`${base}?net=local&fast`);
+    await p.fill("#name-input", "Mike");
+    await p.click("button[type=submit]");
+    await p.waitForSelector(".ms-grid .ms-card-name");
+    const bad = await p.evaluate((w) => [...document.querySelectorAll(".ms-card")].flatMap((c) => {
+      const name = c.querySelector(".ms-card-name"), mark = c.querySelector(".ms-team-mark");
+      if (!name || !mark || getComputedStyle(mark).display === "none") return [];
+      const r = document.createRange(); r.selectNodeContents(name);
+      const t = r.getBoundingClientRect(), m = mark.getBoundingClientRect(), k = c.getBoundingClientRect();
+      const glyph = document.createRange(); glyph.selectNodeContents(mark); const g = glyph.getBoundingClientRect();
+      const out = [];
+      if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
+      if (t.right > g.left - 4) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
+      if (k.right - g.right < 3) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
+      return out.length ? [`${name.textContent.trim()} @${w}: ${out.join(", ")}`] : [];
+    }), viewport.width);
+    assert.deepEqual(bad, []);
+    await ctx.close();
+  }
+});
