@@ -188,20 +188,18 @@
     <p class="pv-caption" id="caption"></p>
 
     <div class="control" id="fRow">
-      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their sideways offset divided by f of their distance z (in meters). Bigger f means smaller on screen.">divide by</span>
-        <div class="pv-axis-pick" id="axisPick" hidden title="Which direction the presets and the back plane slider change">
-          <button data-axis="x">x: across</button><button data-axis="y">y: up and down</button>
-        </div></div>
+      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their offset from the middle of the view divided by f of their distance z (in meters). Bigger f means smaller on screen.">how size changes with distance</span></div>
       <label class="pv-field" id="fxField"><span class="pv-fz" id="fxLabel">f(z) =</span>
         <input id="fx" spellcheck="false" autocomplete="off" value="z"
           title="Type any function of distance z: try 1/z, log(1+z), z^2, sin(z)+2" /></label>
       <p class="pv-error" id="fxErr"></p>
       <div class="pv-axis-row" id="fyRow" hidden>
-        <label class="pv-field" id="fyField"><span class="pv-fz">y: f(z) =</span>
+        <label class="pv-field" id="fyField"><span class="pv-fz">up/down: f(z) =</span>
           <input id="fy" spellcheck="false" autocomplete="off" value="z"
             title="The function used for up-down positions" /></label>
         <p class="pv-error" id="fyErr"></p>
       </div>
+      <p class="pv-note" id="fxNote">Something z meters away is drawn 1/f(z) as big. f(z) = z is an ordinary camera.</p>
     </div>
 
     <div class="pv-chips" id="chips"></div>
@@ -229,8 +227,8 @@
 
     <div class="control" id="sRow">
       <div class="control-head">
-        <span class="name" title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">back plane height</span>
-        <span class="value" id="sVal">a point</span>
+        <span class="name" title="How tall the plane at your eye is that the rays start from, in meters and compared with the screen (1:1 = the same size). A point is a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">rays start from</span>
+        <span class="value" id="sVal">your eye</span>
       </div>
       <datalist id="sTicks"><option value="1"></option></datalist>
       <input type="range" id="s" min="0" max="3" step="0.005" value="0" list="sTicks"
@@ -260,8 +258,6 @@
       <p class="pv-note" id="hNote">The tallest screen that stays above the rails at your feet.</p>
     </div>
 
-    <label class="check" id="splitRow" title="Use a different lens for side-to-side and up-down, like orthographic across and perspective up and down">
-      <input type="checkbox" id="split" /> separate lens for x and y</label>
   </control-panel>
 
   <div class="control-bar pv-bar">
@@ -283,6 +279,10 @@
         divided by its distance $z$.</p>
       <canvas class="pv-about-diagram" data-demo="pinhole"></canvas>
       <p class="pv-about-caption">Rays fanning out from the eye. Everything on one ray lands on the same spot.</p>
+      <p>The screen isn't a window you look through. It only decides <i>where</i> in the picture
+        each ray lands. What you see along a ray is the first thing it hits, starting from your
+        eye, so something closer than the screen (a platform you've walked right up to) still
+        shows, in the spot where its ray would have crossed the screen.</p>
 
       <div class="section-label">a plane behind the screen</div>
       <p>The lines don't have to start at a single point. Start them from a
@@ -291,8 +291,17 @@
         camera. When it's as big as the screen the rays are parallel, nothing shrinks with
         distance, and you get an <b>orthographic</b> view, the kind used in technical drawings.
         Make the plane bigger than the screen and the rays converge again, this time in front of
-        you, so far things look bigger. That's <b>reverse perspective</b>, and nothing past the
-        meeting point can be seen at all.</p>
+        you, so far things look bigger. That's <b>reverse perspective</b>. Past the meeting point the
+        rays carry on crossed, so out there the world is upside down.</p>
+      <p>So which one is the screen? Each spot in the picture is one ray, and a ray needs two
+        points: where it <span style="color:var(--plane)">starts</span>, on the plane at your eye,
+        and where it crosses the <span style="color:var(--accent)">screen</span>. The spot $u$ of
+        the picture starts at $s\,u$ on the plane (the plane is $s$ times the screen's size) and
+        passes $u$ on the screen. The plane decides where the rays come from, and the screen,
+        together with the plane, decides which way each one points. Either could serve as the
+        picture: the plane is just the same picture scaled by $s$. The screen is the one whose
+        scale we keep, so things at the screen's distance always stay the same size. With parallel
+        rays the two are the same size, so there's nothing to tell them apart.</p>
       <p>The plane is always centered on your eye, so your eye stays in the same place whichever
         lens you pick. Its lower part reaches below your feet, and rays that start there are inside
         the earth, so they see solid ground. Looking straight ahead in orthographic, the ground's

@@ -9,6 +9,7 @@ import {
   LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
+import { PHYS, COURSE, TOWER } from "./course.mjs";
 
 const $ = (id) => document.getElementById(id);
 const isBg = new URLSearchParams(location.search).has("background");
@@ -603,18 +604,13 @@ buildSigns();
   scene.add(suburb);
 }
 
-// a jumping course on the right: steps up to a lookout tower
-const COURSE = [
-  [9, 0.0, -6, 3, 0.8], [12, 0.0, -10, 3, 1.6], [16, 0.0, -13, 3, 2.4], [20, 0, -16, 3, 3.2],
-  [24, 0, -20, 2.5, 4.0], [27, 0, -25, 2.5, 5.0], [27, 0, -31, 2.5, 6.0], [23, 0, -35, 2.5, 7.0],
-  [19, 0, -39, 2.5, 8.0], [19, 0, -45, 2.5, 9.0], [23, 0, -49, 2.5, 10.0], [28, 0, -51, 2.5, 11.0],
-];
-for (const [x, , z, w, top] of COURSE) addBox(w, 0.5, w, x, top - 0.5, z, COL.ochre, { collide: true });
+// a jumping course on the right: steps up to a lookout tower (course.mjs)
+for (const { x, z, w, top } of COURSE) addBox(w, 0.5, w, x, top - 0.5, z, COL.ochre, { collide: true });
 // pillars holding the steps up
-for (const [x, , z, w, top] of COURSE) addBox(0.3, top - 0.5, 0.3, x, 0, z, COL.pole, { seg: 1 });
-// the tower: a hollow-looking block with a lookout deck at 12 m
-addBox(6, 11.5, 6, 34, 0, -54, COL.chalk, { collide: true });
-addBox(7, 0.5, 7, 34, 11.5, -54, COL.ochre, { collide: true });
+for (const { x, z, top } of COURSE) addBox(0.3, top - 0.5, 0.3, x, 0, z, COL.pole, { seg: 1 });
+// the tower: a block with a lookout deck on top
+addBox(TOWER.w, TOWER.top - 0.5, TOWER.w, TOWER.x, 0, TOWER.z, COL.chalk, { collide: true });
+addBox(TOWER.deckW, 0.5, TOWER.deckW, TOWER.x, TOWER.top - 0.5, TOWER.z, COL.ochre, { collide: true });
 
 // the sky: pale at the horizon and deeper blue overhead. It's infinitely far away, so each pixel
 // asks the lens where its ray is heading out there (its position at a very far depth) and takes
@@ -801,10 +797,10 @@ const SUN_DIR = new THREE.Vector3(0.45, 1, 0.3).normalize();
 /* =====================================================================
  * moving around
  * ===================================================================== */
-const RADIUS = 0.3, HEIGHT = 1.8;
+const { RADIUS, HEIGHT } = PHYS;
 const START = { pos: new THREE.Vector3(0, 0.41, 16), yaw: 0, pitch: 0 };
 const player = {
-  pos: START.pos.clone(), vel: new THREE.Vector3(), onGround: false,
+  pos: START.pos.clone(), vel: new THREE.Vector3(), onGround: false, air: 0,
   yaw: START.yaw, pitch: START.pitch,
   mode: "walk",
 };
@@ -878,14 +874,18 @@ function update(dt) {
   const fast = keys.has("ShiftLeft") || keys.has("ShiftRight");
 
   if (player.mode === "walk") {
-    const speed = fast ? 11 : 5.5;
+    const speed = fast ? PHYS.RUN : PHYS.WALK;
     const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
     let mx = -sy * fwdIn + cy * sideIn, mz = -cy * fwdIn - sy * sideIn;
     const len = Math.hypot(mx, mz);
     if (len > 1) { mx /= len; mz /= len; }
     player.vel.x = mx * speed; player.vel.z = mz * speed;
-    if ((keys.has("Space") || touchJump) && player.onGround) { player.vel.y = 8.2; player.onGround = false; }
-    player.vel.y -= 24 * dt;
+    // a jump still counts for a moment after you walk off an edge (coyote time)
+    player.air = player.onGround ? 0 : player.air + dt;
+    if ((keys.has("Space") || touchJump) && player.air <= PHYS.COYOTE && player.vel.y <= 0) {
+      player.vel.y = PHYS.JUMP_V; player.onGround = false; player.air = PHYS.COYOTE + 1;
+    }
+    player.vel.y -= PHYS.G * dt;
 
     const p = player.pos;
     p.x += player.vel.x * dt; collide("x", p, player.vel);
@@ -1044,7 +1044,7 @@ for (const p of PRESETS) {
   b.textContent = "ortho x, persp y";
   b.addEventListener("click", () => {
     state.sphere = false;
-    if (!state.split) { state.split = true; $("split").checked = true; }
+    state.split = true;
     state.x = { src: "1", s: 1 }; state.y = { src: "z", s: 0 };
     fitScreen();
     syncPanel(); applyLens(true);
@@ -1074,6 +1074,7 @@ function fitScreen() {
 }
 function choosePreset(p) {
   state.sphere = false;
+  state.split = false; // every chip but "ortho x, persp y" is one lens for both directions
   setAxis(activeAxis(), { src: p.src, s: p.s ?? null });
   fitScreen();
   clearErrors();
@@ -1105,12 +1106,12 @@ function syncPanel() {
     }
   }
   $("fyRow").hidden = !state.split;
-  $("axisPick").hidden = !state.split;
-  for (const b of $("axisPick").children) b.classList.toggle("is-on", b.dataset.axis === ax);
-  $("fxLabel").textContent = state.split ? "x: f(z) =" : "f(z) =";
+  $("fxLabel").textContent = state.split ? "across: f(z) =" : "f(z) =";
   $("fxField").classList.toggle("pv-active", state.split && ax === "x");
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
-  for (const id of ["fRow", "sRow", "dRow", "hRow", "splitRow"]) $(id).hidden = state.sphere;
+  for (const id of ["fRow", "dRow", "hRow"]) $(id).hidden = state.sphere;
+  // with two lenses the rays' start is different across and up/down: the caption says how
+  $("sRow").hidden = state.sphere || state.split;
   $("sphereRows").hidden = !state.sphere;
   if (state.ahFit) state.ah = undistortedAh();
   $("aw").value = state.aw; $("awVal").textContent = state.aw + "°";
@@ -1143,8 +1144,8 @@ function syncPanel() {
   $("hVal").textContent = fmtD(2 * state.H) + " tall";
   const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
   $("hNote").textContent = [
-    state.H < state.Hasked - 1e-6 ? "Shrunk so this lens's back plane clears the rails." : atClear ? "Tallest that clears the rails." : "",
-    same ? "1:1 with the back plane." : "",
+    state.H < state.Hasked - 1e-6 ? "Shrunk so where the rays start stays above the rails." : atClear ? "Tallest that clears the rails." : "",
+    same && !state.split ? "As tall as where the rays start." : "",
   ].filter(Boolean).join(" ");
   // tick marks where the screen's bottom is at your feet, and where it matches the back plane
   $("hGroundTick").value = sliderFromH(CLEAR_H);
@@ -1153,15 +1154,16 @@ function syncPanel() {
 }
 // the back plane's own height, and how it compares with the screen's
 function sLabel(s) {
-  if (Math.abs(s) < 1e-9) return "a point";
-  return fmtD(2 * s * state.H) + " tall";
+  if (Math.abs(s) < 1e-9) return "your eye";
+  return `a ${fmtD(2 * s * state.H)} plane`;
 }
 // and how it compares with the screen, in words
 function sNote(s) {
-  if (s == null || Math.abs(s) < 1e-9) return "";
+  if (s == null) return "";
+  if (Math.abs(s) < 1e-9) return "One point, like a camera. Slide right to start the rays from a plane around your eye instead; as tall as the screen makes them parallel.";
   const low = s * state.H > CLEAR_H + 1e-3 ? " Dips into the ground." : "";
-  if (Math.abs(s - 1) < 1e-9) return "1:1 with the screen: parallel rays." + low;
-  return `${+s.toFixed(2)}× the screen.` + low;
+  if (Math.abs(s - 1) < 1e-9) return "As tall as the screen, so the rays run parallel: orthographic." + low;
+  return `${+s.toFixed(2)}× the screen's height.` + (s > 1 ? " Bigger than the screen, so the rays cross ahead." : "") + low;
 }
 
 function onField(ax) {
@@ -1181,9 +1183,6 @@ for (const ax of ["x", "y"]) {
   inp.addEventListener("focus", () => { state.active = ax; syncPanel(); });
   inp.addEventListener("blur", () => syncPanel());
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === "Escape") inp.blur(); });
-}
-for (const b of $("axisPick").children) {
-  b.addEventListener("click", () => { state.active = b.dataset.axis; syncPanel(); redrawDiagram(); });
 }
 
 $("s").addEventListener("input", (e) => {
@@ -1243,12 +1242,6 @@ $("ah").addEventListener("input", (e) => {
   state.ah = state.ahFit ? u : snapTo(v, [180], 5);
   syncPanel();
 });
-$("split").addEventListener("change", (e) => {
-  state.split = e.target.checked;
-  if (!state.split) { state.y = { ...state.x }; state.active = "x"; applyLens(true); }
-  else state.active = "y";
-  syncPanel();
-});
 
 /* ---------------- diagram + caption ---------------- */
 const diag = $("diagram");
@@ -1259,14 +1252,23 @@ function updateCaption() {
   let c;
   if (s != null) {
     if (Math.abs(s) < 1e-9) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
-    else if (s < 0) c = "The back plane is flipped, so rays cross <b>behind</b> you.";
+    else if (s < 0) c = "The rays start from a flipped plane, so they cross <b>behind</b> you.";
     else if (s < 1) c = `The rays start on a plane <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
     else if (Math.abs(s - 1) < 1e-9) c = "Rays are <b>parallel</b>, so nothing shrinks. Looking level, the ground is edge-on.";
-    else c = `The back plane is <b>bigger than the screen</b>, so rays cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
+    else c = `The rays start from a plane <b>bigger than the screen</b>, so they cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
-  if (state.split) c = `<b>${ax === "x" ? "Side to side" : "Up and down"}:</b> ` + c[0].toLowerCase() + c.slice(1);
+  if (state.split) {
+    const short = (a) => {
+      const v = effS(a);
+      if (v == null) return `f(z) = ${escapeHtml(state[a].src)}`;
+      if (Math.abs(v) < 1e-9) return "rays fan out from your eye, like a camera";
+      if (Math.abs(v - 1) < 1e-9) return "rays run parallel, so nothing shrinks";
+      return `rays start on a plane ${+v.toFixed(2)}× the screen`;
+    };
+    c = `<b>Across:</b> ${short("x")}. <b>Up and down:</b> ${short("y")}.`;
+  }
   if (state.sphere) c = `The screen is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
 }
@@ -1308,10 +1310,10 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const s = keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
         drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
         const cap = el.querySelector('[data-caption="plane"]');
-        const txt = s < 0.02 ? "Back plane size 0: one point, a normal camera."
-          : Math.abs(s - 1) < 0.02 ? "Back plane size 1: parallel rays, orthographic."
-          : s > 1.58 ? `Back plane size 1.6: rays meet ${Math.round(convergenceDepth(1.6, D))} m ahead, reverse perspective.`
-          : `Back plane size ${s.toFixed(2)}.`;
+        const txt = s < 0.02 ? "Rays start from one point: a normal camera."
+          : Math.abs(s - 1) < 0.02 ? "From a plane as tall as the screen: parallel rays, orthographic."
+          : s > 1.58 ? `From a plane 1.6× the screen: rays meet ${Math.round(convergenceDepth(1.6, D))} m ahead, reverse perspective.`
+          : `From a plane ${s.toFixed(2)}× the screen.`;
         if (cap.textContent !== txt) cap.textContent = txt;
       } else if (demo === "functions") {
         // hold each function, then morph to the next the way the lens does
@@ -1551,7 +1553,7 @@ function renderInset() {
     tag("screen", _w.applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
   }
   else tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
-  tag(planeEdge.visible ? "back plane" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
+  tag(planeEdge.visible ? "rays start" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
   insetFog.near = noFog.near; insetFog.far = noFog.far;
   lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
   renderer.setScissorTest(false);
@@ -1603,8 +1605,7 @@ function frame(now) {
 }
 let wasMorphing = false;
 const redrawDiagram = () => {}; // the side view redraws every frame
-for (const id of ["s", "d", "fx", "fy", "split"]) $(id).addEventListener("input", redrawDiagram);
-$("split").addEventListener("change", redrawDiagram);
+for (const id of ["s", "d", "fx", "fy"]) $(id).addEventListener("input", redrawDiagram);
 chipsEl.addEventListener("click", redrawDiagram);
 new ResizeObserver(redrawDiagram).observe(diag);
 

@@ -240,7 +240,7 @@ test("every preset's back plane clears the rails at the default settings", () =>
     assert.ok(h > 0.3, `${p.id}: screen still usable`);
   }
   assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
-  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*setAxis\(.*\);\s*fitScreen\(\);/);
+  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*state\.split = false;.*\s*setAxis\(.*\);\s*fitScreen\(\);/);
   assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
 });
 
