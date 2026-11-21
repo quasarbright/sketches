@@ -1,23 +1,26 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, sparkle, card } from "../brush.mjs";
-// The sleepwalker: eyes shut, arms out in front, shuffling right in a long nightshirt and a drooping nightcap.
+import { blob, brush, rect, sparkle, boot, card } from "../brush.mjs";
+// The alcoholic (role id "sleepwalker"): a peasant swaying on crossed legs, bottle raised, the other arm out for balance.
 const { card: bg, ink } = ROLE_COLORS.sleepwalker;
-const backLeg = [brush([[232, 470], [214, 540], [196, 590]], [34, 28, 24]), blob([[168, 580], [204, 580], [214, 600], [166, 602]])];
-const shirt = blob([[214, 250], [262, 236], [294, 262], [304, 340], [318, 420], [334, 500, "c"], [296, 494], [264, 504], [226, 494], [192, 502, "c"], [196, 420], [200, 340]]);
-const frontLeg = [brush([[278, 480], [296, 540], [300, 590]], [34, 28, 24]), blob([[286, 580], [328, 578], [338, 600], [284, 602]])];
-const head = blob([[230, 170], [258, 158], [286, 166], [300, 192], [306, 204, "c"], [298, 210], [298, 224], [280, 238], [254, 238], [234, 222]]);
-const cap = [blob([[222, 178, "c"], [234, 146], [268, 134], [296, 150], [304, 180, "c"], [262, 172]]),
-  brush([[250, 140], [210, 130], [176, 150], [160, 190], [166, 220]], [40, 32, 24, 14, 8]), blob([[152, 214], [176, 214], [180, 238], [164, 248], [150, 236]])];
-const neck = brush([[260, 226], [262, 250]], [24, 28]);
-const arms = [brush([[282, 262], [340, 260], [396, 250]], [30, 24, 20]), blob([[388, 238], [420, 238], [428, 252], [416, 262], [388, 262]]),
-  brush([[262, 270], [326, 290], [382, 284]], [30, 24, 20]), blob([[374, 272], [406, 274], [414, 288], [400, 296], [374, 296]])];
-const zs = [[352, 150, 30], [392, 118, 22], [424, 94, 16]];
-const zee = (x, y, s) => brush([[x - s / 2, y - s / 2], [x + s / 2, y - s / 2], [x - s / 2, y + s / 2], [x + s / 2, y + s / 2]], [s * .22, s * .22]);
+const circle = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
+const backLeg = [brush([[238, 466], [222, 530], [204, 584]], [38, 30, 24]), boot(206, 598, { s: 25, dir: -1 })];
+const frontLeg = [brush([[270, 466], [244, 530], [262, 584]], [38, 30, 24]), boot(266, 598, { s: 25 })];
+const tunic = blob([[226, 262], [276, 250], [304, 278], [306, 360], [312, 470], [292, 486], [250, 482], [210, 478], [214, 380], [210, 300]]);
+const neck = brush([[256, 254], [258, 226]], [30, 26]);
+// head lolled back and to the side, mouth open
+const head = blob([[230, 206], [236, 176], [262, 162], [290, 170], [300, 190], [312, 198, "c"], [302, 206], [304, 218], [294, 226], [298, 236, "c"], [278, 242], [248, 238], [232, 224]]);
+const hood = blob([[222, 230, "c"], [226, 186], [246, 162], [276, 156], [294, 168], [282, 176], [258, 180], [246, 204], [244, 240, "c"]]);
+const farArm = [brush([[228, 286], [190, 304], [156, 292]], [32, 26, 22]), blob([[140, 280], [160, 278], [166, 296], [146, 302]])];
+const bottleArm = [brush([[292, 284], [340, 258], [350, 200]], [32, 26, 22]), blob([[336, 186], [360, 182], [366, 204], [342, 210]])];
+const bottle = [rect(358, 170, 30, 58, 50, 10), brush([[336, 190], [314, 208]], [12, 10])];
+const drops = [blob([[306, 236, "c"], [312, 246], [306, 252], [300, 246]]), blob([[312, 262, "c"], [316, 270], [312, 274], [308, 270]])];
 const cuts = [
-  brush([[270, 192], [288, 196]], [3, 3]), brush([[268, 196], [278, 202], [290, 200]], [2, 3, 2]),  // closed eye
-  brush([[282, 220], [292, 222]], [3, 2]),                                                         // open mouth
-  brush([[226, 178], [302, 182]], [4, 4]),                                                         // cap edge
-  brush([[244, 300], [234, 400], [226, 490]], [3, 5, 2]), brush([[288, 330], [300, 420], [306, 490]], [3, 5, 2]), // folds
+  brush([[270, 190], [286, 194]], [4, 3]), brush([[268, 194], [278, 198], [288, 196]], [2, 3, 2]), // half-shut eye
+  blob([[290, 220], [302, 220], [298, 228, "c"]]),                                               // open mouth
+  brush([[214, 360], [308, 352]], [5, 5]),                                                       // belt
+  brush([[254, 290], [248, 352]], [3, 3]), brush([[234, 380], [226, 470]], [4, 1]), brush([[292, 380], [298, 470]], [4, 1]),
 ];
-export default card({ bg, ink, transform: "translate(-12 30)", layers: [backLeg, { d: shirt }, frontLeg, neck, { d: head }, cap, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: arms, halo: 4, roots: [[282, 262, 24], [262, 270, 24]] }, zs.map(([x, y, s]) => zee(x, y, s)), sparkle(130, 120, 12), sparkle(100, 300, 10), sparkle(420, 380, 10)] });
+export default card({ bg, ink, transform: "translate(0 4) rotate(-7 260 600)", layers: [
+  [circle(236, 140, 7), circle(218, 116, 5), circle(232, 94, 4)].map((d) => ({ d })), sparkle(110, 150, 12), sparkle(420, 330, 10),
+  backLeg, { d: tunic }, { group: frontLeg, halo: 4, roots: [[270, 466, 30]] }, neck, { d: head }, { d: hood }, { group: farArm },
+  cuts.map((d) => ({ d, fill: "bg" })), { group: [...bottleArm], halo: 4, roots: [[292, 284, 24]] }, { group: bottle, halo: 4 }, { d: rect(364, 165, 12, 26, 50, 4), fill: "bg" }, drops] });

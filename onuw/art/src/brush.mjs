@@ -133,10 +133,20 @@ export function rect(x, y, w, h, a = 0, rr = 6) {
 // Transform a path's points: used to place a shape built at the origin.
 export const at = (x, y, a = 0, sc = 1) => `translate(${x} ${y}) rotate(${a}) scale(${sc})`;
 
-// A menacing teardrop eye for a face in profile: round at the back, pointed toward the snout,
-// tilted down at the front (angle in degrees), with a heavy brow cut above it.
-export function eye(x, y, { len = 22, h = 9, angle = 18, flip = false } = {}) {
-  const a = (flip ? 180 - angle : angle) * Math.PI / 180, dir = flip ? -1 : 1;
-  const P = (u, v, c) => { const q = [x + u * Math.cos(a) - v * Math.sin(a) * dir, y + u * Math.sin(a) + v * Math.cos(a) * dir]; return c ? [...q, c] : q; };
-  return blob([P(-len * .45, 0), P(-len * .3, -h * .55), P(0, -h * .5), P(len * .55, 0, "c"), P(0, h * .45), P(-len * .3, h * .5)]);
+// A menacing eye for a wolf in profile facing right: a straight top edge slanting down toward the
+// snout (the scowl), a rounded lower lid, and a sharp inner corner. `len` and `h` set its size.
+export function eye(x, y, { len = 22, h = 10, tilt = .55 } = {}) {
+  const L = len / 2, top = (u) => y - h / 2 + (u + L) * tilt * h / len;
+  return blob([[x - L, top(-L), "c"], [x + L, top(L) + h * .15, "c"], [x + L * .35, y + h * .5], [x - L * .35, y + h * .45], [x - L * .9, y + h * .1]]);
+}
+
+// A digitigrade wolf paw standing on y, toes pointing `dir` (1 right, -1 left): compact, heel raised, two toe bumps.
+export function paw(x, y, { s = 16, dir = 1 } = {}) {
+  const P = (u, v) => [x + dir * u * s, y + v * s];
+  return blob([P(-.8, -.9), P(-.1, -1.25), P(.55, -.95), P(.95, -.55), [...P(1.15, -.05), "c"], P(.75, 0), P(.35, -.08), [...P(-.1, 0), "c"], P(-.75, -.2)]);
+}
+// A shoe standing on y, toe pointing `dir`: heel, instep, rounded toe, flat sole.
+export function boot(x, y, { s = 22, dir = 1 } = {}) {
+  const P = (u, v) => [x + dir * u * s, y + v * s];
+  return blob([[...P(-.75, -1.1), "c"], P(.2, -1.05), P(.65, -.6), P(1.25, -.42), P(1.5, -.15), [...P(1.45, .05), "c"], [...P(-.8, .05), "c"]]);
 }
