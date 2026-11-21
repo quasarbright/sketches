@@ -24,9 +24,9 @@ const ls = safe(window.localStorage);
 const ss = safe(window.sessionStorage);
 
 // One id per tab (so two tabs are two players), kept across refreshes of that tab.
-let myId = ss.get("moonswap:id");
-if (!myId) { myId = Math.random().toString(36).slice(2, 12); ss.set("moonswap:id", myId); }
-let myName = ls.get("moonswap:name") || "";
+let myId = ss.get("onuw:id");
+if (!myId) { myId = Math.random().toString(36).slice(2, 12); ss.set("onuw:id", myId); }
+let myName = ls.get("onuw:name") || "";
 
 const app = document.getElementById("app");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -79,7 +79,7 @@ let lastHostId = null;
 
 const now = () => Date.now();
 const hostNow = () => now() + clockOffset;
-const hostKey = (code) => `moonswap:host:${code}`;
+const hostKey = (code) => `onuw:host:${code}`;
 
 function setRoomInUrl(code) {
   const u = new URL(location.href);
@@ -365,7 +365,7 @@ function receiveView(v) {
     ui.peeked = keepPeek;
   }
   const me = v.players.find((p) => p.id === myId);
-  if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set("moonswap:name", myName); }
+  if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set("onuw:name", myName); }
   render();
 }
 
@@ -414,7 +414,7 @@ function topBar() {
   const v = view;
   const n = v.players.length;
   return `<header class="ms-top">
-    <div class="ms-brand">${moonMark()}<span>Moonswap</span></div>
+    <div class="ms-brand">${moonMark()}<span>onuw</span></div>
     <div class="ms-top-actions">
       <button class="ms-icon-btn" data-act="cheatsheet" aria-label="Cards in this game" data-tooltip="Cards in this game: what each one does, and how each team wins">${icon("book")}</button>
       <button class="ms-icon-btn" data-act="players" aria-label="Players" data-tooltip="Players: see who's here and change your name">${icon("users")}<span class="ms-count">${n}</span></button>
@@ -495,7 +495,7 @@ function homeScreen() {
   const joining = !!roomCode;
   return `<main class="ms-center ms-home">
     <div class="ms-hero-moon">${bigMoon()}</div>
-    <h1 class="ms-title">Moonswap</h1>
+    <h1 class="ms-title">onuw</h1>
     <p class="ms-lede">A one-night werewolf game for 3 to 10 people in the same room, each on their own phone. Cards move in the dark, so you might not be who you think you are by morning.</p>
     <form class="ms-form" data-form="${joining ? "join" : "create"}">
       <label class="ms-label" for="name-input">Your name</label>
@@ -1098,13 +1098,13 @@ function onSubmit(e) {
   if (kind === "create" || kind === "join") {
     const n = E.cleanName(document.getElementById("name-input").value);
     if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
-    myName = n; ls.set("moonswap:name", n);
+    myName = n; ls.set("onuw:name", n);
     if (kind === "create") createRoom(); else joinAsGuest(roomCode);
   }
   if (kind === "rename") {
     const n = E.cleanName(document.getElementById("rename-input").value);
     if (!n) { toast("Name can't be empty"); return; }
-    myName = n; ls.set("moonswap:name", n);
+    myName = n; ls.set("onuw:name", n);
     send({ t: "rename", name: n });
     toast("Name changed");
   }
@@ -1160,7 +1160,7 @@ function onClick(e) {
       if (code.length !== 4) { toast("Room codes are 4 letters"); return; }
       const n = E.cleanName(document.getElementById("name-input").value);
       if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
-      myName = n; ls.set("moonswap:name", n);
+      myName = n; ls.set("onuw:name", n);
       joinAsGuest(code);
       return;
     }
@@ -1174,7 +1174,7 @@ function onClick(e) {
     case "invite": {
       const link = inviteLink();
       if (navigator.share && matchMedia("(pointer: coarse)").matches) {
-        navigator.share({ title: "Moonswap", text: `Join my Moonswap room ${roomCode}`, url: link }).catch(() => {});
+        navigator.share({ title: "onuw", text: `Join my onuw room ${roomCode}`, url: link }).catch(() => {});
       } else {
         navigator.clipboard?.writeText(link).then(() => toast("Invite link copied"), () => toast(link));
       }
@@ -1262,4 +1262,4 @@ if (!LOCAL && !window.Peer) {
 }
 
 // for tests
-window.__moonswap = { get view() { return view; }, get mode() { return mode; }, get state() { return S; }, send, publish };
+window.__onuw = { get view() { return view; }, get mode() { return mode; }, get state() { return S; }, send, publish };

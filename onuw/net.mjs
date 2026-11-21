@@ -8,7 +8,7 @@
 // `local` uses a BroadcastChannel, so tabs of one browser can play each other (?net=local).
 // It exists for tests and for trying the game alone.
 
-const PREFIX = "moonswap-v1-";
+const PREFIX = "onuw-v1-";
 
 export function makeNet(kind) {
   return kind === "local" ? localNet : peerNet;
@@ -72,7 +72,7 @@ const rid = () => Math.random().toString(36).slice(2, 10);
 const localNet = {
   host(code, { onConnect, onMessage, onClose }) {
     return new Promise((resolve, reject) => {
-      const ch = new BroadcastChannel("moonswap-local-" + code);
+      const ch = new BroadcastChannel("onuw-local-" + code);
       const me = rid();
       const conns = new Set();
       let claimed = false;
@@ -98,7 +98,7 @@ const localNet = {
   },
 
   guest(code, { onOpen, onMessage, onClose }) {
-    const ch = new BroadcastChannel("moonswap-local-" + code);
+    const ch = new BroadcastChannel("onuw-local-" + code);
     const conn = rid();
     let open = false, ended = false;
     const end = (reason) => { if (ended) return; ended = true; ch.close(); onClose(reason); };
