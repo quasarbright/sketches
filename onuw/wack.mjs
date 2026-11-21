@@ -1,5 +1,5 @@
-// Whack-a-wolf: a little game for players who are waiting during the night. Wolves pop out of hay
-// bales and you bonk them; now and then a villager pops up instead, and bonking one costs you.
+// Whack-a-wolf: a little game for players who are waiting during the night. wolf cards pop out of
+// holes and you bonk them; now and then a villager card pops up instead, and bonking one costs you.
 // It all happens on this phone (nothing is sent), and it closes by itself when your turn comes.
 // It lives in its own overlay outside #app, because the night screen is rebuilt every second.
 
@@ -9,7 +9,7 @@ const HOLES = 9;
 
 const css = `
 .wk { position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column; align-items: center;
-  background: radial-gradient(120% 80% at 50% 0%, #1c2350 0%, #0b0f24 55%, #05070f 100%); color: var(--text, #eef);
+  background: var(--bg, #070914); color: var(--text, #eef);
   font-family: var(--font-ui, system-ui); padding: max(12px, env(safe-area-inset-top)) 16px 16px; overflow: hidden;
   touch-action: manipulation; user-select: none; -webkit-user-select: none; animation: wk-in .28s cubic-bezier(.2,.9,.3,1.2); }
 @keyframes wk-in { from { opacity: 0; transform: scale(.96); } }
@@ -29,14 +29,16 @@ const css = `
 .wk-time { width: min(460px, 100%); height: 6px; border-radius: 99px; background: #ffffff1a; margin: 12px 0 6px; overflow: hidden; }
 .wk-time i { display: block; height: 100%; width: 100%; background: var(--accent, #f1e2b8); transform-origin: left; border-radius: inherit; }
 .wk-hint { font-size: .85rem; color: var(--muted, #99a); margin: 0 0 6px; text-align: center; }
-.wk-board { position: relative; width: min(460px, 100%, 62vh); aspect-ratio: 1; display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 4% 3%; margin: auto 0; cursor: none; }
-.wk-board::before { content: ""; position: absolute; inset: -6% -10%; border-radius: 50%;
-  background: radial-gradient(closest-side, #1f3a2a 0%, #15291e 60%, transparent 100%); z-index: -1; }
+.wk-board { position: relative; width: min(440px, 100%, 44vh); aspect-ratio: 3 / 4.4; display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 2% 5%; margin: auto 0; cursor: none; }
 .wk-hole { position: relative; }
-.wk-pit { position: absolute; left: 6%; right: 6%; top: -34%; bottom: 34%; overflow: hidden; }
-.wk-sprite { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; transform: translateY(105%); transform-origin: 50% 100%; }
-.wk-sprite svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.wk-hole-back { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 18%; border-radius: 50%; background: #02030a;
+  box-shadow: inset 0 6px 10px #000, 0 0 0 3px #1b2350; }
+.wk-hole-front { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 9%; border-radius: 0 0 50% 50% / 0 0 100% 100%;
+  border: 3px solid #3c4a96; border-top: none; margin: 0 -3px -3px; }
+.wk-pit { position: absolute; left: 9%; right: 9%; top: -12%; bottom: 13%; overflow: hidden; }
+.wk-sprite .ms-card { --w: 100%; width: 100%; box-shadow: 0 0 5px rgba(0,0,0,.5); }
+.wk-sprite { position: absolute; left: 0; right: 0; bottom: -4%; transform: translateY(105%); transform-origin: 50% 100%; }
 .wk-hole.is-up .wk-sprite { transform: none; animation: wk-pop .34s cubic-bezier(.3,1.5,.5,1) both; }
 @keyframes wk-pop { 0% { transform: translateY(105%) scale(1.25, .6); } 55% { transform: translateY(-6%) scale(.86, 1.18); }
   78% { transform: translateY(2%) scale(1.08, .92); } 100% { transform: none; } }
@@ -47,14 +49,7 @@ const css = `
 .wk-hole.is-bonked .wk-sprite { animation: wk-bonk .75s cubic-bezier(.3,.7,.4,1) forwards; }
 @keyframes wk-bonk { 0% { transform: scale(1.35, .5); } 14% { transform: scale(.85, 1.15) rotate(10deg); } 28% { transform: scale(1.06, .95) rotate(-8deg); }
   42% { transform: rotate(5deg); } 56% { transform: rotate(-3deg); } 70% { transform: none; } 100% { transform: translateY(105%) scale(1.15, .75); } }
-.wk-eyes-x { display: none; }
-.wk-hole.is-bonked .wk-eyes { display: none; }
-.wk-hole.is-bonked .wk-eyes-x { display: inline; }
-.wk-bale { position: absolute; left: 0; right: 0; bottom: 0; height: 52%; transform-origin: 50% 100%; }
-.wk-bale svg { width: 100%; height: 100%; display: block; }
-.wk-hole.is-hit .wk-bale { animation: wk-bale .35s cubic-bezier(.3,1.6,.5,1); }
-@keyframes wk-bale { 30% { transform: scale(1.08, .86); } 65% { transform: scale(.97, 1.04); } }
-.wk-fx { position: absolute; inset: -20% -10% 30%; pointer-events: none; }
+.wk-fx { position: absolute; inset: -50% -10% 30%; pointer-events: none; z-index: 2; }
 .wk-star { position: absolute; left: 50%; top: 45%; width: 18%; aspect-ratio: 1; margin: -9% 0 0 -9%; color: #ffe08a;
   animation: wk-star .6s cubic-bezier(.15,.8,.3,1) forwards; }
 .wk-star svg { width: 100%; height: 100%; display: block; fill: currentColor; }
@@ -82,34 +77,9 @@ const css = `
 }
 `;
 
-// Sprites, drawn as flat silhouettes with a few lighter lines, like the card art.
-const WOLF = `<svg viewBox="0 0 100 100" aria-hidden="true">
-  <path d="M14 100 C14 70 20 52 28 44 L22 8 L42 30 Q50 27 58 30 L78 8 L72 44 C80 52 86 70 86 100 Z" fill="#3b2a3a"/>
-  <path d="M28 14 L38 31 L31 36 Z M72 14 L62 31 L69 36 Z" fill="#6b4458"/>
-  <path d="M34 62 Q50 54 66 62 L60 80 Q50 88 40 80 Z" fill="#4c3549"/>
-  <ellipse cx="50" cy="66" rx="7" ry="5" fill="#140c14"/>
-  <path d="M42 82 Q50 86 58 82" stroke="#f3e6d0" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-  <path d="M44 81 L45.5 86 L47 81.6 M53 81.6 L54.5 86 L56 81" fill="#f3e6d0"/>
-  <g class="wk-eyes"><path d="M31 50 Q37 43 43 49 Q37 53 31 50 Z M57 49 Q63 43 69 50 Q63 53 57 49 Z" fill="#ffd34d"/>
-    <circle cx="38" cy="49" r="2" fill="#140c14"/><circle cx="62" cy="49" r="2" fill="#140c14"/></g>
-  <g class="wk-eyes-x" stroke="#ffd34d" stroke-width="3.2" stroke-linecap="round"><path d="M32 44 L42 53 M42 44 L32 53 M58 44 L68 53 M68 44 L58 53"/></g>
-</svg>`;
-const VILLAGER = `<svg viewBox="0 0 100 100" aria-hidden="true">
-  <path d="M18 100 C18 82 30 74 50 74 C70 74 82 82 82 100 Z" fill="#5b7a3a"/>
-  <circle cx="50" cy="52" r="24" fill="#e9b98c"/>
-  <circle cx="35" cy="60" r="5" fill="#f19c86" opacity=".7"/><circle cx="65" cy="60" r="5" fill="#f19c86" opacity=".7"/>
-  <path d="M10 36 Q50 20 90 36 Q78 40 70 38 L66 14 Q50 6 34 14 L30 38 Q22 40 10 36 Z" fill="#d6a54a"/>
-  <path d="M31 31 Q50 25 69 31" stroke="#a87a2c" stroke-width="3" fill="none"/>
-  <g class="wk-eyes"><circle cx="41" cy="52" r="3" fill="#2b1a12"/><circle cx="59" cy="52" r="3" fill="#2b1a12"/></g>
-  <g class="wk-eyes-x" stroke="#2b1a12" stroke-width="2.6" stroke-linecap="round"><path d="M37 48 L45 56 M45 48 L37 56 M55 48 L63 56 M63 48 L55 56"/></g>
-  <path d="M43 63 Q50 69 57 63" stroke="#7a3b2a" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-</svg>`;
-const BALE = `<svg viewBox="0 0 100 52" preserveAspectRatio="none" aria-hidden="true">
-  <rect x="2" y="4" width="96" height="46" rx="10" fill="#c99a3f"/>
-  <rect x="2" y="4" width="96" height="12" rx="8" fill="#e2b75a"/>
-  <path d="M10 22 L24 20 M30 30 L46 27 M56 22 L70 24 M74 34 L90 31 M14 40 L28 38 M44 42 L60 40" stroke="#9c7426" stroke-width="2" stroke-linecap="round"/>
-  <path d="M30 4 V50 M70 4 V50" stroke="#7d5a1c" stroke-width="3"/>
-</svg>`;
+// The figures are the real cards (the game's own card component, passed in by the app), popping
+// out of holes in the ground.
+const ROLE = { wolf: "werewolf", villager: "villager" };
 const STAR = `<svg viewBox="0 0 24 24"><path d="M12 1.5 14.9 8.6 22.5 9.2 16.7 14.2 18.5 21.6 12 17.6 5.5 21.6 7.3 14.2 1.5 9.2 9.1 8.6Z"/></svg>`;
 const MALLET = `<svg viewBox="0 0 80 80" aria-hidden="true">
   <rect x="36" y="26" width="8" height="52" rx="3" fill="#8a5a2b"/>
@@ -140,9 +110,9 @@ export function openWack(o = {}) {
   el.innerHTML = `<div class="wk-top"><div class="wk-title">Whack-a-wolf</div><span class="wk-score" aria-live="polite">0</span>
       <button class="wk-close" data-wk="close" aria-label="Close the game">${X}</button></div>
     <div class="wk-time"><i></i></div>
-    <p class="wk-hint">Bonk the wolves. Leave the villagers alone. It closes when your turn comes.</p>
+    <p class="wk-hint">Bonk the ${opts.names?.werewolf ?? ""} cards. Leave the ${opts.names?.villager ?? ""} cards alone. It closes when your turn comes.</p>
     <div class="wk-board">${Array.from({ length: HOLES }, (_, i) => `<div class="wk-hole" data-hole="${i}">
-      <div class="wk-pit"><div class="wk-sprite"></div></div><div class="wk-bale">${BALE}</div><div class="wk-fx"></div></div>`).join("")}</div>`;
+      <div class="wk-hole-back"></div><div class="wk-pit"><div class="wk-sprite"></div></div><div class="wk-hole-front"></div><div class="wk-fx"></div></div>`).join("")}</div>`;
   document.body.appendChild(el);
   mallet = document.createElement("div");
   mallet.className = "wk-mallet";
@@ -175,7 +145,7 @@ const later = (fn, ms) => { st.timers.push(setTimeout(fn, ms)); };
 function start() {
   stopAll();
   el.querySelector(".wk-end")?.remove();
-  Object.assign(st, { score: 0, best: bestGet(), startedAt: performance.now(), over: false, holes: Array.from({ length: HOLES }, () => ({ kind: null, state: "down", id: 0 })) });
+  Object.assign(st, { score: 0, best: bestGet(), startedAt: performance.now(), over: false, wolfRun: 0, holes: Array.from({ length: HOLES }, () => ({ kind: null, state: "down", id: 0 })) });
   el.querySelectorAll(".wk-hole").forEach((h) => { h.className = "wk-hole"; h.querySelector(".wk-sprite").innerHTML = ""; });
   setScore(0);
   const tick = () => {
@@ -189,13 +159,21 @@ function start() {
   if (st.auto) scheduleSpawn(500);
 }
 
+// About one in four pop-ups is a villager, and never more than three wolves in a row, so every
+// round has some. Exposed for tests.
+export function nextKind(wolfRun, r = Math.random()) { return wolfRun >= 3 || r < 0.25 ? "villager" : "wolf"; }
+
 function progress() { return Math.min(1, (performance.now() - st.startedAt) / ROUND_MS); }
 
 function scheduleSpawn(ms) {
   st.spawnTimer = setTimeout(() => {
     if (!el || st.over) return;
     const free = st.holes.map((h, i) => (h.state === "down" ? i : -1)).filter((i) => i >= 0);
-    if (free.length) spawn(free[Math.floor(Math.random() * free.length)], Math.random() < 0.22 ? "villager" : "wolf");
+    if (free.length) {
+      const kind = nextKind(st.wolfRun);
+      st.wolfRun = kind === "wolf" ? st.wolfRun + 1 : 0;
+      spawn(free[Math.floor(Math.random() * free.length)], kind);
+    }
     const p = progress();
     scheduleSpawn(820 - 420 * p + Math.random() * 260);
   }, ms);
@@ -207,7 +185,7 @@ export function spawn(i, kind = "wolf", stayMs) {
   if (!h || !node || h.state !== "down") return;
   const id = ++h.id;
   Object.assign(h, { kind, state: "up" });
-  node.querySelector(".wk-sprite").innerHTML = kind === "wolf" ? WOLF : VILLAGER;
+  node.querySelector(".wk-sprite").innerHTML = opts.card ? opts.card(ROLE[kind]) : "";
   node.className = "wk-hole is-up";
   node.dataset.kind = kind;
   const stay = stayMs ?? 1150 - 500 * progress() + Math.random() * 250;
