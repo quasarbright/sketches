@@ -38,6 +38,12 @@ const player = (s, id) => s.players.find((p) => p.id === id);
 const nameOf = (s, id) => player(s, id)?.name ?? "Someone";
 const roleName = (r) => ROLES[r].name;
 const centerLabel = (i) => `Center card ${i + 1}`;
+// " You're on the wolf team now." when a new card moves you to another team
+function teamNote(from, to) {
+  const a = ROLES[from].team, b = ROLES[to].team;
+  if (a === b) return "";
+  return b === "wolf" ? " You're on the wolf team now." : b === "village" ? " You're on the village team now." : " You're on your own now: you win only if you die.";
+}
 
 function uniqueName(s, id, name) {
   let base = cleanName(name) || `Player ${s.players.length + 1}`;
@@ -350,7 +356,7 @@ function startStep(s, id, pid, actors) {
       return { kind: "center1", required: true, text: "Swap your card with a center card. You won't see your new card." };
     case "nightowl": {
       const r = g.cards[pid];
-      const t = r === "nightowl" ? "Your card is still the Night Owl." : `Your card is now the ${roleName(r)}.`;
+      const t = r === "nightowl" ? "Your card is still the Night Owl." : `Your card is now the ${roleName(r)}.${teamNote("nightowl", r)}`;
       addInfo(s, pid, id, t, [{ label: "Your card", role: r }]);
       return { kind: "ack", text: t, cards: [{ label: "Your card", role: r }] };
     }
@@ -382,8 +388,11 @@ function applyAction(s, pid, id, prompt, msg) {
   const me = nameOf(s, pid);
   if (msg.skip) {
     if (prompt.required) return { error: "You have to choose" };
-    if (prompt.kind !== "ack") logAction(s, id, pid, `${me} (${roleName(g.dealt[pid])}) did nothing.`);
-    return { result: prompt.kind === "ack" ? null : { text: "You did nothing." } };
+    if (prompt.kind === "ack") return { result: null };
+    logAction(s, id, pid, `${me} (${roleName(g.dealt[pid])}) did nothing.`);
+    const text = id === "wolves" ? "You didn't look at a center card." : `You didn't use your ${roleName(g.dealt[pid])} power.`;
+    addInfo(s, pid, id, msg.timedOut ? `Time ran out. ${text}` : text);
+    return { result: { text } };
   }
   switch (prompt.kind) {
     case "ack":
@@ -424,7 +433,7 @@ function applyAction(s, pid, id, prompt, msg) {
       }
       if (id === "thief") {
         [g.cards[pid], g.cards[t]] = [g.cards[t], g.cards[pid]];
-        const text = `You swapped cards with ${them}. Your card is now the ${roleName(g.cards[pid])}.`;
+        const text = `You swapped cards with ${them}. Your card is now the ${roleName(g.cards[pid])}.${teamNote("thief", g.cards[pid])}`;
         addInfo(s, pid, id, text, [{ label: "Your new card", role: g.cards[pid] }]);
         logAction(s, id, pid, `${me} (Thief) swapped with ${them} and took the ${roleName(g.cards[pid])}.`);
         return { result: { text, cards: [{ label: "Your new card", role: g.cards[pid] }] } };
@@ -465,7 +474,7 @@ function applyAction(s, pid, id, prompt, msg) {
 
 // What an actor who never answered gets: optional actions are skipped, required ones picked at random.
 function defaultAction(s, pid, prompt, rng) {
-  if (!prompt.required) return { skip: true };
+  if (!prompt.required) return { skip: true, timedOut: true };
   if (prompt.kind === "center1") return { center: Math.floor(rng() * 3) };
   const options = s.g.seats.filter((t) => !(prompt.exclude || []).includes(t));
   return { target: options[Math.floor(rng() * options.length)] };

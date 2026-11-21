@@ -305,3 +305,20 @@ test("views never leak other players' cards before the results", () => {
   const json = JSON.stringify({ ...v, roles: null, game: { ...v.game, steps: null } });
   assert.ok(!json.includes("werewolf") && !json.includes("seer") && !json.includes("thief"), json);
 });
+
+test("a player who lets their turn pass is told they didn't use their power", () => {
+  const s = room(["a", "b", "c"]);
+  rig(s, { a: "seer", b: "thief", c: "werewolf" }, ["villager", "villager", "meddler"]);
+  for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0);
+  let now = 0;
+  while (s.phase === "night") { now += 500; tick(s, now); }
+  assert.match(s.g.info.a.at(-1).text, /Time ran out. You didn't use your Seer power/);
+  assert.match(s.g.info.b.at(-1).text, /didn't use your Thief power/);
+});
+
+test("taking a card from another team says so", () => {
+  const s = room(["a", "b", "c"]);
+  rig(s, { a: "thief", b: "werewolf", c: "villager" }, ["villager", "villager", "seer"]);
+  runNight(s, { thief: { a: { target: "b" } } });
+  assert.match(s.g.info.a.at(-1).text, /You're on the wolf team now/);
+});

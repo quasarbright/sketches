@@ -394,10 +394,10 @@ function avatar(name, id = name, cls = "") {
 }
 
 // A card face. size: "sm" (results, night info), "md" (picker), "lg" (your card)
-function card(role, { size = "md", label = "", info = true, cls = "", attrs = "" } = {}) {
+function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
   const R = ROLES[role];
   return `<div class="ms-card ms-${size} ${cls}" style="--team:${TEAMS[R.team].color}" ${attrs}>
-    <div class="ms-card-name">${esc(R.name)}</div>
+    <div class="ms-card-name">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>
     <div class="ms-card-art">${emblemSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}
@@ -568,7 +568,7 @@ function lobby() {
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use suggested cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? " The Pack Leader also gets a spare Werewolf card, shown with a lock, on top of these." : ""}${host ? " Tap a card to add or remove it." : ""}</p>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? " The Pack Leader also adds a spare Werewolf card, placed next to it with a lock, on top of these." : ""}${host ? " Tap a card to add or remove it." : ""}</p>
       <div class="ms-grid">${cards}</div>
     </section>
 
@@ -656,7 +656,7 @@ function dealScreen() {
 }
 
 // Names for a "waiting for …" line, with the local player called "you"
-const waitNames = (players) => listNames(players.map((p) => (p.id === myId ? "you" : p.name)));
+const waitNames = (players) => listNames([...players].sort((a, b) => (b.id === myId) - (a.id === myId)).map((p) => (p.id === myId ? "you" : p.name)));
 
 function listNames(names) {
   if (names.length <= 1) return names.join("");
@@ -704,10 +704,10 @@ function nightScreen() {
       <p class="ms-hint">Close your eyes again. The night goes on.</p>
     </div>`;
   else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>`;
-  return `<main class="ms-center ms-night">
+  return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
-    <div class="ms-label">Night · ${g.stepIdx + 1} of ${g.steps.length}</div>
-    <h1 class="ms-h1">${p && !p.done ? `Your turn: ${st.id === "wolves" ? "the wolves wake up" : `the ${esc(st.label)}`}` : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
+    <div class="ms-label">Night · ${g.stepIdx + 1} of ${g.steps.length}${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
+    <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
     ${panel}
     <div class="ms-mycard">You started as ${wrap(card(g.myCard, { size: "xs", info: true }))}</div>
     <mike-footer></mike-footer>
@@ -804,7 +804,7 @@ function inGameStrip() {
   const v = view;
   return `<section>
     <h2 class="ms-h2">Cards in This Game</h2>
-    <div class="ms-chiprow">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "xs" })) + (v.roles[r] > 1 ? `<span class="ms-mono ms-muted ms-times">×${v.roles[r]}</span>` : "")).join("")}
+    <div class="ms-chiprow">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "xs", times: v.roles[r] }))).join("")}
     ${v.game.hasSpare ? `<div class="ms-cardwrap"><div class="ms-card ms-xs ms-spare-xs" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Spare Werewolf</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare Werewolf card">${icon("info")}</button></div></div>` : ""}
     </div>
   </section>`;
@@ -864,9 +864,7 @@ function resultsScreen() {
   const teamsWon = [r.village && "the village", r.wolfTeam && "the wolves", r.jester && "the Jester"].filter(Boolean);
   const headline = teamsWon.length ? `${cap(listNames(teamsWon))} ${teamsWon.length > 1 || teamsWon[0] === "the wolves" ? "win" : "wins"}` : "Nobody wins";
   const color = r.village ? TEAMS.village.color : r.wolfTeam ? TEAMS.wolf.color : r.jester ? TEAMS.jester.color : "var(--muted)";
-  const deathLine = r.dead.length
-    ? `${listNames(r.dead.map(playerName))} ${r.dead.length > 1 ? "died" : "died"}${r.hunterShots.length ? ` (${r.hunterShots.map(([h, t]) => `the Hunter ${playerName(h)} took ${playerName(t)} down too`).join("; ")})` : ""}.`
-    : "Nobody got more than one vote, so nobody died.";
+  const deathLine = whyLine(r, g.seats);
   const rows = g.seats.map((id) => {
     const p = v.players.find((x) => x.id === id);
     const votes = r.counts[id] || 0;
@@ -918,6 +916,37 @@ function resultsScreen() {
 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+// Who died and why that decides the game, in plain sentences.
+function whyLine(r, seats) {
+  const c = r.cards;
+  const named = (ids) => listNames(ids.map(playerName));
+  const parts = [];
+  const shot = new Set(r.hunterShots.map(([, t]) => t));
+  const voted = r.dead.filter((id) => !shot.has(id));
+  if (!r.dead.length) parts.push("Nobody got more than one vote, so nobody died.");
+  else if (voted.length > 1) parts.push(`${named(voted)} tied with ${r.counts[voted[0]]} votes each, so they all died.`);
+  else parts.push(`${named(voted)} got the most votes and died.`);
+  for (const [h, t] of r.hunterShots) parts.push(`${playerName(h)} was the Hunter, so ${playerName(t)}, who they voted for, died too.`);
+  const deadAs = (pred) => r.dead.filter((id) => pred(c[id]));
+  const wolves = deadAs((x) => ROLES[x].wolf);
+  const scouts = deadAs((x) => x === "scout");
+  const jesters = deadAs((x) => x === "jester");
+  const anyWolf = seats.some((id) => ROLES[c[id]].wolf);
+  const as = (ids, what) => `${named(ids)} ${ids.length > 1 ? "were" : "was"} ${what}`;
+  if (jesters.length) parts.push(`${as(jesters, "the Jester")}, so the Jester wins${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
+  if (r.village) {
+    if (wolves.length) parts.push(`${as(wolves, wolves.length > 1 ? "wolves" : "a wolf")}, so the village wins.`);
+    else if (scouts.length) parts.push(`${as(scouts, "the Scout")}, so the village wins.`);
+    else if (!anyWolf && !r.dead.length) parts.push("No player was a wolf and nobody died, so the village wins.");
+    else parts.push(`${as(deadAs((x) => x === "lackey"), "the Lackey")}, and no player was a wolf, so the village wins.`);
+  } else if (r.wolfTeam) {
+    parts.push(anyWolf ? "No wolf died, so the wolves win." : "No player was a wolf, and someone off the wolf team died, so the Lackey and Scout win.");
+  } else if (!anyWolf && r.dead.length && !jesters.length) {
+    parts.push("No player was a wolf, so anyone dying meant the village lost.");
+  }
+  return parts.join(" ");
+}
 
 // ---------------------------------------------------------------- panels (modals with live content)
 
