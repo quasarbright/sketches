@@ -96,7 +96,7 @@ test("Pack Leader gives the spare card; a lone Pack Leader peeks at a real cente
   assert.deepEqual(s.g.center, ["werewolf", "villager", "villager"]);
   const info = s.g.info.a.map((i) => i.text).join("\n");
   assert.match(info, /Center card 1 is the Werewolf/);
-  assert.match(info, /spare Werewolf card to B/);
+  assert.match(info, /spare Werewolf card with B.s card/);
 });
 
 test("Pack Leader can't target a known wolf", () => {

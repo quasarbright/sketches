@@ -315,7 +315,7 @@ function startStep(s, id, pid, actors) {
       return {
         kind: "player", required: true, spare: true,
         exclude: [pid, ...wolves],
-        text: "Give the spare Werewolf card to a player who isn't a wolf. Their card goes face down into the spare slot, and they become a Werewolf without knowing it.",
+        text: "Give the spare Werewolf card to a player who isn't a wolf. You swap it with their card: they'll hold the Werewolf card without knowing it, and their old card goes face down into the spare slot.",
       };
     case "prowler":
       return { kind: "player", optional: true, exclude: [pid], text: "You may look at another player's card." };
@@ -410,10 +410,11 @@ function applyAction(s, pid, id, prompt, msg) {
       if (id === "packleader") {
         const old = g.cards[t];
         [g.cards[t], g.spare] = [g.spare, g.cards[t]];
-        const text = `You gave the spare Werewolf card to ${them}. Their old card is now face down in the spare slot. ${them} is a Werewolf now.`;
-        addInfo(s, pid, id, text);
+        const text = `You swapped the spare Werewolf card with ${them}'s card. ${them} now holds the Werewolf card, and their old card is face down in the spare slot.`;
+        const cards = [{ label: `${them} now holds`, role: "werewolf" }, { label: "Spare slot", back: true }];
+        addInfo(s, pid, id, text, cards);
         logAction(s, id, pid, `${me} (Pack Leader) gave the spare Werewolf card to ${them}, whose ${roleName(old)} went into the spare slot.`);
-        return { result: { text } };
+        return { result: { text, cards } };
       }
       if (id === "prowler") {
         const text = `${them}'s card is the ${roleName(g.cards[t])}.`;

@@ -258,7 +258,7 @@ function hostLost(reason) {
   if (mode !== "guest") return;
   if (!everJoined) {
     lostSince ||= now();
-    if (now() - lostSince > 12000) { screen = "notfound"; render(); return; }
+    if (now() - lostSince > 6000) { screen = "notfound"; render(); return; }
     setTimeout(() => mode === "guest" && !guestNet && joinAsGuest(roomCode), 1200);
     return;
   }
@@ -355,6 +355,9 @@ function receiveView(v) {
   }
   lastHostId = v.hostId;
   const key = `${v.round}:${v.phase}:${v.game?.stepId ?? ""}`;
+  if (key !== ui.key && v.phase === "night" && v.game?.prompt && !v.game.prompt.done) {
+    try { navigator.vibrate?.([120, 80, 120]); } catch {}   // it's your turn: a buzz, since eyes are on your own screen
+  }
   if (key !== ui.key) {
     const keepPeek = ui.peeked && prev?.round === v.round;
     ui = freshUi();
@@ -383,10 +386,10 @@ function toast(text) {
 const team = (r) => ROLES[r].team;
 const playerName = (id) => view?.players.find((p) => p.id === id)?.name ?? "?";
 
-function avatar(name, cls = "") {
+function avatar(name, id = name, cls = "") {
   const hues = [215, 265, 170, 25, 340, 80, 195, 45];
   let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return `<span class="ms-avatar ${cls}" style="--h:${hues[h % hues.length]}">${esc((name.trim()[0] || "?").toUpperCase())}</span>`;
 }
 
@@ -445,28 +448,39 @@ function render() {
   let html;
   if (screen === "home") html = homeScreen();
   else if (screen === "connecting") html = messageScreen("Connecting…", `Looking for room <b class="ms-mono">${esc(roomCode || "")}</b>.`, true);
-  else if (screen === "notfound") html = messageScreen("Room not found", `Nobody is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> right now. Check the code, or start your own room.`, false, true);
+  else if (screen === "notfound") html = messageScreen("Room not found", `Nobody is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> right now. Check the code, or start your own room.`, false, true, true);
   else if (screen === "kicked") html = messageScreen("You were removed", "The host removed you from the room.", false, true);
   else if (!view) html = messageScreen("Connecting…", "", true);
   else html = roomScreen();
   if (html !== app._html) {
     const focused = document.activeElement?.id;
     const sel = focused && document.activeElement.selectionStart;
+    const oldMoon = app.querySelector(".ms-arc-moon")?.style.transform;
     app.innerHTML = html;
     app._html = html;
+    // the page is rebuilt from scratch, so start the moon where it was and let it glide to its new spot
+    const moon = app.querySelector(".ms-arc-moon");
+    if (moon && oldMoon && oldMoon !== moon.style.transform) {
+      const target = moon.style.transform;
+      moon.style.transition = "none";
+      moon.style.transform = oldMoon;
+      moon.getBoundingClientRect();
+      moon.style.transition = "";
+      requestAnimationFrame(() => (moon.style.transform = target));
+    }
     if (focused) { const el = document.getElementById(focused); if (el) { el.focus(); try { el.setSelectionRange(sel, sel); } catch {} } }
   }
   document.body.dataset.phase = view && screen === "room" ? view.phase : screen;
   refreshPanel();
 }
 
-function messageScreen(title, body, spinner = false, back = false) {
+function messageScreen(title, body, spinner = false, back = false, retry = false) {
   return `<main class="ms-center">
     <div class="ms-hero-moon">${bigMoon()}</div>
     <h1 class="ms-h1">${title}</h1>
     <p class="ms-lede">${body}</p>
     ${spinner ? `<div class="ms-dots"><span></span><span></span><span></span></div>` : ""}
-    ${back ? `<button class="ms-btn ms-primary" data-act="home">Back to the start</button>` : ""}
+    ${retry || back ? `<div class="ms-msg-actions">${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry ? "" : "ms-primary"}" data-act="home">Back to the start</button>` : ""}</div>` : ""}
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -487,9 +501,9 @@ function homeScreen() {
       <label class="ms-label" for="name-input">Your name</label>
       <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="What should people call you?" value="${esc(myName)}" />
       ${joining
-        ? `<button class="ms-btn ms-primary ms-wide" type="submit">Join room <span class="ms-mono">${esc(roomCode)}</span></button>
+        ? `<button class="ms-btn ms-primary ms-wide" type="submit" ${myName ? "" : "disabled"}>Join room <span class="ms-mono">${esc(roomCode)}</span></button>
            <button class="ms-link" type="button" data-act="home">Start a different room instead</button>`
-        : `<button class="ms-btn ms-primary ms-wide" type="submit">Create a room</button>
+        : `<button class="ms-btn ms-primary ms-wide" type="submit" ${myName ? "" : "disabled"}>Create a room</button>
            <div class="ms-or"><span>or join one</span></div>
            <div class="ms-join-row">
              <input id="code-input" class="ms-input ms-code-input" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code" />
@@ -522,17 +536,17 @@ function lobby() {
   const have = deckSize(v.roles);
   const need = v.players.length + 3;
   const okCount = have === need;
-  const cards = ROLE_ORDER.filter((r) => host || v.roles[r]).map((r) => pickerCard(r, v.roles[r] || 0, host)).join("");
   const spare = v.roles.packleader ? `<div class="ms-cardwrap ms-spare-wrap">
       <div class="ms-card ms-md ms-locked" style="--team:${TEAMS.wolf.color}">
         <div class="ms-card-name">Werewolf</div>
         <div class="ms-card-art">${emblemSvg("werewolf")}</div>
         <div class="ms-card-short">Spare card</div>
         <span class="ms-lock" aria-hidden="true">${icon("lock")}</span>
-        <button class="ms-info" data-info="packleader" aria-label="Why there's a spare card" data-tooltip="Spare card: added for the Pack Leader to hand out">${icon("info")}</button>
+        <button class="ms-info" data-info="spare" aria-label="Why there's a spare card" data-tooltip="Spare card: added for the Pack Leader to hand out">${icon("info")}</button>
       </div>
       <div class="ms-card-label">Added for the Pack Leader</div>
     </div>` : "";
+  const cards = ROLE_ORDER.filter((r) => host || v.roles[r]).map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
   const problem = v.startProblem;
   return `<main class="ms-page">
     <section class="ms-room">
@@ -546,20 +560,20 @@ function lobby() {
     <section>
       <h2 class="ms-h2">Players <span class="ms-sub">${v.players.length}</span></h2>
       <ul class="ms-players">${v.players.map((p) => playerRow(p)).join("")}</ul>
-      ${v.players.length < 3 ? `<p class="ms-hint">You need at least 3 players. Send the others the invite link or the code.</p>` : ""}
+      ${v.players.length < 3 ? `<p class="ms-hint">Send the others the invite link or the room code. You need at least 3 players.</p>` : ""}
     </section>
 
     <section>
       <div class="ms-h2row">
-        <h2 class="ms-h2">Cards <span class="ms-sub ${okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
+        <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use suggested cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center${v.roles.packleader ? ", plus the spare Werewolf card for the Pack Leader, which is added for you and doesn't count here" : ""}.${host ? " Tap a card to add or remove it." : ""}</p>
-      <div class="ms-grid">${cards}${spare}</div>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? " The Pack Leader also gets a spare Werewolf card, shown with a lock, on top of these." : ""}${host ? " Tap a card to add or remove it." : ""}</p>
+      <div class="ms-grid">${cards}</div>
     </section>
 
     <section class="ms-day-len">
-      <h2 class="ms-h2">Day length</h2>
+      <h2 class="ms-h2">Day Length</h2>
       ${host
         ? `<div class="ms-chips" role="radiogroup" aria-label="Day length">${[3, 5, 7, 10].map((m) => `<button class="ms-chip ${v.dayMinutes === m ? "is-on" : ""}" role="radio" aria-checked="${v.dayMinutes === m}" data-day="${m}">${m} min</button>`).join("")}</div>`
         : `<p class="ms-hint">${v.dayMinutes} minutes to talk before the vote.</p>`}
@@ -567,7 +581,7 @@ function lobby() {
     <mike-footer></mike-footer>
   </main>
   ${bar(host
-    ? `${problem ? `<div class="ms-bar-note">${esc(problem)}</div>` : ""}<button class="ms-btn ms-primary ms-wide" data-act="start" ${problem ? "disabled" : ""}>Start the game</button>`
+    ? `${problem && v.players.length >= 3 ? `<div class="ms-bar-note">${esc(problem)}</div>` : ""}<button class="ms-btn ms-primary ms-wide" data-act="start" ${problem ? "disabled" : ""}>${v.players.length < 3 ? "Waiting for 3 players" : "Start the game"}</button>`
     : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start the game</div>`)}`;
 }
 
@@ -581,7 +595,7 @@ function pickerCard(r, count, host) {
         <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" data-tooltip="One more ${esc(R.name)}" ${count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
       </div>`
     : "";
-  const badge = on && (count > 1 || R.pair) ? `<span class="ms-badge">×${count}</span>` : "";
+  const badge = on && !stepper && (count > 1 || R.pair) ? `<span class="ms-badge">×${count}</span>` : "";
   const label = "";
   return `<div class="ms-cardwrap ${on ? "is-on" : "is-off"}">
     ${card(r, {
@@ -599,7 +613,7 @@ function playerRow(p, { extra = "" } = {}) {
     p.id === v.hostId ? `<span class="ms-tag ms-tag-host">${icon("crown", "ms-ico-sm")}host</span>` : "",
     !p.connected ? `<span class="ms-tag ms-tag-off">${icon("wifiOff", "ms-ico-sm")}${p.left ? "left" : "offline"}</span>` : "",
   ].join("");
-  return `<li class="ms-player ${p.connected ? "" : "is-offline"}">${avatar(p.name)}<span class="ms-pname">${esc(p.name)}</span>${tags}${extra}</li>`;
+  return `<li class="ms-player ${p.connected ? "" : "is-offline"}">${avatar(p.name, p.id)}<span class="ms-pname" title="${esc(p.name)}">${esc(p.name)}</span>${tags}${extra}</li>`;
 }
 
 // ---- spectators (joined mid-round)
@@ -623,14 +637,17 @@ function dealScreen() {
   const showing = ui.peeking;
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
-    <p class="ms-lede">${ui.peeked ? "You act as this card tonight, even if someone swaps it away from you. At the end, you're on the team of whatever card you hold." : "Press and hold the card to look at it. Keep your screen to yourself."}</p>
+    <p class="ms-lede">Press and hold the card to look at it. Keep your screen to yourself.</p>
     <button class="ms-peek ${showing ? "is-showing" : ""}" data-peek aria-label="Press and hold to see your card">
       <span class="ms-peek-inner">
         <span class="ms-peek-face ms-peek-back">${cardBack({ size: "lg" })}<span class="ms-peek-hint">${icon("eye")} Hold to look</span></span>
         <span class="ms-peek-face ms-peek-front">${card(g.myCard, { size: "lg", info: false })}</span>
       </span>
     </button>
-    ${ui.peeked ? `<button class="ms-link" data-info="${g.myCard}">What does the ${esc(ROLES[g.myCard].name)} do?</button>` : ""}
+    <div class="ms-after-peek ${ui.peeked ? "" : "is-hidden"}">
+      <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
+      <button class="ms-link" data-info="${g.myCard}" ${ui.peeked ? "" : "tabindex=\"-1\""}>What does the ${esc(ROLES[g.myCard].name)} do?</button>
+    </div>
     <mike-footer></mike-footer>
   </main>
   ${bar(me?.ready
@@ -690,7 +707,7 @@ function nightScreen() {
   return `<main class="ms-center ms-night">
     ${moonArc(g)}
     <div class="ms-label">Night · ${g.stepIdx + 1} of ${g.steps.length}</div>
-    <h1 class="ms-h1">${p && !p.done ? (st.id === "wolves" ? "Your turn: the wolves wake up" : `Your turn, ${esc(st.label)}`) : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
+    <h1 class="ms-h1">${p && !p.done ? `Your turn: ${st.id === "wolves" ? "the wolves wake up" : `the ${esc(st.label)}`}` : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
     ${panel}
     <div class="ms-mycard">You started as ${wrap(card(g.myCard, { size: "xs", info: true }))}</div>
     <mike-footer></mike-footer>
@@ -699,7 +716,8 @@ function nightScreen() {
 
 function resultCards(cards) {
   if (!cards?.length) return "";
-  return `<div class="ms-row">${cards.map((c) => wrap(card(c.role, { size: "sm", label: c.label }))).join("")}</div>`;
+  const swap = cards.some((c) => c.back);
+  return `<div class="ms-row ms-result-cards">${cards.map((c) => wrap(c.back ? cardBack({ size: "sm", label: c.label }) : card(c.role, { size: "sm", label: c.label }))).join(swap ? icon("swap", "ms-ico ms-swap-ico") : "")}</div>`;
 }
 
 function promptPanel(p, g) {
@@ -709,7 +727,7 @@ function promptPanel(p, g) {
   const csel = ui.center;
   const playerBtn = (id) => {
     const pl = v.players.find((x) => x.id === id);
-    return `<button class="ms-target ${sel.includes(id) ? "is-on" : ""}" data-target="${id}">${avatar(pl.name)}<span>${esc(pl.name)}</span></button>`;
+    return `<button class="ms-target ${sel.includes(id) ? "is-on" : ""}" data-target="${id}">${avatar(pl.name, pl.id)}<span>${esc(pl.name)}</span></button>`;
   };
   const centerBtn = (i) => `<button class="ms-center-card ${csel.includes(i) ? "is-on" : ""}" data-center="${i}" aria-label="Center card ${i + 1}">${cardBack({ size: "sm" })}<span class="ms-card-label">Center ${i + 1}</span></button>`;
   const centers = `<div class="ms-row ms-centers">${[0, 1, 2].map(centerBtn).join("")}</div>`;
@@ -771,7 +789,7 @@ function nightNotes(g) {
     ? g.info.map((i) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === i.step)?.label ?? "")}</span><p>${esc(i.text)}</p>${resultCards(i.cards)}</li>`).join("")
     : `<li><p>You slept through the night.</p></li>`;
   return `<section class="ms-panel">
-    <h2 class="ms-h2">Your night</h2>
+    <h2 class="ms-h2">Your Night</h2>
     <div class="ms-mycard">You started as ${wrap(card(g.myCard, { size: "xs" }))}</div>
     <ul class="ms-notes">${items}</ul>
   </section>`;
@@ -779,15 +797,15 @@ function nightNotes(g) {
 
 // The Pack Leader's spare Werewolf card, drawn apart from the role cards.
 function spareCard(label) {
-  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Werewolf</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="packleader" aria-label="About the spare Werewolf card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
+  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Werewolf</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare Werewolf card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
 }
 
 function inGameStrip() {
   const v = view;
   return `<section>
-    <h2 class="ms-h2">Cards in this game</h2>
+    <h2 class="ms-h2">Cards in This Game</h2>
     <div class="ms-chiprow">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "xs" })) + (v.roles[r] > 1 ? `<span class="ms-mono ms-muted ms-times">×${v.roles[r]}</span>` : "")).join("")}
-    ${v.game.hasSpare ? `${wrap(card("werewolf", { size: "xs", info: false }))}<span class="ms-muted ms-times">spare, for the Pack Leader</span>` : ""}
+    ${v.game.hasSpare ? `<div class="ms-cardwrap"><div class="ms-card ms-xs ms-spare-xs" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Spare Werewolf</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare Werewolf card">${icon("info")}</button></div></div>` : ""}
     </div>
   </section>`;
 }
@@ -828,7 +846,7 @@ function voteScreen() {
       <p class="ms-lede">Pick a player. Whoever gets the most votes dies, and ties all die. If nobody gets more than one vote, nobody dies. You can change your vote until everyone has voted.</p>
     </section>
     <div class="ms-targets ms-vote-grid">
-      ${seated.filter((p) => p.id !== myId).map((p) => `<button class="ms-target ${g.myVote === p.id ? "is-on" : ""}" data-vote="${p.id}">${avatar(p.name)}<span>${esc(p.name)}</span>${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
+      ${seated.filter((p) => p.id !== myId).map((p) => `<button class="ms-target ${g.myVote === p.id ? "is-on" : ""}" data-vote="${p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
     </div>
     ${nightNotes(g)}
     <mike-footer></mike-footer>
@@ -857,9 +875,9 @@ function resultsScreen() {
     const changed = r.dealt[id] !== r.cards[id];
     return `<li class="ms-res-row ${id === myId ? "is-me" : ""}">
       <div class="ms-res-who">
-        ${avatar(p?.name ?? "?")}
+        ${avatar(p?.name ?? "?", id)}
         <div>
-          <div class="ms-pname">${esc(p?.name ?? "?")}${id === myId ? ` <span class="ms-tag">you</span>` : ""}</div>
+          <div class="ms-pname">${esc(p?.name ?? "?")}${id === myId ? ` <span class="ms-tag">you</span>` : ""}${p && !p.connected ? ` <span class="ms-tag ms-tag-off">${p.left ? "left" : "offline"}</span>` : ""}</div>
           <div class="ms-res-meta">${votes} vote${votes === 1 ? "" : "s"}${r.votes[id] ? ` · voted for ${esc(playerName(r.votes[id]))}` : " · didn't vote"}</div>
         </div>
         <div class="ms-res-flags">
@@ -877,15 +895,19 @@ function resultsScreen() {
     <section class="ms-dayhead">
       <div class="ms-label">Morning</div>
       <h1 class="ms-h1 ms-headline" style="color:${color}">${esc(headline)}</h1>
-      <p class="ms-lede">${esc(deathLine)} ${g.seated ? (won ? "<b>You won.</b>" : "<b>You lost.</b>") : ""}</p>
+      ${g.seated ? `<div class="ms-verdict ${won ? "is-won" : "is-lost"}">${won ? "You won" : "You lost"}</div>` : ""}
+      <p class="ms-lede">${esc(deathLine)}</p>
     </section>
     <ul class="ms-res">${rows}</ul>
     <section>
-      <h2 class="ms-h2">Center cards at the end</h2>
-      <div class="ms-row">${r.center.map((c, i) => wrap(card(c, { size: "sm", label: `Center ${i + 1}` }))).join("")}${r.spare ? wrap(card(r.spare, { size: "sm", label: "Spare slot" })) : ""}</div>
+      <h2 class="ms-h2">Center Cards at the End</h2>
+      <div class="ms-row ms-res-center">
+        <div class="ms-row">${r.center.map((c, i) => wrap(card(c, { size: "sm", label: `Center ${i + 1}` }))).join("")}</div>
+        ${r.spare ? `<div class="ms-spare-slot">${wrap(card(r.spare, { size: "sm", label: "Spare slot" }))}</div>` : ""}
+      </div>
     </section>
     <section class="ms-panel">
-      <h2 class="ms-h2">What happened in the night</h2>
+      <h2 class="ms-h2">What Happened in the Night</h2>
       ${r.log.length ? `<ol class="ms-log">${r.log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>` : `<p class="ms-hint">Nobody moved or looked at a card.</p>`}
     </section>
     <mike-footer></mike-footer>
@@ -903,6 +925,8 @@ let panel = null; // { kind, el, close }
 
 function openPanel(kind) {
   closePanel();
+  ui.confirmHost = null;
+  ui.confirmKick = null;
   const { el, close } = openModal("", { className: `ms-modal ms-modal-${kind}`, onClose: () => { if (panel?.el === el) panel = null; } });
   panel = { kind, el, close };
   el.addEventListener("click", onClick);
@@ -936,11 +960,11 @@ function refreshPanel(force = false) {
 function playersPanel() {
   const v = view;
   const confirmKick = ui.confirmKick;
-  return `<h2 class="ms-h2">Players in room <span class="ms-mono">${esc(v.code)}</span></h2>
+  return `<h2 class="ms-h2">Players in Room <span class="ms-mono">${esc(v.code)}</span></h2>
     <ul class="ms-players">${v.players.map((p) => playerRow(p, {
       extra: v.isHost && p.id !== myId
         ? (confirmKick === p.id
-          ? `<span class="ms-kick-confirm">Kick ${esc(p.name)}? <button class="ms-btn ms-danger ms-sm-btn" data-kick="${p.id}">Kick</button><button class="ms-btn ms-sm-btn" data-act="kick-cancel">Cancel</button></span>`
+          ? `<span class="ms-kick-confirm">Kick ${esc(p.name)} from the room for good? <span class="ms-confirm-row"><button class="ms-btn ms-danger ms-sm-btn" data-kick="${p.id}">Kick from room</button><button class="ms-btn ms-sm-btn" data-act="kick-cancel">Cancel</button></span></span>`
           : `<button class="ms-icon-btn ms-kick" data-kick-ask="${p.id}" aria-label="Kick ${esc(p.name)} from the room" data-tooltip="Kick from room: removes ${esc(p.name)} and stops them rejoining">${icon("userX")}</button>`)
         : "",
     })).join("")}</ul>
@@ -958,19 +982,23 @@ function playersPanel() {
 function hostPanel() {
   const v = view;
   const ph = v.phase;
-  const item = (act, label, desc, danger = false, enabled = true) =>
-    `<button class="ms-host-item ${danger ? "is-danger" : ""}" data-act="${act}" ${enabled ? "" : "disabled"}><b>${label}</b><span>${desc}</span></button>`;
+  // dangerous items ask once, inline, like kicking does
+  const item = (act, label, desc, danger = false) => danger && ui.confirmHost === act
+    ? `<div class="ms-host-item is-danger is-confirming"><b>${label}?</b><span>${desc}</span>
+        <div class="ms-confirm-row"><button class="ms-btn ms-danger ms-sm-btn" data-act="${act}">Yes, ${label.toLowerCase()}</button><button class="ms-btn ms-sm-btn" data-act="host-cancel">Cancel</button></div></div>`
+    : `<button class="ms-host-item ${danger ? "is-danger" : ""}" data-act="${danger ? "host-ask" : act}" data-what="${act}"><b>${label}</b><span>${desc}</span></button>`;
+  const inRound = ph !== "lobby" && ph !== "results";
   const missing = v.players.filter((p) => p.seated && p.connected && !p.ready).length;
   const unvoted = v.players.filter((p) => p.seated && p.connected && !p.voted).length;
-  return `<h2 class="ms-h2 ms-host-title">${icon("shield")} Host controls</h2>
+  return `<h2 class="ms-h2 ms-host-title">${icon("shield")} Host Controls</h2>
     <p class="ms-hint">Only you see these. Use them when someone is stuck, has left, or the group wants to move on.</p>
     <div class="ms-host-list">
       ${ph === "deal" ? item("h-night", "Start the night now", missing ? `${missing} player${missing === 1 ? " hasn't" : "s haven't"} said they're ready.` : "Everyone is ready.") : ""}
       ${ph === "day" ? item("h-skipday", "Skip to the vote", "Ends the talking now, for everyone.") : ""}
       ${ph === "vote" ? item("h-endvote", "End the vote now", unvoted ? `${unvoted} player${unvoted === 1 ? " hasn't" : "s haven't"} voted. Their votes count as no vote.` : "Everyone has voted.") : ""}
       ${item("players", "Kick a player", "Opens the player list, where each player has a kick button.")}
-      ${ph !== "lobby" ? item("h-reset", "Back to the lobby", "Ends this round for everyone, without results.", true) : ""}
-      ${item("leave", "Leave and hand off hosting", "A random player becomes the host. The round keeps going.", true)}
+      ${inRound ? item("h-reset", "Back to the lobby", "Ends this round for everyone, without results.", true) : ""}
+      ${item("leave", "Leave and hand off hosting", inRound ? "A random player becomes the host. The round keeps going." : "A random player becomes the host and you leave the room.", true)}
     </div>`;
 }
 
@@ -978,22 +1006,38 @@ function cheatsheetPanel() {
   const roles = view?.roles || {};
   const inGame = ROLE_ORDER.filter((r) => roles[r]);
   const list = (inGame.length ? inGame : ROLE_ORDER);
-  return `<h2 class="ms-h2">Cards in this game</h2>
+  return `<h2 class="ms-h2">Cards in This Game</h2>
     <p class="ms-hint">In the order they wake up.</p>
-    <ul class="ms-sheet">${list.map((r) => `<li>${wrap(card(r, { size: "xs", info: false }))}<div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
-    <h2 class="ms-h2">Who wins</h2>
-    <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The (village|wolf team|Jester) /, ""))}</li>`).join("")}</ul>`;
+    <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-emblem" style="color:${TEAMS[ROLES[r].team].color}">${emblemSvg(r)}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
+    <h2 class="ms-h2">Who Wins</h2>
+    <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The (village|wolf team|Jester) /, ""))}</li>`).join("")}</ul>
+    <button class="ms-link" data-act="howto">How to play</button>`;
 }
 
 function infoPanel(r) {
+  if (r === "spare") {
+    return `<div class="ms-info-modal">
+      ${wrap(`<div class="ms-card ms-lg" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Werewolf</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
+      <div>
+        <h2 class="ms-h2" style="color:${TEAMS.wolf.color}">The Spare Werewolf Card</h2>
+        <div class="ms-label">Only in games with the Pack Leader</div>
+        <p>Picking the Pack Leader adds one extra Werewolf card. It isn't dealt to anyone and isn't one of the 3 center cards. It waits in its own spare slot.</p>
+        <p>On the Pack Leader's turn, they give it to a player who isn't a wolf. The two cards swap places: the player now holds the Werewolf card, so they're on the wolf team without knowing it, and their old card goes face down into the spare slot.</p>
+      </div>
+    </div>`;
+  }
   const R = ROLES[r];
   const T = TEAMS[R.team];
-  const stepIdx = NIGHT_STEPS.findIndex((s) => s.id === R.step);
+  // wake order within this game's deck (or the whole list when nothing is picked)
+  const deck = view?.roles || {};
+  const steps = NIGHT_STEPS.filter((st) => st.roles.some((x) => deck[x]) || !Object.keys(deck).length);
+  const stepId = R.wolf ? "wolves" : R.step;
+  const stepIdx = steps.findIndex((st) => st.id === stepId);
   return `<div class="ms-info-modal">
     ${wrap(card(r, { size: "lg", info: false }))}
     <div>
       <h2 class="ms-h2" style="color:${T.color}">${esc(R.name)}</h2>
-      <div class="ms-label">${esc(T.name)}${R.wolf ? " · counts as a wolf" : ""} · ${stepIdx >= 0 ? `wakes ${ordinal(stepIdx + 1)}` : "doesn't wake up"}</div>
+      <div class="ms-label">${esc(T.name)}${R.wolf ? " · counts as a wolf" : ""} · ${stepIdx >= 0 ? `wakes ${ordinal(stepIdx + 1)} of ${steps.length}` : R.step ? "not in this game" : "doesn't wake up"}</div>
       <p>${esc(R.text)}</p>
       ${R.note ? `<p class="ms-hint">${esc(R.note)}</p>` : ""}
     </div>
@@ -1002,14 +1046,14 @@ function infoPanel(r) {
 const ordinal = (n) => `${n}${["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || "th"}`;
 
 function howtoPanel() {
-  return `<h2 class="ms-h2">How to play</h2>
+  return `<h2 class="ms-h2">How to Play</h2>
     <p>Get everyone in the same room, each on their own phone. One person creates a room and the others join with the code.</p>
-    <h3 class="ms-h3">The deal</h3>
+    <h3 class="ms-h3">The Deal</h3>
     <p>Everyone gets one secret card, and 3 more go face down in the center. Your card says which team you're on: the village or the wolves.</p>
-    <h3 class="ms-h3">The night</h3>
+    <h3 class="ms-h3">The Night</h3>
     <p>Cards wake up one at a time, and each can look at or swap cards. You act as the card you were dealt, but swaps mean you might end the night holding a different card without knowing it. Whatever card you hold in the morning is who you are.</p>
-    <h3 class="ms-h3">The day</h3>
-    <p>Talk. Claim a card, or lie about it. Then everyone votes for someone to die. The most votes dies, and ties all die. If nobody gets two votes, nobody dies.</p>
+    <h3 class="ms-h3">The Day</h3>
+    <p>Talk. Claim a card, or lie about it. Then everyone votes for someone to die. Whoever gets the most votes dies, and ties all die. If nobody gets two votes, nobody dies.</p>
     <h3 class="ms-h3">Winning</h3>
     <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The (village|wolf team|Jester) /, ""))}</li>`).join("")}</ul>
     <p class="ms-hint">The game runs between your browsers with no server in the middle and no ads. If the host leaves, someone else takes over.</p>`;
@@ -1080,6 +1124,7 @@ function onClick(e) {
   if (d.kick) { ui.confirmKick = null; send({ t: "hostKick", target: d.kick }); return; }
   switch (d.act) {
     case "home": leaveRoom(); return;
+    case "retry": lostSince = null; joinAsGuest(roomCode); return;
     case "howto": openPanel("howto"); return;
     case "join-code": {
       const code = (document.getElementById("code-input").value || "").toUpperCase().replace(/[^A-Z]/g, "");
@@ -1094,7 +1139,9 @@ function onClick(e) {
     case "players": openPanel("players"); return;
     case "host": openPanel("host"); return;
     case "kick-cancel": ui.confirmKick = null; refreshPanel(); return;
-    case "leave": leaveRoom(); return;
+    case "host-ask": ui.confirmHost = d.what; refreshPanel(); return;
+    case "host-cancel": ui.confirmHost = null; refreshPanel(); return;
+    case "leave": closePanel(); leaveRoom(); return;
     case "invite": {
       const link = inviteLink();
       if (navigator.share && matchMedia("(pointer: coarse)").matches) {
@@ -1139,14 +1186,22 @@ app.addEventListener("keydown", (e) => {
 });
 app.addEventListener("input", (e) => {
   if (e.target.id === "code-input") e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+  if (e.target.id === "name-input") {
+    const btn = app.querySelector('.ms-form button[type="submit"]');
+    if (btn) btn.disabled = !E.cleanName(e.target.value);
+  }
 });
 
 // hold to peek (pointer, or Space/Enter held on the focused card)
 function setPeek(on) {
   if (ui.peeking === on) return;
+  if (on && !ui.peeked) { ui.peeked = true; render(); }   // first look: enables "ready" and the rules link
   ui.peeking = on;
-  if (on) ui.peeked = true;
-  render();
+  const el = app.querySelector("[data-peek]");
+  if (!el) return;
+  el.getBoundingClientRect();
+  el.classList.toggle("is-showing", on);   // flip the card that's already there, so the flip animates
+  app._html = null;                        // the DOM no longer matches the last render string
 }
 app.addEventListener("pointerdown", (e) => { if (e.target.closest("[data-peek]")) { e.preventDefault(); setPeek(true); } });
 window.addEventListener("pointerup", () => setPeek(false));

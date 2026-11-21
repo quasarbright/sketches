@@ -19,7 +19,7 @@ export const ROLES = {
   packleader: {
     name: "Pack Leader", team: "wolf", wolf: true, max: 1, step: "packleader",
     short: "Gives a player the spare Werewolf card",
-    text: "A wolf who wakes with the other wolves. Then, on their own turn, they give the spare Werewolf card to a player who isn't a wolf. Nobody is converted by magic: the two cards swap places. The player's old card goes face down into the spare slot, and the Werewolf card is now theirs, so they're on the wolf team without knowing it.",
+    text: "A wolf who wakes with the other wolves. Then, on their own turn, they give the spare Werewolf card to a player who isn't a wolf. The two cards swap places: the player now holds the Werewolf card, so they're on the wolf team without knowing it, and their old card goes face down into the spare slot.",
     note: "Picking the Pack Leader adds a spare Werewolf card to the deck. It sits apart from the 3 center cards and only the Pack Leader can move it.",
   },
   prowler: {
