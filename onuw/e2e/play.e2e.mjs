@@ -311,3 +311,48 @@ test("right after your night turn, what you saw shows for a few seconds, then go
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 });
+
+test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and it closes when your turn comes", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  let w = null;
+  for (const p of t.pages) if (await p.locator("[data-act=wack]").count()) { w = p; break; }
+  assert.ok(w, "a waiting player sees the whack-a-wolf button");
+  await w.click("[data-act=wack]");
+  await w.waitForSelector(".wk");
+  await w.evaluate(() => { const W = window.__onuw.wack; W.setAuto(false); });
+  await w.waitForTimeout(200);
+  const free = await w.evaluate(() => [...document.querySelectorAll(".wk-hole")].findIndex((h) => !h.classList.contains("is-up")));
+  await w.evaluate((i) => window.__onuw.wack.spawn(i, "wolf", 5000), free);
+  await w.waitForTimeout(400);
+  await w.locator(`[data-hole="${free}"]`).click();
+  assert.equal(await w.evaluate(() => window.__onuw.wack.score()), 1);
+  assert.ok(await w.locator(`[data-hole="${free}"].is-bonked`).count());
+  assert.ok(await w.locator(".wk-star").count() > 0);
+  await w.waitForTimeout(900);
+  await w.evaluate((i) => window.__onuw.wack.spawn(i, "villager", 5000), free);
+  await w.waitForTimeout(400);
+  await w.locator(`[data-hole="${free}"]`).click();
+  assert.equal(await w.evaluate(() => window.__onuw.wack.score()), -1);
+  assert.ok(await w.locator(".wk.is-shaking").count());
+  await w.click("[data-wk=close]");
+  assert.equal(await w.locator(".wk").count(), 0);
+  // everyone who's waiting plays; whenever someone's turn comes, their game has closed
+  for (let k = 0; k < 300 && (await view(t.host)).phase === "night"; k++) {
+    for (const p of t.pages) {
+      const pr = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
+      if (!pr) { if (await p.locator("[data-act=wack]").count() && !(await p.locator(".wk").count())) await p.click("[data-act=wack]"); continue; }
+      assert.equal(await p.locator(".wk").count(), 0, "the game closes when your turn comes");
+      if (pr.kind === "center1") await p.click('[data-center="0"]');
+      if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
+      if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
+      if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
+      await p.click("[data-act=confirm]").catch(() => {});
+    }
+    await t.host.waitForTimeout(100);
+  }
+  for (const p of t.pages) assert.equal(await p.locator(".wk").count(), 0, "the game closes when the night ends");
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});

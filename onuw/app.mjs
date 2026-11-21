@@ -7,6 +7,8 @@ import { makeNet } from "./net.mjs";
 import { NAMES as N, TITLE } from "./skin.mjs";
 import * as SKIN from "./skin.mjs";
 import { artSvg } from "./art.mjs";
+import * as WACK from "./wack.mjs";
+const { openWack, closeWack, isOpen: wackOpen } = WACK;
 document.title = TITLE;
 
 // ---------------------------------------------------------------- setup
@@ -57,6 +59,7 @@ const ICONS = {
   share: `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>`,
   swap: `<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`,
   eyeOff: `<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>`,
+  hammer: `<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>`,
   eye: `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
   userX: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>`,
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
@@ -379,6 +382,8 @@ function receiveView(v) {
   // right after your turn, what you saw shows for a few seconds in your card-and-night panel
   const was = prev?.game?.prompt, cur = v.game?.prompt;
   if (v.phase === "night" && was && !was.done && cur?.done && was.step === cur.step) turnCard("secret", true, 6000);
+  // the game closes the moment your turn comes, or when the night ends
+  if (wackOpen() && (v.phase !== "night" || (cur && !cur.done))) closeWack();
 }
 
 // ---------------------------------------------------------------- toasts
@@ -799,7 +804,8 @@ function nightScreen() {
   let panel;
   if (p && !p.done) panel = promptPanel(p, g);
   else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>
-    <p class="ms-hint">Tap and scroll now and then, so nobody can tell when your turn comes.</p>`;
+    <p class="ms-hint">Tap and scroll now and then, so nobody can tell when your turn comes.</p>
+    <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play whack-a-wolf while you wait</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
     <div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
@@ -1306,6 +1312,7 @@ function onClick(e) {
       }
       return;
     }
+    case "wack": openWack(); return;
     case "suggest": send({ t: "suggestRoles" }); return;
     case "start": send({ t: "start" }); return;
     case "ready": send({ t: "peeked" }); return;
@@ -1416,4 +1423,4 @@ if (!LOCAL && !window.Peer) {
 }
 
 // for tests
-window.__onuw = { get view() { return view; }, get mode() { return mode; }, get state() { return S; }, send, publish };
+window.__onuw = { get view() { return view; }, get mode() { return mode; }, get state() { return S; }, send, publish, wack: WACK };
