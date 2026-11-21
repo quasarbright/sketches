@@ -1,6 +1,6 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, fringe, rect, card } from "../brush.mjs";
-// The thief: a hooded, masked cutpurse tiptoeing left with a sack over one shoulder and a stolen card held behind his back.
+// The thief: a hooded, masked cutpurse tiptoeing left with a sack over his shoulder, holding a stolen card out in front.
 const { card: bg, ink } = ROLE_COLORS.thief;
 const sack = blob([[290, 210], [340, 190], [392, 220], [410, 290], [390, 350], [340, 366], [300, 340], [286, 280]]);
 const sackTie = brush([[296, 230], [278, 248], [268, 262]], [26, 20, 16]);
@@ -12,11 +12,10 @@ const head = blob([[202, 176], [226, 162], [254, 166], [264, 192], [260, 220], [
 const cap = [blob([[196, 196, "c"], [204, 158], [236, 140], [268, 150], [280, 184], [278, 226], [262, 246], [246, 232], [256, 196], [226, 182]]), brush([[262, 156], [296, 160], [320, 186], [330, 222]], [28, 20, 12, 4])];
 // mask: a band across the eyes, tails flying back
 const maskTails = [brush([[258, 196], [290, 192], [318, 204]], [12, 10, 2]), brush([[258, 202], [286, 212], [306, 230]], [10, 8, 2])];
-const farArm = [brush([[276, 262], [304, 250], [298, 226]], [30, 24, 20])];
-const nearArm = [brush([[236, 272], [228, 330], [262, 380], [300, 384]], [34, 28, 22, 20]), blob([[292, 372], [316, 370], [320, 392], [298, 398]])];
-const heldCard = rect(322, 400, 40, 58, 18, 6);
-const frontHand = [brush([[214, 268], [176, 290], [152, 274]], [30, 24, 20]), blob([[136, 262], [158, 256], [166, 276], [150, 288], [134, 282]]),
-  brush([[144, 262], [134, 244]], [8, 0])];
+// far hand holds the sack's neck over his shoulder; near hand holds the stolen card out in front
+const farArm = [brush([[276, 262], [300, 248], [292, 234]], [30, 24, 20])];
+const nearArm = [brush([[238, 276], [206, 334], [164, 312]], [34, 28, 22]), blob([[146, 292], [170, 290], [178, 312], [160, 322], [144, 312]])];
+const C = [144, 262, -12];
 const cuts = [
   brush([[200, 200], [262, 198]], [14, 14]),                     // mask band
   blob([[214, 196], [226, 192], [228, 202], [216, 206]]),         // eye hole
@@ -27,4 +26,6 @@ const cuts = [
 ];
 export default card({ bg, ink, transform: "translate(6 4)", layers: [{ d: sack }, sackTie, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[236, 410, 34]] }, neck, maskTails, { d: head }, cap,
   farArm, cuts.slice(2).map((d) => ({ d, fill: "bg" })), { d: cuts[0], fill: ink }, { d: cuts[1], fill: "bg" },
-  { group: frontHand, halo: 4, roots: [[214, 268, 22]] }, { group: nearArm, halo: 4, roots: [[236, 272, 24]] }, { d: heldCard, halo: 4 }, { d: rect(322, 400, 30, 48, 18, 4), fill: "bg" }, { d: rect(322, 400, 24, 42, 18, 3) }] });
+  { group: nearArm, halo: 4, roots: [[238, 276, 24]] },
+  { d: rect(C[0], C[1], 44, 64, C[2], 6), halo: 4 }, { d: rect(C[0], C[1], 34, 54, C[2], 4), fill: "bg" }, { d: rect(C[0], C[1], 28, 48, C[2], 3) },
+  { d: `M${C[0] - 2} ${C[1] - 12}a12 12 0 1 0 9 21a9.5 9.5 0 1 1 -9 -21z`, fill: "bg" }] });

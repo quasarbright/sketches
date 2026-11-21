@@ -153,7 +153,7 @@ export const EMBLEMS = {
   seer: `<path d="M7 36c9-13 41-13 50 0-9 13-41 13-50 0z"/><circle cx="32" cy="36" r="6"/><path d="M32 9v9"/><path d="M15 14l5 7"/><path d="M49 14l-5 7"/>`,
   thief: `<path d="M7 26c8-7 18-7 25 2 7-9 17-9 25-2 0 13-8 19-14 17-5-1-6-7-11-7s-6 6-11 7C15 45 7 39 7 26z"/><circle cx="20" cy="31" r="4"/><circle cx="44" cy="31" r="4"/>`,
   meddler: `<path d="M11 22h37"/><path d="M40 13l9 9-9 9"/><path d="M53 42H16"/><path d="M24 33l-9 9 9 9"/>`,
-  sleepwalker: `<path d="M41 13a19 19 0 1 0 13 31 15 15 0 1 1-13-31z"/><path d="M11 12h9l-9 9h9"/><path d="M24 24h6l-6 6h6"/>`,
+  sleepwalker: `<path d="M27 8h10v12c6 3 9 8 9 14v18a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4V34c0-6 3-11 9-14z"/><path d="M18 38h28"/>`,
   nightowl: `<path d="M14 20c0-6 6-10 10-6 5-3 11-3 16 0 4-4 10 0 10 6v18c0 10-8 18-18 18s-18-8-18-18z"/><circle cx="25" cy="32" r="6"/><circle cx="39" cy="32" r="6"/><path d="M29 41l3 5 3-5z"/>`,
   villager: `<path d="M10 31 32 13l22 18"/><path d="M17 26v25h30V26"/><path d="M28 51V38h8v13"/>`,
   hunter: `<circle cx="32" cy="32" r="17"/><path d="M32 7v13"/><path d="M32 44v13"/><path d="M7 32h13"/><path d="M44 32h13"/><circle cx="32" cy="32" r="2.5" fill="currentColor"/>`,

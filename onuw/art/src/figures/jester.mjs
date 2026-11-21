@@ -1,6 +1,6 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, fringe, card } from "../brush.mjs";
-// The jester: a gangly fool in a three-pointed belled hat, flinging one arm wide and holding up a grinning mask on a stick.
+// The jester: a gangly fool in a three-pointed belled hat, flinging one arm wide and waving the other overhead.
 const { card: bg, ink } = ROLE_COLORS.jester;
 const legs = [brush([[240, 420], [222, 500], [214, 580]], [38, 30, 24]), blob([[214, 572], [170, 568], [150, 548, "c"], [168, 584], [222, 592]]),
   brush([[276, 420], [306, 500], [330, 572]], [38, 30, 24]), blob([[322, 566], [366, 562], [388, 540, "c"], [372, 580], [324, 588]])];
@@ -11,14 +11,11 @@ const hat = [brush([[196, 210], [160, 180], [126, 186], [110, 210]], [34, 26, 16
   brush([[234, 206], [270, 182], [304, 192], [316, 218]], [32, 24, 16, 6]), blob([[176, 214, "c"], [200, 196], [238, 198], [258, 214, "c"], [218, 224]])];
 const bells = [[106, 218], [266, 126], [320, 226]].map(([x, y]) => `M${x} ${y}m-11 0a11 11 0 1 0 22 0a11 11 0 1 0 -22 0z`);
 const sweepArm = [brush([[296, 296], [350, 330], [392, 372]], [30, 24, 20]), blob([[384, 362], [410, 362], [420, 382], [398, 392]])];
-const stick = brush([[196, 330], [150, 230], [128, 168]], [9, 8, 7]);
-const mask = blob([[100, 130], [128, 116], [156, 130], [158, 164], [140, 188], [116, 188], [98, 164]]);
-const maskArm = [brush([[218, 300], [196, 330], [176, 300]], [30, 24, 20]), blob([[164, 286], [186, 282], [192, 304], [172, 310]])];
+const waveArm = [brush([[218, 300], [176, 286], [150, 236]], [30, 24, 20]), blob([[138, 228], [144, 206], [160, 210], [164, 232], [150, 240]]), ...[[140, 210, 132, 192], [150, 207, 148, 186], [160, 211, 164, 192]].map(([a, b, c, d]) => brush([[a, b], [c, d]], [8, 6]))];
 const cuts = [
   brush([[226, 300], [262, 360], [292, 420]], [4, 5, 3]), brush([[290, 300], [252, 360], [230, 430]], [4, 5, 3]), // diamond pattern
   brush([[230, 232], [244, 228]], [4, 3]), brush([[218, 250], [236, 258], [250, 250]], [3, 4, 2]),                  // eye, smile
   brush([[226, 436], [290, 436]], [5, 5]),
 ];
-const maskCuts = [brush([[110, 146], [124, 140]], [8, 4]), brush([[134, 140], [148, 146]], [4, 8]), brush([[110, 164], [128, 176], [146, 164]], [4, 6, 4])];
 export default card({ bg, ink, transform: "translate(4 30)", layers: [legs, { d: torso }, cuts.map((d) => ({ d, fill: "bg" })), collar, hat, bells, { d: head },
-  [cuts[2], cuts[3]].map((d) => ({ d, fill: "bg" })), { group: sweepArm, halo: 4, roots: [[296, 296, 22]] }, { d: stick }, { d: mask, halo: 4 }, maskCuts.map((d) => ({ d, fill: "bg" })), { group: maskArm, halo: 4, roots: [[218, 300, 22]] }] });
+  [cuts[2], cuts[3]].map((d) => ({ d, fill: "bg" })), { group: sweepArm, halo: 4, roots: [[296, 296, 22]] }, { group: waveArm, halo: 4, roots: [[218, 300, 22]] }] });

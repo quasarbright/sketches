@@ -19,7 +19,7 @@ export const NAMES = {
   seer: "Seer",
   thief: "Thief",
   meddler: "Meddler",
-  sleepwalker: "Sleepwalker",
+  sleepwalker: "Alcoholic",
   nightowl: "Night Owl",
   villager: "Villager",
   hunter: "Hunter",
