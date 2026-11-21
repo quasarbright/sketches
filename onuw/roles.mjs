@@ -1,5 +1,6 @@
 // Role definitions: names, teams, wake order, rules text and card emblems.
 // Pure data, shared by the engine (rules) and the page (cards, cheat sheet).
+import { NAMES as N, ART } from "./skin.mjs";
 
 export const TEAMS = {
   village: { name: "Village", color: "#5aa9e6" },
@@ -12,75 +13,75 @@ export const TEAMS = {
 // `step`: the night step this role acts in (see NIGHT_STEPS), or null for no night action.
 export const ROLES = {
   werewolf: {
-    name: "Werewolf", team: "wolf", wolf: true, max: 3, step: "wolves",
+    name: N.werewolf, team: "wolf", wolf: true, max: 3, step: "wolves",
     short: "Sees the other wolves",
     text: "Wakes with the other wolves so you all know each other. If you're the only wolf, you may look at one of the 3 center cards.",
   },
   packleader: {
-    name: "Pack Leader", team: "wolf", wolf: true, max: 1, step: "packleader",
-    short: "Gives a player the spare Werewolf card",
-    text: "A wolf who wakes with the other wolves. Then, on their own turn, they give the spare Werewolf card to a player who isn't a wolf. The two cards swap places: the player now holds the Werewolf card, so they're on the wolf team without knowing it, and their old card goes face down into the spare slot.",
-    note: "Picking the Pack Leader adds a spare Werewolf card to the deck. It sits apart from the 3 center cards and only the Pack Leader can move it.",
+    name: N.packleader, team: "wolf", wolf: true, max: 1, step: "packleader",
+    short: `Gives a player the spare ${N.werewolf} card`,
+    text: `A wolf who wakes with the other wolves. Then, on their own turn, they give the spare ${N.werewolf} card to a player who isn't a wolf. The two cards swap places: the player now holds the ${N.werewolf} card, so they're on the wolf team without knowing it, and their old card goes face down into the spare slot.`,
+    note: `Picking the ${N.packleader} adds a spare ${N.werewolf} card to the deck. It sits apart from the 3 center cards and only the ${N.packleader} can move it.`,
   },
   prowler: {
-    name: "Prowler", team: "wolf", wolf: true, max: 1, step: "prowler",
+    name: N.prowler, team: "wolf", wolf: true, max: 1, step: "prowler",
     short: "A wolf who may look at a player's card",
     text: "A wolf who wakes with the other wolves. Then, on their own turn, they may look at one other player's card.",
   },
   lackey: {
-    name: "Lackey", team: "wolf", wolf: false, max: 1, step: "lackey",
+    name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
     short: "Sees the wolves, wins with them",
     text: "On the wolf team, but not a wolf. Wakes to see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win as long as someone other than you dies.",
   },
   scout: {
-    name: "Scout", team: "wolf", wolf: false, max: 1, step: "scout",
+    name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
     short: "Sees the wolves and their cards",
-    text: "On the wolf team, but not a wolf. Wakes to see who the wolves are and looks at their cards, so you know whether they're still wolves. If the Scout dies, the village wins.",
+    text: `On the wolf team, but not a wolf. Wakes to see who the wolves are and looks at their cards, so you know whether they're still wolves. If the ${N.scout} dies, the village wins.`,
   },
   mason: {
-    name: "Mason", team: "village", wolf: false, max: 2, pair: true, step: "masons",
-    short: "Sees the other Mason",
-    text: "Masons come in pairs. They wake together and see each other. If you wake alone, the other Mason card is in the center.",
+    name: N.mason, team: "village", wolf: false, max: 2, pair: true, step: "masons",
+    short: `Sees the other ${N.mason}`,
+    text: `${N.mason}s come in pairs. They wake together and see each other. If you wake alone, the other ${N.mason} card is in the center.`,
   },
   seer: {
-    name: "Seer", team: "village", wolf: false, max: 1, step: "seer",
+    name: N.seer, team: "village", wolf: false, max: 1, step: "seer",
     short: "Looks at a player's card or two center cards",
     text: "May look at one other player's card, or at two of the 3 center cards.",
   },
   thief: {
-    name: "Thief", team: "village", wolf: false, max: 1, step: "thief",
+    name: N.thief, team: "village", wolf: false, max: 1, step: "thief",
     short: "Swaps with a player and looks",
-    text: "May swap cards with another player, then looks at the card they took. They're now on that card's team, and the other player has the Thief card.",
+    text: `May swap cards with another player, then looks at the card they took. They're now on that card's team, and the other player has the ${N.thief} card.`,
   },
   meddler: {
-    name: "Meddler", team: "village", wolf: false, max: 1, step: "meddler",
+    name: N.meddler, team: "village", wolf: false, max: 1, step: "meddler",
     short: "Swaps two other players' cards",
     text: "May swap the cards of two other players without looking at them.",
   },
   sleepwalker: {
-    name: "Sleepwalker", team: "village", wolf: false, max: 1, step: "sleepwalker",
+    name: N.sleepwalker, team: "village", wolf: false, max: 1, step: "sleepwalker",
     short: "Swaps with a center card blind",
     text: "Must swap their card with one of the 3 center cards, without looking at the new one.",
   },
   nightowl: {
-    name: "Night Owl", team: "village", wolf: false, max: 1, step: "nightowl",
+    name: N.nightowl, team: "village", wolf: false, max: 1, step: "nightowl",
     short: "Checks their own card at the end",
     text: "Wakes last and looks at their own card, to see whether someone swapped it.",
   },
   villager: {
-    name: "Villager", team: "village", wolf: false, max: 3, step: null,
+    name: N.villager, team: "village", wolf: false, max: 3, step: null,
     short: "No night action",
     text: "Sleeps through the night. Use the day to work out who the wolves are.",
   },
   hunter: {
-    name: "Hunter", team: "village", wolf: false, max: 1, step: null,
+    name: N.hunter, team: "village", wolf: false, max: 1, step: null,
     short: "Takes their vote down with them",
-    text: "No night action. If the Hunter dies, the player the Hunter voted for dies too.",
+    text: `No night action. If the ${N.hunter} dies, the player the ${N.hunter} voted for dies too.`,
   },
   jester: {
-    name: "Jester", team: "jester", wolf: false, max: 1, step: null,
+    name: N.jester, team: "jester", wolf: false, max: 1, step: null,
     short: "Wins only by dying",
-    text: "On nobody's team. The Jester wins only if they die. If the Jester dies, the wolves can't win, though the village still can.",
+    text: `On nobody's team. The ${N.jester} wins only if they die. If the ${N.jester} dies, the wolves can't win, though the village still can.`,
   },
 };
 
@@ -93,23 +94,23 @@ export const ROLE_ORDER = [
 // Night steps in wake order. `roles`: a step runs when any of these cards is in the deck
 // (center included, so a skipped step never gives away that a card is in the center).
 export const NIGHT_STEPS = [
-  { id: "wolves", label: "Werewolves", roles: ["werewolf", "packleader", "prowler"] },
-  { id: "packleader", label: "Pack Leader", roles: ["packleader"] },
-  { id: "prowler", label: "Prowler", roles: ["prowler"] },
-  { id: "lackey", label: "Lackey", roles: ["lackey"] },
-  { id: "scout", label: "Scout", roles: ["scout"] },
-  { id: "masons", label: "Masons", roles: ["mason"] },
-  { id: "seer", label: "Seer", roles: ["seer"] },
-  { id: "thief", label: "Thief", roles: ["thief"] },
-  { id: "meddler", label: "Meddler", roles: ["meddler"] },
-  { id: "sleepwalker", label: "Sleepwalker", roles: ["sleepwalker"] },
-  { id: "nightowl", label: "Night Owl", roles: ["nightowl"] },
+  { id: "wolves", label: N.werewolves, roles: ["werewolf", "packleader", "prowler"] },
+  { id: "packleader", label: N.packleader, roles: ["packleader"] },
+  { id: "prowler", label: N.prowler, roles: ["prowler"] },
+  { id: "lackey", label: N.lackey, roles: ["lackey"] },
+  { id: "scout", label: N.scout, roles: ["scout"] },
+  { id: "masons", label: `${N.mason}s`, roles: ["mason"] },
+  { id: "seer", label: N.seer, roles: ["seer"] },
+  { id: "thief", label: N.thief, roles: ["thief"] },
+  { id: "meddler", label: N.meddler, roles: ["meddler"] },
+  { id: "sleepwalker", label: N.sleepwalker, roles: ["sleepwalker"] },
+  { id: "nightowl", label: N.nightowl, roles: ["nightowl"] },
 ];
 
 export const WIN_RULES = [
-  ["village", "The village wins if at least one wolf dies, or if the Scout dies. If no player is a wolf, the village wins when nobody dies (or the Lackey or Scout dies)."],
-  ["wolf", "The wolf team wins if no wolf and no Scout dies, and the Jester doesn't die. If no player is a wolf, the Lackey and Scout win when someone else dies."],
-  ["jester", "The Jester wins if the Jester dies."],
+  ["village", `The village wins if at least one wolf dies, or if the ${N.scout} dies. If no player is a wolf, the village wins when nobody dies (or the ${N.lackey} or ${N.scout} dies).`],
+  ["wolf", `The wolf team wins if no wolf and no ${N.scout} dies, and the ${N.jester} doesn't die. If no player is a wolf, the ${N.lackey} and ${N.scout} win when someone else dies.`],
+  ["jester", `The ${N.jester} wins if the ${N.jester} dies.`],
 ];
 
 // Suggested decks by player count (player count + 3 cards). Used until the host edits the picker.
@@ -161,5 +162,6 @@ export const EMBLEMS = {
 };
 
 export function emblemSvg(id, cls = "ms-emblem") {
+  if (ART[id]) return `<img class="${cls} ms-art-img" src="${ART[id]}" alt="" aria-hidden="true">`;
   return `<svg class="${cls}" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EMBLEMS[id] || EMBLEMS.back}</svg>`;
 }

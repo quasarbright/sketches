@@ -297,6 +297,15 @@ test("names are cleaned and kept unique", () => {
   assert.equal(s.players[1].name.length, 20);
 });
 
+test("names can only change in the lobby", () => {
+  const s = room(["a", "b", "c"]);
+  rig(s, { a: "werewolf", b: "villager", c: "seer" }, ["villager", "villager", "thief"]);
+  const before = s.players[1].name;
+  const r = handle(s, "b", { t: "rename", name: "Zed" }, 0);
+  assert.ok(r.error);
+  assert.equal(s.players[1].name, before);
+});
+
 test("views never leak other players' cards before the results", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "werewolf", b: "villager", c: "seer" }, ["villager", "villager", "thief"]);
@@ -321,4 +330,16 @@ test("taking a card from another team says so", () => {
   rig(s, { a: "thief", b: "werewolf", c: "villager" }, ["villager", "villager", "seer"]);
   runNight(s, { thief: { a: { target: "b" } } });
   assert.match(s.g.info.a.at(-1).text, /You're on the wolf team now/);
+});
+
+test("display names live only in skin.mjs", async () => {
+  const fs = await import("node:fs");
+  const { NAMES } = await import("./skin.mjs");
+  const names = Object.values(NAMES);
+  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "");
+  for (const f of ["app.mjs", "engine.mjs", "roles.mjs", "net.mjs", "art.mjs", "index.html"]) {
+    if (!fs.existsSync(new URL(f, import.meta.url))) continue;
+    const src = strip(fs.readFileSync(new URL(f, import.meta.url), "utf8"));
+    for (const n of names) assert.ok(!new RegExp(`\\b${n}\\b`).test(src), `${f} hard-codes "${n}"; use NAMES from skin.mjs`);
+  }
 });
