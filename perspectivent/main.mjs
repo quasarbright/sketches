@@ -1145,7 +1145,7 @@ function syncPanel() {
   const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
   $("hNote").textContent = [
     state.H < state.Hasked - 1e-6 ? "Shrunk so where the rays start stays above the rails." : atClear ? "Tallest that clears the rails." : "",
-    same && !state.split ? "As tall as where the rays start." : "",
+    same && !state.split ? "As tall as the plane the rays start from, so they run parallel." : "",
   ].filter(Boolean).join(" ");
   // tick marks where the screen's bottom is at your feet, and where it matches the back plane
   $("hGroundTick").value = sliderFromH(CLEAR_H);
@@ -1160,7 +1160,7 @@ function sLabel(s) {
 // and how it compares with the screen, in words
 function sNote(s) {
   if (s == null) return "";
-  if (Math.abs(s) < 1e-9) return "One point, like a camera. Slide right to start the rays from a plane around your eye instead; as tall as the screen makes them parallel.";
+  if (Math.abs(s) < 1e-9) return "One point: a normal camera. Slide right to start the rays from a plane; as tall as the screen, they run parallel.";
   const low = s * state.H > CLEAR_H + 1e-3 ? " Dips into the ground." : "";
   if (Math.abs(s - 1) < 1e-9) return "As tall as the screen, so the rays run parallel: orthographic." + low;
   return `${+s.toFixed(2)}× the screen's height.` + (s > 1 ? " Bigger than the screen, so the rays cross ahead." : "") + low;
