@@ -181,8 +181,8 @@
     /* Cards are laid out like a printed role card: a name band, the picture, and a band with the short
        rule. Sizes are in container units (cqw = 1% of the card's width), so every size of card keeps the
        same proportions; small cards get a floor so their text stays readable. */
-    .ms-card { --w: 112px; position: relative; width: var(--w); max-width: 100%; aspect-ratio: 125 / 202; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column;
-      container-type: inline-size; background: var(--team); box-shadow: 0 0 5px rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.25); text-align: center; font-family: "Lato", var(--font-ui); }
+    .ms-card { --w: 112px; position: relative; width: var(--w); max-width: 100%; aspect-ratio: 125 / 202; border-radius: 5px; overflow: hidden; display: flex; flex-direction: column;
+      container-type: inline-size; background: var(--team); box-shadow: 0 0 5px rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.25); text-align: center; font-family: "Lato", "Helvetica Neue", Arial, sans-serif; }
     .ms-card { --sky-top: color-mix(in srgb, var(--team) 42%, #0a0d1c); --sky-bot: color-mix(in srgb, var(--team) 14%, #070914);
       --glow: color-mix(in srgb, var(--team) 55%, #fff6dc); --sil: color-mix(in srgb, var(--team) 16%, #04050c); --far: color-mix(in srgb, var(--team) 30%, #090b17);
       --glint: #ffe6a8; --moon: #f6e9c4; --moon-dim: #e2d3a6; --star: #fff3d6; --window: #ffd98a; --wolf-card: #e0485a; --card-a: #5aa9e6; --card-b: #f2a541; }
