@@ -44,23 +44,24 @@ export const ART = {
   back: "art/back.svg",
 };
 
-// ROLE_COLORS: each card's own color, like the reference's role cards. `card` is the art's flat
-// background (use a lighter tint of it for the name band), `ink` is the silhouette. The art in
-// art/src reads these, so change a color here and rebuild the art (node art/src/build.mjs).
+// ROLE_COLORS: each card's own colors, the same as the reference's role cards so players feel at
+// home. `card` is the card and the art's flat background, `band` the lighter name band and text
+// strip, `ink` the silhouette (the reference draws it as black at 60% over the card color).
+// The art in art/src reads these: change a color here, then rebuild with node art/src/build.mjs.
 export const ROLE_COLORS = {
-  werewolf: { card: "#d9463b", ink: "#5a1612" },
-  packleader: { card: "#b8323f", ink: "#4a0c16" },
-  prowler: { card: "#c4553a", ink: "#4b160b" },
-  lackey: { card: "#c75274", ink: "#4a1028" },
-  scout: { card: "#d8654a", ink: "#4d1a0c" },
-  mason: { card: "#2d93a8", ink: "#0c3540" },
-  seer: { card: "#7a50c6", ink: "#2b1858" },
-  thief: { card: "#3d5b8a", ink: "#0f1d36" },
-  meddler: { card: "#a24bbd", ink: "#3a0f4c" },
-  sleepwalker: { card: "#5a6ed0", ink: "#18215a" },
-  nightowl: { card: "#4453b6", ink: "#141a4d" },
-  villager: { card: "#3f84c8", ink: "#122f52" },
-  hunter: { card: "#2a8a86", ink: "#0a3432" },
-  jester: { card: "#e0963a", ink: "#5a2e04" },
+  werewolf: { card: "#f44336", band: "#f77066", ink: "#621b16" },
+  packleader: { card: "#b30915", band: "#e40b1b", ink: "#480408" },
+  prowler: { card: "#be2c4c", band: "#d54867", ink: "#4c121e" },
+  lackey: { card: "#ff5722", band: "#ff7e55", ink: "#66230e" },
+  scout: { card: "#a63311", band: "#d44116", ink: "#421407" },
+  mason: { card: "#0d47a1", band: "#115cd0", ink: "#051c40" },
+  seer: { card: "#673ab7", band: "#8259cb", ink: "#291749" },
+  thief: { card: "#263238", band: "#3b4d56", ink: "#0f1416" },
+  meddler: { card: "#9c27b0", band: "#bc37d3", ink: "#3e1046" },
+  sleepwalker: { card: "#4caf50", band: "#6ec071", ink: "#1e4620" },
+  nightowl: { card: "#1a237e", band: "#232fa8", ink: "#0a0e32" },
+  villager: { card: "#2196f3", band: "#51adf6", ink: "#0d3c61" },
+  hunter: { card: "#607d8b", band: "#7b96a3", ink: "#263238" },
+  jester: { card: "#ff9800", band: "#ffad33", ink: "#663d00" },
   back: { card: "#1b2350", ink: "#3c4a96" },
 };
