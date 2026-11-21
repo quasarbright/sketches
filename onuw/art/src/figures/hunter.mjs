@@ -22,5 +22,5 @@ const cuts = [
   brush([[218, 380], [286, 372]], [5, 5]),                                 // belt
   brush([[172, 330], [146, 420]], [3, 1]),                                 // cloak crease
 ];
-export default card({ bg, ink, transform: "translate(-12 6)", layers: [quiver, { d: cloak }, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[270, 420, 36]] }, { d: hood }, { d: face },
+export default card({ bg, ink, transform: "translate(-17 0) translate(-12 6)", layers: [quiver, { d: cloak }, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[270, 420, 36]] }, { d: hood }, { d: face },
   cuts.map((d) => ({ d, fill: "bg" })), { d: string }, { group: bowArm, halo: 4, roots: [[284, 266, 24]] }, { d: bow }, arrow, { group: drawArm, halo: 4, roots: [[262, 270, 24]] }] });

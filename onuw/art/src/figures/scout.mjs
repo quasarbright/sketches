@@ -1,27 +1,25 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, card } from "../brush.mjs";
-// The scout: a lookout with one boot up on a rock, peering through a spyglass, cape blowing back.
+import { blob, brush, rect, boot, card } from "../brush.mjs";
+// The ward (a squire): a young page standing at attention for his masters, carrying their tall lance
+// and a big kite shield marked with a wolf's head.
 const { card: bg, ink } = ROLE_COLORS.scout;
-const rock = blob([[250, 520], [300, 488], [360, 492], [400, 530], [410, 610], [240, 612]]);
-const cape = blob([[220, 236], [168, 270], [120, 330], [86, 380], [60, 400, "c"], [94, 404], [72, 440, "c"], [116, 420], [100, 460, "c"], [150, 410], [196, 360], [236, 300]]);
-const backLeg = [brush([[232, 400], [216, 500], [206, 588]], [50, 38, 32]), blob([[184, 578], [226, 576], [248, 600], [182, 608]])];
-const torso = blob([[218, 246], [266, 234], [292, 270], [292, 340], [282, 410], [222, 414], [212, 340], [208, 280]]);
-const frontLeg = [brush([[262, 392], [318, 420], [336, 486]], [54, 40, 34]), blob([[318, 474], [356, 472], [378, 494], [314, 500]])];
-const neck = brush([[248, 220], [250, 246]], [26, 30]);
-const head = blob([[226, 176], [252, 164], [278, 170], [286, 194], [292, 208, "c"], [284, 212], [284, 226], [266, 238], [240, 232], [226, 206]]);
-const hat = [blob([[214, 172, "c"], [240, 150], [276, 148], [296, 166, "c"], [270, 174], [238, 180]]), blob([[232, 160], [246, 132], [274, 130], [282, 158]])];
-const feather = [brush([[240, 140], [206, 116], [176, 108]], [12, 10, 0]), ...fringe([[240, 140], [206, 116], [176, 108]], { n: 7, len: [8, 16], w: 7, side: 1, lean: .7, seed: 71 })];
-// both hands hold the spyglass up to the eye, pointing right
-const glass = [brush([[276, 198], [330, 190], [400, 180]], [18, 22, 26], { cap: "butt" }), brush([[396, 181], [410, 179]], [32, 32], { cap: "butt" })];
-const arms = [brush([[272, 262], [300, 240], [314, 206]], [30, 24, 20]), blob([[302, 196], [326, 192], [330, 214], [306, 218]]),
-  brush([[250, 266], [296, 258], [344, 216]], [30, 24, 20]), blob([[334, 196], [360, 192], [362, 214], [338, 220]])];
-const belt = [brush([[214, 380], [288, 384]], [8, 8])];
+const lance = [brush([[332, 600], [332, 160]], [12, 10]), blob([[324, 164], [332, 108, "c"], [340, 164]]),
+  blob([[332, 176], [400, 188], [380, 206, "c"], [404, 226], [332, 222]])]; // pennant
+const legs = [brush([[236, 430], [232, 510], [228, 580]], [34, 28, 24]), boot(224, 596, { s: 24 }), brush([[272, 430], [278, 510], [282, 580]], [34, 28, 24]), boot(284, 596, { s: 24 })];
+const tunic = blob([[222, 262], [254, 250], [290, 262], [300, 330], [306, 450, "c"], [254, 456], [208, 450, "c"], [210, 330]]);
+const neck = brush([[254, 230], [254, 256]], [22, 26]);
+const head = blob([[230, 196], [250, 180], [274, 186], [282, 206], [290, 216, "c"], [282, 220], [282, 232], [268, 244], [248, 242], [234, 228]]);
+const cap = blob([[224, 204, "c"], [230, 182], [252, 170], [276, 176], [286, 196, "c"], [256, 192]]);
+// near arm holds the lance; far arm hangs behind the shield
+const arm = [brush([[284, 276], [306, 320], [326, 314]], [28, 22, 18]), blob([[318, 300], [342, 298], [344, 322], [320, 326]])];
+const shield = blob([[168, 300, "c"], [254, 300, "c"], [254, 380], [236, 430], [211, 456, "c"], [186, 430], [168, 380]]);
+// the wolf's head on the shield, facing right, cut out of it
+const emblem = blob([[188, 414], [182, 384], [188, 358], [194, 330, "c"], [208, 350], [214, 334, "c"], [222, 354], [238, 362], [250, 370, "c"], [240, 380], [226, 384], [214, 400], [206, 416]]);
 const cuts = [
-  brush([[258, 226], [252, 300], [248, 392]], [3, 4, 2]),      // tunic front
-  brush([[324, 190], [324, 204]], [4, 4]), brush([[370, 182], [370, 200]], [4, 4]),   // spyglass bands
-  brush([[220, 160], [292, 158]], [3, 3]),                      // hat band
-  brush([[140, 330], [110, 380]], [3, 1]), brush([[180, 310], [150, 380]], [3, 1]),   // cape creases
-  brush([[214, 382], [288, 386]], [3, 3]),
+  brush([[266, 206], [276, 208]], [3, 3]),                                    // eye
+  brush([[224, 204], [286, 198]], [3, 3]),                                     // cap band
+  brush([[212, 390], [298, 386]], [5, 5]),                                     // belt
+  brush([[254, 262], [254, 384]], [3, 2]),
 ];
-export default card({ bg, ink, transform: "translate(0 -8)", layers: [rock, { d: cape }, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[262, 392, 34]] }, neck, { d: head }, feather, hat,
-  cuts.map((d) => ({ d, fill: "bg" })), { group: [glass, arms], halo: 4, roots: [[272, 262, 22], [250, 266, 22]] }, cuts.slice(1, 3).map((d) => ({ d, fill: "bg" }))] });
+export default card({ bg, ink, transform: "translate(-40 0) translate(10 -6)", layers: [lance, legs, { d: tunic }, neck, { d: head }, { d: cap }, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: arm, halo: 4, roots: [[284, 276, 20]] }, { d: shield, halo: 5 }, { d: rect(211, 304, 74, 6, 0, 2), fill: "bg" }, { d: emblem, fill: "bg" }, { d: brush([[212, 364], [222, 368]], [4, 2]) }] });

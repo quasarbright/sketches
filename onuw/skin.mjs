@@ -14,7 +14,7 @@ export const NAMES = {
   packleader: "Pack Leader",
   prowler: "Prowler",
   lackey: "Lackey",
-  scout: "Scout",
+  scout: "Ward",
   mason: "Mason",
   seer: "Seer",
   thief: "Thief",

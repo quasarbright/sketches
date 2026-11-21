@@ -148,7 +148,7 @@ export const EMBLEMS = {
   packleader: `<path d="M15 25 19 11l8 7 5-10 5 10 8-7 4 14z"/><path d="M23 33c3 6 4 13 2 21"/><path d="M32 32c3 7 4 15 2 23"/><path d="M41 33c3 6 3 13 1 20"/>`,
   prowler: `<path d="M6 32c9-13 43-13 52 0-9 13-43 13-52 0z"/><path d="M32 21c-4 6-4 16 0 22 4-6 4-16 0-22z"/>`,
   lackey: `<circle cx="32" cy="10" r="3.5"/><path d="M22 18h20l-3 29H25z"/><path d="M18 52h28"/><path d="M32 27c-4 5-4 10 0 13 4-3 4-8 0-13z"/>`,
-  scout: `<circle cx="21" cy="42" r="9"/><circle cx="43" cy="42" r="9"/><path d="M14 36l5-20h6l2 17"/><path d="M50 36l-5-20h-6l-2 17"/><path d="M27 27h10"/>`,
+  scout: `<path d="M14 12h36v18c0 13-8 21-18 26-10-5-18-13-18-26z"/><path d="M32 12v44"/><path d="M14 28h36"/>`,
   mason: `<circle cx="25" cy="32" r="13"/><circle cx="39" cy="32" r="13"/>`,
   seer: `<path d="M7 36c9-13 41-13 50 0-9 13-41 13-50 0z"/><circle cx="32" cy="36" r="6"/><path d="M32 9v9"/><path d="M15 14l5 7"/><path d="M49 14l-5 7"/>`,
   thief: `<path d="M7 26c8-7 18-7 25 2 7-9 17-9 25-2 0 13-8 19-14 17-5-1-6-7-11-7s-6 6-11 7C15 45 7 39 7 26z"/><circle cx="20" cy="31" r="4"/><circle cx="44" cy="31" r="4"/>`,

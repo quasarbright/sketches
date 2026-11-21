@@ -20,7 +20,7 @@ const cuts = [
   brush([[214, 360], [308, 352]], [5, 5]),                                                       // belt
   brush([[254, 290], [248, 352]], [3, 3]), brush([[234, 380], [226, 470]], [4, 1]), brush([[292, 380], [298, 470]], [4, 1]),
 ];
-export default card({ bg, ink, transform: "translate(0 4) rotate(-7 260 600)", layers: [
+export default card({ bg, ink, transform: "translate(10 0) translate(0 4) rotate(-7 260 600)", layers: [
   [circle(236, 140, 7), circle(218, 116, 5), circle(232, 94, 4)].map((d) => ({ d })), sparkle(110, 150, 12), sparkle(420, 330, 10),
   backLeg, { d: tunic }, { group: frontLeg, halo: 4, roots: [[270, 466, 30]] }, neck, { d: head }, { d: hood }, { group: farArm },
   cuts.map((d) => ({ d, fill: "bg" })), { group: [...bottleArm], halo: 4, roots: [[292, 284, 24]] }, { group: bottle, halo: 4 }, { d: rect(364, 165, 12, 26, 50, 4), fill: "bg" }, drops] });

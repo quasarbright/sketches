@@ -20,7 +20,7 @@ const cuts = [
   brush([[292, 232], [310, 270], [322, 276]], [4, 4, 2]),                      // hood opening
   brush([[236, 300], [226, 380], [228, 446]], [3, 5, 1]), brush([[300, 300], [312, 380], [304, 444]], [3, 5, 1]), // cloak folds
 ];
-export default card({ bg, ink, transform: "translate(0 26)", layers: [
+export default card({ bg, ink, transform: "translate(-25 0) translate(0 26)", layers: [
   { group: backArm }, cards.slice(0, 1).map(([x, y, a]) => [{ d: rect(x, y, 46, 66, a, 7), halo: 4 }, { d: rect(x, y, 34, 54, a, 5), fill: "bg" }, { d: rect(x, y, 28, 48, a, 4) }]),
   backLeg, { group: frontLeg, halo: 4, roots: [[262, 430, 30]] }, hoodTail, { d: cloak }, { d: hood }, { d: face }, cuts.map((d) => ({ d, fill: "bg" })),
   { group: foreArm, halo: 4, roots: [[306, 296, 22]] },

@@ -28,6 +28,6 @@ const cuts = [
 ];
 // fangs in the gap between the jaws
 const fangs = [[440, 268, 0], [458, 266, 0], [430, 284, 180], [448, 284, 180]].map(([x, y, a]) => ({ d: blob([[-4, 0], [4, 0], [0, 13, "c"]]), transform: `translate(${x} ${y}) rotate(${a})` }));
-export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(-26 -16)", layers: [tail, { group: farArm }, leg(-56, .9), { d: torso }, hackles, chest, ears,
+export default card({ bg, ink, transform: "translate(13 0) translate(500 0) scale(-1 1) translate(-26 -16)", layers: [tail, { group: farArm }, leg(-56, .9), { d: torso }, hackles, chest, ears,
   { d: jaw }, { d: head }, fangs, { group: leg(0), halo: 4, roots: [[230, 396, 62], [262, 440, 40]] }, cuts.map((d) => ({ d, fill: "bg" })),
   { group: arm, halo: 4, roots: [[360, 290, 38]] }, { d: pupil(420, 238, { len: 27, h: 10 }) }] });

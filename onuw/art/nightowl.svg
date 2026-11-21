@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 700">
 <rect width="500" height="700" fill="#1a237e"/>
-<g transform="translate(0 10)">
+<g transform="translate(-18 0) translate(0 10)">
 <path d="M368 128a54 54 0 1 0 38 92a44 44 0 1 1 -38 -92z" fill="#0a0e32"/>
 <path d="M110 124Q113.52 136.48 126 140Q113.52 143.52 110 156Q106.48 143.52 94 140Q106.48 136.48 110 124Z" fill="#0a0e32"/>
 <path d="M150 221Q151.98 228.02 159 230Q151.98 231.98 150 239Q148.02 231.98 141 230Q148.02 228.02 150 221Z" fill="#0a0e32"/>

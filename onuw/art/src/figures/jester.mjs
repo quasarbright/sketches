@@ -17,5 +17,5 @@ const cuts = [
   brush([[230, 232], [244, 228]], [4, 3]), brush([[218, 250], [236, 258], [250, 250]], [3, 4, 2]),                  // eye, smile
   brush([[226, 436], [290, 436]], [5, 5]),
 ];
-export default card({ bg, ink, transform: "translate(4 30)", layers: [legs, { d: torso }, cuts.map((d) => ({ d, fill: "bg" })), collar, hat, bells, { d: head },
+export default card({ bg, ink, transform: "translate(-12 0) translate(4 30)", layers: [legs, { d: torso }, cuts.map((d) => ({ d, fill: "bg" })), collar, hat, bells, { d: head },
   [cuts[2], cuts[3]].map((d) => ({ d, fill: "bg" })), { group: sweepArm, halo: 4, roots: [[296, 296, 22]] }, { group: waveArm, halo: 4, roots: [[218, 300, 22]] }] });

@@ -24,7 +24,7 @@ const cuts = [
   brush([[214, 400], [286, 400]], [5, 5]),                         // belt
   brush([[330, 230], [360, 290], [350, 340]], [3, 4, 1]),          // sack crease
 ];
-export default card({ bg, ink, transform: "translate(6 4)", layers: [{ d: sack }, sackTie, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[236, 410, 34]] }, neck, maskTails, { d: head }, cap,
+export default card({ bg, ink, transform: "translate(-17 0) translate(6 4)", layers: [{ d: sack }, sackTie, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[236, 410, 34]] }, neck, maskTails, { d: head }, cap,
   farArm, cuts.slice(2).map((d) => ({ d, fill: "bg" })), { d: cuts[0], fill: ink }, { d: cuts[1], fill: "bg" },
   { group: nearArm, halo: 4, roots: [[238, 276, 24]] },
   { d: rect(C[0], C[1], 44, 64, C[2], 6), halo: 4 }, { d: rect(C[0], C[1], 34, 54, C[2], 4), fill: "bg" }, { d: rect(C[0], C[1], 28, 48, C[2], 3) },

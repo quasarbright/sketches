@@ -19,5 +19,5 @@ const cuts = [
   ...[[226, 320], [262, 330], [216, 360], [252, 370], [288, 360], [236, 404], [272, 404]].map(([x, y]) => brush([[x - 12, y - 4], [x, y + 4], [x + 12, y - 4]], [3, 4, 3])), // chest feathers
   brush([[304, 300], [316, 380], [312, 450]], [3, 4, 1]),
 ];
-export default card({ bg, ink, transform: "translate(0 10)", layers: [{ d: moon }, sparkle(110, 140, 16), sparkle(150, 230, 9), sparkle(430, 300, 11), branch, leaves, { d: tail }, { d: body }, { d: wing }, tufts, { d: head },
+export default card({ bg, ink, transform: "translate(-18 0) translate(0 10)", layers: [{ d: moon }, sparkle(110, 140, 16), sparkle(150, 230, 9), sparkle(430, 300, 11), branch, leaves, { d: tail }, { d: body }, { d: wing }, tufts, { d: head },
   { group: talons }, cuts.map((d) => ({ d, fill: "bg" })), { d: `M226 228m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0zM276 228m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0z` }, { d: `M199 224A27 27 0 1 1 253 217ZM249 217A27 27 0 1 1 303 224Z` }] });
