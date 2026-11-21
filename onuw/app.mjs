@@ -5,6 +5,7 @@ import { ROLES, ROLE_ORDER, TEAMS, WIN_RULES, NIGHT_STEPS, emblemSvg, deckSize }
 import * as E from "./engine.mjs";
 import { makeNet } from "./net.mjs";
 import { NAMES as N, TITLE } from "./skin.mjs";
+import { artSvg } from "./art.mjs";
 document.title = TITLE;
 
 // ---------------------------------------------------------------- setup
@@ -55,6 +56,7 @@ const ICONS = {
   share: `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>`,
   swap: `<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`,
   eye: `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
+  chevronUp: `<path d="m18 15-6-6-6 6"/>`,
   userX: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>`,
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
   vote: `<path d="m9 12 2 2 4-4"/><path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12H5V7Z"/><path d="M22 19H2"/>`,
@@ -400,14 +402,14 @@ function card(role, { size = "md", label = "", info = true, cls = "", attrs = ""
   const R = ROLES[role];
   return `<div class="ms-card ms-${size} ${cls}" style="--team:${TEAMS[R.team].color}" ${attrs}>
     <div class="ms-card-name">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>
-    <div class="ms-card-art">${emblemSvg(role)}</div>
+    <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}
   </div>${label ? `<div class="ms-card-label">${esc(label)}</div>` : ""}`;
 }
 
 function cardBack({ size = "md", label = "", cls = "", attrs = "" } = {}) {
-  return `<div class="ms-card ms-back ms-${size} ${cls}" ${attrs}><div class="ms-card-art">${emblemSvg("back")}</div></div>${label ? `<div class="ms-card-label">${esc(label)}</div>` : ""}`;
+  return `<div class="ms-card ms-back ms-${size} ${cls}" ${attrs}><div class="ms-card-art">${size === "xs" ? emblemSvg("back") : artSvg("back")}</div></div>${label ? `<div class="ms-card-label">${esc(label)}</div>` : ""}`;
 }
 
 const wrap = (inner, cls = "") => `<div class="ms-cardwrap ${cls}">${inner}</div>`;
@@ -541,7 +543,7 @@ function lobby() {
   const spare = v.roles.packleader ? `<div class="ms-cardwrap ms-spare-wrap">
       <div class="ms-card ms-md ms-locked" style="--team:${TEAMS.wolf.color}">
         <div class="ms-card-name">${N.werewolf}</div>
-        <div class="ms-card-art">${emblemSvg("werewolf")}</div>
+        <div class="ms-card-art">${artSvg("werewolf")}</div>
         <div class="ms-card-short">Spare card</div>
         <span class="ms-lock" aria-hidden="true">${icon("lock")}</span>
         <button class="ms-info" data-info="spare" aria-label="Why there's a spare card" data-tooltip="Spare card: added for the ${N.packleader} to hand out">${icon("info")}</button>
@@ -647,16 +649,13 @@ function dealScreen() {
   const g = v.game;
   const me = v.players.find((p) => p.id === myId);
   const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
-  const showing = ui.peeking;
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
-    <p class="ms-lede">Press and hold the card to look at it. Keep your screen to yourself.</p>
-    <button class="ms-peek ${showing ? "is-showing" : ""}" data-peek aria-label="Press and hold to see your card">
-      <span class="ms-peek-inner">
-        <span class="ms-peek-face ms-peek-back">${cardBack({ size: "lg" })}<span class="ms-peek-hint">${icon("eye")} Hold to look</span></span>
-        <span class="ms-peek-face ms-peek-front">${card(g.myCard, { size: "lg", info: false })}</span>
-      </span>
-    </button>
+    <p class="ms-lede">Slide the cover up to look at your card, or press and hold it. Keep your screen to yourself.</p>
+    <div class="ms-peek" data-peek tabindex="0" role="button" aria-label="Slide up, or press and hold, to see your card">
+      <div class="ms-peek-card">${card(g.myCard, { size: "lg", info: false })}</div>
+      <div class="ms-peek-cover">${cardBack({ size: "lg" })}<span class="ms-peek-hint">${icon("chevronUp")} Slide up to look</span></div>
+    </div>
     <div class="ms-after-peek ${ui.peeked ? "" : "is-hidden"}">
       <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
       <button class="ms-link" data-info="${g.myCard}" ${ui.peeked ? "" : "tabindex=\"-1\""}>What does the ${esc(ROLES[g.myCard].name)} do?</button>
@@ -758,7 +757,7 @@ function promptPanel(p, g) {
     case "player":
       if (p.spare) {
         body = `<div class="ms-spare-row">
-          ${wrap(`<div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${emblemSvg("werewolf")}</div></div>`, "")}
+          ${wrap(`<div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div></div>`, "")}
           <div class="ms-spare-text"><b>The spare ${N.werewolf} card</b><br>Separate from the 3 center cards.</div>
         </div>
         <div class="ms-label">Give it to</div>
@@ -810,7 +809,7 @@ function nightNotes(g) {
 
 // The Pack Leader's spare Werewolf card, drawn apart from the role cards.
 function spareCard(label) {
-  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
+  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
 }
 
 function inGameStrip() {
@@ -1059,7 +1058,7 @@ function cheatsheetPanel() {
 function infoPanel(r) {
   if (r === "spare") {
     return `<div class="ms-info-modal">
-      ${wrap(`<div class="ms-card ms-lg" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
+      ${wrap(`<div class="ms-card ms-lg" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
       <div>
         <h2 class="ms-h2" style="color:${TEAMS.wolf.color}">The Spare ${N.werewolf} Card</h2>
         <div class="ms-label">Only in games with the ${N.packleader}</div>
@@ -1242,23 +1241,51 @@ app.addEventListener("input", (e) => {
   }
 });
 
-// hold to peek (pointer, or Space/Enter held on the focused card)
-function setPeek(on) {
-  if (ui.peeking === on) return;
-  if (on && !ui.peeked) { ui.peeked = true; render(); }   // first look: enables "ready" and the rules link
-  ui.peeking = on;
-  const el = app.querySelector("[data-peek]");
-  if (!el) return;
-  el.getBoundingClientRect();
-  el.classList.toggle("is-showing", on);   // flip the card that's already there, so the flip animates
-  app._html = null;                        // the DOM no longer matches the last render string
+// Look at your card: slide the cover up with a finger (it springs back when you let go),
+// or press and hold without moving (the cover lifts all the way). Space/Enter held does the same.
+const peek = { on: false, y0: 0, dy: 0, moved: false, held: false, timer: 0 };
+const coverEl = () => app.querySelector(".ms-peek-cover");
+function setCover(dy, animate) {
+  const c = coverEl();
+  if (!c) return;
+  c.style.transition = animate ? "" : "none";
+  c.style.transform = dy ? `translateY(${dy}px)` : "";
+  peek.dy = dy;
+  const h = c.offsetHeight || 1;
+  if (-dy > h * 0.45) ui.peeked = true;
 }
-app.addEventListener("pointerdown", (e) => { if (e.target.closest("[data-peek]")) { e.preventDefault(); setPeek(true); } });
-window.addEventListener("pointerup", () => setPeek(false));
-window.addEventListener("pointercancel", () => setPeek(false));
-window.addEventListener("blur", () => setPeek(false));
-app.addEventListener("keydown", (e) => { if (e.target.closest("[data-peek]") && (e.key === " " || e.key === "Enter")) { e.preventDefault(); setPeek(true); } });
-app.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") setPeek(false); });
+function liftAll() { const c = coverEl(); if (c) setCover(-(c.offsetHeight + 12), true); }
+function endPeek() {
+  if (!peek.on) return;
+  clearTimeout(peek.timer);
+  peek.on = false;
+  const wasPeeked = ui.peeked, nudge = !peek.moved && !peek.held;
+  setCover(0, true);
+  if (nudge && !wasPeeked) { const c = coverEl(); c?.classList.remove("is-nudge"); void c?.offsetWidth; c?.classList.add("is-nudge"); }
+  if (wasPeeked) { app._html = null; setTimeout(render, 260); }   // enables "ready" once the cover is back
+}
+app.addEventListener("pointerdown", (e) => {
+  if (!e.target.closest("[data-peek]")) return;
+  e.preventDefault();
+  Object.assign(peek, { on: true, y0: e.clientY, dy: 0, moved: false, held: false });
+  peek.timer = setTimeout(() => { if (peek.on && !peek.moved) { peek.held = true; liftAll(); } }, 320);
+});
+window.addEventListener("pointermove", (e) => {
+  if (!peek.on || peek.held) return;
+  const dy = Math.min(0, e.clientY - peek.y0);
+  if (Math.abs(dy) > 6) peek.moved = true;
+  if (peek.moved) setCover(dy, false);
+});
+window.addEventListener("pointerup", endPeek);
+window.addEventListener("pointercancel", endPeek);
+window.addEventListener("blur", endPeek);
+app.addEventListener("keydown", (e) => {
+  if (e.target.closest("[data-peek]") && (e.key === " " || e.key === "Enter")) {
+    e.preventDefault();
+    if (!peek.on) { Object.assign(peek, { on: true, moved: true, held: true }); liftAll(); }
+  }
+});
+app.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") endPeek(); });
 app.addEventListener("contextmenu", (e) => { if (e.target.closest("[data-peek]")) e.preventDefault(); });
 
 // ---------------------------------------------------------------- start

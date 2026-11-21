@@ -177,11 +177,18 @@
     .ms-cardwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
     .ms-card { --w: 108px; position: relative; width: var(--w); max-width: 100%; aspect-ratio: 5 / 7; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;
       background: color-mix(in srgb, var(--team) 20%, #0d1224); border: 1.5px solid color-mix(in srgb, var(--team) 65%, transparent); box-shadow: 0 6px 18px rgba(0,0,0,.35); text-align: center; }
+    .ms-card { --sky-top: color-mix(in srgb, var(--team) 42%, #0a0d1c); --sky-bot: color-mix(in srgb, var(--team) 14%, #070914);
+      --glow: color-mix(in srgb, var(--team) 55%, #fff6dc); --sil: color-mix(in srgb, var(--team) 16%, #04050c); --far: color-mix(in srgb, var(--team) 30%, #090b17);
+      --glint: #ffe6a8; --moon: #f6e9c4; --moon-dim: #e2d3a6; --star: #fff3d6; --window: #ffd98a; --wolf-card: #e0485a; --card-a: #5aa9e6; --card-b: #f2a541; }
+    .ms-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+    .ms-card-name, .ms-card-short { position: relative; z-index: 1; }
+    .ms-info, .ms-lock, .ms-badge { z-index: 2; }
+    .ms-off .ms-art { opacity: .3; filter: grayscale(.7); }
     .ms-card-name { background: var(--team); color: #0b1020; font: 700 .78rem/1.2 var(--font-ui); padding: 5px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ms-card-art { flex: 1; display: grid; place-items: center; color: color-mix(in srgb, var(--team) 75%, #fff); min-height: 0; }
     .ms-emblem { width: 62%; height: auto; max-height: 100%; }
     /* fixed height (3 lines) so every card in a row is the same size */
-    .ms-card-short { flex: none; font-size: .68rem; line-height: 1.25; height: calc(3.75em + 12px); padding: 5px 5px 7px; color: var(--text); background: rgba(0,0,0,.28);
+    .ms-card-short { flex: none; font-size: .68rem; line-height: 1.25; height: calc(3.75em + 12px); padding: 5px 5px 7px; color: var(--text); background: rgba(4,6,14,.62); backdrop-filter: blur(2px);
       display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .ms-card-label { font-size: .78rem; color: var(--muted); text-align: center; max-width: 110px; }
     .ms-info { position: absolute; right: 4px; top: 30px; width: 26px; height: 26px; border-radius: 50%; border: none; display: grid; place-items: center;
@@ -231,12 +238,13 @@
     .ms-lock .ms-ico { width: 14px; height: 14px; }
     .ms-spare-wrap .ms-card { border-style: dashed; }
 
-    /* ---- deal: hold to peek */
-    .ms-peek { background: none; border: none; padding: 0; margin: 4px auto 14px; cursor: pointer; perspective: 900px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-    .ms-peek-inner { position: relative; display: block; transform-style: preserve-3d; transition: transform .28s ease; }
-    .ms-peek.is-showing .ms-peek-inner { transform: rotateY(180deg); }
-    .ms-peek-face { display: block; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-    .ms-peek-front { position: absolute; inset: 0; transform: rotateY(180deg); }
+    /* ---- deal: slide the cover up to look */
+    .ms-peek { position: relative; margin: 4px auto 14px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; border-radius: 16px; }
+    .ms-peek:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .ms-peek-card { display: block; }
+    .ms-peek-cover { position: absolute; inset: 0; z-index: 3; transition: transform .28s cubic-bezier(.2,.9,.3,1.15); box-shadow: 0 -10px 24px rgba(0,0,0,.45); border-radius: 16px; }
+    .ms-peek-cover.is-nudge { animation: ms-nudge .5s ease; }
+    @keyframes ms-nudge { 30% { transform: translateY(-26px); } 100% { transform: none; } }
     .ms-after-peek { max-width: 40ch; }
     .ms-after-peek.is-hidden { visibility: hidden; }
     .ms-msg-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -360,7 +368,7 @@
     @media (min-width: 1800px) and (min-height: 1000px) { html { zoom: 1.35; } }
     @media (min-width: 2400px) and (min-height: 1300px) { html { zoom: 1.7; } }
     @media (prefers-reduced-motion: reduce) {
-      .ms-peek-inner, .ms-arc-moon { transition: none; }
+      .ms-peek-cover, .ms-arc-moon { transition: none; }
     }
   </style>
 </head>
