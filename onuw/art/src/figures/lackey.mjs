@@ -10,7 +10,7 @@ const head = blob([[176, 230], [196, 206], [226, 202], [248, 220], [250, 252], [
 const nose = blob([[176, 238], [154, 258, "c"], [174, 262]]);
 const tuft = fringe([[204, 206], [228, 204], [244, 216]], { n: 4, len: [12, 24], w: 9, side: -1, lean: .5, seed: 61 });
 // near arm reaches forward and up holding the lantern by its ring
-const arm = brush([[220, 290], [178, 320], [146, 300], [128, 258]], [36, 30, 24, 20], { capStart: "butt" });
+const arm = brush([[220, 290], [178, 320], [146, 300], [128, 258]], [36, 30, 24, 20]);
 const hand = blob([[116, 252], [132, 236], [146, 248], [136, 266]]);
 const ring = brush([[112, 228], [114, 210], [124, 204], [134, 210], [136, 228]], [6, 6]);
 const lantern = [blob([[100, 226, "c"], [148, 226, "c"], [152, 236], [96, 236]]), rect2(124, 262, 44, 46), blob([[96, 286, "c"], [152, 286, "c"], [144, 298], [104, 298]])];
@@ -26,4 +26,4 @@ const cuts = [
   ...[330, 362, 394].map((y) => blob([[236, y - 5], [244, y - 5], [244, y + 5], [236, y + 5]])),  // buttons
 ];
 export default card({ bg, ink, transform: "translate(30 0)", layers: [legs, { d: coat }, { d: hump }, tuft, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
-  { d: otherHand, halo: 4 }, { group: [arm, hand], halo: 4 }, rays, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }] });
+  { d: otherHand, halo: 4 }, { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, rays, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }] });

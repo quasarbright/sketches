@@ -12,8 +12,8 @@ const beard = blob([[226, 216], [256, 232], [292, 216], [298, 244], [278, 276], 
 const cap = blob([[214, 178, "c"], [228, 146], [260, 134], [292, 146], [306, 178, "c"], [260, 170]]);
 const mallet = [brush([[196, 336], [170, 250], [156, 196]], [13, 13, 13], { cap: "butt" }), rect(152, 178, 84, 46, -14, 8)];
 const block = rect(352, 380, 86, 70, -8, 4);
-const farArm = [brush([[316, 274], [356, 320], [372, 370]], [42, 36, 30], { capStart: "butt" })];
-const nearArm = [brush([[208, 276], [190, 320], [196, 340]], [44, 36, 30], { capStart: "butt" }), blob([[180, 322], [212, 320], [214, 350], [184, 354]])];
+const farArm = [brush([[316, 274], [356, 320], [372, 370]], [42, 36, 30])];
+const nearArm = [brush([[208, 276], [190, 320], [196, 340]], [44, 36, 30]), blob([[180, 322], [212, 320], [214, 350], [184, 354]])];
 const shoulder = blob([[190, 268], [240, 254], [246, 300], [200, 304]]);
 const cuts = [
   brush([[214, 330], [258, 300], [302, 330]], [4, 4, 4]),               // apron strap
@@ -25,4 +25,4 @@ const cuts = [
   brush([[356, 360], [358, 380]], [3, 3]),
 ];
 export default card({ bg, ink, transform: "translate(-4 0)", layers: [legs, { d: torso }, { d: apron }, neck, { d: head }, { d: beard }, { d: cap },
-  { group: [block], halo: 4 }, farArm, cuts.map((d) => ({ d, fill: "bg" })), { group: [mallet], halo: 4 }, { group: nearArm, halo: 4 }, { d: shoulder }] });
+  { group: [block], halo: 4 }, farArm, cuts.map((d) => ({ d, fill: "bg" })), { group: [mallet], halo: 4 }, { group: nearArm, halo: 4, roots: [[208, 276, 30]] }, { d: shoulder }] });

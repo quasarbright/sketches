@@ -62,6 +62,7 @@ export const strand = (pts, w0, w1 = 0) => brush(pts, [w0, w1]);
 
 // layers: back to front. Each is a path string (ink) or { d, fill: "ink" | "bg" | color, halo: gap width }.
 // A halo outlines the shape in the background color, separating it from what's behind it.
+let maskId = 0;
 export function card({ bg, ink, layers, transform = "" }) {
   const col = (f) => f === "bg" ? bg : f === "ink" || !f ? ink : f;
   const path = (d, fill, extra = "") => `<path d="${d}" fill="${fill}"${extra}/>`;
@@ -73,7 +74,13 @@ export function card({ bg, ink, layers, transform = "" }) {
     if (typeof l === "string") return path(l, ink);
     if (l.transform) return `<g transform="${l.transform}">${one({ ...l, transform: undefined })}</g>`;
     const ds = l.group ? l.group.flat(Infinity) : [l.d];
-    const stroke = l.halo ? ds.map((d) => path(d, bg, ` stroke="${bg}" stroke-width="${l.halo * 2}" stroke-linejoin="round"`)).join("\n") : "";
+    let stroke = l.halo ? ds.map((d) => path(d, bg, ` stroke="${bg}" stroke-width="${l.halo * 2}" stroke-linejoin="round"`)).join("\n") : "";
+    // roots: circles [x, y, r] where the halo is left out, so a limb grows out of the body
+    // without an outline (or a flat stroke end) showing where it joins.
+    if (stroke && l.roots) {
+      const id = `root${++maskId}`;
+      stroke = `<mask id="${id}" maskUnits="userSpaceOnUse" x="-100" y="-100" width="700" height="900"><rect x="-100" y="-100" width="700" height="900" fill="#fff"/>${l.roots.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#000"/>`).join("")}</mask><g mask="url(#${id})">${stroke}</g>`;
+    }
     return stroke + ds.map((d) => path(d, col(l.fill))).join("\n");
   };
   const body = layers.map(one).join("\n");
@@ -125,3 +132,11 @@ export function rect(x, y, w, h, a = 0, rr = 6) {
 }
 // Transform a path's points: used to place a shape built at the origin.
 export const at = (x, y, a = 0, sc = 1) => `translate(${x} ${y}) rotate(${a}) scale(${sc})`;
+
+// A menacing teardrop eye for a face in profile: round at the back, pointed toward the snout,
+// tilted down at the front (angle in degrees), with a heavy brow cut above it.
+export function eye(x, y, { len = 22, h = 9, angle = 18, flip = false } = {}) {
+  const a = (flip ? 180 - angle : angle) * Math.PI / 180, dir = flip ? -1 : 1;
+  const P = (u, v, c) => { const q = [x + u * Math.cos(a) - v * Math.sin(a) * dir, y + u * Math.sin(a) + v * Math.cos(a) * dir]; return c ? [...q, c] : q; };
+  return blob([P(-len * .45, 0), P(-len * .3, -h * .55), P(0, -h * .5), P(len * .55, 0, "c"), P(0, h * .45), P(-len * .3, h * .5)]);
+}
