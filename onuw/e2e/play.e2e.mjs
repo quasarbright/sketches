@@ -314,28 +314,34 @@ test("right after your night turn, what you saw shows for a few seconds, then go
 
 test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and it closes when your turn comes", async () => {
   const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  // 4 cards that never wake among 7, so at least one player can play undisturbed
+  await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 2, seer: 1, villager: 3, hunter: 1 } }));
+  await t.host.waitForTimeout(200);
   await t.host.click("[data-act=start]");
   await dealAndReady(t.pages);
   let w = null;
-  for (const p of t.pages) if (await p.locator("[data-act=wack]").count()) { w = p; break; }
+  for (const p of t.pages) if (["villager", "hunter"].includes((await view(p)).game.myCard)) { w = p; break; }
+  await w.waitForSelector("[data-act=wack]");
   assert.ok(w, "a waiting player sees the whack-a-wolf button");
   await w.click("[data-act=wack]");
   await w.waitForSelector(".wk");
   await w.evaluate(() => { const W = window.__onuw.wack; W.setAuto(false); });
-  await w.waitForTimeout(200);
+  await w.waitForTimeout(700);   // the card art loads, then the round starts
   const free = await w.evaluate(() => [...document.querySelectorAll(".wk-hole")].findIndex((h) => !h.classList.contains("is-up")));
   await w.evaluate((i) => window.__onuw.wack.spawn(i, "wolf", 5000), free);
   await w.waitForTimeout(400);
-  await w.locator(`[data-hole="${free}"]`).click();
+  await w.locator(`[data-hole="${free}"] .ms-card`).click();
   assert.equal(await w.evaluate(() => window.__onuw.wack.score()), 1);
   assert.ok(await w.locator(`[data-hole="${free}"].is-bonked`).count());
   assert.ok(await w.locator(".wk-star").count() > 0);
   await w.waitForTimeout(900);
   await w.evaluate((i) => window.__onuw.wack.spawn(i, "villager", 5000), free);
   await w.waitForTimeout(400);
-  await w.locator(`[data-hole="${free}"]`).click();
+  // the figures are the game's own cards
+  assert.match(await w.locator(`[data-hole="${free}"] .ms-card-name`).innerText(), /\S/);
+  await w.locator(`[data-hole="${free}"] .ms-card`).click();
   assert.equal(await w.evaluate(() => window.__onuw.wack.score()), -1);
-  assert.ok(await w.locator(".wk.is-shaking").count());
+  assert.match(await w.locator(".wk-pop.is-bad").innerText(), /2/);
   await w.click("[data-wk=close]");
   assert.equal(await w.locator(".wk").count(), 0);
   // everyone who's waiting plays; whenever someone's turn comes, their game has closed

@@ -1316,7 +1316,7 @@ function onClick(e) {
       }
       return;
     }
-    case "wack": openWack(); return;
+    case "wack": openWack({ card: (r) => card(r, { size: "sm", info: false }), names: { werewolf: N.werewolf, villager: N.villager } }); return;
     case "suggest": send({ t: "suggestRoles" }); return;
     case "start": send({ t: "start" }); return;
     case "ready": send({ t: "peeked" }); return;
