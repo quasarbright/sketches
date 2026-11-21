@@ -405,7 +405,18 @@ function avatar(name, id = name, cls = "") {
 // A card face. size: "sm" (results, night info), "md" (picker), "lg" (your card)
 // A card's own color (from skin.mjs ROLE_COLORS when set, else its team's color) and its team letter.
 const roleColor = (role) => SKIN.ROLE_COLORS?.[role]?.card || TEAMS[ROLES[role].team].color;
-const cardStyle = (role) => `--team:${roleColor(role)}`;
+// The name band and text strip are a light tint of the card color with white text, like a printed card.
+// Where white would be hard to read on that tint (a light card such as the Jester), the text uses the card's ink.
+const TINT = 0.12;
+function bandInk(role) {
+  const c = roleColor(role);
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return "#fff";
+  const ch = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) * (1 - TINT) + 255 * TINT)
+    .map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  const lum = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  return 1.05 / (lum + 0.05) >= 3 ? "#fff" : (SKIN.ROLE_COLORS?.[role]?.ink || "#0b1020");
+}
+const cardStyle = (role) => `--team:${roleColor(role)};--band-ink:${bandInk(role)}`;
 const teamMark = (role) => `<span class="ms-team-mark" aria-label="${esc(TEAMS[ROLES[role].team].name)}" title="${esc(TEAMS[ROLES[role].team].name)}">${esc(TEAMS[ROLES[role].team].letter)}</span>`;
 
 function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
