@@ -126,6 +126,17 @@ vec4 lensProject(vec4 mv) {
 }
 `;
 
+// Haze: past about 2 km the ground fades into the air, and below the horizon the sky is that same
+// air over far-off grass. Both take the color from the direction you look (its sine of elevation),
+// so where the ground ends 4 km out it's already the sky's color there and no edge shows, from the
+// ground or from high up. The far haze has no texture, so nothing in it can slide as you move.
+const linHex = (h) => { const c = new THREE.Color(h); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
+const HAZE_NEAR = 2000, HAZE_FAR = 3800;
+const HAZE = /* glsl */`
+vec3 pvHaze(float e) { // linear color; e = sine of the elevation, 0 at the horizon, -1 straight down
+  return mix(${linHex(0xdde8f1)}, ${linHex(0x93b08a)}, smoothstep(0.0, 0.3, -e));
+}
+float pvHazeAmount(vec3 p, vec3 eye) { return smoothstep(${HAZE_NEAR.toFixed(1)}, ${HAZE_FAR.toFixed(1)}, length(p.xz - eye.xz)); }`;
 function lensify(mat, extra) {
   // three.js caches compiled programs by onBeforeCompile's source text, which is the same for
   // every material here, so materials with extra shader code need their own key
@@ -133,12 +144,13 @@ function lensify(mat, extra) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, lensUniforms);
     sh.vertexShader = sh.vertexShader
-      .replace("#include <common>", "#include <common>\n" + LENS_PARS)
+      .replace("#include <common>", "#include <common>\n" + LENS_PARS + "varying vec3 vHazeW;")
       .replace("#include <project_vertex>",
+        "vec4 pvHw = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\npvHw = instanceMatrix * pvHw;\n#endif\nvHazeW = (modelMatrix * pvHw).xyz;\n" +
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere;")
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere;\nvarying vec3 vHazeW;\n" + HAZE)
       .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;\n"
         // On the sphere a triangle is drawn straight between its corners, which is only right when
         // it covers a small patch of longitude. One straddling the seam straight behind you (its
@@ -148,7 +160,10 @@ function lensify(mat, extra) {
         + "if (lensSphere.x > 0.5 && vLensDepth > -0.5) { vec3 dd = normalize(vLensDir.xyz);"
         + " if (abs(atan(dd.x, -dd.z) - vLensDir.w) * max(length(dd.xz), 0.05) > 0.06) discard; }")
       .replace("#include <dithering_fragment>",
-        "#include <dithering_fragment>\ngl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
+        "#include <dithering_fragment>\n"
+        // the far haze (see HAZE), after the color space conversion so it converts too
+        + "gl_FragColor.rgb = mix(gl_FragColor.rgb, sRGBTransferOETF(vec4(pvHaze(normalize(vHazeW - cameraPosition).y), 1.0)).rgb, pvHazeAmount(vHazeW, cameraPosition));\n"
+        + "gl_FragDepth = vLensDepth < -0.5 ? gl_FragCoord.z : clamp(vLensDepth, 0.0, 1.0);");
     if (extra) extra(sh);
   };
   return mat;
@@ -644,6 +659,7 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
     uniform vec3 skySphere;
     uniform vec3 horizon, mid, zenith;
     ${SPHERE_PIX}
+    ${HAZE}
     varying vec2 vNdc;
     void main() {
       vec3 c = horizon;
@@ -651,8 +667,8 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
       if (sphere || (abs(skyG.x) > 1e-6 && abs(skyG.y) > 1e-6)) { // (crossed rays come in with g < 0: flipped)
         vec3 d = sphere ? spherePix(vNdc, skySphere, skyRot)
           : skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
-        float e = max(0.0, normalize(d).y); // sine of the elevation
-        c = e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
+        float e = normalize(d).y; // sine of the elevation
+        c = e < 0.0 ? pvHaze(e) : e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
       }
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
@@ -687,6 +703,7 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
     uniform mat4 earthWorld;
     uniform vec3 earthSphere;
     ${SPHERE_PIX}
+    ${HAZE}
     uniform vec3 earthColor, ballastColor, tieColor, railColor;
     varying vec2 vNdc;
     float pvGrid(vec2 p, float spacing, float width) {
@@ -719,6 +736,7 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
           if (along && abs(q.x) < 1.7) k = ballastColor;
           else q = eye.xz - sd.xz * (eye.y / sd.y);
         }
+        k = mix(k, pvHaze(normalize(sd).y), pvHazeAmount(vec3(q.x, 0.0, q.y), eye.xyz));
         gl_FragColor = vec4(k, 1.0);
         #include <colorspace_fragment>
         gl_FragDepth = 1.0;
@@ -1106,11 +1124,11 @@ function syncPanel() {
     }
   }
   $("fyRow").hidden = !state.split;
-  $("fxLabel").textContent = state.split ? "across: f(z) =" : "f(z) =";
+  $("fxLabel").textContent = state.split ? "horizontal: f(z) =" : "f(z) =";
   $("fxField").classList.toggle("pv-active", state.split && ax === "x");
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
   for (const id of ["fRow", "dRow", "hRow"]) $(id).hidden = state.sphere;
-  // with two lenses the rays' start is different across and up/down: the caption says how
+  // with two lenses the rays' start is different horizontally and vertically: the caption says how
   $("sRow").hidden = state.sphere || state.split;
   $("sphereRows").hidden = !state.sphere;
   if (state.ahFit) state.ah = undistortedAh();
@@ -1267,7 +1285,7 @@ function updateCaption() {
       if (Math.abs(v - 1) < 1e-9) return "rays run parallel, so nothing shrinks";
       return `rays start on a plane ${+v.toFixed(2)}× the screen`;
     };
-    c = `<b>Across:</b> ${short("x")}. <b>Up and down:</b> ${short("y")}.`;
+    c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
   if (state.sphere) c = `The screen is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
