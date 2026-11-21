@@ -22,7 +22,7 @@
        JetBrains Mono for room codes and timers. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Lato:wght@400;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -176,44 +176,41 @@
     .ms-confirm-row { display: flex; gap: 6px; flex-wrap: wrap; }
 
     /* ---- cards */
-    .ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 14px 10px; align-items: start; }
+    .ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 14px 10px; align-items: start; }
     .ms-cardwrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
-    .ms-card { --w: 108px; position: relative; width: var(--w); max-width: 100%; aspect-ratio: 5 / 7; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;
-      background: var(--team); border: 1.5px solid color-mix(in srgb, var(--team) 70%, #000); box-shadow: 0 6px 18px rgba(0,0,0,.35); text-align: center; }
+    /* Cards are laid out like a printed role card: a name band, the picture, and a band with the short
+       rule. Sizes are in container units (cqw = 1% of the card's width), so every size of card keeps the
+       same proportions; small cards get a floor so their text stays readable. */
+    .ms-card { --w: 112px; position: relative; width: var(--w); max-width: 100%; aspect-ratio: 125 / 202; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column;
+      container-type: inline-size; background: var(--team); box-shadow: 0 0 5px rgba(0,0,0,.5), 0 6px 16px rgba(0,0,0,.25); text-align: center; font-family: "Lato", var(--font-ui); }
     .ms-card { --sky-top: color-mix(in srgb, var(--team) 42%, #0a0d1c); --sky-bot: color-mix(in srgb, var(--team) 14%, #070914);
       --glow: color-mix(in srgb, var(--team) 55%, #fff6dc); --sil: color-mix(in srgb, var(--team) 16%, #04050c); --far: color-mix(in srgb, var(--team) 30%, #090b17);
       --glint: #ffe6a8; --moon: #f6e9c4; --moon-dim: #e2d3a6; --star: #fff3d6; --window: #ffd98a; --wolf-card: #e0485a; --card-a: #5aa9e6; --card-b: #f2a541; }
     .ms-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
     .ms-card-name, .ms-card-short { position: relative; z-index: 1; }
-    /* team letter in the top-right corner, on the name band */
-    .ms-team-mark { position: absolute; top: 0; right: 0; z-index: 2; min-width: 18px; height: calc(.78rem * 1.2 + 10px); display: grid; place-items: center;
-      font: 800 .8rem/1 var(--font-ui); color: var(--band-ink, #fff); text-shadow: 0 1px 2px rgba(0,0,0,.35); padding-right: 3px; }
-    .ms-sm .ms-team-mark { height: calc(.7rem * 1.2 + 8px); font-size: .68rem; min-width: 14px; }
-    .ms-lg .ms-team-mark { height: calc(1.25rem * 1.3 + 20px); font-size: 1.1rem; min-width: 30px; padding-right: 8px; }
-    .ms-off .ms-team-mark { color: var(--muted); text-shadow: none; }
-    .ms-info, .ms-lock, .ms-badge { z-index: 2; }
-    .ms-off .ms-art { opacity: .3; filter: grayscale(.7); }
-    .ms-card-name { background: color-mix(in srgb, var(--team) 88%, #fff); color: var(--band-ink, #fff); text-shadow: 0 1px 2px rgba(0,0,0,.35); font: 700 .78rem/1.2 var(--font-ui); padding: 5px 18px 5px 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ms-card-name { flex: none; background: var(--band, var(--team)); color: var(--band-ink, #fff); font-weight: 400; font-size: max(12.2cqw, 11px); line-height: 1.43;
+      padding: 1.8cqw 15cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .01em; }
     .ms-card-art { flex: 1; display: grid; place-items: center; color: color-mix(in srgb, var(--team) 75%, #fff); min-height: 0; }
     .ms-emblem { width: 62%; height: auto; max-height: 100%; }
-    /* fixed height (3 lines) so every card in a row is the same size */
-    .ms-card-short { flex: none; font-size: .68rem; line-height: 1.25; height: calc(3.75em + 12px); padding: 5px 5px 7px; color: var(--band-ink, #fff); text-shadow: 0 1px 2px rgba(0,0,0,.3); background: color-mix(in srgb, var(--team) 88%, #fff);
-      display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .ms-card-label { font-size: .78rem; color: var(--muted); text-align: center; max-width: 110px; }
-    .ms-info { position: absolute; right: 4px; top: 30px; width: 26px; height: 26px; border-radius: 50%; border: none; display: grid; place-items: center;
-      background: rgba(5, 8, 20, .55); color: var(--text); cursor: pointer; padding: 0; }
+    .ms-card-short { flex: none; height: 34.4cqw; padding: 0 7cqw; background: var(--band, var(--team)); color: var(--band-ink, #fff);
+      font-weight: 400; font-size: max(8.6cqw, 10px); line-height: 1.12; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    /* team letter in the top-right corner, on the name band */
+    .ms-team-mark { position: absolute; top: 0; right: 0; z-index: 2; width: 15cqw; height: calc(max(12.2cqw, 11px) * 1.43 + 3.6cqw); display: grid; place-items: center;
+      font-weight: 400; font-size: max(12.2cqw, 11px); line-height: 1; color: var(--band-ink, #fff); }
+    .ms-off .ms-team-mark { color: var(--muted); }
+    .ms-info, .ms-lock, .ms-badge { z-index: 2; }
+    .ms-off .ms-art { opacity: .3; filter: grayscale(.7); }
+    .ms-card-label { font-size: .78rem; color: var(--muted); text-align: center; max-width: 120px; }
+    .ms-info { position: absolute; right: 2.5cqw; bottom: calc(34.4cqw + 2.5cqw); width: max(18cqw, 22px); height: max(18cqw, 22px); border-radius: 50%; border: none; display: grid; place-items: center;
+      background: rgba(0, 0, 0, .3); color: #fff; cursor: pointer; padding: 0; }
     .ms-info::after { content: ""; position: absolute; inset: -8px; }  /* finger-sized hit area */
-    .ms-info .ms-ico { width: 18px; height: 18px; }
-    .ms-info:hover { background: rgba(5, 8, 20, .85); }
-    .ms-sm { --w: 84px; border-radius: 8px; }
-    .ms-sm .ms-card-name { font-size: .7rem; padding: 4px 16px; }
-    .ms-sm .ms-info { top: auto; bottom: 3px; right: 3px; width: 22px; height: 22px; }
-    .ms-sm .ms-info .ms-ico { width: 15px; height: 15px; }
-    .ms-lg { --w: min(250px, 64vw); border-radius: 16px; }
-    .ms-lg .ms-card-name { font: 650 1.25rem var(--font-display); padding: 10px 30px; }
-    .ms-lg .ms-card-short { font-size: .95rem; padding: 10px 12px 14px; height: auto; min-height: 3.6em; }
+    .ms-info .ms-ico { width: 72%; height: 72%; }
+    .ms-info:hover { background: rgba(0, 0, 0, .55); }
+    .ms-sm { --w: 88px; }
+    .ms-sm .ms-info { bottom: 2.5cqw; }
+    .ms-lg { --w: min(230px, 60vw); }
     /* inline chip version: emblem + name */
-    .ms-xs { --w: auto; aspect-ratio: auto; flex-direction: row; align-items: center; border-radius: 999px; padding: 2px 4px 2px 4px; display: inline-flex; vertical-align: middle; box-shadow: none; }
+    .ms-xs { --w: auto; aspect-ratio: auto; container-type: normal; font-family: var(--font-ui); flex-direction: row; align-items: center; border-radius: 999px; padding: 2px 4px 2px 4px; display: inline-flex; vertical-align: middle; box-shadow: none; }
     .ms-xs .ms-card-art { order: 0; width: 30px; height: 30px; flex: none; }
     .ms-xs .ms-card-name { order: 1; background: none; color: var(--text); font-size: .9rem; padding: 0 6px 0 2px; overflow: visible; }
     .ms-xs .ms-emblem { width: 24px; }
@@ -237,13 +234,13 @@
     .ms-off .ms-card-name { background: var(--panel-2); color: var(--muted); }
     .ms-off .ms-card-art { color: #56628c; }
     .ms-off .ms-card-short { color: var(--muted); background: none; }
-    .ms-badge { position: absolute; left: 4px; top: 28px; font: 700 .78rem var(--font-mono); background: rgba(5,8,20,.7); color: var(--text); border-radius: 999px; padding: 1px 7px; }
+    .ms-badge { position: absolute; left: 3cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.6cqw); font: 700 .78rem var(--font-mono); background: rgba(5,8,20,.7); color: var(--text); border-radius: 999px; padding: 1px 7px; }
     .ms-stepper { display: flex; align-items: center; gap: 4px; }
     .ms-stepper button { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; padding: 0; }
     .ms-stepper button:disabled { background: none; color: var(--faint); cursor: not-allowed; }
     .ms-stepper span { min-width: 22px; text-align: center; font-weight: 700; }
     .ms-locked { opacity: 1; }
-    .ms-lock { position: absolute; left: 6px; top: 30px; color: var(--text); background: rgba(5,8,20,.6); border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; }
+    .ms-lock { position: absolute; left: 3cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.6cqw); color: var(--text); background: rgba(5,8,20,.6); border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; }
     .ms-lock .ms-ico { width: 14px; height: 14px; }
     .ms-spare-wrap .ms-card { border-style: dashed; }
 
@@ -334,7 +331,7 @@
     .ms-spec-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .ms-spec-cards { flex-wrap: nowrap; align-items: center; gap: 6px; }
     .ms-spec-cards .ms-card, .ms-spec-center .ms-card { --w: 68px; }
-    .ms-spec-cards .ms-card-name, .ms-spec-center .ms-card-name { font-size: .6rem; padding: 3px 2px; text-overflow: clip; letter-spacing: -.01em; }
+    .ms-spec-cards .ms-card-name, .ms-spec-center .ms-card-name { font-size: max(12.2cqw, 9.5px); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
     .ms-spec-center { justify-content: flex-start; }
     .ms-watch-h { font: 600 .9rem var(--font-ui); color: var(--muted); margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
     .ms-spec-toggle { margin-top: 10px; }
@@ -363,15 +360,13 @@
     .ms-sheet li { display: flex; gap: 12px; align-items: flex-start; }
     .ms-sheet-card { flex: none; }
     .ms-sheet-card .ms-card { --w: 64px; }
-    .ms-sheet-card .ms-card-name { font-size: .58rem; padding: 3px 2px; }
+    .ms-sheet-card .ms-card-name { font-size: max(12.2cqw, 9.5px); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
     /* the tiniest cards have no room for the team letter beside the name */
     .ms-sheet-card .ms-team-mark, .ms-spec-cards .ms-team-mark, .ms-spec-center .ms-team-mark { display: none; }
     .ms-sheet p { margin: 2px 0 0; color: var(--muted); line-height: 1.45; font-size: .92rem; }
     .ms-wins { padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); line-height: 1.45; }
     .ms-info-modal { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .ms-info-modal .ms-lg { --w: 170px; }
-    .ms-info-modal .ms-lg .ms-card-name { font-size: 1rem; }
-    .ms-info-modal .ms-lg .ms-card-short { font-size: .8rem; }
     .ms-info-modal > div:last-child { flex: 1; min-width: 200px; }
     .ms-info-modal p { line-height: 1.55; }
 
