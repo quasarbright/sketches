@@ -318,6 +318,20 @@
     .ms-res-cards { display: flex; align-items: center; gap: 10px; }
     .ms-res-arrow { color: var(--muted); }
     .ms-res-same { color: var(--muted); font-size: .85rem; }
+    .ms-spec-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; margin-bottom: 14px;
+      background: color-mix(in srgb, #f2a541 16%, var(--panel)); border: 1px solid color-mix(in srgb, #f2a541 55%, transparent); color: #ffe2b0; line-height: 1.4; }
+    .ms-spec-banner .ms-ico { flex: none; width: 22px; height: 22px; margin-top: 1px; }
+    .ms-spec-head { text-align: center; }
+    .ms-spec-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .ms-spec-seat { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--border); }
+    .ms-spec-seat.is-acting { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .ms-spec-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .ms-spec-cards { flex-wrap: nowrap; align-items: center; gap: 6px; }
+    .ms-spec-cards .ms-card, .ms-spec-center .ms-card { --w: 68px; }
+    .ms-spec-cards .ms-card-name, .ms-spec-center .ms-card-name { font-size: .6rem; text-overflow: clip; letter-spacing: -.01em; }
+    .ms-spec-center { justify-content: flex-start; }
+    .ms-watch-h { font: 600 .9rem var(--font-ui); color: var(--muted); margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
+    .ms-spec-toggle { margin-top: 10px; }
     .ms-log { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.45; }
     .ms-log .ms-label { display: inline; margin-right: 4px; }
 

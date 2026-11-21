@@ -134,7 +134,7 @@ function hostOnMessage(id, msg) {
     // a refreshed tab replaces its old connection
     for (const [oid, oc] of conns) if (oid !== id && oc.pid === pid) { conns.delete(oid); hostNet.drop(oid); }
     c.pid = pid;
-    const r = E.handle(S, pid, { t: "hello", name: msg.name }, now());
+    const r = E.handle(S, pid, { t: "hello", name: msg.name, spectator: !!msg.spectator }, now());
     if (r.kicked) { hostNet.send(id, { t: "kicked" }); conns.delete(id); setTimeout(() => hostNet.drop(id), 300); return; }
     publish();
     return;
@@ -217,7 +217,11 @@ function handOffHost() {
 
 // ---------------------------------------------------------------- joining
 
-function joinAsGuest(code) {
+// Whether this tab joined a room as a spectator. Remembered per room so a refresh rejoins the same way.
+const joinedKey = (code) => `onuw:joined:${code}`;
+
+function joinAsGuest(code, as) {
+  if (as) ss.set(joinedKey(code), as);
   mode = "guest";
   roomCode = code;
   setRoomInUrl(code);
@@ -226,7 +230,7 @@ function joinAsGuest(code) {
   const net = NET.guest(code, {
     onOpen() {
       lastHostMsg = now();
-      net.send({ t: "hello", id: myId, name: myName });
+      net.send({ t: "hello", id: myId, name: myName, spectator: ss.get(joinedKey(code)) === "spectator" });
     },
     onMessage(m) {
       if (guestNet !== net) return;
@@ -505,7 +509,9 @@ function homeScreen() {
       <label class="ms-label" for="name-input">Your name</label>
       <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="What should people call you?" value="${esc(myName)}" />
       ${joining
-        ? `<button class="ms-btn ms-primary ms-wide" type="submit" ${myName ? "" : "disabled"}>Join room <span class="ms-mono">${esc(roomCode)}</span></button>
+        ? `<button class="ms-btn ms-primary ms-wide" type="submit" data-as="player" ${myName ? "" : "disabled"}>Join room <span class="ms-mono">${esc(roomCode)}</span> as a player</button>
+           <button class="ms-btn ms-wide" type="submit" data-as="spectator" ${myName ? "" : "disabled"}>${icon("eye")}<span>Watch as a spectator</span></button>
+           <p class="ms-hint">Spectators see every card and everything that happens at night. If a game is already going, you'll watch until the next round.</p>
            <button class="ms-link" type="button" data-act="home">Start a different room instead</button>`
         : `<button class="ms-btn ms-primary ms-wide" type="submit" ${myName ? "" : "disabled"}>Create a room</button>
            <div class="ms-or"><span>or join one</span></div>
@@ -523,7 +529,7 @@ function roomScreen() {
   const v = view;
   let body = "";
   if (v.phase === "lobby") body = lobby();
-  else if (v.game && !v.game.seated && v.phase !== "results") body = spectating();
+  else if (v.spectator && v.phase !== "results") body = spectatorScreen();
   else if (v.phase === "deal") body = dealScreen();
   else if (v.phase === "night") body = nightScreen();
   else if (v.phase === "day") body = dayScreen();
@@ -541,6 +547,8 @@ const codeWords = (code) => [...(code || "")].map((c) => CODE_WORDS[c] || c).joi
 
 function lobby() {
   const v = view;
+  const playing = v.players.filter((p) => !p.spectator);
+  const watching = v.players.filter((p) => p.spectator);
   const host = v.isHost;
   const have = deckSize(v.roles);
   const need = v.players.length + 3;
@@ -568,9 +576,13 @@ function lobby() {
     </section>
 
     <section>
-      <h2 class="ms-h2">Players <span class="ms-sub">${v.players.length}</span></h2>
-      <ul class="ms-players">${v.players.map((p) => p.id === myId ? myLobbyRow(p) : playerRow(p)).join("")}</ul>
-      ${v.players.length < 3 ? `<p class="ms-hint">Send the others the invite link or the room code. You need at least 3 players.</p>` : ""}
+      <h2 class="ms-h2">Players <span class="ms-sub">${playing.length}</span></h2>
+      <ul class="ms-players">${playing.map((p) => p.id === myId ? myLobbyRow(p) : playerRow(p)).join("")}</ul>
+      ${watching.length ? `<h3 class="ms-watch-h">${icon("eye", "ms-ico-sm")} Watching</h3>
+      <ul class="ms-players">${watching.map((p) => p.id === myId ? myLobbyRow(p) : playerRow(p)).join("")}</ul>` : ""}
+      <button class="ms-link ms-spec-toggle" data-act="${v.spectator ? "spec-off" : "spec-on"}">${v.spectator ? "Play in the next game instead" : "Watch as a spectator instead"}</button>
+      ${v.spectator ? `<p class="ms-hint">You're watching. You'll see every card and everything that happens at night, so keep your screen away from the players.</p>` : ""}
+      ${playing.length < 3 ? `<p class="ms-hint">Send the others the invite link or the room code. You need at least 3 players.</p>` : ""}
     </section>
 
     <section>
@@ -631,6 +643,7 @@ function playerRow(p, { extra = "" } = {}) {
   const v = view;
   const tags = [
     p.id === myId ? `<span class="ms-tag">you</span>` : "",
+    p.spectator ? `<span class="ms-tag">${icon("eye", "ms-ico-sm")}watching</span>` : "",
     p.id === v.hostId ? `<span class="ms-tag ms-tag-host">${icon("crown", "ms-ico-sm")}host</span>` : "",
     !p.connected ? `<span class="ms-tag ms-tag-off">${icon("wifiOff", "ms-ico-sm")}${p.left ? "left" : "offline"}</span>` : "",
   ].join("");
@@ -639,11 +652,60 @@ function playerRow(p, { extra = "" } = {}) {
 
 // ---- spectators (joined mid-round)
 
-function spectating() {
-  return `<main class="ms-center">
-    <div class="ms-hero-moon">${bigMoon()}</div>
-    <h1 class="ms-h1">A round is underway</h1>
-    <p class="ms-lede">You'll be dealt in when the next round starts.</p>
+// Spectators see the whole table at all times: every card, the night so far and the votes.
+function spectatorBanner() {
+  return `<div class="ms-spec-banner" role="note">${icon("eye")}<div><b>You're a spectator.</b> You see every card and every night action. Keep your screen away from the players.</div></div>`;
+}
+
+function spectatorScreen() {
+  const v = view;
+  const g = v.game;
+  const o = g.omni;
+  const st = NIGHT_STEPS.find((x) => x.id === g.stepId);
+  let head = "";
+  if (v.phase === "deal") {
+    const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
+    head = `<div class="ms-label">Dealing</div><h1 class="ms-h1">Players are looking at their cards</h1>
+      <p class="ms-hint">${waiting.length ? `Waiting for ${esc(waitNames(waiting))}.` : "Night falls in a moment."}</p>`;
+  } else if (v.phase === "night") {
+    head = `${moonArc(g)}<div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length} · ${countdown(g.stepEndsAt)} left</div>
+      <h1 class="ms-h1">The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake</h1>
+      <p class="ms-hint">${o.actors.length ? `Acting now: ${esc(o.actors.map(playerName).join(", "))}.` : "Nobody holds this card, so the turn passes on its own."}</p>`;
+  } else if (v.phase === "day") {
+    head = `<div class="ms-label">${icon("sun", "ms-ico-sm")} Day</div>${countdown(g.dayEndsAt, "ms-bigtime")}
+      <p class="ms-hint">The players are talking it over.</p>`;
+  } else if (v.phase === "vote") {
+    const left = v.players.filter((p) => p.seated && p.connected && !p.voted);
+    head = `<div class="ms-label">Vote</div><h1 class="ms-h1">The players are voting</h1>
+      <p class="ms-hint">${left.length ? `Still to vote: ${esc(waitNames(left))}.` : "Counting the votes."}</p>`;
+  }
+  const seatRow = (id) => {
+    const p = v.players.find((x) => x.id === id);
+    const started = o.dealt[id], now = o.cards[id];
+    const vote = o.votes[id];
+    const acting = v.phase === "night" && o.actors.includes(id);
+    return `<li class="ms-spec-seat ${acting ? "is-acting" : ""}">
+      <div class="ms-spec-who">${avatar(p?.name ?? "?", id)}<div><div class="ms-pname">${esc(p?.name ?? "?")}${p && !p.connected ? ` <span class="ms-tag ms-tag-off">${p.left ? "left" : "offline"}</span>` : ""}</div>
+        <div class="ms-hint">${acting ? "Acting now" : vote ? `Voted for ${esc(playerName(vote))}` : v.phase === "day" && o.dayReady[id] ? "Ready to vote" : ""}</div></div></div>
+      <div class="ms-row ms-spec-cards">${wrap(card(started, { size: "sm", label: "Started" }))}${now !== started ? icon("swap", "ms-ico ms-swap-ico") + wrap(card(now, { size: "sm", label: "Now" })) : ""}</div>
+    </li>`;
+  };
+  return `<main class="ms-page ms-spectator">
+    ${spectatorBanner()}
+    <section class="ms-center ms-spec-head">${head}</section>
+    <section>
+      <h2 class="ms-h2">Players' Cards</h2>
+      <ul class="ms-spec-seats">${g.seats.map(seatRow).join("")}</ul>
+    </section>
+    <section>
+      <h2 class="ms-h2">Center</h2>
+      <div class="ms-row ms-spec-center">${o.center.map((r, i) => wrap(card(r, { size: "sm", label: `Center ${i + 1}` }))).join("")}
+        ${g.hasSpare ? (o.spare === "werewolf" ? spareCard("Spare slot") : wrap(card(o.spare, { size: "sm", label: "Spare slot" }))) : ""}</div>
+    </section>
+    <section>
+      <h2 class="ms-h2">Night Log</h2>
+      ${o.log.length ? `<ol class="ms-log">${o.log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((x) => x.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>` : `<p class="ms-hint">Nothing has happened yet.</p>`}
+    </section>
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -1119,7 +1181,8 @@ function onSubmit(e) {
     const n = E.cleanName(document.getElementById("name-input").value);
     if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
     myName = n; ls.set("onuw:name", n);
-    if (kind === "create") createRoom(); else joinAsGuest(roomCode);
+    if (kind === "create") createRoom();
+    else joinAsGuest(roomCode, e.submitter?.dataset.as === "spectator" ? "spectator" : "player");
   }
   if (kind === "rename") {
     const n = E.cleanName(document.getElementById("rename-input").value);
@@ -1182,7 +1245,7 @@ function onClick(e) {
       const n = E.cleanName(document.getElementById("name-input").value);
       if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
       myName = n; ls.set("onuw:name", n);
-      joinAsGuest(code);
+      roomCode = code; setRoomInUrl(code); render();
       return;
     }
     case "cheatsheet": openPanel("cheatsheet"); return;
@@ -1199,6 +1262,8 @@ function onClick(e) {
       return;
     }
     case "edit-name-cancel": ui.renaming = false; render(); return;
+    case "spec-on": ss.set(joinedKey(roomCode), "spectator"); send({ t: "setSpectator", on: true }); return;
+    case "spec-off": ss.set(joinedKey(roomCode), "player"); send({ t: "setSpectator", on: false }); return;
     case "invite": {
       const link = inviteLink();
       if (navigator.share && matchMedia("(pointer: coarse)").matches) {
@@ -1307,7 +1372,7 @@ async function boot() {
     try { await becomeHost(roomCode, JSON.parse(saved), { tries: 8 }); return; }
     catch { ss.del(hostKey(roomCode)); mode = null; S = null; }
   }
-  if (myName) joinAsGuest(roomCode);
+  if (myName && ss.get(joinedKey(roomCode))) joinAsGuest(roomCode);
   else { screen = "home"; render(); }
 }
 
