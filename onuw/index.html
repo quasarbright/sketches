@@ -190,7 +190,7 @@
     .ms-card-name, .ms-card-short { position: relative; z-index: 1; }
     .ms-card-name { flex: none; background: var(--band, var(--team)); color: var(--band-ink, #fff); font-weight: 400; font-size: max(12.2cqw, 11px); line-height: 1.43;
       padding: 1.8cqw 15cqw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .01em; }
-    .ms-card-art { flex: 1; display: grid; place-items: center; color: color-mix(in srgb, var(--team) 75%, #fff); min-height: 0; }
+    .ms-card-art { flex: 1; position: relative; overflow: hidden; display: grid; place-items: center; color: color-mix(in srgb, var(--team) 75%, #fff); min-height: 0; }
     .ms-emblem { width: 62%; height: auto; max-height: 100%; }
     .ms-card-short { flex: none; height: 34.4cqw; padding: 0 7cqw; background: var(--band, var(--team)); color: var(--band-ink, #fff);
       font-weight: 400; font-size: max(8.6cqw, 10px); line-height: 1.12; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -201,13 +201,12 @@
     .ms-info, .ms-lock, .ms-badge { z-index: 2; }
     .ms-off .ms-art { opacity: .3; filter: grayscale(.7); }
     .ms-card-label { font-size: .78rem; color: var(--muted); text-align: center; max-width: 120px; }
-    .ms-info { position: absolute; right: 2.5cqw; bottom: calc(34.4cqw + 2.5cqw); width: max(18cqw, 22px); height: max(18cqw, 22px); border-radius: 50%; border: none; display: grid; place-items: center;
+    .ms-info { position: absolute; right: 2.5cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.1cqw); width: max(15cqw, 20px); height: max(15cqw, 20px); border-radius: 50%; border: none; display: grid; place-items: center;
       background: rgba(0, 0, 0, .3); color: #fff; cursor: pointer; padding: 0; }
     .ms-info::after { content: ""; position: absolute; inset: -8px; }  /* finger-sized hit area */
     .ms-info .ms-ico { width: 72%; height: 72%; }
     .ms-info:hover { background: rgba(0, 0, 0, .55); }
     .ms-sm { --w: 88px; }
-    .ms-sm .ms-info { bottom: 2.5cqw; }
     .ms-lg { --w: min(230px, 60vw); }
     /* inline chip version: emblem + name */
     .ms-xs { --w: auto; aspect-ratio: auto; container-type: normal; font-family: var(--font-ui); flex-direction: row; align-items: center; border-radius: 999px; padding: 2px 4px 2px 4px; display: inline-flex; vertical-align: middle; box-shadow: none; }
