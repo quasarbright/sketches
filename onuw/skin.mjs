@@ -49,7 +49,7 @@ export const ART = {
 // strip, `ink` the silhouette (the reference draws it as black at 60% over the card color).
 // The art in art/src reads these: change a color here, then rebuild with node art/src/build.mjs.
 export const ROLE_COLORS = {
-  werewolf: { card: "#f44336", band: "#f77066", ink: "#621b16" },
+  werewolf: { card: "#e53030", band: "#ee5a52", ink: "#5c1313" },
   packleader: { card: "#b30915", band: "#e40b1b", ink: "#480408" },
   prowler: { card: "#be2c4c", band: "#d54867", ink: "#4c121e" },
   lackey: { card: "#ff5722", band: "#ff7e55", ink: "#66230e" },
