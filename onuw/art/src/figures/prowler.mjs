@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, eye, pupil, brow, paw, card } from "../brush.mjs";
+import { blob, brush, fringe, eye, brow, paw, card } from "../brush.mjs";
 // The prowler: a wolf on all fours, slinking right with its head low and one forepaw lifted mid-step.
 const { card: bg, ink } = ROLE_COLORS.prowler;
 // legs bend where a wolf's do: elbow and wrist in front, stifle forward and hock back behind; every paw stands on its toes
@@ -18,10 +18,10 @@ const nearFore = [brush([[326, 394], [338, 444], [362, 482], [352, 504]], [44, 2
 const belly = fringe([[150, 426], [220, 434], [290, 428]], { n: 8, len: [10, 18], w: 12, side: -1, lean: .3, seed: 53 });
 const cuts = [
   brush([[220, 388], [228, 432], [212, 470]], [3, 5, 2]), brush([[326, 386], [334, 420], [348, 452]], [3, 4, 2]),  // near legs
-  eye(418, 377, { len: 22, h: 8.5 }), brow(418, 377, { len: 22, h: 8.5 }),                       // eye
+  eye(418, 377, { len: 22, h: 7 }), brow(418, 377, { len: 22, h: 7 }),                       // eye
   brush([[436, 398], [458, 398]], [3, 1]),                       // mouth
   brush([[392, 352], [394, 338]], [5, 0]),                       // inner ear
   brush([[250, 368], [272, 396], [270, 420]], [4, 1]), brush([[226, 370], [246, 396], [244, 420]], [4, 1]), // ribs
 ];
 export default card({ bg, ink, transform: "translate(4 -132) scale(1.02)", layers: [farLegs, farPaws, tail, { d: body }, back, { d: neck }, ears, { d: head },
-  nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" })), { d: pupil(418, 377, { len: 22, h: 8.5 }) }] });
+  nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" }))] });

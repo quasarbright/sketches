@@ -1,23 +1,27 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, sparkle, card } from "../brush.mjs";
-// The night owl: a big-eyed owl on a gnarled branch, up all night under the moon and exhausted: heavy drooping lids, bags under the eyes.
+import { blob, brush, sparkle, boot, card } from "../brush.mjs";
+// The night owl (the insomniac): a villager up all night in nightshirt and nightcap, slumped and heavy-eyed,
+// holding a guttering candle. Facing right.
 const { card: bg, ink } = ROLE_COLORS.nightowl;
-const moon = `M368 128a54 54 0 1 0 38 92a44 44 0 1 1 -38 -92z`;
-const branch = [brush([[40, 470], [160, 452], [280, 462], [400, 446], [470, 420]], [30, 28, 26, 22, 12]), brush([[330, 456], [380, 500], [410, 540]], [18, 12, 4]), brush([[120, 458], [96, 420], [84, 392]], [14, 8, 2])];
-const leaves = [[84, 392, -30], [410, 540, 60], [470, 420, 0]].map(([x, y, a]) => blob([[x, y], [x + 22 * Math.cos((a - 30) * Math.PI / 180), y + 22 * Math.sin((a - 30) * Math.PI / 180)], [x + 40 * Math.cos(a * Math.PI / 180), y + 40 * Math.sin(a * Math.PI / 180), "c"], [x + 22 * Math.cos((a + 30) * Math.PI / 180), y + 22 * Math.sin((a + 30) * Math.PI / 180)]]));
-const body = blob([[200, 250], [250, 226], [302, 250], [324, 320], [320, 400], [296, 452], [250, 466], [206, 452], [182, 400], [180, 320]]);
-const wing = blob([[300, 270], [330, 300], [340, 380], [330, 450], [312, 486, "c"], [300, 420], [292, 340]]);
-const tail = blob([[226, 452], [276, 452], [270, 500, "c"], [250, 488], [232, 502, "c"]]);
-const head = blob([[184, 182], [206, 160], [250, 150], [294, 160], [316, 182], [320, 230], [300, 262], [250, 274], [200, 262], [180, 230]]);
-const tufts = [blob([[192, 172], [176, 122, "c"], [218, 160]]), blob([[308, 172], [324, 122, "c"], [282, 160]])];
-const talons = [[230, 462], [270, 462]].map(([x, y]) => [-14, 0, 14].map((d) => brush([[x, y - 8], [x + d, y + 6], [x + d * 1.2, y + 18]], [9, 7, 0]))).flat();
-const breast = fringe([[220, 300], [250, 310], [282, 300]], { n: 0 });
+const moon = `M112 120a46 46 0 1 0 32 78a37 37 0 1 1 -32 -78z`;
+const legs = [brush([[236, 520], [232, 584]], [30, 26]), boot(232, 598, { s: 23 }), brush([[276, 520], [282, 584]], [30, 26]), boot(284, 598, { s: 23 })];
+const shirt = blob([[222, 262], [262, 248], [296, 268], [306, 340], [316, 430], [324, 540, "c"], [290, 534], [256, 544], [222, 534], [194, 540, "c"], [200, 430], [206, 340]]);
+const neck = brush([[262, 242], [266, 262]], [24, 28]);
+// head hung forward and low
+const head = blob([[244, 196], [270, 184], [296, 194], [308, 218], [316, 232, "c"], [306, 236], [306, 250], [290, 262], [264, 260], [248, 244]]);
+const cap = [blob([[236, 206, "c"], [248, 176], [280, 166], [306, 182], [312, 206, "c"], [272, 198]]),
+  brush([[262, 172], [226, 170], [200, 196], [194, 236]], [36, 28, 18, 8]), `M194 244m-12 0a12 12 0 1 0 24 0a12 12 0 1 0 -24 0z`];
+// the far arm hangs; the near arm holds the candle out in front at chest height
+const farArm = [brush([[234, 280], [222, 350], [222, 410]], [28, 24, 20]), blob([[210, 404], [232, 402], [236, 424], [214, 428]])];
+const nearArm = [brush([[290, 282], [312, 340], [350, 352]], [30, 24, 20]), blob([[344, 340], [366, 338], [370, 360], [348, 364]])];
+const candle = [blob([[338, 362, "c"], [384, 362, "c"], [376, 374], [346, 374]]), brush([[361, 360], [361, 318]], [14, 14], { cap: "butt" }),
+  blob([[361, 310], [367, 300], [362, 284, "c"], [356, 298]])];
 const cuts = [
-  `M226 214m-26 0a26 26 0 1 0 52 0a26 26 0 1 0 -52 0z`, `M276 214m-26 0a26 26 0 1 0 52 0a26 26 0 1 0 -52 0z`,   // eye whites
-  brush([[206, 250], [226, 258], [244, 250]], [3, 4, 2]), brush([[258, 250], [276, 258], [296, 250]], [2, 4, 3]),   // bags
-  blob([[244, 236], [258, 236], [251, 256, "c"]]),
-  ...[[226, 320], [262, 330], [216, 360], [252, 370], [288, 360], [236, 404], [272, 404]].map(([x, y]) => brush([[x - 12, y - 4], [x, y + 4], [x + 12, y - 4]], [3, 4, 3])), // chest feathers
-  brush([[304, 300], [316, 380], [312, 450]], [3, 4, 1]),
+  brush([[282, 216], [298, 220]], [4, 4]), brush([[282, 224], [292, 228], [300, 226]], [2, 3, 1]),   // drooping lid and a bag under it
+  brush([[296, 246], [304, 246]], [3, 2]),                                                          // slack mouth
+  brush([[236, 206], [312, 206]], [4, 4]),                                                          // cap brim
+  brush([[248, 300], [240, 420], [234, 530]], [3, 5, 2]), brush([[290, 320], [300, 430], [306, 530]], [3, 5, 2]),   // folds
 ];
-export default card({ bg, ink, transform: "translate(-18 0) translate(0 10)", layers: [{ d: moon }, sparkle(110, 140, 16), sparkle(150, 230, 9), sparkle(430, 300, 11), branch, leaves, { d: tail }, { d: body }, { d: wing }, tufts, { d: head },
-  { group: talons }, cuts.map((d) => ({ d, fill: "bg" })), { d: `M226 228m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0zM276 228m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0z` }, { d: `M199 224A27 27 0 1 1 253 217ZM249 217A27 27 0 1 1 303 224Z` }] });
+export default card({ bg, ink, transform: "translate(0 -22)", layers: [{ d: moon }, sparkle(420, 150, 12), sparkle(150, 330, 9), sparkle(420, 420, 9),
+  { group: farArm }, legs, { d: shirt }, neck, { d: head }, cap, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: nearArm, halo: 4, roots: [[290, 282, 22]] }, { group: candle, halo: 4 }] });

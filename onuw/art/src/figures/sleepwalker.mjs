@@ -1,10 +1,11 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, rect, sparkle, boot, card } from "../brush.mjs";
-// The alcoholic (role id "sleepwalker"): a peasant swaying on crossed legs, bottle raised, the other arm out for balance.
+// The alcoholic (role id "sleepwalker"): a peasant swaying on loose wide-set legs, bottle raised, the other arm out for balance.
 const { card: bg, ink } = ROLE_COLORS.sleepwalker;
 const circle = (x, y, r) => `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
-const backLeg = [brush([[238, 466], [222, 530], [204, 584]], [38, 30, 24]), boot(206, 598, { s: 25, dir: -1 })];
-const frontLeg = [brush([[270, 466], [244, 530], [262, 584]], [38, 30, 24]), boot(266, 598, { s: 25 })];
+const backLeg = [brush([[236, 466], [222, 530], [210, 584]], [38, 30, 24]), boot(208, 598, { s: 25 })];
+// knees loose and feet wide, bracing against the sway
+const frontLeg = [brush([[272, 466], [302, 524], [312, 584]], [38, 30, 24]), boot(316, 598, { s: 25 })];
 const tunic = blob([[226, 262], [276, 250], [304, 278], [306, 360], [312, 470], [292, 486], [250, 482], [210, 478], [214, 380], [210, 300]]);
 const neck = brush([[256, 254], [258, 226]], [30, 26]);
 // head lolled back and to the side, mouth open

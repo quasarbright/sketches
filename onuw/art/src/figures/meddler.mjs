@@ -1,28 +1,26 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, rect, boot, card } from "../brush.mjs";
-// The meddler: a hooded trickster creeping on tiptoe, hunched forward, sliding one card out from behind
-// its back while the other hand slips a second card forward.
+import { blob, brush, rect, card } from "../brush.mjs";
+// The meddler (the troublemaker): a jester juggling two players' cards, swapping them hand to hand.
 const { card: bg, ink } = ROLE_COLORS.meddler;
-const backLeg = [brush([[232, 430], [204, 500], [170, 560]], [40, 32, 24]), boot(164, 578, { s: 24 })];
-const frontLeg = [brush([[262, 430], [316, 486], [300, 556]], [42, 32, 24]), boot(306, 578, { s: 24 })];
-// a long cloak, hunched over the shoulders
-const cloak = blob([[214, 262], [262, 236], [312, 252], [330, 300], [326, 380], [306, 450, "c"], [270, 440], [236, 452], [194, 450, "c"], [196, 380], [198, 310]]);
-const hood = blob([[262, 210], [280, 176], [314, 164], [346, 180], [358, 210], [356, 248], [330, 272], [292, 276], [262, 256]]);
-const hoodTail = brush([[276, 190], [236, 178], [200, 196], [178, 228]], [40, 28, 16, 4]);
-const face = blob([[326, 214], [346, 206], [356, 222], [366, 232, "c"], [354, 236], [352, 252], [334, 262]]);
-// hand behind the back with a card; hand forward with a card, held low
-const backArm = [brush([[232, 300], [196, 340], [168, 352]], [30, 24, 20]), blob([[150, 340], [170, 336], [176, 356], [156, 362]])];
-const foreArm = [brush([[306, 296], [346, 330], [384, 346]], [30, 24, 20]), blob([[378, 334], [400, 332], [406, 352], [384, 358]])];
-const cards = [[148, 330, -30], [404, 322, 22]];
+const legs = [brush([[236, 420], [224, 500], [216, 580]], [38, 30, 24]), blob([[216, 572], [172, 568], [152, 548, "c"], [170, 584], [224, 592]]),
+  brush([[276, 420], [290, 500], [298, 580]], [38, 30, 24]), blob([[294, 572], [338, 568], [358, 548, "c"], [340, 584], [292, 592]])];
+const torso = blob([[214, 286], [256, 266], [298, 286], [306, 340], [300, 400], [292, 436], [220, 436], [212, 380], [206, 340]]);
+const head = blob([[230, 214], [256, 204], [282, 214], [290, 240], [280, 264], [256, 272], [232, 264], [222, 240]]);
+const hat = [brush([[236, 216], [206, 190], [176, 196], [164, 222]], [32, 24, 16, 6]), brush([[256, 208], [254, 166], [276, 140], [302, 144]], [30, 22, 14, 6]),
+  brush([[276, 216], [306, 192], [336, 198], [346, 222]], [32, 24, 16, 6]), blob([[226, 222, "c"], [240, 202], [272, 202], [288, 222, "c"], [256, 230]])];
+const bells = [[160, 230], [306, 142], [350, 230]].map(([x, y]) => `M${x} ${y}m-10 0a10 10 0 1 0 20 0a10 10 0 1 0 -20 0z`);
+// both hands up, palms open, mid-toss
+const arms = [brush([[218, 300], [180, 336], [168, 290]], [30, 24, 20]), blob([[154, 284], [160, 268], [180, 270], [182, 290], [166, 296]]),
+  brush([[296, 300], [334, 336], [346, 290]], [30, 24, 20]), blob([[332, 290], [334, 270], [354, 268], [360, 284], [348, 296]])];
+const cards = [[160, 176, -28], [354, 150, 24]];
+// the juggling arcs: up from one hand, over the hat, down to the other
+const arcs = [brush([[150, 258], [136, 232], [134, 214]], [2, 4, 1]), brush([[192, 140], [246, 100], [312, 108]], [2, 5, 1]),
+  brush([[372, 186], [378, 230], [362, 262]], [1, 4, 2])];
 const cuts = [
-  brush([[338, 222], [352, 226]], [4, 3]),                                     // narrowed eye
-  brush([[342, 246], [354, 244]], [3, 2]),                                     // smirk
-  brush([[292, 232], [310, 270], [322, 276]], [4, 4, 2]),                      // hood opening
-  brush([[236, 300], [226, 380], [228, 446]], [3, 5, 1]), brush([[300, 300], [312, 380], [304, 444]], [3, 5, 1]), // cloak folds
+  brush([[238, 240], [250, 238]], [3, 3]), brush([[262, 238], [274, 240]], [3, 3]),   // eyes
+  brush([[240, 252], [256, 260], [272, 252]], [3, 4, 3]),                             // grin
+  brush([[224, 300], [256, 370], [290, 430]], [4, 5, 3]), brush([[290, 300], [256, 370], [222, 430]], [4, 5, 3]), // diamond pattern
 ];
-export default card({ bg, ink, transform: "translate(-25 0) translate(0 26)", layers: [
-  { group: backArm }, cards.slice(0, 1).map(([x, y, a]) => [{ d: rect(x, y, 46, 66, a, 7), halo: 4 }, { d: rect(x, y, 34, 54, a, 5), fill: "bg" }, { d: rect(x, y, 28, 48, a, 4) }]),
-  backLeg, { group: frontLeg, halo: 4, roots: [[262, 430, 30]] }, hoodTail, { d: cloak }, { d: hood }, { d: face }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: foreArm, halo: 4, roots: [[306, 296, 22]] },
-  cards.slice(1).map(([x, y, a]) => [{ d: rect(x, y, 46, 66, a, 7), halo: 4 }, { d: rect(x, y, 34, 54, a, 5), fill: "bg" }, { d: rect(x, y, 28, 48, a, 4) }]),
-] });
+export default card({ bg, ink, transform: "translate(15 20) scale(.94)", layers: [legs, { d: torso }, hat, bells, { d: head }, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: arms, halo: 4, roots: [[218, 300, 22], [296, 300, 22]] }, arcs,
+  cards.map(([x, y, a]) => [{ d: rect(x, y, 46, 66, a, 7), halo: 4 }, { d: rect(x, y, 34, 54, a, 5), fill: "bg" }, { d: rect(x, y, 28, 48, a, 4) }])] });
