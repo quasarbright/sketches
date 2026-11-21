@@ -5,6 +5,7 @@ import { ROLES, ROLE_ORDER, TEAMS, WIN_RULES, NIGHT_STEPS, emblemSvg, deckSize }
 import * as E from "./engine.mjs";
 import { makeNet } from "./net.mjs";
 import { NAMES as N, TITLE } from "./skin.mjs";
+import * as SKIN from "./skin.mjs";
 import { artSvg } from "./art.mjs";
 document.title = TITLE;
 
@@ -402,10 +403,15 @@ function avatar(name, id = name, cls = "") {
 }
 
 // A card face. size: "sm" (results, night info), "md" (picker), "lg" (your card)
+// A card's own color (from skin.mjs ROLE_COLORS when set, else its team's color) and its team letter.
+const roleColor = (role) => SKIN.ROLE_COLORS?.[role]?.card || TEAMS[ROLES[role].team].color;
+const cardStyle = (role) => `--team:${roleColor(role)}`;
+const teamMark = (role) => `<span class="ms-team-mark" aria-label="${esc(TEAMS[ROLES[role].team].name)}" title="${esc(TEAMS[ROLES[role].team].name)}">${esc(TEAMS[ROLES[role].team].letter)}</span>`;
+
 function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
   const R = ROLES[role];
-  return `<div class="ms-card ms-${size} ${cls}" style="--team:${TEAMS[R.team].color}" ${attrs}>
-    <div class="ms-card-name">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>
+  return `<div class="ms-card ms-${size} ${cls}" style="${cardStyle(role)}" ${attrs}>
+    <div class="ms-card-name">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}
@@ -554,7 +560,7 @@ function lobby() {
   const need = v.players.length + 3;
   const okCount = have === need;
   const spare = v.roles.packleader ? `<div class="ms-cardwrap ms-spare-wrap">
-      <div class="ms-card ms-md ms-locked" style="--team:${TEAMS.wolf.color}">
+      <div class="ms-card ms-md ms-locked" style="${cardStyle("werewolf")}">
         <div class="ms-card-name">${N.werewolf}</div>
         <div class="ms-card-art">${artSvg("werewolf")}</div>
         <div class="ms-card-short">Spare card</div>
@@ -826,7 +832,7 @@ function promptPanel(p, g) {
     case "player":
       if (p.spare) {
         body = `<div class="ms-spare-row">
-          ${wrap(`<div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div></div>`, "")}
+          ${wrap(`<div class="ms-card ms-sm" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div></div>`, "")}
           <div class="ms-spare-text"><b>The spare ${N.werewolf} card</b><br>Separate from the 3 center cards.</div>
         </div>
         <div class="ms-label">Give it to</div>
@@ -878,7 +884,7 @@ function nightNotes(g) {
 
 // The Pack Leader's spare Werewolf card, drawn apart from the role cards.
 function spareCard(label) {
-  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
+  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
 }
 
 function inGameStrip() {
@@ -1128,7 +1134,7 @@ function cheatsheetPanel() {
 function infoPanel(r) {
   if (r === "spare") {
     return `<div class="ms-info-modal">
-      ${wrap(`<div class="ms-card ms-lg" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">${N.werewolf}</div><div class="ms-card-art">${artSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
+      ${wrap(`<div class="ms-card ms-lg" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
       <div>
         <h2 class="ms-h2" style="color:${TEAMS.wolf.color}">The Spare ${N.werewolf} Card</h2>
         <div class="ms-label">Only in games with the ${N.packleader}</div>
