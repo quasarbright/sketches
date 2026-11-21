@@ -8,7 +8,8 @@ const legs = [brush([[238, 560], [232, 600]], [30, 28]), brush([[300, 560], [310
   blob([[200, 592], [244, 590], [250, 608], [196, 610]]), blob([[300, 592], [344, 590], [352, 608], [298, 610]])];
 // a deep hood with a plain human face in profile, peering at the lantern
 const head = blob([[188, 222], [204, 198], [236, 190], [262, 206], [270, 240], [262, 268], [236, 282], [206, 280], [194, 262]]);
-const hoodTip = brush([[240, 196], [272, 192], [298, 210], [306, 232]], [30, 22, 12, 4]);
+// the hood falls straight from the hump to the brow, so the head hangs forward and low like a hunchback's
+const hoodTip = blob([[200, 206], [226, 188], [262, 182], [300, 194], [330, 222], [340, 262], [300, 280], [262, 276], [230, 262]]);
 const nose = blob([[196, 220], [190, 236], [180, 248, "c"], [190, 252], [188, 262], [194, 268], [202, 276], [214, 276], [206, 230]]);
 const tuft = hoodTip;
 // near arm reaches forward and up holding the lantern by its ring

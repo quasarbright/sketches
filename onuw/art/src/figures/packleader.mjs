@@ -1,32 +1,33 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, fringe, claws, eye, paw, card } from "../brush.mjs";
-// The pack leader: a huge werewolf with its head thrown back, howling at the full moon, claws out at its sides.
-// Drawn facing right, then mirrored so it faces left (the plain Werewolf faces right).
+// The pack leader: a huge hunched werewolf, shoulders bunched, head low and thrust forward in a snarl,
+// long arms hanging with the claws spread. Drawn facing right, then mirrored so it faces left.
 const { card: bg, ink } = ROLE_COLORS.packleader;
-const moon = `M462 100m-30 0a30 30 0 1 0 60 0a30 30 0 1 0 -60 0z`;
-const tailPath = [[244, 396], [202, 410], [172, 444], [160, 490], [170, 536]];
-const tail = [brush(tailPath, [18, 42, 48, 30, 0]),
-  ...fringe(tailPath, { n: 11, len: [16, 30], w: 13, side: 1, lean: .75, seed: 5, from: .15, to: .8 }),
-  ...fringe(tailPath, { n: 11, len: [16, 30], w: 13, side: -1, lean: .75, seed: 6, from: .15, to: .8 })];
-const leg = (dx, s = 1) => [brush([[276 + dx, 392], [318 + dx, 452], [266 + dx, 514], [288 + dx, 576]], [84 * s, 54 * s, 22, 18]), paw(294 + dx, 594, { s: 21 })];
-const farArm = [brush([[254, 262], [222, 320], [204, 376], [196, 404]], [42, 32, 26, 22]), ...claws([192, 420], 105, { size: 1, spread: 80, curl: -14, len: 42 })];
-const torso = blob([[236, 230], [298, 208], [344, 228], [362, 276], [352, 334], [324, 384], [292, 414], [256, 418], [234, 388], [222, 326], [222, 270]]);
-const neck = brush([[294, 240], [314, 200], [326, 170]], [100, 84, 66]);
-// a great bristling ruff from the back of the skull down over the shoulders
-const ruff = [...fringe([[290, 166], [264, 200], [242, 244], [230, 300], [236, 350]], { n: 14, len: [22, 44], w: 20, side: 1, lean: .5, seed: 41 }),
-  ...fringe([[350, 196], [362, 236], [366, 280]], { n: 6, len: [16, 30], w: 16, side: -1, lean: .55, seed: 42 })];
-// head thrown back, jaws open: the upper jaw and skull, then the lower jaw, with a gap of sky between them
-const head = blob([[292, 206], [280, 166], [290, 128], [316, 104], [348, 86], [380, 62], [402, 44], [414, 50], [414, 64], [406, 74], [392, 94], [372, 118], [352, 140], [338, 168], [328, 200]]);
-const jaw = blob([[322, 196], [338, 170], [358, 150], [384, 128], [404, 114], [410, 120, "c"], [400, 138], [380, 162], [360, 190], [342, 212]]);
-const ears = [blob([[296, 150, "c"], [268, 130], [250, 116, "c"], [288, 108], [316, 118]])];
-const arm = [brush([[332, 256], [370, 306], [380, 360], [394, 396]], [48, 34, 26, 22]), ...claws([398, 412], 75, { size: 1.05, spread: 80, curl: 14, len: 44 })];
+const tailPath = [[200, 392], [160, 410], [128, 444], [112, 486], [116, 528]];
+const tail = [brush(tailPath, [18, 40, 46, 30, 0]),
+  ...fringe(tailPath, { n: 11, len: [16, 28], w: 13, side: 1, lean: .75, seed: 5, from: .15, to: .8 }),
+  ...fringe(tailPath, { n: 11, len: [16, 28], w: 13, side: -1, lean: .75, seed: 6, from: .15, to: .8 })];
+const leg = (dx, s = 1) => [brush([[226 + dx, 392], [278 + dx, 458], [222 + dx, 520], [236 + dx, 580]], [96 * s, 58 * s, 24, 19]), paw(242 + dx, 596, { s: 21 })];
+// a massive hunched back rising to a hump of muscle over the shoulders
+const torso = blob([[196, 360], [214, 300], [250, 248], [300, 220], [352, 226], [392, 262], [400, 312], [376, 352], [336, 386], [280, 412], [226, 416], [200, 396]]);
+const hackles = fringe([[218, 300], [252, 254], [300, 222], [348, 222], [384, 246]], { n: 15, len: [20, 40], w: 20, side: -1, lean: .55, seed: 41 });
+const chest = fringe([[396, 300], [380, 344], [350, 378]], { n: 6, len: [14, 26], w: 16, side: -1, lean: .5, seed: 43 });
+// the head low and forward, ears pinned back, jaws parted in a snarl
+const head = blob([[356, 252], [372, 224], [400, 212], [428, 222], [452, 236], [482, 250, "c"], [478, 264], [452, 266], [428, 270], [404, 286], [376, 290], [358, 276]]);
+const jaw = blob([[396, 284], [424, 278], [452, 280], [470, 284, "c"], [456, 296], [428, 304], [404, 304]]);
+const ears = [blob([[378, 230, "c"], [352, 212], [336, 204, "c"], [366, 198], [394, 214]])];
+const farArm = [brush([[300, 268], [276, 340], [272, 410], [282, 450]], [48, 36, 28, 22]), ...claws([284, 466], 95, { size: 1, spread: 80, curl: -12, len: 40 })];
+const arm = [brush([[360, 290], [392, 360], [404, 420], [416, 460]], [56, 40, 30, 24]), ...claws([420, 476], 80, { size: 1.15, spread: 84, curl: 14, len: 46 })];
 const cuts = [
-  { d: eye(0, 0, { len: 24, h: 11 }), fill: "bg", transform: "translate(334 122) rotate(-40)" },
-  ...[[396, 80, 38], [378, 102, 40], [392, 126, -142], [374, 144, -140]].map(([x, y, a]) => ({ d: blob([[-4, 0], [4, 0], [0, 12, "c"]]), fill: ink, transform: `translate(${x} ${y}) rotate(${a})` })), // fangs
-  { d: brush([[296, 138], [282, 122]], [6, 0]), fill: "bg" },                                                         // inner ear
-  ...[brush([[310, 276], [318, 320], [310, 364]], [4, 5, 1]), brush([[334, 280], [342, 316], [336, 352]], [3, 4, 1]),  // chest fur
-    brush([[356, 98], [394, 66]], [3, 1])].map((d) => ({ d, fill: "bg" })),                                          // nose ridge
+  eye(420, 238, { len: 24, h: 11 }),                                            // scowling eye
+  brush([[386, 222], [410, 226], [434, 236]], [3, 4, 1]),                        // heavy brow ridge
+  brush([[448, 244], [468, 250]], [3, 1]),                                       // snout wrinkle
+  brush([[362, 210], [348, 206]], [6, 0]),                                       // inner ear
+  brush([[292, 300], [300, 350], [290, 392]], [4, 5, 1]), brush([[338, 300], [346, 340], [334, 374]], [3, 4, 1]),  // muscle lines
+  brush([[380, 296], [386, 336]], [3, 1]),
 ];
-export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(50 61) scale(.84)", layers: [{ d: moon }, tail, { group: farArm }, leg(-46, .9), { d: torso }, ruff, { d: neck },
-  ears, { d: head }, { d: jaw }, { group: leg(0), halo: 4, roots: [[270, 392, 44]] }, cuts,
-  { group: arm, halo: 4, roots: [[330, 254, 34]] }] });
+// fangs in the gap between the jaws
+const fangs = [[440, 268, 0], [458, 266, 0], [430, 284, 180], [448, 284, 180]].map(([x, y, a]) => ({ d: blob([[-4, 0], [4, 0], [0, 13, "c"]]), transform: `translate(${x} ${y}) rotate(${a})` }));
+export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(-26 -16)", layers: [tail, { group: farArm }, leg(-56, .9), { d: torso }, hackles, chest, ears,
+  { d: jaw }, { d: head }, fangs, { group: leg(0), halo: 4, roots: [[230, 396, 62], [262, 440, 40]] }, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: arm, halo: 4, roots: [[360, 290, 38]] }] });
