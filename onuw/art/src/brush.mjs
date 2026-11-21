@@ -135,9 +135,22 @@ export const at = (x, y, a = 0, sc = 1) => `translate(${x} ${y}) rotate(${a}) sc
 
 // A menacing eye for a wolf in profile facing right: a straight top edge slanting down toward the
 // snout (the scowl), a rounded lower lid, and a sharp inner corner. `len` and `h` set its size.
-export function eye(x, y, { len = 22, h = 10, tilt = .55 } = {}) {
-  const L = len / 2, top = (u) => y - h / 2 + (u + L) * tilt * h / len;
-  return blob([[x - L, top(-L), "c"], [x + L, top(L) + h * .15, "c"], [x + L * .35, y + h * .5], [x - L * .35, y + h * .45], [x - L * .9, y + h * .1]]);
+// A wolf's eye in profile, as on a real wolf: an almond with both corners pointed, the outer (ear-side)
+// corner raised a so the eye slants up toward the ear. Facing right; use pupil() with the same args.
+const eyeFrame = (x, y, a) => (u, v) => { const r = a * Math.PI / 180; return [x + u * Math.cos(r) - v * Math.sin(r), y + u * Math.sin(r) + v * Math.cos(r)]; };
+export function eye(x, y, { len = 22, h = 10, a = 30 } = {}) {
+  const L = len / 2, P = eyeFrame(x, y, a);
+  return blob([[...P(-L, 0), "c"], P(-L * .3, -h * .56), P(L * .4, -h * .5), [...P(L, h * .08), "c"], P(L * .3, h * .44), P(-L * .4, h * .36)]);
+}
+// A heavy brow over eye(): a cut that slopes down toward the nose, close over the lid, so the eye scowls.
+export function brow(x, y, { len = 22, h = 10, a = 30 } = {}) {
+  const L = len / 2, P = eyeFrame(x, y, a - 34);
+  return brush([P(-L * 1.2, -h * 1.1), P(0, -h * .95), P(L * 1.15, -h * .55)], [2, h * .32, 1]);
+}
+export function pupil(x, y, { len = 22, h = 10, a = 30 } = {}) {
+  // the pupil sits high and forward, half hidden under the upper lid: a glare, not a stare
+  const [cx, cy] = eyeFrame(x, y, a)(len * .06, -h * .08), r = h * .44;
+  return `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`;
 }
 
 // A digitigrade wolf paw standing on y, toes pointing `dir` (1 right, -1 left): compact, heel raised, two toe bumps.

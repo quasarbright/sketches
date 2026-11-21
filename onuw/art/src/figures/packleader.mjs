@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, claws, eye, paw, card } from "../brush.mjs";
+import { blob, brush, fringe, claws, eye, pupil, paw, card } from "../brush.mjs";
 // The pack leader: a huge hunched werewolf, shoulders bunched, head low and thrust forward in a snarl,
 // long arms hanging with the claws spread. Drawn facing right, then mirrored so it faces left.
 const { card: bg, ink } = ROLE_COLORS.packleader;
@@ -19,7 +19,7 @@ const ears = [blob([[378, 230, "c"], [352, 212], [336, 204, "c"], [366, 198], [3
 const farArm = [brush([[300, 268], [276, 340], [272, 410], [282, 450]], [48, 36, 28, 22]), ...claws([284, 466], 95, { size: 1, spread: 80, curl: -12, len: 40 })];
 const arm = [brush([[360, 290], [392, 360], [404, 420], [416, 460]], [56, 40, 30, 24]), ...claws([420, 476], 80, { size: 1.15, spread: 84, curl: 14, len: 46 })];
 const cuts = [
-  eye(420, 238, { len: 24, h: 11 }),                                            // scowling eye
+  eye(420, 238, { len: 27, h: 10 }),                                            // scowling eye
   brush([[386, 222], [410, 226], [434, 236]], [3, 4, 1]),                        // heavy brow ridge
   brush([[448, 244], [468, 250]], [3, 1]),                                       // snout wrinkle
   brush([[362, 210], [348, 206]], [6, 0]),                                       // inner ear
@@ -30,4 +30,4 @@ const cuts = [
 const fangs = [[440, 268, 0], [458, 266, 0], [430, 284, 180], [448, 284, 180]].map(([x, y, a]) => ({ d: blob([[-4, 0], [4, 0], [0, 13, "c"]]), transform: `translate(${x} ${y}) rotate(${a})` }));
 export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(-26 -16)", layers: [tail, { group: farArm }, leg(-56, .9), { d: torso }, hackles, chest, ears,
   { d: jaw }, { d: head }, fangs, { group: leg(0), halo: 4, roots: [[230, 396, 62], [262, 440, 40]] }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: arm, halo: 4, roots: [[360, 290, 38]] }] });
+  { group: arm, halo: 4, roots: [[360, 290, 38]] }, { d: pupil(420, 238, { len: 27, h: 10 }) }] });
