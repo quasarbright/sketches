@@ -56,6 +56,7 @@ const ICONS = {
   wifiOff: `<path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/>`,
   share: `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>`,
   swap: `<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`,
+  eyeOff: `<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>`,
   eye: `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
   userX: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>`,
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
@@ -350,7 +351,7 @@ async function createRoom() {
 
 let ui = freshUi();
 function freshUi() {
-  return { key: null, sel: [], center: [], faceUp: false, peeked: false };
+  return { key: null, sel: [], center: [], up: {}, peeked: false };
 }
 
 function receiveView(v) {
@@ -375,6 +376,9 @@ function receiveView(v) {
   const me = v.players.find((p) => p.id === myId);
   if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set("onuw:name", myName); }
   render();
+  // right after your turn, what you saw shows for a few seconds in your card-and-night panel
+  const was = prev?.game?.prompt, cur = v.game?.prompt;
+  if (v.phase === "night" && was && !was.done && cur?.done && was.step === cur.step) turnCard("secret", true, 6000);
 }
 
 // ---------------------------------------------------------------- toasts
@@ -480,6 +484,7 @@ function render() {
     const oldMoon = app.querySelector(".ms-arc-moon")?.style.transform;
     app.innerHTML = html;
     app._html = html;
+    restoreTurn();
     // the page is rebuilt from scratch, so start the moon where it was and let it glide to its new spot
     const moon = app.querySelector(".ms-arc-moon");
     if (moon && oldMoon && oldMoon !== moon.style.transform) {
@@ -734,13 +739,15 @@ function dealScreen() {
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
     <p class="ms-lede">Tap the card to flip it. It turns back over by itself after a few seconds. Keep your screen to yourself.</p>
-    <div class="ms-flip ${ui.faceUp ? "is-up" : ""}" data-flip tabindex="0" role="button" aria-pressed="${ui.faceUp}" aria-label="Flip your card">
-      <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg", info: false })}</div>
-      <div class="ms-flip-face is-back">${cardBack({ size: "lg" })}<span class="ms-flip-hint">Tap to flip</span></div>
-    </div>
-    <div class="ms-after-peek ${ui.peeked ? "" : "is-hidden"}">
-      <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
-      <button class="ms-link" data-info="${g.myCard}" ${ui.peeked ? "" : "tabindex=\"-1\""}>What does the ${esc(ROLES[g.myCard].name)} do?</button>
+    <div class="ms-flipscope ${ui.up.deal ? "is-up" : ""}" data-flip="deal">
+      <div class="ms-flip ms-turner" data-flip-tap tabindex="0" role="button" aria-pressed="${!!ui.up.deal}" aria-label="Flip your card">
+        <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg", info: false })}</div>
+        <div class="ms-flip-face is-back">${cardBack({ size: "lg" })}<span class="ms-flip-hint">Tap to flip</span></div>
+      </div>
+      <div class="ms-after-peek is-front-soft">
+        <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
+        <button class="ms-link" data-info="${g.myCard}">What does the ${esc(ROLES[g.myCard].name)} do?</button>
+      </div>
     </div>
     <mike-footer></mike-footer>
   </main>
@@ -791,12 +798,6 @@ function nightScreen() {
   const p = g.prompt;
   let panel;
   if (p && !p.done) panel = promptPanel(p, g);
-  else if (p && p.done) panel = `<div class="ms-panel ms-result">
-      <div class="ms-label">${esc(st.label)}</div>
-      ${p.result ? `<p>${esc(p.result.text)}</p>${resultCards(p.result.cards)}` : `<p>${esc(p.text)}</p>${resultCards(p.cards)}`}
-      ${p.timedOut ? `<p class="ms-hint">Time ran out, so ${p.required ? "one was picked for you" : "you did nothing"}.</p>` : ""}
-      <p class="ms-hint">Close your eyes again. The night goes on.</p>
-    </div>`;
   else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>
     <p class="ms-hint">Tap and scroll now and then, so nobody can tell when your turn comes.</p>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
@@ -804,7 +805,7 @@ function nightScreen() {
     <div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
     <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
     ${panel}
-    <div class="ms-mycard">You started as ${wrap(card(g.myCard, { size: "xs", info: true }))}</div>
+    ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -879,14 +880,32 @@ function promptPanel(p, g) {
 
 // ---- day
 
-function nightNotes(g) {
+// Your starting card and what you learned at night, face down until you tap it, then hidden again
+// after a few seconds, so nobody reads it over your shoulder. Shown at night, in the day and at the vote.
+function secretPanel(g) {
+  const up = !!ui.up.secret;
   const items = g.info.length
     ? g.info.map((i) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === i.step)?.label ?? "")}</span><p>${esc(i.text)}</p>${resultCards(i.cards)}</li>`).join("")
-    : `<li><p>You slept through the night.</p></li>`;
-  return `<section class="ms-panel">
-    <h2 class="ms-h2">Your Night</h2>
-    <div class="ms-mycard">You started as ${wrap(card(g.myCard, { size: "xs" }))}</div>
-    <ul class="ms-notes">${items}</ul>
+    : `<li><p>${view.phase === "night" ? "Nothing yet tonight." : "You slept through the night."}</p></li>`;
+  return `<section class="ms-panel ms-secret ms-flipscope ${up ? "is-up" : ""}" data-flip="secret">
+    <div class="ms-secret-head">
+      <div class="ms-turner ms-secret-card" data-flip-tap tabindex="0" role="button" aria-pressed="${up}" aria-label="Show your card and your night for a few seconds">
+        <div class="is-front">${card(g.myCard, { size: "sm", info: false })}</div>
+        <div class="is-back">${cardBack({ size: "sm" })}</div>
+      </div>
+      <div class="ms-secret-text">
+        <h2 class="ms-h2">Your Card and Your Night</h2>
+        <div class="is-back">
+          <p class="ms-hint">Face down so nobody reads it over your shoulder. Tap to look for a few seconds.</p>
+          <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eye")}<span>Show</span></button>
+        </div>
+        <div class="is-front">
+          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>. <button class="ms-link" data-info="${g.myCard}">What does it do?</button></p>
+          <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eyeOff")}<span>Hide</span></button>
+        </div>
+      </div>
+    </div>
+    <ul class="ms-notes is-front">${items}</ul>
   </section>`;
 }
 
@@ -918,7 +937,7 @@ function dayScreen() {
       ${countdown(g.dayEndsAt, "ms-bigtime")}
       <p class="ms-lede">Talk it over. When the timer runs out, or everyone's ready, you vote on who to kill.</p>
     </section>
-    ${nightNotes(g)}
+    ${secretPanel(g)}
     ${inGameStrip()}
     <mike-footer></mike-footer>
   </main>
@@ -944,7 +963,7 @@ function voteScreen() {
     <div class="ms-targets ms-vote-grid">
       ${seated.filter((p) => p.id !== myId).map((p) => `<button class="ms-target ${g.myVote === p.id ? "is-on" : ""}" data-vote="${p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
     </div>
-    ${nightNotes(g)}
+    ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>
   ${bar(`<div class="ms-bar-wait">${votedN} of ${live.length} voted${notYet.length ? `. Waiting for ${esc(waitNames(notYet))}.` : ""}</div>`)}`;
@@ -1328,37 +1347,52 @@ app.addEventListener("input", (e) => {
   }
 });
 
-// Look at your card: tap it and it turns over, like a card on the table (lifts, turns edge-on,
-// comes down face up), then turns back by itself after a few seconds. Tap again to turn it back sooner.
+// Face-down things (your card at the deal; your card and night notes later): tap and the card
+// turns over like a card on the table (lifts, turns edge-on, comes down face up, as in card-table),
+// then turns back by itself after a few seconds. Everything role-specific in the same [data-flip]
+// scope is marked .is-front and only shows while it's face up.
 const FLIP_MS = 460, FACE_UP_MS = 4000;
-const flip = { busy: false, timer: 0 };
-function turnCard(up) {
-  const el = app.querySelector("[data-flip]");
-  if (!el || flip.busy || ui.faceUp === up) return;
-  clearTimeout(flip.timer);
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const flip = { busy: {}, timers: {}, turning: null };
+function turnCard(name, up, holdMs = FACE_UP_MS) {
+  const scope = app.querySelector(`[data-flip="${name}"]`);
+  if (!scope || flip.busy[name] || !!ui.up[name] === up) return;
+  clearTimeout(flip.timers[name]);
   const swap = () => {
-    ui.faceUp = up;
-    const now = app.querySelector("[data-flip]");
+    ui.up[name] = up;
+    const now = app.querySelector(`[data-flip="${name}"]`);
     now?.classList.toggle("is-up", up);
-    now?.setAttribute("aria-pressed", String(up));
-    if (up && !ui.peeked) { ui.peeked = true; app._html = null; firstLook = true; }
-    if (up) flip.timer = setTimeout(() => turnCard(false), FACE_UP_MS);
+    now?.querySelectorAll("[aria-pressed]").forEach((e) => e.setAttribute("aria-pressed", String(up)));
+    if (up) flip.timers[name] = setTimeout(() => turnCard(name, false), holdMs);
+    if (up && name === "deal" && !ui.peeked) { ui.peeked = true; render(); }   // enables "ready"
   };
-  // the first look enables "ready"; re-render once the card has landed so the turn isn't cut short
-  const settle = () => { if (firstLook) { firstLook = false; render(); } };
-  let firstLook = false;
-  if (reduce) { swap(); settle(); return; }
-  flip.busy = true;
-  el.classList.remove("is-turning"); void el.offsetWidth; el.classList.add("is-turning");
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { swap(); return; }
+  flip.busy[name] = true;
+  flip.turning = { name, start: performance.now() };
+  restoreTurn();
   setTimeout(swap, FLIP_MS / 2);
-  setTimeout(() => { flip.busy = false; app.querySelector("[data-flip]")?.classList.remove("is-turning"); settle(); }, FLIP_MS);
+  setTimeout(() => {
+    flip.busy[name] = false;
+    if (flip.turning?.name === name) flip.turning = null;
+    app.querySelector(`[data-flip="${name}"] .ms-turner`)?.classList.remove("is-turning");
+  }, FLIP_MS);
 }
-app.addEventListener("click", (e) => { if (e.target.closest("[data-flip]")) turnCard(!ui.faceUp); });
+// The page is rebuilt on every change (the night countdown ticks each second), so a turn in progress
+// is put back at the point it had reached.
+function restoreTurn() {
+  if (!flip.turning) return;
+  const el = app.querySelector(`[data-flip="${flip.turning.name}"] .ms-turner`);
+  if (!el) return;
+  el.classList.remove("is-turning"); void el.offsetWidth;
+  el.style.animationDelay = `-${Math.round(performance.now() - flip.turning.start)}ms`;
+  el.classList.add("is-turning");
+}
+function flipScopeOf(t) { return t.closest("[data-flip-tap]")?.closest("[data-flip]")?.dataset.flip; }
+app.addEventListener("click", (e) => { const n = flipScopeOf(e.target); if (n) turnCard(n, !ui.up[n]); });
 app.addEventListener("keydown", (e) => {
-  if (e.target.closest("[data-flip]") && (e.key === " " || e.key === "Enter")) { e.preventDefault(); if (!e.repeat) turnCard(!ui.faceUp); }
+  const t = e.target.closest("[data-flip-tap]");
+  if (t && t.tagName !== "BUTTON" && (e.key === " " || e.key === "Enter")) { e.preventDefault(); if (!e.repeat) turnCard(flipScopeOf(t), !ui.up[flipScopeOf(t)]); }
 });
-app.addEventListener("contextmenu", (e) => { if (e.target.closest("[data-flip]")) e.preventDefault(); });
+app.addEventListener("contextmenu", (e) => { if (e.target.closest("[data-flip-tap]")) e.preventDefault(); });
 
 // ---------------------------------------------------------------- start
 

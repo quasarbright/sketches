@@ -62,7 +62,7 @@ async function newTable(names, { watchers = [] } = {}) {
 const view = (p) => p.evaluate(() => window.__onuw.view);
 
 async function flipToLook(p) {
-  await p.click("[data-flip]");
+  await p.click("[data-flip=deal] .ms-turner");
   await p.waitForFunction(() => !document.querySelector("[data-act=ready]")?.disabled);
 }
 
@@ -118,21 +118,25 @@ test("your card is face down until you tap it, then turns back over by itself", 
   const t = await newTable(["Mike", "Ana", "Ben"]);
   await t.host.click("[data-act=start]");
   const p = t.pages[1];
-  const faceUp = () => p.locator("[data-flip] .is-front").isVisible();
+  const faceUp = () => p.locator("[data-flip=deal] .ms-turner .is-front").isVisible();
+  const notes = () => p.locator(".ms-after-peek").isVisible();
   assert.equal(await faceUp(), false);
+  assert.equal(await notes(), false);
   assert.equal(await p.locator("[data-act=ready]").isDisabled(), true);
   await flipToLook(p);
   await p.waitForTimeout(300);
   assert.equal(await faceUp(), true);
+  assert.equal(await notes(), true);
   // a tap turns it back sooner
-  await p.click("[data-flip]");
+  await p.click("[data-flip=deal] .ms-turner");
   await p.waitForTimeout(600);
   assert.equal(await faceUp(), false);
+  assert.equal(await notes(), false);   // the role's text goes face down with the card
   // left alone, it turns back after a few seconds
-  await p.click("[data-flip]");
+  await p.click("[data-flip=deal] .ms-turner");
   await p.waitForTimeout(600);
   assert.equal(await faceUp(), true);
-  await p.waitForFunction(() => !document.querySelector("[data-flip]").classList.contains("is-up"), null, { timeout: 6000 });
+  await p.waitForFunction(() => !document.querySelector("[data-flip=deal]").classList.contains("is-up"), null, { timeout: 6000 });
   assert.equal(await p.locator("[data-act=ready]").isDisabled(), false);   // having looked once is enough
   await t.ctx.close();
 });
@@ -257,4 +261,53 @@ test("card names fit their band, clear of the team letter and the card edge, at 
     assert.deepEqual(bad, []);
     await ctx.close();
   }
+});
+
+test("mid-game, your card and night are face down until you tap Show, and hide again", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  await playNight(t.host, t.pages);
+  for (const p of t.pages) {
+    const name = await p.locator("[data-flip=secret] .ms-turner .is-front .ms-card-name").textContent();
+    const panel = p.locator("[data-flip=secret]");
+    assert.doesNotMatch(await panel.innerText(), new RegExp(name.trim()));
+    await p.click("[data-flip=secret] .is-back [data-flip-tap]");
+    await p.waitForTimeout(500);
+    assert.match(await panel.innerText(), new RegExp(name.trim()));
+    assert.ok(await p.locator("[data-flip=secret] .ms-notes li").count() >= 1);
+    await p.click("[data-flip=secret] .is-front button[data-flip-tap]");
+    await p.waitForTimeout(500);
+    assert.doesNotMatch(await panel.innerText(), new RegExp(name.trim()));
+  }
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});
+
+test("right after your night turn, what you saw shows for a few seconds, then goes face down", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  let saw = 0;
+  for (let k = 0; k < 300 && (await view(t.host)).phase === "night"; k++) {
+    for (const p of t.pages) {
+      const pr = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
+      if (!pr) continue;
+      if (pr.kind === "center1") await p.click('[data-center="0"]');
+      if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
+      if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
+      if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
+      await p.click("[data-act=confirm]").catch(() => {});
+      const up = () => p.evaluate(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"));
+      if (await p.waitForFunction(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"), null, { timeout: 1500 }).then(() => true, () => false)) {
+        saw++;
+        await p.waitForFunction(() => !document.querySelector("[data-flip=secret]")?.classList.contains("is-up"), null, { timeout: 8000 }).catch(() => {});
+        if ((await view(p)).phase === "night") assert.equal(await up(), false);
+      }
+    }
+    await t.host.waitForTimeout(100);
+  }
+  assert.ok(saw > 0, "the night panel never opened after a turn");
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
 });
