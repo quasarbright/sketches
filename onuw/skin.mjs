@@ -23,7 +23,7 @@ export const NAMES = {
   nightowl: "Night Owl",
   villager: "Villager",
   hunter: "Hunter",
-  jester: "Jester",
+  jester: "Skinner",
 };
 
 export const ART = {

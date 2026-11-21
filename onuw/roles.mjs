@@ -5,7 +5,7 @@ import { NAMES as N, ART } from "./skin.mjs";
 export const TEAMS = {
   village: { name: "Village", color: "#5aa9e6", letter: "V" },
   wolf: { name: "Wolf team", color: "#e0485a", letter: "W" },
-  jester: { name: "On their own", color: "#f2a541", letter: "J" },
+  jester: { name: "On their own", color: "#f2a541", letter: "S" },
 };
 
 // `max`: how many copies the role picker allows. `pair`: comes in twos (Masons).
@@ -157,7 +157,7 @@ export const EMBLEMS = {
   nightowl: `<path d="M14 20c0-6 6-10 10-6 5-3 11-3 16 0 4-4 10 0 10 6v18c0 10-8 18-18 18s-18-8-18-18z"/><circle cx="25" cy="32" r="6"/><circle cx="39" cy="32" r="6"/><path d="M29 41l3 5 3-5z"/>`,
   villager: `<path d="M10 31 32 13l22 18"/><path d="M17 26v25h30V26"/><path d="M28 51V38h8v13"/>`,
   hunter: `<circle cx="32" cy="32" r="17"/><path d="M32 7v13"/><path d="M32 44v13"/><path d="M7 32h13"/><path d="M44 32h13"/><circle cx="32" cy="32" r="2.5" fill="currentColor"/>`,
-  jester: `<path d="M12 47c4-12 6-25 2-33 8 4 14 12 18 22 4-10 10-18 18-22-4 8-2 21 2 33z"/><circle cx="14" cy="10" r="3.5"/><circle cx="50" cy="10" r="3.5"/><path d="M12 47h40"/>`,
+  jester: `<path d="M8 8h48v48H8z"/><path d="M20 16c4 4 8 4 12 0 4 4 8 4 12 0 0 6 4 10 4 16s-4 10-4 16c-4-4-8-4-12 0-4-4-8-4-12 0 0-6-4-10-4-16s4-10 4-16z"/>`,
   back: `<path d="M38 14a18 18 0 1 0 12 30 14 14 0 1 1-12-30z"/><path d="M14 16v6M11 19h6"/><path d="M50 50v4M48 52h4"/><path d="M18 48v4M16 50h4"/>`,
 };
 
