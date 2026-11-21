@@ -56,17 +56,20 @@ function uniqueName(s, id, name) {
   }
 }
 
+// People dealt in next round: everyone who isn't watching as a spectator.
+export const gamePlayers = (s) => s.players.filter((p) => !p.spectator);
+
 function autoRoles(s) {
-  if (!s.rolesCustom) s.roles = suggestedRoles(s.players.length);
+  if (!s.rolesCustom) s.roles = suggestedRoles(gamePlayers(s).length);
 }
 
 export function cardsNeeded(s) {
-  return s.players.length + 3;
+  return gamePlayers(s).length + 3;
 }
 
 // Why the host can't start yet, or null when they can.
 export function startProblem(s) {
-  const n = s.players.length;
+  const n = gamePlayers(s).length;
   if (n < MIN_PLAYERS) return `Needs at least ${MIN_PLAYERS} players`;
   const have = deckSize(s.roles);
   const need = n + 3;
@@ -95,7 +98,10 @@ export function handle(s, pid, msg, now, rng = Math.random) {
       if (s.kicked.includes(pid)) return { kicked: true };
       const p = player(s, pid);
       if (p) { p.connected = true; delete p.droppedAt; delete p.left; return {}; }
-      s.players.push({ id: pid, name: uniqueName(s, pid, msg.name), connected: true, joinedAt: now });
+      // Joining mid-game always watches; it becomes a seat at the next round unless they chose to watch.
+      const midGame = s.phase !== "lobby";
+      s.players.push({ id: pid, name: uniqueName(s, pid, msg.name), connected: true, joinedAt: now,
+        spectator: !!msg.spectator || midGame, autoSpectator: midGame && !msg.spectator });
       if (s.phase === "lobby") autoRoles(s);
       return {};
     }
@@ -114,6 +120,15 @@ export function handle(s, pid, msg, now, rng = Math.random) {
       if (!p || !n) return { error: "Name can't be empty" };
       if (s.phase !== "lobby") return { error: "You can change your name in the lobby, between games" };
       p.name = uniqueName(s, pid, n);
+      return {};
+    }
+    case "setSpectator": {
+      const p = player(s, pid);
+      if (!p) return {};
+      if (s.phase !== "lobby") return { error: "You can switch between playing and watching in the lobby" };
+      p.spectator = !!msg.on;
+      delete p.autoSpectator;
+      autoRoles(s);
       return {};
     }
     case "setRoles": {
@@ -226,7 +241,10 @@ function toLobby(s) {
   s.g = null;
   s.round++;
   s.players = s.players.filter((p) => !p.left);
-  for (const p of s.players) delete p.left;
+  for (const p of s.players) {
+    delete p.left;
+    if (p.autoSpectator) { p.spectator = false; delete p.autoSpectator; }
+  }
   autoRoles(s);
 }
 
@@ -238,7 +256,7 @@ function deal(s, now, rng) {
   const deck = [];
   for (const id of ROLE_ORDER) for (let i = 0; i < (s.roles[id] || 0); i++) deck.push(id);
   shuffle(deck, rng);
-  const seats = shuffle(s.players.map((p) => p.id), rng);
+  const seats = shuffle(gamePlayers(s).map((p) => p.id), rng);
   const dealt = {};
   seats.forEach((id, i) => (dealt[id] = deck[i]));
   const inDeck = new Set(deck);
@@ -580,6 +598,8 @@ export function tick(s, now, rng = Math.random) {
 export function viewFor(s, pid, now) {
   const g = s.g;
   const seated = !!g && g.seats.includes(pid);
+  const me = player(s, pid);
+  const spectator = !!me?.spectator || (!!g && !seated);
   const v = {
     code: s.code,
     you: pid,
@@ -590,11 +610,12 @@ export function viewFor(s, pid, now) {
     now,
     players: s.players.map((p) => ({
       id: p.id, name: p.name, connected: p.connected, left: !!p.left,
-      seated: !g || g.seats.includes(p.id),
+      spectator: !!p.spectator, seated: g ? g.seats.includes(p.id) : !p.spectator,
       ready: !!g?.ready[p.id], dayReady: !!g?.dayReady[p.id], voted: !!g?.votes[p.id],
     })),
     roles: g ? g.roles : s.roles,
     rolesCustom: s.rolesCustom,
+    spectator,
     dayMinutes: s.dayMinutes,
     startProblem: s.phase === "lobby" ? startProblem(s) : null,
     game: null,
@@ -616,6 +637,13 @@ export function viewFor(s, pid, now) {
     myVote: g.votes[pid] || null,
     result: null,
   };
+  // Spectators see everything, at every moment: every card, the night log and the votes.
+  if (spectator) {
+    v.game.omni = {
+      dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log,
+      actors: st ? st.actors : [], votes: g.votes, dayReady: g.dayReady,
+    };
+  }
   if (s.phase === "results") {
     v.game.result = { ...g.result, dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log };
   }

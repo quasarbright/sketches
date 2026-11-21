@@ -343,3 +343,79 @@ test("display names live only in skin.mjs", async () => {
     for (const n of names) assert.ok(!new RegExp(`\\b${n}\\b`).test(src), `${f} hard-codes "${n}"; use NAMES from skin.mjs`);
   }
 });
+
+// ---------------------------------------------------------------- spectators
+
+test("a spectator who joins in the lobby isn't dealt in or counted for the deck", () => {
+  const s = room(["a", "b", "c"]);
+  handle(s, "w", { t: "hello", name: "W", spectator: true }, 0);
+  assert.equal(s.players.find((p) => p.id === "w").spectator, true);
+  assert.equal(startProblem(s), null);               // 3 players + 3 center, the watcher doesn't count
+  handle(s, "a", { t: "start" }, 0);
+  assert.equal(s.g.seats.length, 3);
+  assert.ok(!s.g.seats.includes("w"));
+});
+
+test("joining mid-game always watches, and is dealt in next round", () => {
+  const s = room(["a", "b", "c"]);
+  handle(s, "a", { t: "start" }, 0);
+  handle(s, "late", { t: "hello", name: "Late" }, 0);
+  const late = s.players.find((p) => p.id === "late");
+  assert.equal(late.spectator, true);
+  assert.equal(viewFor(s, "late", 0).spectator, true);
+  handle(s, "a", { t: "hostReset" }, 0);
+  assert.equal(s.phase, "lobby");
+  assert.equal(late.spectator, false);
+  handle(s, "a", { t: "start" }, 0);
+  assert.ok(s.g.seats.includes("late"));
+});
+
+test("someone who chose to watch keeps watching next round", () => {
+  const s = room(["a", "b", "c"]);
+  handle(s, "w", { t: "hello", name: "W", spectator: true }, 0);
+  handle(s, "a", { t: "start" }, 0);
+  handle(s, "a", { t: "hostReset" }, 0);
+  assert.equal(s.players.find((p) => p.id === "w").spectator, true);
+});
+
+test("players can switch between playing and watching only in the lobby", () => {
+  const s = room(["a", "b", "c", "d"]);
+  assert.equal(handle(s, "d", { t: "setSpectator", on: true }, 0).error, undefined);
+  assert.equal(s.players.find((p) => p.id === "d").spectator, true);
+  assert.equal(handle(s, "d", { t: "setSpectator", on: false }, 0).error, undefined);
+  handle(s, "a", { t: "start" }, 0);
+  assert.ok(handle(s, "d", { t: "setSpectator", on: true }, 0).error);
+  assert.equal(s.players.find((p) => p.id === "d").spectator, false);
+});
+
+test("spectators see every card and the night log at every moment; players never do", () => {
+  const s = room(["a", "b", "c"]);
+  handle(s, "w", { t: "hello", name: "W", spectator: true }, 0);
+  rig(s, { a: "werewolf", b: "seer", c: "thief" }, ["villager", "villager", "villager"]);
+  let v = viewFor(s, "w", 0);
+  assert.deepEqual(v.game.omni.dealt, { a: "werewolf", b: "seer", c: "thief" });
+  assert.deepEqual(v.game.omni.center, ["villager", "villager", "villager"]);
+  for (const id of ["a", "b", "c"]) assert.equal(viewFor(s, id, 0).game.omni, undefined);
+  runNight(s, { seer: { b: { target: "a" } }, thief: { c: { target: "a" } } });
+  v = viewFor(s, "w", 0);
+  assert.equal(v.game.omni.cards.c, "werewolf");      // the Thief took the Werewolf
+  assert.ok(v.game.omni.log.some((l) => l.actor === "b"));
+  assert.ok(v.game.omni.log.some((l) => l.actor === "c"));
+  for (const id of ["a", "b", "c"]) {
+    const pv = viewFor(s, id, 0);
+    assert.equal(pv.game.omni, undefined);
+    assert.equal(pv.spectator, false);
+  }
+});
+
+test("spectators can't act, ready up or vote", () => {
+  const s = room(["a", "b", "c"]);
+  handle(s, "w", { t: "hello", name: "W", spectator: true }, 0);
+  rig(s, { a: "werewolf", b: "villager", c: "villager" }, ["villager", "seer", "thief"]);
+  handle(s, "w", { t: "peeked" }, 0);
+  assert.equal(s.g.ready.w, undefined);
+  runNight(s);
+  handle(s, "a", { t: "hostSkipDay" }, 0);
+  assert.ok(handle(s, "w", { t: "vote", target: "a" }, 0).error);
+  assert.equal(s.g.votes.w, undefined);
+});
