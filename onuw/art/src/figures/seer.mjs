@@ -1,6 +1,7 @@
+import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, sparkle, rect, card } from "../brush.mjs";
 // A hooded seer in profile, peeking at a card held up to her face. Her scarf streams out behind her.
-const bg = "#7a50c6", ink = "#2b1858";
+const { card: bg, ink } = ROLE_COLORS.seer;
 const scarf = [
   blob([[226, 244], [180, 262], [136, 300], [112, 352], [92, 404], [60, 436, "c"], [96, 430], [80, 470, "c"], [124, 424], [150, 370], [174, 318], [220, 286]]),
 ];

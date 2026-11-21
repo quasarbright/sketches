@@ -71,6 +71,7 @@ export function card({ bg, ink, layers, transform = "" }) {
     if (Array.isArray(l)) return l.map(one).join("\n");
     if (!l) return "";
     if (typeof l === "string") return path(l, ink);
+    if (l.transform) return `<g transform="${l.transform}">${one({ ...l, transform: undefined })}</g>`;
     const ds = l.group ? l.group.flat(Infinity) : [l.d];
     const stroke = l.halo ? ds.map((d) => path(d, bg, ` stroke="${bg}" stroke-width="${l.halo * 2}" stroke-linejoin="round"`)).join("\n") : "";
     return stroke + ds.map((d) => path(d, col(l.fill))).join("\n");

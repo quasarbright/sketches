@@ -6,7 +6,7 @@ const [out, ...ids] = process.argv.slice(2);
 const dir = new URL("..", import.meta.url).pathname;
 const all = ids.length ? ids : fs.readdirSync(dir).filter((f) => f.endsWith(".svg")).map((f) => f.slice(0, -4));
 fs.mkdirSync(out, { recursive: true });
-const b = await chromium.launch(); const p = await b.newPage({ deviceScaleFactor: 1 });
+const b = await chromium.launch(); const p = await b.newPage({ deviceScaleFactor: +(process.env.DPR || 1) });
 const { ROLES, TEAMS } = await import("../../roles.mjs");
 const team = (id) => ROLES[id] ? TEAMS[ROLES[id].team].color : "#8b93ff";
 const nm = (id) => ROLES[id]?.name || id, sh = (id) => ROLES[id]?.short || "";
