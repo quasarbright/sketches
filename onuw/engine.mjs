@@ -622,15 +622,18 @@ export function viewFor(s, pid, now) {
   };
   if (!g) return v;
   const st = g.step;
+  const knowsStep = spectator || s.phase !== "night" || !!(st && st.prompts[pid] && !st.done[pid]);
   v.game = {
     seated,
     seats: g.seats,
     myCard: seated ? g.dealt[pid] : null,
     hasSpare: !!g.spare,
-    steps: g.steps,
-    stepIdx: g.stepIdx,
-    stepId: st?.id ?? null,
-    stepEndsAt: st ? st.maxEnd : null,
+    // At night a player learns nothing about the night's progress (which card is awake, how many
+    // turns there are) except during their own turn. Spectators see it all.
+    steps: knowsStep ? g.steps : null,
+    stepIdx: knowsStep ? g.stepIdx : null,
+    stepId: knowsStep ? st?.id ?? null : null,
+    stepEndsAt: knowsStep && st ? st.maxEnd : null,
     prompt: st && st.prompts[pid] ? { ...st.prompts[pid], step: st.id, done: !!st.done[pid] } : null,
     info: g.info[pid] || [],
     dayEndsAt: g.dayEndsAt,

@@ -372,7 +372,9 @@ function receiveView(v) {
   }
   if (key !== ui.key) {
     const keepPeek = ui.peeked && prev?.round === v.round;
+    const keepUp = prev?.round === v.round && prev?.phase === v.phase ? ui.up : {};   // a card you're looking at stays up between night turns
     ui = freshUi();
+    ui.up = keepUp;
     ui.key = key;
     ui.peeked = keepPeek;
   }
@@ -773,19 +775,21 @@ function listNames(names) {
 
 // ---- night
 
+// The moon's path across the night. Players only see where it is during their own turn (and
+// spectators always); otherwise it hangs still at the top, so the screen says nothing about the night.
 function moonArc(g) {
-  const n = g.steps.length;
+  const n = g.steps?.length || 0;
   const W = 320, H = 130, cx = W / 2, cy = 140, r = 128;
   const at = (t) => {
     const a = Math.PI * (1 - t);
     return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
   };
-  const t = n ? (g.stepIdx + 0.5) / n : 0.5;
+  const t = n && g.stepIdx != null ? (g.stepIdx + 0.5) / n : 0.5;
   const [mx, my] = at(t);
-  const ticks = g.steps.map((_, i) => {
+  const ticks = n ? g.steps.map((_, i) => {
     const [x, y] = at((i + 0.5) / n);
     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="${i < g.stepIdx ? "past" : i === g.stepIdx ? "now" : "next"}"/>`;
-  }).join("");
+  }).join("") : "";
   const [x0, y0] = at(0), [x1, y1] = at(1);
   return `<svg class="ms-arc" viewBox="0 0 ${W} ${H}" aria-hidden="true">
     <path d="M${x0} ${y0} A${r} ${r} 0 0 1 ${x1} ${y1}" class="ms-arc-path"/>
@@ -808,8 +812,8 @@ function nightScreen() {
     <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play whack-a-wolf while you wait</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
-    <div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
-    <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : `The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake`}</h1>
+    <div class="ms-label">Night${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
+    <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : "Everyone is asleep"}</h1>
     ${panel}
     ${secretPanel(g)}
     <mike-footer></mike-footer>

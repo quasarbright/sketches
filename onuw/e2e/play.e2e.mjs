@@ -356,3 +356,35 @@ test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and i
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 });
+
+test("at night, players who aren't acting see nothing about which card is awake or how far the night has gone", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  const leaks = new Set();
+  const labels = (await t.host.evaluate(() => window.__onuw.state.g.steps));
+  for (let k = 0; k < 300 && (await view(t.host)).phase === "night"; k++) {
+    for (const p of t.pages) {
+      const v = await view(p);
+      if (v.phase !== "night") continue;
+      const acting = v.game.prompt && !v.game.prompt.done;
+      if (!acting) {
+        if (v.game.stepId || v.game.steps || v.game.stepIdx != null || v.game.stepEndsAt) leaks.add("view has step info");
+        const text = await p.locator("main").innerText();
+        if (/turn \d+ of|awake|left\b/i.test(text)) leaks.add(`screen says: ${text.match(/turn \d+ of|awake|left\b/i)[0]}`);
+        if (await p.locator(".ms-arc circle.now").count()) leaks.add("moon arc shows progress");
+      } else {
+        const pr = v.game.prompt;
+        if (pr.kind === "center1") await p.click('[data-center="0"]');
+        if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
+        if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
+        if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
+        await p.click("[data-act=confirm]").catch(() => {});
+      }
+    }
+    await t.host.waitForTimeout(100);
+  }
+  assert.ok(labels.length > 0);
+  assert.deepEqual([...leaks], []);
+  await t.ctx.close();
+});
