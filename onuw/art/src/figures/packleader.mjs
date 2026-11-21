@@ -35,7 +35,7 @@ const arm = [brush([[318, 256], [344, 320], [352, 380], [360, 410]], [54, 42, 32
 const cuts = [
   brush([[284, 268], [290, 306], [282, 346]], [4, 5, 1]), brush([[310, 274], [318, 314], [310, 354]], [3, 4, 1]),   // chest fur
 ];
-export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(-12 -16)", layers: [tail, { group: farArm }, leg(-42, .92), { d: torso }, mane, { d: neck }, { d: ear },
+export default card({ bg, ink, transform: "translate(500 0) scale(-1 1) translate(2 40) scale(.9)", layers: [tail, { group: farArm }, leg(-42, .92), { d: torso }, mane, { d: neck }, { d: ear },
   { group: [...ears, head, ...fangs], transform: tilt }, { group: leg(0), halo: 4, roots: [[272, 392, 46]] },
   cuts.map((d) => ({ d, fill: "bg" })), headCuts.map((d) => ({ d, fill: "bg", transform: tilt })),
   { group: arm, halo: 4, roots: [[318, 256, 34]] }] });
