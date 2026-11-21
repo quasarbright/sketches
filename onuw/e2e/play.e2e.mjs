@@ -61,18 +61,13 @@ async function newTable(names, { watchers = [] } = {}) {
 
 const view = (p) => p.evaluate(() => window.__onuw.view);
 
-async function slideToLook(p) {
-  const box = await p.locator("[data-peek]").boundingBox();
-  const x = box.x + box.width / 2;
-  await p.mouse.move(x, box.y + box.height - 30);
-  await p.mouse.down();
-  for (let k = 1; k <= 20; k++) await p.mouse.move(x, box.y + box.height - 30 - k * 20);
-  await p.mouse.up();
+async function flipToLook(p) {
+  await p.click("[data-flip]");
   await p.waitForFunction(() => !document.querySelector("[data-act=ready]")?.disabled);
 }
 
 async function dealAndReady(pages) {
-  for (const p of pages) { await slideToLook(p); await p.click("[data-act=ready]"); }
+  for (const p of pages) { await flipToLook(p); await p.click("[data-act=ready]"); }
   await pages[0].waitForFunction(() => window.__onuw.view.phase === "night");
 }
 
@@ -119,19 +114,26 @@ test("a full game from lobby to results, with no console errors", async () => {
   await t.ctx.close();
 });
 
-test("the card is hidden until you slide the cover up, and a tap only nudges it", async () => {
+test("your card is face down until you tap it, then turns back over by itself", async () => {
   const t = await newTable(["Mike", "Ana", "Ben"]);
   await t.host.click("[data-act=start]");
   const p = t.pages[1];
-  await p.locator("[data-peek]").click();
-  await p.waitForTimeout(400);
+  const faceUp = () => p.locator("[data-flip] .is-front").isVisible();
+  assert.equal(await faceUp(), false);
   assert.equal(await p.locator("[data-act=ready]").isDisabled(), true);
-  await slideToLook(p);
-  assert.equal(await p.locator("[data-act=ready]").isDisabled(), false);
-  // the cover springs back over the card after you let go
-  await p.waitForTimeout(400);
-  const tr = await p.locator(".ms-peek-cover").evaluate((e) => getComputedStyle(e).transform);
-  assert.ok(tr === "none" || /matrix\(1, 0, 0, 1, 0, 0\)/.test(tr), tr);
+  await flipToLook(p);
+  await p.waitForTimeout(300);
+  assert.equal(await faceUp(), true);
+  // a tap turns it back sooner
+  await p.click("[data-flip]");
+  await p.waitForTimeout(600);
+  assert.equal(await faceUp(), false);
+  // left alone, it turns back after a few seconds
+  await p.click("[data-flip]");
+  await p.waitForTimeout(600);
+  assert.equal(await faceUp(), true);
+  await p.waitForFunction(() => !document.querySelector("[data-flip]").classList.contains("is-up"), null, { timeout: 6000 });
+  assert.equal(await p.locator("[data-act=ready]").isDisabled(), false);   // having looked once is enough
   await t.ctx.close();
 });
 

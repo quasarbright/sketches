@@ -57,7 +57,6 @@ const ICONS = {
   share: `<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>`,
   swap: `<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`,
   eye: `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
-  chevronUp: `<path d="m18 15-6-6-6 6"/>`,
   userX: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>`,
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
   vote: `<path d="m9 12 2 2 4-4"/><path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12H5V7Z"/><path d="M22 19H2"/>`,
@@ -351,7 +350,7 @@ async function createRoom() {
 
 let ui = freshUi();
 function freshUi() {
-  return { key: null, sel: [], center: [], peeking: false, peeked: false };
+  return { key: null, sel: [], center: [], faceUp: false, peeked: false };
 }
 
 function receiveView(v) {
@@ -734,10 +733,10 @@ function dealScreen() {
   const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
-    <p class="ms-lede">Slide the cover up to look at your card, or press and hold it. Keep your screen to yourself.</p>
-    <div class="ms-peek" data-peek tabindex="0" role="button" aria-label="Slide up, or press and hold, to see your card">
-      <div class="ms-peek-card">${card(g.myCard, { size: "lg", info: false })}</div>
-      <div class="ms-peek-cover">${cardBack({ size: "lg" })}<span class="ms-peek-hint">${icon("chevronUp")} Slide up to look</span></div>
+    <p class="ms-lede">Tap the card to flip it. It turns back over by itself after a few seconds. Keep your screen to yourself.</p>
+    <div class="ms-flip ${ui.faceUp ? "is-up" : ""}" data-flip tabindex="0" role="button" aria-pressed="${ui.faceUp}" aria-label="Flip your card">
+      <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg", info: false })}</div>
+      <div class="ms-flip-face is-back">${cardBack({ size: "lg" })}<span class="ms-flip-hint">Tap to flip</span></div>
     </div>
     <div class="ms-after-peek ${ui.peeked ? "" : "is-hidden"}">
       <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
@@ -1329,52 +1328,37 @@ app.addEventListener("input", (e) => {
   }
 });
 
-// Look at your card: slide the cover up with a finger (it springs back when you let go),
-// or press and hold without moving (the cover lifts all the way). Space/Enter held does the same.
-const peek = { on: false, y0: 0, dy: 0, moved: false, held: false, timer: 0 };
-const coverEl = () => app.querySelector(".ms-peek-cover");
-function setCover(dy, animate) {
-  const c = coverEl();
-  if (!c) return;
-  c.style.transition = animate ? "" : "none";
-  c.style.transform = dy ? `translateY(${dy}px)` : "";
-  peek.dy = dy;
-  const h = c.offsetHeight || 1;
-  if (-dy > h * 0.45) ui.peeked = true;
+// Look at your card: tap it and it turns over, like a card on the table (lifts, turns edge-on,
+// comes down face up), then turns back by itself after a few seconds. Tap again to turn it back sooner.
+const FLIP_MS = 460, FACE_UP_MS = 4000;
+const flip = { busy: false, timer: 0 };
+function turnCard(up) {
+  const el = app.querySelector("[data-flip]");
+  if (!el || flip.busy || ui.faceUp === up) return;
+  clearTimeout(flip.timer);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const swap = () => {
+    ui.faceUp = up;
+    const now = app.querySelector("[data-flip]");
+    now?.classList.toggle("is-up", up);
+    now?.setAttribute("aria-pressed", String(up));
+    if (up && !ui.peeked) { ui.peeked = true; app._html = null; firstLook = true; }
+    if (up) flip.timer = setTimeout(() => turnCard(false), FACE_UP_MS);
+  };
+  // the first look enables "ready"; re-render once the card has landed so the turn isn't cut short
+  const settle = () => { if (firstLook) { firstLook = false; render(); } };
+  let firstLook = false;
+  if (reduce) { swap(); settle(); return; }
+  flip.busy = true;
+  el.classList.remove("is-turning"); void el.offsetWidth; el.classList.add("is-turning");
+  setTimeout(swap, FLIP_MS / 2);
+  setTimeout(() => { flip.busy = false; app.querySelector("[data-flip]")?.classList.remove("is-turning"); settle(); }, FLIP_MS);
 }
-function liftAll() { const c = coverEl(); if (c) setCover(-(c.offsetHeight + 12), true); }
-function endPeek() {
-  if (!peek.on) return;
-  clearTimeout(peek.timer);
-  peek.on = false;
-  const wasPeeked = ui.peeked, nudge = !peek.moved && !peek.held;
-  setCover(0, true);
-  if (nudge && !wasPeeked) { const c = coverEl(); c?.classList.remove("is-nudge"); void c?.offsetWidth; c?.classList.add("is-nudge"); }
-  if (wasPeeked) { app._html = null; setTimeout(render, 260); }   // enables "ready" once the cover is back
-}
-app.addEventListener("pointerdown", (e) => {
-  if (!e.target.closest("[data-peek]")) return;
-  e.preventDefault();
-  Object.assign(peek, { on: true, y0: e.clientY, dy: 0, moved: false, held: false });
-  peek.timer = setTimeout(() => { if (peek.on && !peek.moved) { peek.held = true; liftAll(); } }, 320);
-});
-window.addEventListener("pointermove", (e) => {
-  if (!peek.on || peek.held) return;
-  const dy = Math.min(0, e.clientY - peek.y0);
-  if (Math.abs(dy) > 6) peek.moved = true;
-  if (peek.moved) setCover(dy, false);
-});
-window.addEventListener("pointerup", endPeek);
-window.addEventListener("pointercancel", endPeek);
-window.addEventListener("blur", endPeek);
+app.addEventListener("click", (e) => { if (e.target.closest("[data-flip]")) turnCard(!ui.faceUp); });
 app.addEventListener("keydown", (e) => {
-  if (e.target.closest("[data-peek]") && (e.key === " " || e.key === "Enter")) {
-    e.preventDefault();
-    if (!peek.on) { Object.assign(peek, { on: true, moved: true, held: true }); liftAll(); }
-  }
+  if (e.target.closest("[data-flip]") && (e.key === " " || e.key === "Enter")) { e.preventDefault(); if (!e.repeat) turnCard(!ui.faceUp); }
 });
-app.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") endPeek(); });
-app.addEventListener("contextmenu", (e) => { if (e.target.closest("[data-peek]")) e.preventDefault(); });
+app.addEventListener("contextmenu", (e) => { if (e.target.closest("[data-flip]")) e.preventDefault(); });
 
 // ---------------------------------------------------------------- start
 
