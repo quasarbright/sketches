@@ -534,6 +534,11 @@ function roomScreen() {
 
 // ---- lobby
 
+// One word per room-code letter, so the code is easy to say out loud.
+const CODE_WORDS = { A: "Amber", B: "Bramble", C: "Candle", D: "Dusk", E: "Ember", F: "Fog", G: "Glade", H: "Hollow", J: "Juniper", K: "Kettle",
+  L: "Lantern", M: "Meadow", N: "Nettle", P: "Pine", Q: "Quill", R: "Raven", S: "Shadow", T: "Thicket", U: "Umber", V: "Velvet", W: "Willow", X: "Xylem", Y: "Yarrow", Z: "Zephyr" };
+const codeWords = (code) => [...(code || "")].map((c) => CODE_WORDS[c] || c).join(" · ");
+
 function lobby() {
   const v = view;
   const host = v.isHost;
@@ -557,6 +562,7 @@ function lobby() {
       <div>
         <div class="ms-label">Room code</div>
         <div class="ms-code">${esc(v.code)}</div>
+        <div class="ms-code-words">${esc(codeWords(v.code))}</div>
       </div>
       <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy invite link</span></button>
     </section>
@@ -715,7 +721,8 @@ function nightScreen() {
       ${p.timedOut ? `<p class="ms-hint">Time ran out, so ${p.required ? "one was picked for you" : "you did nothing"}.</p>` : ""}
       <p class="ms-hint">Close your eyes again. The night goes on.</p>
     </div>`;
-  else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>`;
+  else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>
+    <p class="ms-hint">Tap and scroll now and then, so nobody can tell when your turn comes.</p>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
     <div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
@@ -816,8 +823,9 @@ function inGameStrip() {
   const v = view;
   return `<section>
     <h2 class="ms-h2">Cards in This Game</h2>
-    <div class="ms-chiprow">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "xs", times: v.roles[r] }))).join("")}
-    ${v.game.hasSpare ? `<div class="ms-cardwrap"><div class="ms-card ms-xs ms-spare-xs" style="--team:${TEAMS.wolf.color}"><div class="ms-card-name">Spare ${N.werewolf}</div><div class="ms-card-art">${emblemSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div></div>` : ""}
+    <p class="ms-hint">In the order they wake up.</p>
+    <div class="ms-row ms-deck-row">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "sm", label: v.roles[r] > 1 ? `×${v.roles[r]}` : "" }))).join("")}
+    ${v.game.hasSpare ? spareCard("Spare") : ""}
     </div>
   </section>`;
 }
@@ -1049,7 +1057,7 @@ function cheatsheetPanel() {
   const list = (inGame.length ? inGame : ROLE_ORDER);
   return `<h2 class="ms-h2">Cards in This Game</h2>
     <p class="ms-hint">In the order they wake up.</p>
-    <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-emblem" style="color:${TEAMS[ROLES[r].team].color}">${emblemSvg(r)}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
+    <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
     <h2 class="ms-h2">Who Wins</h2>
     <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
     <button class="ms-link" data-act="howto">How to play</button>`;
