@@ -15,73 +15,73 @@ export const ROLES = {
   werewolf: {
     name: N.werewolf, team: "wolf", wolf: true, max: 3, step: "wolves",
     short: "Sees the other wolves",
-    text: "Wakes with the other wolves so you all know each other. If you're the only wolf, you may look at one of the 3 center cards.",
+    text: "You wake with the other wolves and see who they are. If you're the only wolf, you may look at one of the 3 center cards.",
   },
   packleader: {
     name: N.packleader, team: "wolf", wolf: true, max: 1, step: "packleader",
     short: `Gives a player the spare ${N.werewolf} card`,
-    text: `A wolf who wakes with the other wolves. Then, on their own turn, they give the spare ${N.werewolf} card to a player who isn't a wolf. The two cards swap places: the player now holds the ${N.werewolf} card, so they're on the wolf team without knowing it, and their old card goes face down into the spare slot.`,
+    text: `You're a wolf and wake with the other wolves. Then, on your own turn, you give the spare ${N.werewolf} card to a player who isn't a wolf. The two cards swap places: that player now holds the ${N.werewolf} card and is on the wolf team without knowing it, and their old card goes face down into the spare slot.`,
     note: `Picking the ${N.packleader} adds a spare ${N.werewolf} card to the deck. It sits apart from the 3 center cards and only the ${N.packleader} can move it.`,
   },
   prowler: {
     name: N.prowler, team: "wolf", wolf: true, max: 1, step: "prowler",
     short: "A wolf who may look at a player's card",
-    text: "A wolf who wakes with the other wolves. Then, on their own turn, they may look at one other player's card.",
+    text: "You're a wolf and wake with the other wolves. Then, on your own turn, you may look at one other player's card.",
   },
   lackey: {
     name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
     short: "Sees the wolves, wins with them",
-    text: "On the wolf team, but not a wolf. Wakes to see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win as long as someone other than you dies.",
+    text: "You're on the wolf team, but you aren't a wolf. You wake and see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win as long as someone other than you dies.",
   },
   scout: {
     name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
     short: "Sees the wolves and their cards",
-    text: `On the wolf team, but not a wolf. Wakes to see who the wolves are and looks at their cards, so you know whether they're still wolves. If the ${N.scout} dies, the village wins.`,
+    text: `You're on the wolf team, but you aren't a wolf. You wake, see who the wolves are and look at their cards, so you know whether they're still wolves. If you die, the village wins.`,
   },
   mason: {
     name: N.mason, team: "village", wolf: false, max: 2, pair: true, step: "masons",
     short: `Sees the other ${N.mason}`,
-    text: `${N.mason}s come in pairs. They wake together and see each other. If you wake alone, the other ${N.mason} card is in the center.`,
+    text: `${N.mason}s come in pairs. You wake with the other ${N.mason} and see each other. If you wake alone, the other ${N.mason} card is in the center.`,
   },
   seer: {
     name: N.seer, team: "village", wolf: false, max: 1, step: "seer",
     short: "Looks at a player's card or two center cards",
-    text: "May look at one other player's card, or at two of the 3 center cards.",
+    text: "You may look at one other player's card, or at two of the 3 center cards.",
   },
   thief: {
     name: N.thief, team: "village", wolf: false, max: 1, step: "thief",
     short: "Swaps with a player and looks",
-    text: `May swap cards with another player, then looks at the card they took. They're now on that card's team, and the other player has the ${N.thief} card.`,
+    text: `You may swap cards with another player, then look at the card you took. You're now on that card's team, and the other player has the ${N.thief} card.`,
   },
   meddler: {
     name: N.meddler, team: "village", wolf: false, max: 1, step: "meddler",
     short: "Swaps two other players' cards",
-    text: "May swap the cards of two other players without looking at them.",
+    text: "You may swap the cards of two other players without looking at them.",
   },
   sleepwalker: {
     name: N.sleepwalker, team: "village", wolf: false, max: 1, step: "sleepwalker",
     short: "Swaps with a center card blind",
-    text: "Must swap their card with one of the 3 center cards, without looking at the new one.",
+    text: "You must swap your card with one of the 3 center cards, without looking at your new one.",
   },
   nightowl: {
     name: N.nightowl, team: "village", wolf: false, max: 1, step: "nightowl",
     short: "Checks their own card at the end",
-    text: "Wakes last and looks at their own card, to see whether someone swapped it.",
+    text: "You wake last and look at your own card, to see whether someone swapped it.",
   },
   villager: {
     name: N.villager, team: "village", wolf: false, max: 3, step: null,
     short: "No night action",
-    text: "Sleeps through the night. Use the day to work out who the wolves are.",
+    text: "You sleep through the night. Use the day to work out who the wolves are.",
   },
   hunter: {
     name: N.hunter, team: "village", wolf: false, max: 1, step: null,
     short: "Takes their vote down with them",
-    text: `No night action. If the ${N.hunter} dies, the player the ${N.hunter} voted for dies too.`,
+    text: "No night action. If you die, the player you voted for dies too.",
   },
   jester: {
     name: N.jester, team: "jester", wolf: false, max: 1, step: null,
     short: "Wins only by dying",
-    text: `On nobody's team. The ${N.jester} wins only if they die. If the ${N.jester} dies, the wolves can't win, though the village still can.`,
+    text: "You're on nobody's team, and you win only if you die. If you die, the wolves can't win, though the village still can.",
   },
 };
 
