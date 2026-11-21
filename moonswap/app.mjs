@@ -778,7 +778,7 @@ function promptPanel(p, g) {
       ${p.optional ? `<button class="ms-btn" data-act="skip">Do nothing</button>` : ""}
       <button class="ms-btn ms-primary" data-act="confirm" ${ready ? "" : "disabled"}>${esc(confirm)}</button>
     </div>
-    <div class="ms-hint ms-timer-line">${countdown(view.game.stepEndsAt)} left${p.required ? ", then one is picked for you" : ""}</div>
+    ${p.required ? `<div class="ms-hint ms-timer-line">When time runs out, one is picked for you.</div>` : ""}
   </div>`;
 }
 
