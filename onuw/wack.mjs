@@ -29,16 +29,17 @@ const css = `
 .wk-time { width: min(460px, 100%); height: 6px; border-radius: 99px; background: #ffffff1a; margin: 12px 0 6px; overflow: hidden; }
 .wk-time i { display: block; height: 100%; width: 100%; background: var(--accent, #f1e2b8); transform-origin: left; border-radius: inherit; }
 .wk-hint { font-size: .85rem; color: var(--muted, #99a); margin: 0 0 6px; text-align: center; }
-.wk-board { position: relative; width: min(440px, 100%, 44vh); aspect-ratio: 3 / 4.4; display: grid; grid-template-columns: repeat(3, 1fr);
+.wk-board { position: relative; width: min(440px, 100%, 44vh); aspect-ratio: 3 / 3.4; display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 2% 5%; margin: auto 0; cursor: none; }
 .wk-hole { position: relative; }
 .wk-hole-back { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 18%; border-radius: 50%; background: #02030a;
   box-shadow: inset 0 6px 10px #000, 0 0 0 3px #1b2350; }
 .wk-hole-front { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 9%; border-radius: 0 0 50% 50% / 0 0 100% 100%;
   border: 3px solid #3c4a96; border-top: none; margin: 0 -3px -3px; }
-.wk-pit { position: absolute; left: 9%; right: 9%; top: -12%; bottom: 13%; overflow: hidden; }
+.wk-pit { position: absolute; left: 9%; right: 9%; top: -80%; bottom: 13%; overflow: hidden; }
 .wk-sprite .ms-card { --w: 100%; width: 100%; box-shadow: 0 0 5px rgba(0,0,0,.5); }
-.wk-sprite { position: absolute; left: 0; right: 0; bottom: -4%; transform: translateY(105%); transform-origin: 50% 100%; }
+/* Only the top half of a card comes up: translate keeps the bottom half below the rim, and transforms pivot at the rim. */
+.wk-sprite { position: absolute; left: 0; right: 0; bottom: -4%; translate: 0 50%; transform: translateY(105%); transform-origin: 50% 50%; }
 .wk-hole.is-up .wk-sprite { transform: none; animation: wk-pop .34s cubic-bezier(.3,1.5,.5,1) both; }
 @keyframes wk-pop { 0% { transform: translateY(105%) scale(1.25, .6); } 55% { transform: translateY(-6%) scale(.86, 1.18); }
   78% { transform: translateY(2%) scale(1.08, .92); } 100% { transform: none; } }
