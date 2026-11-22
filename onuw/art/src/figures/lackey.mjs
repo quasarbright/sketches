@@ -2,17 +2,16 @@ import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, fringe, card } from "../brush.mjs";
 // The lackey: a hunched, scheming servant in a long coat, holding a lantern up for the wolves with a sly grin.
 const { card: bg, ink } = ROLE_COLORS.lackey;
-const coat = blob([[206, 262], [262, 228], [318, 244], [348, 300], [352, 400], [362, 500], [366, 590, "c"], [326, 582], [300, 594], [262, 584], [226, 594], [196, 586, "c"], [200, 500], [192, 420], [186, 330]]);
-// a rounded hunch over the shoulders, a little higher than the head
-const hump = blob([[224, 236], [262, 200], [310, 194], [346, 226], [358, 280], [300, 296], [240, 284]]);
+const coat = blob([[206, 262], [262, 228], [318, 244], [362, 330], [364, 420], [366, 500], [366, 590, "c"], [326, 582], [300, 594], [262, 584], [226, 594], [196, 586, "c"], [200, 500], [192, 420], [186, 330]]);
+// the spine curves: upright from the hem, then the back rounds over the shoulders and carries the hooded
+// head forward and down, one smooth line from hem to brow
+const back = blob([[196, 262], [218, 238], [250, 222], [286, 214], [318, 222], [344, 250], [358, 296], [364, 360], [330, 350], [270, 320], [220, 312]]);
+const upper = "translate(-14 36)";   // head, face, arm and lantern sit forward and lower on the curved spine
 const legs = [brush([[238, 560], [232, 600]], [30, 28]), brush([[300, 560], [310, 600]], [30, 28]),
   blob([[200, 592], [244, 590], [250, 608], [196, 610]]), blob([[300, 592], [344, 590], [352, 608], [298, 610]])];
 // a deep hood with a plain human face in profile, peering at the lantern
 const head = blob([[188, 222], [204, 198], [236, 190], [262, 206], [270, 240], [262, 268], [236, 282], [206, 280], [194, 262]]);
-// the hood falls straight from the hump to the brow, so the head hangs forward and low like a hunchback's
-const hoodTip = blob([[200, 206], [226, 188], [262, 180], [300, 186], [334, 214], [346, 262], [300, 280], [262, 276], [230, 262]]);
 const nose = blob([[196, 220], [190, 236], [180, 248, "c"], [190, 252], [188, 262], [194, 268], [202, 276], [214, 276], [206, 230]]);
-const tuft = hoodTip;
 // near arm reaches forward and up holding the lantern by its ring
 const arm = brush([[220, 290], [178, 320], [146, 300], [128, 258]], [36, 30, 24, 20]);
 const hand = blob([[116, 252], [132, 236], [146, 248], [136, 266]]);
@@ -29,8 +28,7 @@ const cuts = [
   brush([[222, 440], [298, 436]], [5, 5]),                         // belt
   ...[330, 362, 394].map((y) => blob([[236, y - 5], [244, y - 5], [244, y + 5], [236, y + 5]])),  // buttons
 ];
-// the whole figure leans forward from the feet (skew), but the lantern hangs plumb, so undo the skew around it
-const unlean = "translate(124 262) skewX(-9) translate(-124 -262)";
-export default card({ bg, ink, transform: "translate(62 0) translate(0 600) skewX(9) translate(0 -600)", layers: [legs, { d: coat }, { d: hump }, tuft, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, ...[{ group: rays }, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }]
-    .map((l) => ({ ...l, transform: unlean }))] });
+const face = [{ d: head }, { d: nose }, ...cuts.slice(0, 4).map((d) => ({ d, fill: "bg" }))];
+export default card({ bg, ink, transform: "translate(42 -14)", layers: [legs, { d: coat }, { d: back }, cuts.slice(4).map((d) => ({ d, fill: "bg" })),
+  ...[...face, { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, { group: rays }, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" },
+    { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }].map((l) => ({ ...l, transform: upper }))] });
