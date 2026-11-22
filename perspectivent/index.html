@@ -124,7 +124,8 @@
     .pv-chip .pv-chip-f { font-family: var(--font-mono); font-size: .72rem; opacity: .75; margin-left: 4px; }
 
     .pv-about-diagram { display: block; width: 100%; max-width: 440px; height: 170px; margin: 12px auto 4px; border-radius: var(--radius-sm); background: #111317; }
-    .pv-about-3d { height: auto; aspect-ratio: 16 / 9; margin-top: 4px; }
+    .pv-about-3d { max-width: 100%; height: 250px; margin-top: 4px; }
+    @media (max-width: 500px) { .pv-about-3d { height: 190px; } }
     .pv-about-caption { text-align: center; font-size: .8rem; color: var(--muted); margin: 0 0 14px; min-height: 1.2em; }
     .pv-na input[type=range] { opacity: .35; }
     .pv-na .value { color: var(--faint); }
@@ -288,7 +289,7 @@
       <p>Do that for every pixel in the grid, row by row, and you have the whole picture. Here it is
         for the same scene, seen from your eye. The middle column is the one above.</p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="render3d"></canvas>
-      <p class="pv-about-caption">Every pixel's ray, traced in turn.</p>
+      <p class="pv-about-caption">Your eye fires a ray for every pixel, row by row. The yellow rays are the pixels being worked out right now.</p>
 
       <div class="section-label">what gets divided</div>
       <p>Tracing a ray for every pixel is slow, so the game works the other way around. It takes
@@ -299,13 +300,13 @@
         the picture is $y \div 0.55\,z$, where 1 is the top edge, 0 the middle and −1 the bottom.
         Its distance to the left or right is divided by $z$ the same way. That's the division: a
         corner's offset from the line you're looking along, divided by how far ahead it is.</p>
-      <canvas class="pv-about-diagram" data-demo="divide"></canvas>
-      <p class="pv-about-caption" data-caption="divide"></p>
       <p>A corner lands on exactly the pixel whose ray goes through it, so the two ways give the
-        same picture. Once the corners are placed, the graphics card fills in the flat faces between
-        them, nearest in front. That's how the game draws every frame.</p>
+        same picture. Every shape is made of triangles, so once the corners are placed, the graphics
+        card fills in the triangles between them, nearest in front. That's how the game draws every
+        frame. Below, each box corner is joined to your eye by the ray it's on, and placed in the
+        picture by dividing.</p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="divide3d"></canvas>
-      <p class="pv-about-caption">Each box corner placed by dividing, then joined up and filled in.</p>
+      <p class="pv-about-caption" data-caption="divide3d"></p>
 
       <div class="section-label">a sensor and a spread</div>
       <p>The rays don't have to start at one point. Give them a blue
@@ -320,14 +321,14 @@
       <canvas class="pv-about-diagram" data-demo="render-ortho"></canvas>
       <p class="pv-about-caption">The same scene from a sensor 2.2 m tall, with no spread. The far blue box keeps its real size.</p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="render3d-ortho"></canvas>
-      <p class="pv-about-caption">The whole picture with parallel rays. You see the cube's sides but never its top.</p>
+      <p class="pv-about-caption">The same with parallel rays from the sensor. You see the cube's sides but never its top.</p>
       <p>Make the spread negative and the rays come together in front of you, so far things are
         drawn bigger than near ones. That's <b>reverse perspective</b>. Past the point where they
         cross, the rays carry on crossed, so out there the world is upside down.</p>
       <canvas class="pv-about-diagram" data-demo="plane"></canvas>
       <p class="pv-about-caption" data-caption="plane"></p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="plane3d"></canvas>
-      <p class="pv-about-caption">The scene through the same lens as it changes.</p>
+      <p class="pv-about-caption">The same sweep in 3D, and the picture it makes.</p>
       <p>The division still works. With a sensor reaching $A$ meters above the line you're looking
         along and a spread of $2\phi$, the top ray is $A + z\tan\phi$ meters above that line
         $z$ meters ahead, so a corner $y$ meters above it lands at
@@ -353,7 +354,7 @@
       <canvas class="pv-about-diagram" data-demo="functions"></canvas>
       <p class="pv-about-caption" data-caption="functions"></p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="functions3d"></canvas>
-      <p class="pv-about-caption">The scene traced along the curved rays, pixel by pixel.</p>
+      <p class="pv-about-caption">The curved rays, and the picture traced along them pixel by pixel.</p>
       <p>With curved rays, straight edges in the world come out curved. The graphics card can only
         fill flat triangles between corners, so the game cuts every shape into small pieces and
         places each piece's corners, and the edges bend. Each lens is scaled so that things about

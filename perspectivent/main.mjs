@@ -10,8 +10,9 @@ import {
   LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
-import { drawRenderDemo, drawDivideDemo, EYE_LENS, SENSOR_LENS } from "./render-demo.mjs";
-import { Scan, projectBoxes } from "./render3d.mjs";
+import { drawRenderDemo, EYE_LENS, SENSOR_LENS, RENDER_PIXELS } from "./render-demo.mjs";
+import { Scan } from "./render3d.mjs";
+import { drawTraceDemo, drawLiveDemo, drawCornerDemo } from "./about3d.mjs";
 import { PHYS, COURSE, TOWER } from "./course.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -1287,21 +1288,9 @@ const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;
  * about-modal diagrams (the same drawing code, with lenses that animate on their own)
  * ===================================================================== */
 let aboutRAF = 0, aboutOpen = false;
-// the 3D pictures' scans, one per canvas, restarted when their key changes
-const scans = new WeakMap(), planeState = new WeakMap();
-function scanFor(cv, key, lens) {
-  const sc = scans.get(cv) ?? new Scan();
-  scans.set(cv, sc);
-  if (sc.key !== key || sc.w !== cv.width || sc.h !== cv.height) sc.reset(key, cv.width, cv.height, lens);
-  return sc;
-}
-// work out pixels up to `target`, spending at most a few milliseconds a frame
-function advanceScan(sc, target) {
-  const t0 = performance.now();
-  while (sc.done < Math.min(sc.total, Math.floor(target)) && performance.now() - t0 < 10) {
-    sc.advance(Math.min(2000, Math.floor(target) - sc.done));
-  }
-}
+// the 3D demos' pictures, one per canvas
+const scans = new WeakMap(), planeState = new WeakMap(), lensCache = new Map();
+function scanOf(cv) { let sc = scans.get(cv); if (!sc) { sc = new Scan(); scans.set(cv, sc); } return sc; }
 document.addEventListener("cohesion-modal-open", (e) => {
   if (!e.detail.className?.includes("cohesion-about")) return;
   aboutOpen = true; // the world stays still behind the About, and its demos get the time
@@ -1326,18 +1315,18 @@ document.addEventListener("cohesion-modal-open", (e) => {
       const cap = (txt) => { const c = el.querySelector(`[data-caption="${demo}"]`); if (c && c.textContent !== txt) c.textContent = txt; };
       if (demo === "render") drawRenderDemo(ctx, r.width, r.height, t, { lens: EYE_LENS });
       else if (demo === "render-ortho") drawRenderDemo(ctx, r.width, r.height, t, { lens: SENSOR_LENS });
-      else if (demo === "divide") cap(drawDivideDemo(ctx, r.width, r.height, t, { lens: EYE_LENS }));
       else if (demo === "render3d" || demo === "render3d-ortho") {
-        // the whole picture, pixel by pixel, row by row; then a hold, then again
-        const lens = demo === "render3d" ? EYE_LENS : SENSOR_LENS, dur = 4, cycle = dur + 2.5;
-        const round = Math.floor(t / cycle), into = t % cycle;
-        const sc = scanFor(cv, `${round}`, lens);
-        advanceScan(sc, sc.total * Math.min(1, into / dur));
-        sc.draw(ctx, r.width, r.height);
+        // the same clock as the side view's column above: the picture's rows keep pace with its
+        // pixels, then both hold, then again
+        const lens = demo === "render3d" ? EYE_LENS : SENSOR_LENS, run = RENDER_PIXELS * 0.22, cycle = run + 2.2;
+        drawTraceDemo(ctx, r.width, r.height, dpr, { sc: scanOf(cv), key: `${Math.floor(t / cycle)}`, lens, frac: Math.min(1, (t % cycle) / run) });
       } else if (demo === "divide3d") {
-        // place the 16 corners one at a time, join them, fill the faces, hold
-        const cycle = 9, k = (t % cycle) < 4 ? (t % cycle) / 4 : Math.min(3, 1 + ((t % cycle) - 4) / 1.2);
-        projectBoxes(ctx, r.width, r.height, EYE_LENS, k);
+        // place the 16 corners one at a time, join them into triangles, fill them, hold
+        const tc = t % 10.5, k = tc < 5.6 ? tc / 5.6 : Math.min(3, 1 + (tc - 5.6) / 1.3);
+        const p = drawCornerDemo(ctx, r.width, r.height, dpr, EYE_LENS, k);
+        const n = (v) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2), f = 0.55 * (p ? p[2] : 1);
+        cap(p ? `This corner is x = ${n(p[0])} m across, y = ${n(p[1])} m up and z = ${n(p[2])} m ahead. Divided by 0.55 z: (${n(p[0] / f)}, ${n(p[1] / f)}) in the picture.`
+          : k < 2 ? "Every corner is placed. Neighboring corners are joined into triangles." : "The triangles are filled in, nearest in front.");
       } else if (demo === "plane" || demo === "plane3d") {
         // sweep the sensor from a point (an eye) to as tall as the picture with no spread, and on
         // to bigger with the rays coming together, holding at each
@@ -1362,16 +1351,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
           planeState.set(cv, st);
           const holding = Math.abs(s - st.s) < 1e-9;
           st.s = s;
-          if (!holding) {
-            st.low.reset("", Math.max(8, Math.round(cv.width / 6)), Math.max(4, Math.round(cv.height / 6)), lens);
-            st.low.advance(st.low.total);
-            st.full.key = null;
-            st.low.draw(ctx, r.width, r.height, { head: false });
-          } else {
-            if (st.full.key !== `${s}` || st.full.w !== cv.width) st.full.reset(`${s}`, cv.width, cv.height, lens);
-            advanceScan(st.full, st.full.total);
-            (st.full.done === st.full.total ? st.full : st.low).draw(ctx, r.width, r.height, { head: false });
-          }
+          drawLiveDemo(ctx, r.width, r.height, dpr, st, lens, holding);
         }
       } else if (demo === "functions" || demo === "functions3d") {
         // hold each function, then morph to the next the way the lens does
@@ -1381,13 +1361,13 @@ document.addEventListener("cohesion-modal-open", (e) => {
           const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
           const u = Math.min(1, into), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
           drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => ga(z) + (gb(z) - ga(z)) * e, s: null });
-          cap(`Divide by ${cur.name}.`);
+          cap(`Divide the offset by ${cur.name}.`);
         } else {
           // the curved rays traced pixel by pixel: the view is 2.2 m tall 2 m ahead, like the others
-          const g = normalizedLens(cur.f, 2);
-          const sc = scanFor(cv, `${Math.floor(t / period)}`, { h: (z) => 1.1 * g(z) });
-          advanceScan(sc, sc.total * Math.min(1, (t % period) / 4.5));
-          sc.draw(ctx, r.width, r.height);
+          const g = normalizedLens(cur.f, 2), round = Math.floor(t / period);
+          const lens = lensCache.get(round) ?? { h: (z) => 1.1 * g(z) };
+          lensCache.clear(); lensCache.set(round, lens);
+          drawTraceDemo(ctx, r.width, r.height, dpr, { sc: scanOf(cv), key: `${round}`, lens, frac: Math.min(1, (t % period) / 4.5) });
         }
       }
     }

@@ -5,10 +5,6 @@
 // is the angle between the top ray (u = 1) and the bottom one. The pixel takes the color of the
 // first thing the ray hits.
 //
-// drawDivideDemo: the same picture made the graphics card's way. Each corner of each box, at
-// height y and z meters ahead, goes straight to its place in the picture, y / f(z) with
-// f(z) = A + z·t, and then the column is filled between the corners.
-//
 // The scene is the middle slice of render3d.mjs's SCENE3: the red cube is turned 30°, so straight
 // through its middle it's 0.9 / cos 30° = 1.04 m deep.
 
@@ -125,54 +121,4 @@ export function drawRenderDemo(ctx, W, Hpx, t, { lens = EYE_LENS, step = 0.22, h
     ctx.fillStyle = hits[i].color; ctx.fillRect(L.cx, L.pyTop + i * cellH, L.colW, cellH - 0.6);
   }
   if (!done) { ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 2; ctx.strokeRect(L.cx - 1, L.pyTop + cur * cellH - 1, L.colW + 2, cellH + 1.4); }
-}
-
-// The corners of the boxes, in the order they're placed: front top, back top, front bottom, back
-// bottom of each box. Returns the caption for the current step.
-const CORNERS = SCENE.boxes.flatMap(([z0, z1, b0, b1, c]) => [[z0, b1, c], [z1, b1, c], [z0, b0, c], [z1, b0, c]]);
-export function drawDivideDemo(ctx, W, Hpx, t, { lens = EYE_LENS, step = 1.1, hold = 3 } = {}) {
-  const n = CORNERS.length, fill = 1.2, cycle = n * step + fill + hold;
-  const tc = Math.max(0, t) % cycle, cur = Math.min(n - 1, Math.floor(tc / step)), placing = tc < n * step;
-  const L = frame(ctx, W, Hpx, lens, { ball: false }), { X, Y } = L;
-  const f = (z) => lens.A + z * lens.t;
-  const toPic = (u) => L.pyTop + (1 - u) / 2 * L.colH;
-  source(ctx, L, lens);
-  columnFrame(ctx, L);
-  // after the corners: fill the column between each box's top and bottom, the far box first
-  if (!placing) {
-    const e = Math.min(1, (tc - n * step) / fill);
-    ctx.globalAlpha = e;
-    ctx.fillStyle = SCENE.sky; ctx.fillRect(L.cx, L.pyTop, L.colW, L.colH / 2);
-    ctx.fillStyle = SCENE.grass; ctx.fillRect(L.cx, L.pyTop + L.colH / 2, L.colW, L.colH / 2);
-    for (const [z0, z1, b0, b1, c] of [...SCENE.boxes].reverse()) {
-      const us = [[z0, b1], [z1, b1], [z0, b0], [z1, b0]].map(([z, y]) => y / f(z));
-      const top = toPic(Math.min(1, Math.max(...us))), bot = toPic(Math.max(-1, Math.min(...us)));
-      ctx.fillStyle = c; ctx.fillRect(L.cx, top, L.colW, bot - top);
-    }
-    ctx.globalAlpha = 1;
-  }
-  const shown = placing ? cur + 1 : n;
-  for (let i = 0; i < shown; i++) {
-    const [z, y, c] = CORNERS[i], u = y / f(z), now = placing && i === cur;
-    if (now) { // the corner's height and distance, and where that puts it
-      ctx.setLineDash([3, 3]); ctx.strokeStyle = "rgba(233,228,216,0.7)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(X(z), Y(0)); ctx.lineTo(X(z), Y(y)); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(z), Y(0)); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = "11px 'JetBrains Mono', monospace"; ctx.fillStyle = "#e9e4d8";
-      ctx.fillText("y", X(z) + 4, (Y(0) + Y(y)) / 2 + 4); ctx.fillText("z", X(z / 2) - 3, Y(0) + (y < 0 ? -5 : 13));
-      // and the ray it's on, faint, to show it's the same answer the rays give
-      ctx.strokeStyle = "rgba(255,210,63,0.45)";
-      ctx.beginPath(); ctx.moveTo(X(0), Y(u * lens.A)); ctx.lineTo(X(z), Y(y)); ctx.stroke();
-    }
-    ctx.fillStyle = now ? "#ffd23f" : c;
-    ctx.beginPath(); ctx.arc(X(z), Y(y), now ? 4.5 : 3, 0, 7); ctx.fill();
-    if (Math.abs(u) <= 1) {
-      ctx.beginPath(); ctx.arc(L.cx + L.colW / 2, toPic(u), now ? 4.5 : 3, 0, 7); ctx.fill();
-      ctx.strokeStyle = "#14161a"; ctx.lineWidth = 1; ctx.stroke();
-    }
-  }
-  if (!placing) return "Then the space between the corners is filled in.";
-  const [z, y] = CORNERS[cur], u = y / f(z), sgn = (v) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
-  return `y = ${sgn(y)} m, z = ${z.toFixed(2)} m: y ÷ (${lens.t} z) = ${sgn(u)}` + (Math.abs(u) > 1 ? ", off the picture" : "");
 }

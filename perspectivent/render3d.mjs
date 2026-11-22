@@ -17,7 +17,7 @@ export const SCENE3 = {
   sky: [201, 220, 239], grass: [95, 138, 67],
 };
 const FAR_Z = 8.4; // past the far side of the farthest box
-const SUN = (() => { const v = [0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
+const SUN = (() => { const v = [-0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const BOX_RGB = SCENE3.boxes.map((b) => rgb(b.color)), BALL_RGB = SCENE3.balls.map((b) => rgb(b[4]));
 
@@ -105,6 +105,11 @@ function inside(x, y, z) {
 const STEPS = (() => { const zs = []; for (let z = 0.02; z < 40; z += 0.08 * (1 + z / 4)) zs.push(z); return zs; })();
 const tables = new WeakMap();
 function curvedPixel(h, u, v, aspect) {
+  const r = curvedHit(h, u, v, aspect);
+  return r ? shade(r.x, r.y, r.z, r.n, r.c) : skyAt(v);
+}
+// where a curved ray first meets something: { x, y, z, n, c }, or null for the sky
+function curvedHit(h, u, v, aspect) {
   let hs = tables.get(h);
   if (!hs) { hs = STEPS.map(h); tables.set(h, hs); }
   const at = (z, s = h(z)) => (Number.isFinite(s) && s > 0 ? [u * s * aspect, v * s, z] : null);
@@ -134,9 +139,9 @@ function curvedPixel(h, u, v, aspect) {
       n = toWorld(b, n);
       c = BOX_RGB[kk];
     }
-    return shade(x, y, zz, n, c);
+    return { x, y, z: zz, n, c };
   }
-  return skyAt(v);
+  return null;
 }
 
 // A picture built up pixel by pixel, row by row from the top. `reset` starts a new one,
@@ -158,19 +163,25 @@ export class Scan {
     const end = Math.min(this.total, this.done + n), d = this.img.data, aspect = this.w / this.h;
     for (let i = this.done; i < end; i++) {
       const px = i % this.w, py = (i / this.w) | 0;
-      const c = pixel(this.lens, -1 + (2 * px + 1) / this.w, 1 - (2 * py + 1) / this.h, aspect);
+      const u = -1 + (2 * px + 1) / this.w, v = 1 - (2 * py + 1) / this.h;
+      const c = typeof this.lens === "function" ? this.lens(u, v, aspect) : pixel(this.lens, u, v, aspect);
       d[4 * i] = c[0]; d[4 * i + 1] = c[1]; d[4 * i + 2] = c[2];
     }
     this.done = end;
   }
-  draw(ctx, W, H, { head = true } = {}) {
+  // the pixel the scan is on, as u, v from -1 to 1
+  headUV(i = this.done) {
+    const px = i % this.w, py = (i / this.w) | 0;
+    return [-1 + (2 * px + 1) / this.w, 1 - (2 * py + 1) / this.h];
+  }
+  draw(ctx, W, H, { head = true, x = 0, y = 0 } = {}) {
     this.cv.getContext("2d").putImageData(this.img, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.cv, 0, 0, W, H);
+    ctx.drawImage(this.cv, x, y, W, H);
     if (head && this.done < this.total) { // where the scan is: a yellow mark on the current pixel
       const px = this.done % this.w, py = (this.done / this.w) | 0, sx = W / this.w, sy = H / this.h;
       ctx.fillStyle = "#ffd23f";
-      ctx.fillRect(px * sx - 2, py * sy - 2, Math.max(4, sx + 4), Math.max(4, sy + 4));
+      ctx.fillRect(x + px * sx - 2, y + py * sy - 2, Math.max(4, sx + 4), Math.max(4, sy + 4));
     }
   }
 }
@@ -222,7 +233,9 @@ export function projectBoxes(ctx, W, H, lens, k) {
   if (k >= 1 && k < 3) { // join each box's corners
     const e = Math.min(1, k - 1);
     ctx.strokeStyle = "rgba(20,22,26,0.85)"; ctx.lineWidth = 1.5;
-    const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    // the box's edges, and one diagonal across each face: the graphics card fills triangles
+    const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7],
+      [0, 3], [4, 7], [0, 6], [1, 7], [2, 7], [0, 5]];
     for (let bi = 0; bi < SCENE3.boxes.length; bi++) {
       const c = corners.slice(8 * bi, 8 * bi + 8);
       for (const [a, b] of edges) {
@@ -241,4 +254,51 @@ export function projectBoxes(ctx, W, H, lens, k) {
     return k < 1 ? corners[Math.min(nC - 1, Math.floor(k * nC))].p : null;
   }
   return null;
+}
+
+/* ---------------- the rays, seen from outside ---------------- */
+
+// The path pixel (u, v)'s ray takes, from where it starts to what it hits (or a way into the
+// sky): a list of [x, y, z] points, and the color it finds.
+export function rayPath(lens, u, v, aspect) {
+  if (lens.h) {
+    const r = curvedHit(lens.h, u, v, aspect), zEnd = r ? r.z : 12, pts = [];
+    for (let i = 0; i <= 40; i++) {
+      const z = 0.02 + (zEnd - 0.02) * (i / 40) ** 1.3, sz = lens.h(z);
+      if (Number.isFinite(sz) && sz > 0 && Math.abs(v * sz) < 30) pts.push([u * sz * aspect, v * sz, z]);
+    }
+    return { pts, color: r ? shade(r.x, r.y, r.z, r.n, r.c) : skyAt(v), hit: !!r };
+  }
+  const ox = u * lens.A * aspect, oy = v * lens.A, dx = u * lens.t * aspect, dy = v * lens.t;
+  const h = hit(ox, oy, 0, dx, dy, 1), t = h ? h.t : 12;
+  const end = [ox + dx * t, oy + dy * t, t];
+  return { pts: [[ox, oy, 0], end], color: h ? shade(...end, h.n, h.c) : skyAt(v), hit: !!h };
+}
+
+// a camera off to your left and above, looking across the scene, so you are on the left and the
+// scene runs off to the right, as in the side views
+const OUT = (() => {
+  const pos = [-6.5, 2.6, -1.0], target = [0.5, -0.5, 4.5];
+  const f = target.map((c, i) => c - pos[i]), lf = Math.hypot(...f); f.forEach((c, i) => (f[i] = c / lf));
+  const r = [f[2], 0, -f[0]], lr = Math.hypot(...r); r.forEach((c, i) => (r[i] = -c / lr)); // right = f × up
+  const up = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  return { pos, f, r, up, tan: Math.tan(30 * Math.PI / 180) };
+})();
+// the outside camera's own picture of the scene (a plain camera, for the backdrop)
+export function outsidePixel(u, v, aspect) {
+  const { pos, f, r, up, tan } = OUT;
+  const d = [0, 1, 2].map((i) => f[i] + r[i] * u * tan * aspect + up[i] * v * tan);
+  const h = hit(...pos, ...d);
+  if (!h) return skyAt(0.4 + 0.6 * v);
+  const p = pos.map((c, i) => c + d[i] * h.t);
+  return shade(...p, h.n, h.c);
+}
+// where a point lands in the outside camera's picture, w × h at (x0, y0), or null behind it
+export function outsideXY(p, x0, y0, w, h) {
+  const { pos, f, r, up, tan } = OUT;
+  const q = p.map((c, i) => c - pos[i]);
+  const z = q[0] * f[0] + q[1] * f[1] + q[2] * f[2];
+  if (z < 0.05) return null;
+  const s = (h / 2) / tan / z;
+  return [x0 + w / 2 + (q[0] * r[0] + q[1] * r[1] + q[2] * r[2]) * s, y0 + h / 2 - (q[0] * up[0] + q[1] * up[1] + q[2] * up[2]) * s];
 }
