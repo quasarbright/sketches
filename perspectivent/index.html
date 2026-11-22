@@ -268,73 +268,83 @@
     <about-modal label="about">
       <h2 class="title">Perspectiven't</h2>
       <p class="intro">A camera decides how big things look from how far away they are. A normal
-        camera divides by distance. This lets you swap that rule for any function you like and
-        walk around inside the result.</p>
+        camera divides by distance: something twice as far away is drawn half as big. Here you can
+        swap distance for any function of it, $f(z)$, and walk around inside the result.</p>
 
-      <div class="section-label">how a normal camera works</div>
-      <p>Light from a point in the world travels in a straight line to your eye. The picture is
-        where those lines cross a <span style="color:var(--accent)">screen</span> in front of you.
-        A thing twice as far away needs a line that's twice as shallow to reach the eye, so it
-        lands half as far from the center: on the screen, a point's offset is its real offset
-        divided by its distance $z$.</p>
-      <canvas class="pv-about-diagram" data-demo="pinhole"></canvas>
-      <p class="pv-about-caption">Rays fanning out from the eye. Everything on one ray lands on the same spot.</p>
-      <p>The screen isn't a window you look through. It only decides <i>where</i> in the picture
-        each ray lands. What you see along a ray is the first thing it hits, starting from your
-        eye, so something closer than the screen (a platform you've walked right up to) still
-        shows, in the spot where its ray would have crossed the screen.</p>
+      <div class="section-label">how a picture gets made</div>
+      <p>A picture is a grid of pixels, and every pixel gets its color the same way: a ray goes out
+        from your eye, and the pixel takes the color of the first thing the ray hits. Here's one
+        column of pixels being worked out, top to bottom, for a small scene seen from the side.</p>
+      <canvas class="pv-about-diagram" data-demo="render"></canvas>
+      <p class="pv-about-caption">Each pixel's ray leaves your eye through that pixel's spot on the screen.</p>
+      <p>To aim the rays, the panel puts a <span style="color:var(--accent)">screen</span> in front
+        of you, the same shape as the picture, and each pixel's ray passes through that pixel's spot
+        on it. You don't see the screen or look through it. A ray that hits something before it gets
+        to the screen shows that thing, which is why a platform right in front of you still shows.
+        The screen only sets how widely the rays spread, and so how much of the world fits in the
+        picture.</p>
+      <p>That's where the division comes from. The rays spread evenly, so the ray through height $u$
+        on a screen $D$ meters away is at height $u\,z/D$ when it's $z$ meters away. Turn that
+        around: a point at height $y$, $z$ meters away, is on the ray for screen height
+        <span style="white-space:nowrap">$u = y\,D/z$.</span> Its place in the picture is its height
+        divided by its distance, so twice as far away is half as big.</p>
 
-      <div class="section-label">rays from a plane at your eye</div>
-      <p>The rays don't have to start at a single point. Start them from a
-        <span style="color:var(--plane)">plane</span> at the eye instead, and send each one through
-        the matching spot on the screen. When the plane shrinks to nothing you have the normal
-        camera. When it's as big as the screen the rays are parallel, nothing shrinks with
-        distance, and you get an <b>orthographic</b> view, the kind used in technical drawings.
-        Make the plane bigger than the screen and the rays converge again, this time in front of
-        you, so far things look bigger. That's <b>reverse perspective</b>. Past the meeting point the
-        rays carry on crossed, so out there the world is upside down.</p>
-      <p>So which one is the screen? Each spot in the picture is one ray, and a ray needs two
-        points: where it <span style="color:var(--plane)">starts</span>, on the plane at your eye,
-        and where it crosses the <span style="color:var(--accent)">screen</span>. The spot $u$ of
-        the picture starts at $s\,u$ on the plane (the plane is $s$ times the screen's size) and
-        passes $u$ on the screen. The plane decides where the rays come from, and the screen,
-        together with the plane, decides which way each one points. Either could serve as the
-        picture: the plane is just the same picture scaled by $s$. The screen is the one whose
-        scale we keep, so things at the screen's distance always stay the same size. With parallel
-        rays the two are the same size, so there's nothing to tell them apart.</p>
-      <p>The plane is always centered on your eye, so your eye stays in the same place whichever
-        lens you pick. Its lower part reaches below your feet, and rays that start there are inside
-        the earth, so they see solid ground. Looking straight ahead in orthographic, the ground's
-        surface is edge-on, and walking forward changes nothing until you pass something, because
-        distance no longer changes size. Step sideways or look down to see the world move.</p>
+      <div class="section-label">rays from a sensor</div>
+      <p>The rays don't have to start at one point. Give the eye some size: a blue
+        <span style="color:var(--plane)">sensor</span> centered where your eye was, the same shape
+        as the screen. Each pixel's ray starts at that pixel's spot on the sensor and goes through its
+        spot on the screen. With a sensor there's no single eye any more; it's just where the
+        rays begin.</p>
+      <p>The sensor size slider sets how tall it is. At zero it's a point, your eye, and you have a
+        normal camera. As tall as the screen, every ray runs straight ahead, parallel to the rest,
+        so nothing shrinks with distance. That's an <b>orthographic</b> view, the kind used in
+        technical drawings.</p>
+      <canvas class="pv-about-diagram" data-demo="render-ortho"></canvas>
+      <p class="pv-about-caption">The same scene from a sensor as tall as the screen. The rays are parallel, so the far blue box keeps its real size.</p>
+      <p>Bigger than the screen, the rays come together in front of you, so far things are drawn
+        bigger than near ones. That's <b>reverse perspective</b>. Past the point where they meet,
+        the rays carry on crossed, so out there the world is upside down.</p>
       <canvas class="pv-about-diagram" data-demo="plane"></canvas>
       <p class="pv-about-caption" data-caption="plane"></p>
-      <p>Following one ray: it starts at $s\,u$ on a plane $s$ times the screen's size and reaches
-        $u$ at the screen distance $D$, so at depth $z$ it's at <span style="white-space:nowrap">$u\,(s + (1-s)\,z/D)$.</span> Dividing by
-        that is the same as dividing by <span style="white-space:nowrap">$f(z) = sD + (1-s)\,z$.</span> As $s$ slides from 0 to 1, $f$
-        slides from $z$ to a constant, which is how the camera can morph smoothly from perspective
-        to orthographic instead of cutting between them.</p>
+      <p>The division still works. With a sensor $s$ times the screen's size, the ray for screen
+        height $u$ starts at $s\,u$ and reaches $u$ at the screen, so $z$ meters away it's at
+        <span style="white-space:nowrap">$u\,(s + (1-s)\,z/D)$.</span> A point at height $y$ is on
+        the ray <span style="white-space:nowrap">$u = y / (s + (1-s)\,z/D)$:</span> its height
+        divided by how spread out the rays are at its distance. Call that spread $f(z)$. For a
+        normal camera it's $z$ (give or take the constant $D$), and as the sensor grows to the
+        screen's size it flattens to a constant, which is how the view morphs smoothly from
+        perspective to orthographic instead of cutting between them.</p>
+      <p>The sensor is centered on your eye, so you stay in the same place whichever lens you pick.
+        Its lower part reaches below your feet, and rays that start there begin inside the ground,
+        so they see solid ground. Looking straight ahead in orthographic, the ground is edge-on,
+        and walking forward changes nothing until you pass something, because distance no longer
+        changes size. Step sideways or look down to see the world move.</p>
 
       <div class="section-label">any function of distance</div>
-      <p>Once the camera is "divide by $f(z)$", nothing says $f$ has to be a straight line. Divide
-        by $\sqrt z$ and things shrink more slowly than normal. Divide by $z^2$ and they shrink
-        faster. Divide by <span style="white-space:nowrap">$1/z$,</span> which is multiplying by distance, and the world turns inside out. The reverse button uses $1/(z + 5)$ instead: its rays start on a plane at your eye a couple of times bigger than the screen and bend in toward each other, meeting only infinitely far away. Plain $1/z$ would need that plane to be infinitely big.
-        The rays aren't straight any more, and straight edges in the world come out curved.</p>
+      <p>Once the picture is "divide by $f(z)$", $f$ doesn't have to be a straight line. The ray for
+        screen height $u$ is then the curve $u\,f(z)$, which bends. Divide by $\sqrt z$ and things
+        shrink more slowly than normal. Divide by $z^2$ and they shrink faster. Divide by
+        <span style="white-space:nowrap">$1/z$,</span> which is multiplying by distance, and the world
+        turns inside out. The reverse button uses $1/(z + 5)$ instead: its rays start on a sensor a
+        couple of times bigger than the screen and bend in toward each other, meeting only infinitely
+        far away. With the rays curved, straight edges in the world come out curved.</p>
       <canvas class="pv-about-diagram" data-demo="functions"></canvas>
       <p class="pv-about-caption" data-caption="functions"></p>
-      <p>Everything is scaled so that things at the screen distance keep their size, which is why
+      <p>Everything is scaled so that things at the screen's distance keep their size, which is why
         switching lenses doesn't make the thing you're looking at jump. Where $f$ is zero or
-        negative, no ray reaches, so that part of the world disappears.</p>
+        negative, no ray gets there, so that part of the world disappears.</p>
 
       <div class="section-label">two lenses at once</div>
-      <p>Side-to-side and up-down positions are divided separately, so they can use different
-        functions. Orthographic across and perspective up and down makes the rails stay parallel
+      <p>Horizontal and vertical positions are divided separately, so they can use different
+        functions. Orthographic horizontally and perspective vertically keeps the rails parallel
         while the telegraph poles still shrink.</p>
 
       <div class="section-label">drawing it</div>
-      <p>Each corner of every shape goes through $f$ on the graphics card, and the shapes are cut
-        into small pieces so the curves come out smooth. For the plane-behind-the-screen family,
-        the math is an ordinary projection matrix, so those views are exact.</p>
+      <p>The demo at the top traces each pixel's ray. The game runs it the other way around, which
+        gives the same picture much faster: each corner of every shape is divided by $f$ of its
+        distance on the graphics card, and the shapes are cut into small pieces so the curves come
+        out smooth. For the sensor family the math is an ordinary projection matrix, so those views
+        are exact.</p>
     </about-modal>
   </div>
 

@@ -9,6 +9,7 @@ import {
   LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
+import { drawRenderDemo } from "./render-demo.mjs";
 import { PHYS, COURSE, TOWER } from "./course.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -1308,7 +1309,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
     { name: "1/z", f: parseExpr("1/z") }, { name: "log(1 + z)", f: parseExpr("log(1+z)") },
   ];
   const tick = (now) => {
-    const t = (now - t0) / 1000;
+    const t = Math.max(0, now - t0) / 1000; // the first frame can be stamped before t0
     for (const cv of canvases) {
       const r = cv.getBoundingClientRect();
       if (!r.width) continue;
@@ -1317,8 +1318,10 @@ document.addEventListener("cohesion-modal-open", (e) => {
       const ctx = cv.getContext("2d");
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const demo = cv.dataset.demo;
-      if (demo === "pinhole") {
-        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(0, D), D), s: 0 });
+      if (demo === "render") {
+        drawRenderDemo(ctx, r.width, r.height, t, { s: 0 });
+      } else if (demo === "render-ortho") {
+        drawRenderDemo(ctx, r.width, r.height, t, { s: 1 });
       } else if (demo === "plane") {
         // sweep the back plane 0 → 1.6 → 0 with holds at the named values
         const period = 12, u = (t % period) / period;
@@ -1328,10 +1331,10 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const s = keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
         drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
         const cap = el.querySelector('[data-caption="plane"]');
-        const txt = s < 0.02 ? "Rays start from one point: a normal camera."
-          : Math.abs(s - 1) < 0.02 ? "From a plane as tall as the screen: parallel rays, orthographic."
-          : s > 1.58 ? `From a plane 1.6× the screen: rays meet ${Math.round(convergenceDepth(1.6, D))} m ahead, reverse perspective.`
-          : `From a plane ${s.toFixed(2)}× the screen.`;
+        const txt = s < 0.02 ? "A sensor of size zero, your eye: a normal camera."
+          : Math.abs(s - 1) < 0.02 ? "A sensor as tall as the screen: parallel rays, orthographic."
+          : s > 1.58 ? `A sensor 1.6× the screen: rays meet ${Math.round(convergenceDepth(1.6, D))} m ahead, reverse perspective.`
+          : `A sensor ${s.toFixed(2)}× the screen.`;
         if (cap.textContent !== txt) cap.textContent = txt;
       } else if (demo === "functions") {
         // hold each function, then morph to the next the way the lens does
