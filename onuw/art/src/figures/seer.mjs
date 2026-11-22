@@ -32,8 +32,10 @@ const braidCuts = [0, 1, 2, 3, 4, 5].map((i) => { const y = 270 + i * 17, x = 28
 const sash = [brush([[212, 352], [250, 362], [300, 352]], [4, 4, 4]), brush([[212, 376], [250, 386], [302, 374]], [4, 4, 4])];
 const tassels = [brush([[236, 384], [230, 420], [226, 452]], [14, 10, 4]), brush([[252, 386], [252, 424], [252, 446]], [12, 9, 3])];
 
-export default card({ bg, ink, transform: "translate(-13 0) translate(6 0)", layers: [stars, scarf, { d: robe }, { d: hoodTip }, { d: hood }, { d: face }, { d: off },
+// exported so other cards can show the seer (the watcher spies on her from afar)
+export const seerLayers = [stars, scarf, { d: robe }, { d: hoodTip }, { d: hood }, { d: face }, { d: off },
   folds.map((d) => ({ d, fill: "bg" })),
   sash.map((d) => ({ d, fill: "bg" })), { group: tassels, halo: 4 }, { d: braid, halo: 4 }, braidCuts.map((d) => ({ d, fill: "bg" })),
   { group: [sleeve, forearm, hand], halo: 4 }, brush([[302, 300], [322, 330], [312, 380]], [3, 4, 1]).replace(/^/, "") && { d: brush([[304, 300], [318, 334], [304, 392]], [3, 4, 1]), fill: "bg" },
-  minicard(...C)] });
+  minicard(...C)];
+export default card({ bg, ink, transform: "translate(-13 0) translate(6 0)", layers: seerLayers });

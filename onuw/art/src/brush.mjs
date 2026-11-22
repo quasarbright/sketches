@@ -66,13 +66,14 @@ let maskId = 0;
 export function card({ bg, ink, layers, transform = "" }) {
   const col = (f) => f === "bg" ? bg : f === "ink" || !f ? ink : f;
   const path = (d, fill, extra = "") => `<path d="${d}" fill="${fill}"${extra}/>`;
-  // A layer is a path string, { d, fill, halo }, or { group: [...paths], halo, fill }: a group's halo
+  // A layer is a path string, { d, fill, halo }, { layers: [...] } or { group: [...paths], halo, fill }: a group's halo
   // outlines the union of its shapes, so strands and claws don't each get their own outline.
   const one = (l) => {
     if (Array.isArray(l)) return l.map(one).join("\n");
     if (!l) return "";
     if (typeof l === "string") return path(l, ink);
     if (l.transform) return `<g transform="${l.transform}">${one({ ...l, transform: undefined })}</g>`;
+    if (l.layers) return l.layers.map(one).join("\n");   // a nested scene, e.g. another card's figure drawn small
     const ds = l.group ? l.group.flat(Infinity) : [l.d];
     let stroke = l.halo ? ds.map((d) => path(d, bg, ` stroke="${bg}" stroke-width="${l.halo * 2}" stroke-linejoin="round"`)).join("\n") : "";
     // roots: circles [x, y, r] where the halo is left out, so a limb grows out of the body
