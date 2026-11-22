@@ -136,7 +136,7 @@ export const ROLES = {
   },
   witch: {
     more: true, name: N.witch, team: "village", wolf: false, max: 1, step: "witch",
-    short: "Swaps a center card with another player's card",
+    short: "Swaps a center card with any player's card",
     text: "You may look at one of the 3 center cards. If you do, you must swap it with any player's card, your own included. That player doesn't see it.",
   },
   bodyguard: {

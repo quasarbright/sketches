@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRoom, handle, tick, viewFor, resolveVotes, startProblem, transferHost } from "./engine.mjs";
+import { ROLES } from "./roles.mjs";
 
 const FAST = { timing: { stepMin: 100, stepJitter: 0, stepMax: 1000 } };
 
@@ -459,6 +460,7 @@ test("the Witch can take the card herself, can skip, and a timed-out Witch who l
   assert.equal(handle(s, "a", { t: "act", step: "witch", target: "a" }, 0).error, undefined);
   assert.equal(s.g.cards.a, "seer");
   assert.equal(s.g.center[0], "witch");
+  assert.match(ROLES.witch.short, /any player's card/, "her card text says she can pick herself too, as in the reference game");
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
