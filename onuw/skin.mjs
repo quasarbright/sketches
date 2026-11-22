@@ -2,7 +2,8 @@
 //
 // TITLE: the game's name on the home screen, the top bar and the browser tab.
 // NAMES: the name shown for each role. Rules text, night prompts and results all read from here.
-// ART:   an image per card, drawn by art/src (see art/src/brush.mjs). Paths are relative to the page.
+// ART:   an image per card. The role art is generated (art/gen, see the image-gen skill); the line-art
+//        SVGs drawn by art/src (see art/src/brush.mjs) stay as the originals. Paths are relative to the page.
 //        art/ and give the path, e.g. werewolf: "art/werewolf.png". "back" is the card back.
 //        Any card left null keeps its line art from roles.mjs.
 
@@ -42,35 +43,35 @@ export const NAMES = {
 };
 
 export const ART = {
-  werewolf: "art/werewolf.svg",
-  packleader: "art/packleader.svg",
-  prowler: "art/prowler.svg",
-  lackey: "art/lackey.svg",
-  scout: "art/scout.svg",
-  mason: "art/mason.svg",
-  seer: "art/seer.svg",
-  thief: "art/thief.svg",
-  meddler: "art/meddler.svg",
-  sleepwalker: "art/sleepwalker.svg",
-  nightowl: "art/nightowl.svg",
-  villager: "art/villager.svg",
-  hunter: "art/hunter.svg",
-  jester: "art/jester.svg",
-  witch: "art/witch.svg",
-  bodyguard: "art/bodyguard.svg",
-  prince: "art/prince.svg",
-  cursed: "art/cursed.svg",
-  greatwolf: "art/greatwolf.svg",
-  dozingwolf: "art/dozingwolf.svg",
-  copycat: "art/copycat.svg",
-  lookalike: "art/lookalike.svg",
-  apprentice: "art/apprentice.svg",
-  noviceseer: "art/noviceseer.svg",
-  investigator: "art/investigator.svg",
-  aurareader: "art/aurareader.svg",
-  imp: "art/imp.svg",
-  watcher: "art/watcher.svg",
-  unveiler: "art/unveiler.svg",
+  werewolf: "art/gen/werewolf.webp",
+  packleader: "art/gen/packleader.webp",
+  prowler: "art/gen/prowler.webp",
+  lackey: "art/gen/lackey.webp",
+  scout: "art/gen/scout.webp",
+  mason: "art/gen/mason.webp",
+  seer: "art/gen/seer.webp",
+  thief: "art/gen/thief.webp",
+  meddler: "art/gen/meddler.webp",
+  sleepwalker: "art/gen/sleepwalker.webp",
+  nightowl: "art/gen/nightowl.webp",
+  villager: "art/gen/villager.webp",
+  hunter: "art/gen/hunter.webp",
+  jester: "art/gen/jester.webp",
+  witch: "art/gen/witch.webp",
+  bodyguard: "art/gen/bodyguard.webp",
+  prince: "art/gen/prince.webp",
+  cursed: "art/gen/cursed.webp",
+  greatwolf: "art/gen/greatwolf.webp",
+  dozingwolf: "art/gen/dozingwolf.webp",
+  copycat: "art/gen/copycat.webp",
+  lookalike: "art/gen/lookalike.webp",
+  apprentice: "art/gen/apprentice.webp",
+  noviceseer: "art/gen/noviceseer.webp",
+  investigator: "art/gen/investigator.webp",
+  aurareader: "art/gen/aurareader.webp",
+  imp: "art/gen/imp.webp",
+  watcher: "art/gen/watcher.webp",
+  unveiler: "art/gen/unveiler.webp",
   back: "art/back.svg",
 };
 
