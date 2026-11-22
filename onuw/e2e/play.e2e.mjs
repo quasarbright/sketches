@@ -591,3 +591,61 @@ test("every tab is the same player until the setting is turned on", async () => 
   assert.equal(await id(b), ib);
   await ctx.close();
 });
+
+test("with the setting off, a second tab joining your own room is told why and pointed at Settings", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const a = await ctx.newPage();
+  await createAs(a, "Mike");
+  const code = await a.evaluate(() => window.__onuw.view.code);
+  const b = await ctx.newPage();
+  await b.goto(`${base}?room=${code}&net=local&fast`);
+  await b.click("button[data-as=player]");
+  await b.getByText("You're already in this room").waitFor();
+  await b.click("main button[data-act=settings]");
+  await Promise.all([b.waitForEvent("load"), b.click("button[data-act=tabs-toggle]")]);
+  await b.fill("#name-input", "Ana");
+  await b.click("button[data-as=player]");
+  await b.waitForFunction(() => window.__onuw.view?.players?.length === 2);
+  await a.waitForFunction(() => window.__onuw.view.players.length === 2);
+  await ctx.close();
+});
+
+test("guests see the host's full card list with live counts, and no − or + buttons", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben"]);
+  const guest = t.pages[1];
+  const total = await t.host.locator(".ms-grid .ms-cardwrap").count();
+  assert.equal(await guest.locator(".ms-grid .ms-cardwrap").count(), total, "the same list as the host");
+  assert.ok(await guest.locator(".ms-grid .ms-off").count() > 0, "unpicked cards show too, dimmed");
+  assert.equal(await guest.locator(".ms-grid .ms-count button").count(), 0);
+  const hint = (p) => p.locator(".ms-grid").locator("xpath=preceding-sibling::p[contains(@class,'ms-hint')][1]").innerText();
+  assert.match(await hint(t.host), /One card for each player.*Cards are listed in wake-up order\. Tap a card to add or remove it\./);
+  assert.match(await hint(guest), /One card for each player.*Cards are listed in wake-up order\.$/);
+  assert.ok(await guest.locator(".ms-grid .ms-count.is-view").count() > 0);
+  // a change by the host shows up for the guest
+  const before = await guest.locator(".ms-grid .ms-cardwrap.is-on").count();
+  await t.host.click(".ms-grid .ms-cardwrap.is-off .ms-pickable >> nth=0");
+  await guest.waitForFunction((n) => document.querySelectorAll(".ms-grid .ms-cardwrap.is-on").length === n + 1, before);
+  // the guest's pill is the same height as the host's
+  const h = (p) => p.evaluate(() => Math.round(document.querySelector(".ms-grid .ms-count").getBoundingClientRect().height));
+  assert.equal(await h(guest), await h(t.host));
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});
+
+test("the lobby has a Share button that opens the system share sheet with the invite link, where there is one", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await tabsArePlayers(ctx);
+  await ctx.addInitScript(() => { navigator.share = (d) => { window.__shared = d; return Promise.resolve(); }; });
+  const p = await ctx.newPage();
+  await createAs(p, "Mike");
+  await p.click("button[data-act=share]");
+  const d = await p.evaluate(() => window.__shared);
+  assert.match(d.url, /room=[A-Z]{4}/);
+  // without the share API there's no Share button, only Copy Invite Link
+  const q = await (await browser.newContext()).newPage();
+  await q.addInitScript(() => { delete Navigator.prototype.share; });
+  await createAs(q, "Ana");
+  assert.equal(await q.locator("button[data-act=share]").count(), 0);
+  assert.equal(await q.locator("button[data-act=invite]").count(), 1);
+  await ctx.close(); await q.context().close();
+});

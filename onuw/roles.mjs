@@ -5,7 +5,7 @@ import { NAMES as N, ART } from "./skin.mjs";
 export const TEAMS = {
   village: { name: "Village", color: "#5aa9e6", letter: "V" },
   wolf: { name: "Wolf team", color: "#e0485a", letter: "W" },
-  jester: { name: "On their own", color: "#f2a541", letter: "T" },
+  jester: { name: `${N.jester} team`, color: "#f2a541", letter: "T" },
 };
 
 // `max`: how many copies the role picker allows. `pair`: comes in twos (Masons).
@@ -61,7 +61,7 @@ export const ROLES = {
   },
   apprentice: {
     more: true, name: N.apprentice, team: "jester", wolf: false, max: 1, step: "apprentice",
-    short: "Wins if the Skinner dies",
+    short: `Wins if the ${N.jester} dies`,
     text: `You wake and see who the ${N.jester} is. You win if the ${N.jester} dies. If no player is the ${N.jester}, you win only if you die, like the ${N.jester}.`,
   },
   mason: {

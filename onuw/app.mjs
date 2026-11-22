@@ -41,7 +41,7 @@ const saveSettings = (x) => ls.set(SETTINGS_KEY, JSON.stringify({ ...settings(),
 let NS = "onuw:";
 async function claimSlot() {
   if (params.get("ns")) { NS = `onuw:${params.get("ns")}:`; return; }
-  if (!settings().tabsArePlayers || !navigator.locks) return;
+  if (!navigator.locks) return;
   const held = new Set();
   const grab = (n) => new Promise((res) => {
     navigator.locks.request(`onuw-slot-${n}`, { ifAvailable: true }, (lock) => {
@@ -50,6 +50,9 @@ async function claimSlot() {
       return lock ? new Promise(() => {}) : undefined; // hold it until the tab goes away
     }).catch(() => res(false));
   });
+  // With the setting off, every tab is the plain namespace. One of them still holds slot 0, so a tab
+  // that turns the setting on later can't take slot 0 and end up the same player as the host tab.
+  if (!settings().tabsArePlayers) { await grab(0); ss.set("onuw:slot", "0"); return; }
   const want = ss.get("onuw:slot");
   let slot = +want || 0;
   // after a refresh the old page may still hold this tab's slot for a moment, so wait for it
@@ -111,7 +114,7 @@ let leaving = false;
 let migratingTo = null;   // guest: the player taking over as host
 let view = null;
 let clockOffset = 0;      // host clock minus ours
-let screen = "home";      // home | connecting | room | kicked | notfound
+let screen = "home";      // home | connecting | room | kicked | notfound | sameplayer
 let roomCode = (params.get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4) || null;
 let lastHostId = null;
 
@@ -164,7 +167,9 @@ function hostOnMessage(id, msg) {
   if (msg.t === "pong") return;
   if (msg.t === "hello") {
     const pid = String(msg.id || "").slice(0, 40);
-    if (!pid || pid === myId) { hostNet.drop(id); return; }
+    if (!pid) { hostNet.drop(id); return; }
+    // another tab of this browser, which is the same player as this host tab
+    if (pid === myId) { hostNet.send(id, { t: "same-player" }); setTimeout(() => hostNet?.drop(id), 300); return; }
     // a refreshed tab replaces its old connection
     for (const [oid, oc] of conns) if (oid !== id && oc.pid === pid) { conns.delete(oid); hostNet.drop(oid); }
     c.pid = pid;
@@ -277,6 +282,7 @@ function joinAsGuest(code, as) {
         return;
       }
       if (m.t === "error") { toast(m.text); return; }
+      if (m.t === "same-player") { screen = "sameplayer"; mode = null; guestNet = null; net.close(); render(); return; }
       if (m.t === "kicked") { screen = "kicked"; mode = null; guestNet = null; net.close(); render(); return; }
       if (m.t === "migrate") { migratingTo = m.hostId; return; }
       if (m.t === "state" && m.state?.hostId === myId) {
@@ -514,6 +520,8 @@ function render() {
   if (screen === "home") html = homeScreen();
   else if (screen === "connecting") html = messageScreen("Connecting…", `Looking for room <b class="ms-mono">${esc(roomCode || "")}</b>.`, true);
   else if (screen === "notfound") html = messageScreen("Room not found", `Nobody is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> right now. Check the code, or start your own room.`, false, true, true);
+  else if (screen === "sameplayer") html = messageScreen("You're already in this room", `Another tab in this browser is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> as you. To join as another player from this tab, turn on <b>Each tab is a different player</b> in Settings.`, false, true, false,
+    `<button class="ms-btn ms-primary" data-act="settings">Settings</button>`);
   else if (screen === "kicked") html = messageScreen("You were removed", "The host removed you from the room.", false, true);
   else if (!view) html = messageScreen("Connecting…", "", true);
   else html = roomScreen();
@@ -540,13 +548,13 @@ function render() {
   refreshPanel();
 }
 
-function messageScreen(title, body, spinner = false, back = false, retry = false) {
+function messageScreen(title, body, spinner = false, back = false, retry = false, first = "") {
   return `<main class="ms-center">
     <div class="ms-hero-moon">${bigMoon()}</div>
     <h1 class="ms-h1">${title}</h1>
     <p class="ms-lede">${body}</p>
     ${spinner ? `<div class="ms-dots"><span></span><span></span><span></span></div>` : ""}
-    ${retry || back ? `<div class="ms-msg-actions">${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry ? "" : "ms-primary"}" data-act="home">Main Menu</button>` : ""}</div>` : ""}
+    ${retry || back ? `<div class="ms-msg-actions">${first}${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry || first ? "" : "ms-primary"}" data-act="home">Main Menu</button>` : ""}</div>` : ""}
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -621,7 +629,7 @@ function lobby() {
       </div>
       <div class="ms-card-label">Added for the ${N.packleader}</div>
     </div>` : "";
-  const cards = ROLE_ORDER.filter((r) => host || v.roles[r]).map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
+  const cards = ROLE_ORDER.map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
   const problem = v.startProblem;
   const namePrompt = needName ? `<form class="ms-panel ms-name-first" data-form="firstname">
       <label class="ms-h2" for="name-input">Enter your name</label>
@@ -638,7 +646,10 @@ function lobby() {
         <div class="ms-code">${esc(v.code)}</div>
         <div class="ms-code-words">${esc(codeWords(v.code))}</div>
       </div>
-      <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy Invite Link</span></button>
+      <div class="ms-invite-btns">
+        <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy Invite Link</span></button>
+        ${navigator.share ? `<button class="ms-btn" data-act="share">${icon("share")}<span>Share</span></button>` : ""}
+      </div>
     </section>
 
     <section>
@@ -656,7 +667,7 @@ function lobby() {
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use Suggested Cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""}${host ? " Tap a card to add or remove it." : ""}</p>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""} Cards are listed in wake-up order.${host ? " Tap a card to add or remove it." : ""}</p>
       <div class="ms-grid">${cards}</div>
     </section>
 
@@ -676,18 +687,17 @@ function lobby() {
 function pickerCard(r, count, host) {
   const R = ROLES[r];
   const on = count > 0;
-  // Every card that can have more than one copy shows the same count pill, for the host and
-  // the guests alike; buttons that can't be used (guests, the Masons' fixed pair, the limits)
-  // are disabled rather than left out, so all the cards look and behave the same.
+  // Every card that can have more than one copy shows the same count pill. The host gets − and +
+  // (disabled where they can't be used: the Masons' fixed pair, the limits). Guests see the same
+  // full list with live counts, but only the number, since they can't change anything.
   const counted = on && (R.max > 1 || R.pair);
-  const fixed = !host || R.pair;
-  const stepper = counted
-    ? `<div class="ms-count">
-        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" ${fixed ? "disabled" : ""}>${icon("minus")}</button>
+  const stepper = !counted ? ""
+    : !host ? `<div class="ms-count is-view"><span>×${count}</span></div>`
+    : `<div class="ms-count">
+        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" ${R.pair ? "disabled" : ""}>${icon("minus")}</button>
         <span>×${count}</span>
-        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${fixed || count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
-      </div>`
-    : "";
+        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${R.pair || count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
+      </div>`;
   const label = "";
   return `<div class="ms-cardwrap ${on ? "is-on" : "is-off"}">
     ${card(r, {
@@ -966,7 +976,7 @@ function secretPanel(g) {
   </section>`;
 }
 
-// The Pack Leader's spare Werewolf card, drawn apart from the role cards.
+// The Alpha Wolf's spare Werewolf card, drawn apart from the role cards.
 function spareCard(label) {
   return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
 }
@@ -975,7 +985,7 @@ function inGameStrip() {
   const v = view;
   return `<section>
     <h2 class="ms-h2">Cards in This Game</h2>
-    <p class="ms-hint">In the order they wake up.</p>
+    <p class="ms-hint">Cards are listed in wake-up order.</p>
     <div class="ms-row ms-deck-row">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "sm", label: v.roles[r] > 1 ? `×${v.roles[r]}` : "" }))).join("")}
     ${v.game.hasSpare ? spareCard("Spare") : ""}
     </div>
@@ -1242,7 +1252,7 @@ function cheatsheetPanel() {
   const inGame = ROLE_ORDER.filter((r) => roles[r]);
   const list = (inGame.length ? inGame : ROLE_ORDER);
   return `<h2 class="ms-h2">Cards in This Game</h2>
-    <p class="ms-hint">In the order they wake up.</p>
+    <p class="ms-hint">Cards are listed in wake-up order.</p>
     <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
     <h2 class="ms-h2">Who Wins</h2>
     <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>`;
@@ -1367,7 +1377,8 @@ function onClick(e) {
     case "tabs-toggle": {
       const next = !settings().tabsArePlayers;
       saveSettings({ tabsArePlayers: next });
-      ss.set("onuw:slot", "");
+      // a tab turning it on stays the player it was (slot 0) if it can; turning it off, every tab is slot 0
+      if (!next) ss.set("onuw:slot", "0");
       t.setAttribute?.("aria-checked", String(next));
       // who this tab is gets decided on load
       setTimeout(() => location.reload(), 250);
@@ -1390,13 +1401,11 @@ function onClick(e) {
     case "spec-off": ss.set(joinedKey(roomCode), "player"); send({ t: "setSpectator", on: false }); return;
     case "invite": {
       const link = inviteLink();
-      if (navigator.share && matchMedia("(pointer: coarse)").matches) {
-        navigator.share({ title: TITLE, text: `Join my ${TITLE} room ${roomCode}`, url: link }).catch(() => {});
-      } else {
-        navigator.clipboard?.writeText(link).then(() => toast("Invite link copied"), () => toast(link));
-      }
+      navigator.clipboard?.writeText(link).then(() => toast("Invite link copied"), () => toast(link));
       return;
     }
+    // the system share sheet (on an iPhone it can also show the link as a QR code)
+    case "share": navigator.share?.({ title: TITLE, text: `Join my ${TITLE} room ${roomCode}`, url: inviteLink() }).catch(() => {}); return;
     case "wack": openWack({ card: (r) => card(r, { size: "sm", info: false }), names: { werewolf: N.werewolf, villager: N.villager } }); return;
     case "suggest": send({ t: "suggestRoles" }); return;
     case "start": send({ t: "start" }); return;

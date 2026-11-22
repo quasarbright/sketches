@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRoom, handle, tick, viewFor, resolveVotes, startProblem, transferHost } from "./engine.mjs";
-import { ROLES } from "./roles.mjs";
+import { ROLES, TEAMS } from "./roles.mjs";
 
 const FAST = { timing: { stepMin: 100, stepJitter: 0 } };
 
@@ -787,4 +787,11 @@ test("the Doppelganger does a look or swap right away, and doesn't wake again fo
   assert.equal(s.g.step.done.a, true);
   nightTo(s, "nightowl", 1000);
   assert.deepEqual(s.g.step.actors.sort(), ["a", "b"]);
+});
+
+test("no card text uses a retired name", async () => {
+  const { DETAILS } = await import("./details.mjs");
+  const retired = ["Skinner", "Pack Leader", "Prowler", "Lackey", "Ward", "Night Owl", "Meddler", "Alcoholic", "Sleepwalker", "Jester", "Moonswap"];
+  const texts = [...Object.values(ROLES).flatMap((r) => [r.name, r.short, r.text, r.note]), ...Object.values(DETAILS), ...Object.values(TEAMS).map((t) => t.name)].filter(Boolean);
+  for (const t of texts) for (const n of retired) assert.ok(!new RegExp(`\\b${n}\\b`).test(t), `"${n}" in: ${t}`);
 });
