@@ -270,3 +270,21 @@ export function fitScreenH(hAsked, ratio, clearH) {
 export function screenPos(x, y, gx, gy, halfX, halfY) {
   return { sx: x / (halfX * gx), sy: y / (halfY * gy) };
 }
+
+/* ---------------- sensor and spread ---------------- */
+
+// The panel's controls for a straight-ray lens: a sensor at your eye, A meters from its middle to
+// its top edge, whose rays leave at half-angle phi to the middle ray. z meters out the view's
+// half-height is A + z·tan(phi): positive spread fans out, 0 is parallel, negative comes together.
+// The renderer works in a reference distance D, the view's half-height H there, and the sensor's
+// size as a fraction s of H, so H = A + D·tan(phi) and s = A / H. The picture doesn't depend on
+// D, so it stays at D0 unless the rays cross before it (negative spread), when it moves to
+// halfway to where they cross.
+export function sensorSpreadToLens(A, tanPhi, D0) {
+  const D = tanPhi < 0 ? Math.min(D0, 0.5 * A / -tanPhi) : D0;
+  const H = A + D * tanPhi;
+  return { D, H, s: A / H };
+}
+export function lensToSensorSpread(s, H, D) {
+  return { A: s * H, tanPhi: (1 - s) * H / D };
+}

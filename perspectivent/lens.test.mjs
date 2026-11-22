@@ -242,7 +242,7 @@ test("every preset's back plane clears the rails at the default settings", () =>
     assert.ok(h > 0.3, `${p.id}: screen still usable`);
   }
   assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
-  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*state\.split = false;.*\s*setAxis\(.*\);\s*fitScreen\(\);/);
+  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*state\.split = false;.*\s*setAxis\(.*\);\s*state\.D = D0; state\.Hasked = CLEAR_H;\s*fitScreen\(\);/);
   assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
 });
 
@@ -289,4 +289,30 @@ test("the far ground fades into the same haze the sky shows below the horizon", 
   assert.match(MAIN, /"horizontal: f\(z\) ="/);
   assert.match(HTML, /vertical: f\(z\) =/);
   assert.doesNotMatch(MAIN + HTML, /across: f\(z\)|up\/down: f\(z\)/);
+});
+
+import { sensorSpreadToLens, lensToSensorSpread } from "./lens.mjs";
+// Mike, 2026-11-22: no screen. Straight-ray lenses are a sensor size and a spread angle, positive
+// through 0 to negative, and the view z meters out is A + z·tan(phi) tall (half), whatever D is.
+test("sensor and spread give the view A + z·tan(phi), and survive the round trip", () => {
+  for (const [A, phi] of [[0, 30], [0.7, 30], [1.4, 0], [1.4, -20], [0.3, -40], [1.2, 70]]) {
+    const t = Math.tan(phi * Math.PI / 180);
+    const { D, H, s } = sensorSpreadToLens(A, t, 2.42);
+    assert.ok(H > 0 && D > 0, `${A},${phi}: positive view`);
+    const g = normalizedLens(backPlaneF(s, D), D);
+    for (const z of [0.5, 1, 3, 10]) {
+      if (t < 0 && z > A / -t) continue;
+      assert.ok(Math.abs(H * g(z) - (A + z * t)) < 1e-9, `${A},${phi} at ${z}`);
+    }
+    const back = lensToSensorSpread(s, H, D);
+    assert.ok(Math.abs(back.A - A) < 1e-9 && Math.abs(back.tanPhi - t) < 1e-9);
+  }
+});
+test("the panel has sensor size and spread, and no screen", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.match(html, />sensor size</); assert.match(html, />spread</);
+  assert.match(html, /id="p" min="-90"/);
+  assert.doesNotMatch(html, /screen distance|screen height|id="dRow"|id="hRow"/);
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(main, /screenFill|screenEdge|tag\("screen"/);
 });

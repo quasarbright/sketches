@@ -6,6 +6,7 @@ import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import {
   parseExpr, backPlaneF, backPlaneText, convergenceDepth, normalizedLens, compileLens, planeRatio, fitScreenH,
+  sensorSpreadToLens, lensToSensorSpread,
   LUT, sampleLens, PRESETS, linearS, NEAR,
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
@@ -177,12 +178,13 @@ const EYE = 1.65;     // your eye, above whatever you stand on
  * lens state (what the panel edits)
  * ===================================================================== */
 const state = {
-  D: 2.42,        // screen distance (m)
-  H: 1.4,         // half the screen's height (m). The screen, and the orthographic back plane the
-                  // same size, are centered on your eye, 1.65 m above the ties you stand on. A
-                  // 2.8 m screen ends 8 cm above the rail tops: no part of it is in the ground or the
-                  // rails, in any lens, looking any way. With D = 2.42 a normal camera sees 60°.
-  Hasked: 1.4,    // the screen size you asked for; H is smaller when a lens needs it (fitScreen)
+  // The lens is normalized at a reference distance D, and H is half the view's height there. The
+  // panel shows a straight-ray lens as a sensor and a spread instead (sensorSpread); the picture
+  // doesn't depend on D. A 2.8 m view (and sensor, for orthographic) centered on your eye ends
+  // 8 cm above the rail tops. With D = 2.42 a normal camera sees 60°.
+  D: 2.42,
+  H: 1.4,
+  Hasked: 1.4,    // the size asked for; H is smaller when a lens's sensor would reach the rails (fitScreen)
   split: false,
   active: "x",    // which field the presets and slider apply to when split
   x: { src: "z", s: 0 },   // s is the back-plane size, or null when the lens isn't in that family
@@ -1033,16 +1035,14 @@ $("reset").addEventListener("click", resetPlayer);
 /* =====================================================================
  * the panel
  * ===================================================================== */
-const D_MIN = 1, D_MAX = 1000;
-const dFromSlider = (v) => D_MIN * Math.pow(D_MAX / D_MIN, v / 100);
-const sliderFromD = (d) => 100 * Math.log(d / D_MIN) / Math.log(D_MAX / D_MIN);
+const D0 = 2.42; // the reference distance the lens is normalized at; the picture doesn't depend on it
 const fmtD = (d) => (d < 9.95 ? d.toFixed(1) : Math.round(d)) + " m";
-const H_MIN = 0.25, H_MAX = 25; // half heights; the slider shows the full height
-const hFromSlider = (v) => H_MIN * Math.pow(H_MAX / H_MIN, v / 100);
-const sliderFromH = (h) => 100 * Math.log(h / H_MIN) / Math.log(H_MAX / H_MIN);
-// the tallest screen whose bottom edge clears the rails at your feet (the default)
+// the tallest view, and sensor, whose bottom edge clears the rails at your feet (the default)
 const CLEAR_H = EYE - RAIL_H - 0.08;
-const S_MAX = 3; // the back plane is at most 3× the screen, however the screen is resized
+const A_MAX = CLEAR_H;            // the sensor's half height: it stops above the rails
+const DEG = Math.PI / 180;
+const MIN_HALF = 1 * DEG;         // rays from one point spread at least this much (half angle)
+const MIN_CROSS = 0.5;            // rays that come together cross at least this far ahead
 
 const chipsEl = $("chips");
 for (const p of PRESETS) {
@@ -1065,6 +1065,7 @@ for (const p of PRESETS) {
     state.sphere = false;
     state.split = true;
     state.x = { src: "1", s: 1 }; state.y = { src: "z", s: 0 };
+    state.D = D0; state.Hasked = CLEAR_H;
     fitScreen();
     syncPanel(); applyLens(true);
   });
@@ -1073,7 +1074,7 @@ for (const p of PRESETS) {
 {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = "sphere";
-  b.title = "The screen is a latitude-longitude rectangle on a sphere around your eye: across is the angle left and right, up is the angle up and down. Make it 360° wide to see all the way around.";
+  b.title = "The view is a latitude-longitude rectangle on a sphere around your eye: across is the angle left and right, up is the angle up and down. Make it 360° wide to see all the way around.";
   b.textContent = "sphere";
   b.addEventListener("click", () => { state.sphere = true; syncPanel(); });
   chipsEl.appendChild(b);
@@ -1084,8 +1085,8 @@ function setAxis(ax, v) {
   state[ax] = v;
   if (!state.split) state.y = { ...v };
 }
-// Picking a lens or moving the screen re-fits the screen to the size you asked for, or smaller if
-// that lens's back plane would otherwise reach into the ground or the rails.
+// Picking a lens re-fits the view to the size asked for, or smaller if that lens's sensor would
+// otherwise reach into the ground or the rails.
 function fitScreen() {
   const H = fitScreenH(state.Hasked, planeRatio(axisFn(state.split ? "y" : "x"), state.D), CLEAR_H);
   if (Math.abs(H - state.H) < 1e-9) return;
@@ -1095,6 +1096,7 @@ function choosePreset(p) {
   state.sphere = false;
   state.split = false; // every chip but "ortho x, persp y" is one lens for both directions
   setAxis(activeAxis(), { src: p.src, s: p.s ?? null });
+  state.D = D0; state.Hasked = CLEAR_H;
   fitScreen();
   clearErrors();
   syncPanel();
@@ -1128,7 +1130,7 @@ function syncPanel() {
   $("fxLabel").textContent = state.split ? "horizontal: f(z) =" : "f(z) =";
   $("fxField").classList.toggle("pv-active", state.split && ax === "x");
   $("fyField").classList.toggle("pv-active", state.split && ax === "y");
-  for (const id of ["fRow", "dRow", "hRow"]) $(id).hidden = state.sphere;
+  for (const id of ["fRow", "pRow"]) $(id).hidden = state.sphere;
   // with two lenses the rays' start is different horizontally and vertically: the caption says how
   $("sRow").hidden = state.sphere || state.split;
   $("sphereRows").hidden = !state.sphere;
@@ -1147,52 +1149,59 @@ function syncPanel() {
     const p = PRESETS.find((q) => q.id === id);
     b.classList.toggle("is-on", !mixedOn && sameLens(ax, { src: p.src, s: p.s ?? null }));
   }
-  const s = effS(ax);
-  const row = $("sRow");
-  row.classList.toggle("pv-na", s == null);
-  if (s != null) { $("s").value = Math.min(3, Math.max(0, s)); $("sVal").textContent = sLabel(s); }
+  const ss = sensorSpread();
+  $("sRow").classList.toggle("pv-na", !ss);
+  if (ss) { $("s").value = 2 * ss.A; $("sVal").textContent = ss.A < 1e-9 ? "a point (your eye)" : fmtD(2 * ss.A); }
   else $("sVal").textContent = "rays are curved";
-  $("sNote").textContent = sNote(s);
-  $("d").value = sliderFromD(state.D);
-  $("dVal").textContent = fmtD(state.D);
-  // with parallel rays on both axes the screen's distance can't change the picture; say so, or a
-  // slider that does nothing looks broken
-  const parallel = [ "x", state.split ? "y" : "x" ].every((a) => { const v = effS(a); return v != null && Math.abs(v - 1) < 1e-9; });
-  $("dNote").textContent = parallel ? "Parallel rays: distance changes nothing." : "";
-  $("h").value = sliderFromH(state.H);
-  $("hVal").textContent = fmtD(2 * state.H) + " tall";
-  const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
-  $("hNote").textContent = [
-    state.H < state.Hasked - 1e-6 ? "Shrunk so the sensor stays above the rails." : atClear ? "Tallest that clears the rails." : "",
-    same && !state.split ? "As tall as the sensor, so the rays run parallel." : "",
-  ].filter(Boolean).join(" ");
-  // tick marks where the screen's bottom is at your feet, and where it matches the back plane
-  $("hGroundTick").value = sliderFromH(CLEAR_H);
-  $("hTick").value = s != null && s > 0 ? sliderFromH(s * state.H) : -10;
+  $("sNote").textContent = ss && ss.A < 1e-9 ? "A point: your eye, a normal camera." : ss && ss.A > A_MAX - 1e-3 ? "As tall as it gets without reaching the rails." : "";
+  const phi = ss ? ss.phi : zoomPhi();
+  $("p").value = 2 * phi / DEG;
+  $("pVal").textContent = Math.round(2 * phi / DEG) + "°";
+  $("pNote").textContent = spreadNote(ss);
   updateCaption();
 }
-// the back plane's own height, and how it compares with the screen's
-function sLabel(s) {
-  if (Math.abs(s) < 1e-9) return "a point (your eye)";
-  return fmtD(2 * s * state.H);
+// The active lens as a sensor and a spread, when its rays are straight (null when they curve, or
+// with two lenses, where the sliders can only zoom). A is the sensor's half height in meters,
+// phi the rays' half angle.
+function sensorSpread() {
+  if (state.split) return null;
+  const s = effS("x");
+  if (s == null) return null;
+  const { A, tanPhi } = lensToSensorSpread(s, state.H, state.D);
+  return { A: Math.max(0, A), phi: Math.atan(tanPhi) };
 }
-// and how it compares with the screen, in words
-function sNote(s) {
-  if (s == null) return "";
-  if (Math.abs(s) < 1e-9) return "A point: your eye, a normal camera. Make the sensor as tall as the screen and the rays run parallel.";
-  const low = s * state.H > CLEAR_H + 1e-3 ? " Dips into the ground." : "";
-  if (Math.abs(s - 1) < 1e-9) return "As tall as the screen, so the rays run parallel: orthographic." + low;
-  return `${+s.toFixed(2)}× the screen's height.` + (s > 1 ? " Bigger than the screen, so the rays cross ahead." : "") + low;
+// with curved rays (or two lenses) the spread slider zooms: the half angle the view covers at D
+const zoomPhi = () => Math.atan(state.H / state.D);
+function spreadNote(ss) {
+  if (!ss) return `The rays curve, so this is how far they've spread ${fmtD(state.D)} out. It zooms.`;
+  if (Math.abs(ss.phi) < 1e-6) return "Parallel rays: nothing shrinks with distance. Orthographic.";
+  if (ss.phi < 0) return `The rays come together and cross ${fmtD(ss.A / -Math.tan(ss.phi))} ahead. Far things look bigger, and past the crossing they're upside down.`;
+  if (ss.A < 1e-9) return "The rays fan out from your eye: things shrink with distance.";
+  return "The rays fan out from the sensor: far things shrink, less than for an eye.";
+}
+// Set the lens from a sensor and a spread, keeping each in range: rays from a point must fan out,
+// and rays that come together must cross at least MIN_CROSS ahead. `moved` is the slider that
+// moved; the other one wins when they disagree.
+function setSensorSpread(A, phi, moved) {
+  A = Math.min(A_MAX, Math.max(0, A));
+  const needA = (ph) => (ph >= MIN_HALF ? 0 : Math.max(0.03, MIN_CROSS * Math.max(0, -Math.tan(ph))));
+  if (moved === "A") A = Math.max(A, needA(phi));
+  else if (A < needA(phi)) phi = A < 0.03 ? MIN_HALF : -Math.atan(A / MIN_CROSS);
+  const { D, H, s } = sensorSpreadToLens(A, Math.tan(phi), D0);
+  state.D = D; state.H = state.Hasked = H;
+  setAxis("x", { src: "", s });
 }
 
 function onField(ax) {
   const inp = $(ax === "x" ? "fx" : "fy");
   const err = $(ax === "x" ? "fxErr" : "fyErr");
   const field = $(ax === "x" ? "fxField" : "fyField");
-  const r = compileLens(inp.value, state.D);
+  const r = compileLens(inp.value, D0);
   if (r.error) { err.textContent = r.error; field.classList.add("pv-bad"); return; }
   err.textContent = ""; field.classList.remove("pv-bad");
+  if (state.D !== D0) { state.Hasked = state.H * D0 / state.D; state.D = D0; }
   setAxis(ax, { src: inp.value, s: null });
+  fitScreen();
   syncPanel();
   applyLens(false);
 }
@@ -1205,44 +1214,23 @@ for (const ax of ["x", "y"]) {
 }
 
 $("s").addEventListener("input", (e) => {
-  let s = +e.target.value;
-  for (const snap of [0, 1]) if (Math.abs(s - snap) < 0.09) s = snap;
-  setAxis(activeAxis(), { src: "", s });
+  let A = +e.target.value / 2; // the slider shows the full height
+  if (A < 0.04) A = 0;
+  const ss = sensorSpread() ?? { A: 0, phi: zoomPhi() };
+  setSensorSpread(A, ss.phi, "A");
   clearErrors();
   syncPanel();
   applyLens(false);
 });
-$("d").addEventListener("input", (e) => {
-  let D = dFromSlider(+e.target.value);
-  // a typed lens has to stay positive at the screen: stop at the last distance where it is
-  const bad = (d) => ["x", "y"].some((a) => state[a].s == null && compileLens(state[a].src, d).error);
-  if (bad(D)) {
-    let lo = state.D, hi = D; // lo is valid
-    for (let i = 0; i < 40; i++) { const m = Math.sqrt(lo * hi); if (bad(m)) hi = m; else lo = m; }
-    // stop a little short: right at the edge f(D) is nearly 0 and the view degenerates
-    D = Math.max(Math.min(state.D, lo), lo * 0.9);
-    $("dErr").textContent = `f(z) isn't positive past ${fmtD(lo)}, so the screen can't go further.`;
-  } else $("dErr").textContent = "";
-  state.D = D;
-  fitScreen();
-  syncPanel();
-  applyLens(false);
-});
-$("d").addEventListener("change", () => { $("dErr").textContent = ""; });
-// the screen's size alone: a normal camera sees more or less, orthographic sees a bigger or
-// smaller window, and nothing else moves
-// The screen's size alone. The back plane keeps its own size in meters, so its ratio to the screen
-// changes (orthographic stops being orthographic), except that the slider snaps to where the two
-// sizes match.
-$("h").addEventListener("input", (e) => {
-  const v = +e.target.value, H0 = state.H;
-  let H = hFromSlider(v);
-  const s0 = effS(activeAxis());
-  if (s0 != null && s0 > 0 && Math.abs(v - sliderFromH(s0 * H0)) < 3.5) H = s0 * H0;
-  else if (Math.abs(v - sliderFromH(CLEAR_H)) < 3.5) H = CLEAR_H;
-  for (const a of ["x", "y"]) if (state[a].s != null) state[a] = { src: "", s: Math.min(S_MAX, state[a].s * H0 / H) };
-  if (!state.split) state.y = { ...state.x };
-  state.H = state.Hasked = H;
+$("p").addEventListener("input", (e) => {
+  let full = +e.target.value;
+  for (const snap of [0, 60]) if (Math.abs(full - snap) < 3) full = snap;
+  const ss = sensorSpread();
+  if (ss) setSensorSpread(ss.A, full / 2 * DEG, "phi");
+  else { // curved rays: zoom
+    state.Hasked = state.D * Math.tan(Math.max(MIN_HALF, full / 2 * DEG));
+    fitScreen();
+  }
   syncPanel();
   applyLens(false);
 });
@@ -1272,9 +1260,9 @@ function updateCaption() {
   if (s != null) {
     if (Math.abs(s) < 1e-9) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
     else if (s < 0) c = "The sensor is flipped, so the rays cross <b>behind</b> you.";
-    else if (s < 1) c = `The rays start on a sensor <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
+    else if (s < 1) c = `The rays start on a <b>${fmtD(2 * s * state.H)}</b> sensor and fan out, so far things shrink less.`;
     else if (Math.abs(s - 1) < 1e-9) c = "Rays are <b>parallel</b>, so nothing shrinks. Looking level, the ground is edge-on.";
-    else c = `The rays start on a sensor <b>bigger than the screen</b>, so they cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
+    else c = `The rays start on a <b>${fmtD(2 * s * state.H)}</b> sensor and come together, crossing <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
@@ -1284,11 +1272,11 @@ function updateCaption() {
       if (v == null) return `f(z) = ${escapeHtml(state[a].src)}`;
       if (Math.abs(v) < 1e-9) return "rays fan out from your eye, like a camera";
       if (Math.abs(v - 1) < 1e-9) return "rays run parallel, so nothing shrinks";
-      return `rays start on a sensor ${+v.toFixed(2)}× the screen`;
+      return v > 1 ? `rays come together from a ${fmtD(2 * v * state.H)} sensor` : `rays fan out from a ${fmtD(2 * v * state.H)} sensor`;
     };
     c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
-  if (state.sphere) c = `The screen is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
+  if (state.sphere) c = `The view is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -1390,8 +1378,6 @@ const eyeball = new THREE.Group();
   eyeball.add(white, iris, pupil);
 }
 const planeEdge = new LineSegments2(rectGeo, fat(0x3d9be9, 2.5));
-const screenFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xe8553d, 0.3));
-const screenEdge = new LineSegments2(rectGeo, fat(0xff5a3c, 3));
 const RAY_U = [-1, 0, 1], RAY_STEPS = 48, N_RAYS = RAY_U.length ** 2;
 const rayPos = new Float32Array(N_RAYS * RAY_STEPS * 2 * 3);
 const rayGeo = new LineSegmentsGeometry();
@@ -1442,7 +1428,7 @@ function updateSpherePatch() {
   run(SPH_V, (t) => at(-1, -1 + 2 * t)); run(SPH_V, (t) => at(1, -1 + 2 * t));
   sphereEdgeGeo.setPositions(edge);
 }
-helpers.add(planeFill, planeEdge, eyeball, screenFill, screenEdge, sphereFill, sphereEdge, rays);
+helpers.add(planeFill, planeEdge, eyeball, sphereFill, sphereEdge, rays);
 helpers.traverse((o) => o.layers.set(INSET));
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -1460,11 +1446,7 @@ function updateInset(aspect) {
   for (const o of [planeFill, planeEdge]) {
     o.visible = isPlane; o.position.copy(eye); o.quaternion.copy(q); o.scale.set(px || 1, py || 1, 1);
   }
-  for (const o of [screenFill, screenEdge]) {
-    o.position.copy(eye).addScaledVector(fwd, state.D); o.quaternion.copy(q); o.scale.set(2 * hx, 2 * hy, 1);
-  }
   eyeball.visible = !isPlane || state.sphere; eyeball.position.copy(eye); eyeball.quaternion.copy(q); eyeball.scale.setScalar(2);
-  for (const o of [screenFill, screenEdge]) o.visible = !state.sphere;
   for (const o of [sphereFill, sphereEdge]) { o.visible = state.sphere; o.position.copy(eye); o.quaternion.copy(q); }
   if (state.sphere) return updateInsetSphere(aspect, eye, q, fwd);
   // the rays through the screen's corners, edge middles and center, as far as they go
@@ -1571,9 +1553,8 @@ function renderInset() {
   const top = (o, sy) => _w.set(0, 0.5 * sy, 0).applyQuaternion(o.quaternion).multiplyScalar(o.scale.y).add(o.position);
   if (state.sphere) {
     _w.fromArray(patchDir(0, 1)).multiplyScalar(SIDE_R);
-    tag("screen", _w.applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
+    tag("view", _w.applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
   }
-  else tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
   tag(planeEdge.visible ? "sensor" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -30);
   insetFog.near = noFog.near; insetFog.far = noFog.far;
   lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
@@ -1626,7 +1607,7 @@ function frame(now) {
 }
 let wasMorphing = false;
 const redrawDiagram = () => {}; // the side view redraws every frame
-for (const id of ["s", "d", "fx", "fy"]) $(id).addEventListener("input", redrawDiagram);
+for (const id of ["s", "p", "fx", "fy"]) $(id).addEventListener("input", redrawDiagram);
 chipsEl.addEventListener("click", redrawDiagram);
 new ResizeObserver(redrawDiagram).observe(diag);
 

@@ -197,7 +197,7 @@
 
   <control-panel floating title="Lens">
     <canvas class="pv-diagram" id="diagram"
-      title="Side view of the camera. Each line is the path a ray of light takes from the eye, through the red screen, into the world. Everything on one line lands on the same spot of the picture."></canvas>
+      title="Side view of your eye, or the sensor, and the rays leaving it. Everything on one ray lands on the same spot of the picture."></canvas>
     <p class="pv-caption" id="caption"></p>
 
     <div class="control" id="fRow">
@@ -220,55 +220,43 @@
     <div id="sphereRows" hidden>
       <div class="control">
         <div class="control-head">
-          <span class="name" title="How far around the screen reaches, left to right. 360° is all the way around you.">angular width</span>
+          <span class="name" title="How far around the view reaches, left to right. 360° is all the way around you.">angular width</span>
           <span class="value" id="awVal">160°</span>
         </div>
         <datalist id="awTicks"><option value="180"></option><option value="360"></option></datalist>
         <input type="range" id="aw" min="10" max="360" step="1" value="160" list="awTicks"
-          title="How far around the screen reaches, left to right. 360° is all the way around you." />
+          title="How far around the view reaches, left to right. 360° is all the way around you." />
       </div>
       <div class="control">
         <div class="control-head">
-          <span class="name" title="How far the screen reaches up and down. 180° is from straight down to straight up. It snaps to where a degree is as tall as it is wide on screen, so nothing looks stretched (undistorted).">angular height</span>
+          <span class="name" title="How far the view reaches up and down. 180° is from straight down to straight up. It snaps to where a degree is as tall as it is wide on screen, so nothing looks stretched (undistorted).">angular height</span>
           <span class="value" id="ahVal">90°</span>
         </div>
         <datalist id="ahTicks"><option id="ahTick" value="90"></option><option value="180"></option></datalist>
         <input type="range" id="ah" min="10" max="180" step="0.1" value="90" list="ahTicks"
-          title="How far the screen reaches up and down. 180° is from straight down to straight up. It snaps to where a degree is as tall as it is wide on screen, so nothing looks stretched (undistorted)." />
+          title="How far the view reaches up and down. 180° is from straight down to straight up. It snaps to where a degree is as tall as it is wide on screen, so nothing looks stretched (undistorted)." />
       </div>
     </div>
 
     <div class="control" id="sRow">
       <div class="control-head">
-        <span class="name" title="How tall the sensor at your eye is that the rays start from, in meters. A point is your eye: a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead.">sensor size</span>
-        <span class="value" id="sVal">your eye</span>
+        <span class="name" title="How tall the sensor at your eye is, the strip the rays start from. A point is your eye: a normal camera.">sensor size</span>
+        <span class="value" id="sVal">a point (your eye)</span>
       </div>
-      <datalist id="sTicks"><option value="1"></option></datalist>
-      <input type="range" id="s" min="0" max="3" step="0.005" value="0" list="sTicks"
-        title="How tall the sensor at your eye is that the rays start from, in meters. A point is your eye: a normal camera. As tall as the screen (1:1) makes the rays parallel: orthographic. Taller than the screen and the rays meet somewhere ahead." />
+      <input type="range" id="s" min="0" max="2.94" step="0.01" value="0"
+        title="How tall the sensor at your eye is, the strip the rays start from. A point is your eye: a normal camera." />
       <p class="pv-note" id="sNote"></p>
     </div>
 
-    <div class="control" id="dRow">
+    <div class="control" id="pRow">
       <div class="control-head">
-        <span class="name" title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing.">screen distance</span>
-        <span class="value" id="dVal">2.4 m</span>
+        <span class="name" title="The angle between the top and bottom rays. Positive fans out like an eye (things shrink with distance), 0 is parallel (orthographic, nothing shrinks), negative comes together (reverse perspective: far things look bigger).">spread</span>
+        <span class="value" id="pVal">60°</span>
       </div>
-      <input type="range" id="d" min="0" max="100" step="0.1" value="33.3"
-        title="How far ahead the screen is. Things at this distance keep their size whatever the lens does. With parallel rays (orthographic) it changes nothing." />
-      <p class="pv-error" id="dErr"></p>
-      <p class="pv-note" id="dNote"></p>
-    </div>
-
-    <div class="control" id="hRow">
-      <div class="control-head">
-        <span class="name" title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall.">screen height</span>
-        <span class="value" id="hVal">2.8 m tall</span>
-      </div>
-      <datalist id="hTicks"><option id="hTick" value="-10"></option><option id="hGroundTick" value="-10"></option></datalist>
-      <input type="range" id="h" min="0" max="100" step="0.1" value="37.4" list="hTicks"
-        title="How tall the screen is. A normal camera sees more of the world through a bigger screen; orthographic sees a window exactly this tall." />
-      <p class="pv-note" id="hNote">The tallest screen that stays above the rails at your feet.</p>
+      <datalist id="pTicks"><option value="0"></option><option value="60"></option></datalist>
+      <input type="range" id="p" min="-90" max="150" step="1" value="60" list="pTicks"
+        title="The angle between the top and bottom rays. Positive fans out like an eye (things shrink with distance), 0 is parallel (orthographic, nothing shrinks), negative comes together (reverse perspective: far things look bigger)." />
+      <p class="pv-note" id="pNote"></p>
     </div>
 
   </control-panel>

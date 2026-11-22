@@ -1,5 +1,5 @@
-// The side-view ray diagram: the eye on the left, the screen at distance D, and the path each
-// ray takes into the world. A ray through screen height u is the set of points y = u * h * g(z),
+// The side-view ray diagram: the eye (or sensor) on the left and the path each ray takes into
+// the world. The ray for picture height u is the set of points y = u * h * g(z),
 // where g is the normalized lens, so this draws the lens itself, not an illustration of it.
 import { LUT, convergenceDepth } from "./lens.mjs";
 
@@ -69,10 +69,6 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground =
   if (gx) rays(gx, COL.rayX, [4, 3]);
   rays(gy, COL.ray, []);
 
-  // the screen
-  ctx.strokeStyle = COL.screen; ctx.lineWidth = 2.5; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(X(D), Y(h)); ctx.lineTo(X(D), Y(-h)); ctx.stroke();
-
   // the back plane (or eye point): where the rays start, read off the lens itself at the eye, so
   // curved lenses show theirs too (1/z's is infinitely big)
   ctx.strokeStyle = COL.plane; ctx.fillStyle = COL.plane;
@@ -102,7 +98,6 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground =
     ctx.fillStyle = color; ctx.textAlign = "left";
     ctx.fillText(txt, x0, y);
   };
-  label("screen", X(D), Math.min(H - 8, Y(-h) + 11), "center", COL.screen);
-  label("eye", X(0) - 2, 9, "left", COL.plane);
+  label(g0 <= 0.01 ? "eye" : "sensor", X(0) - 2, 9, "left", COL.plane);
   if (ground != null && Y(-ground) + 8 < H) label("ground", X(zMax) - 2, Y(-ground) + 9, "right", "rgba(150,195,115,1)");
 }
