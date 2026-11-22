@@ -859,7 +859,7 @@ function promptPanel(p, g) {
     case "center1":
       body = centers;
       ready = csel.length === 1;
-      confirm = p.step === "sleepwalker" ? (ready ? `Swap with center ${csel[0] + 1}` : "Pick a center card") : (ready ? `Look at center ${csel[0] + 1}` : "Pick a center card");
+      confirm = (p.as || p.step) === "sleepwalker" ? (ready ? `Swap with center ${csel[0] + 1}` : "Pick a center card") : (ready ? `Look at center ${csel[0] + 1}` : "Pick a center card");
       break;
     case "player":
       if (p.spare) {
@@ -878,7 +878,7 @@ function promptPanel(p, g) {
       } else {
         body = `${resultCards(p.cards)}<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
-        confirm = !ready ? "Pick a player" : p.step === "thief" ? `Swap with ${playerName(sel[0])}` : p.step === "unveiler" ? `Turn over ${playerName(sel[0])}'s card` : `Look at ${playerName(sel[0])}'s card`;
+        confirm = !ready ? "Pick a player" : (p.as || p.step) === "thief" ? `Swap with ${playerName(sel[0])}` : (p.as || p.step) === "unveiler" ? `Turn over ${playerName(sel[0])}'s card` : `Look at ${playerName(sel[0])}'s card`;
       }
       break;
     case "seer":

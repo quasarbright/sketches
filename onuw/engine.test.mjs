@@ -733,3 +733,35 @@ test("anyone who looks at a Copycat or Doppelganger card sees the role it became
   assert.match(info(s, "c"), /Your card is now the Hunter\./);
   assert.doesNotMatch(info(s, "b") + info(s, "c"), /Copycat/);
 });
+
+test("the Doppelganger does a look or swap right away, and doesn't wake again for it", () => {
+  let s = room(["a", "b", "c", "d"]);
+  rig(s, { a: "lookalike", b: "seer", c: "werewolf", d: "villager" }, ["villager", "hunter", "thief"]);
+  nightTo(s, "lookalike");
+  assert.equal(act(s, "a", { target: "b" }).error, undefined);
+  assert.equal(s.g.step.id, "lookalike", "still the Doppelganger's turn");
+  assert.equal(s.g.step.prompts.a.kind, "seer");
+  assert.equal(act(s, "a", { target: "c" }).error, undefined);
+  assert.match(info(s, "a"), /C's card is the Werewolf/);
+  const now = nightTo(s, "seer", 1000);
+  assert.deepEqual(s.g.step.actors, ["b"], "only the real Seer wakes on the Seer's turn");
+  finishNight(s, now);
+
+  // a Robber copy swaps on the spot
+  s = room(["a", "b", "c", "d"]);
+  rig(s, { a: "lookalike", b: "thief", c: "werewolf", d: "villager" }, ["villager", "hunter", "seer"]);
+  nightTo(s, "lookalike");
+  act(s, "a", { target: "b" });
+  act(s, "a", { target: "c" });
+  assert.equal(s.g.cards.a, "werewolf");
+  assert.equal(s.g.cards.c, "lookalike");
+
+  // an Insomniac copy waits for the end of the night
+  s = room(["a", "b", "c"]);
+  rig(s, { a: "lookalike", b: "nightowl", c: "werewolf" }, ["villager", "hunter", "seer"]);
+  nightTo(s, "lookalike");
+  act(s, "a", { target: "b" });
+  assert.equal(s.g.step.done.a, true);
+  nightTo(s, "nightowl", 1000);
+  assert.deepEqual(s.g.step.actors.sort(), ["a", "b"]);
+});

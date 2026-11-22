@@ -525,3 +525,36 @@ test("lobby: the host names themselves after making the room; card counts change
   assert.deepEqual(errors, []);
   await ctx.close();
 });
+
+test("the Doppelganger who copies the Seer looks right away, on the Doppelganger's turn", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben"]);
+  await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 2, lookalike: 1, seer: 1, villager: 2 } }));
+  await t.host.waitForTimeout(200);
+  await t.host.click("[data-act=start]");
+  const anaId = (await view(t.pages[1])).you, benId = (await view(t.pages[2])).you;
+  await t.host.evaluate(([ana, ben]) => {
+    const g = window.__onuw.state.g;
+    const give = (pid, role) => {
+      const from = g.seats.find((x) => g.dealt[x] === role);
+      if (from) { [g.dealt[from], g.dealt[pid]] = [g.dealt[pid], g.dealt[from]]; }
+      else { const i = g.center.indexOf(role); [g.center[i], g.dealt[pid]] = [g.dealt[pid], g.center[i]]; }
+      g.cards = { ...g.dealt };
+    };
+    give(ana, "lookalike"); give(ben, "seer");
+    window.__onuw.publish();
+  }, [anaId, benId]);
+  const ana = t.pages[1];
+  await dealAndReady(t.pages);
+  await ana.waitForFunction(() => window.__onuw.view.game?.prompt?.step === "lookalike" && !window.__onuw.view.game.prompt.done);
+  await ana.click(`[data-target="${benId}"]`);
+  await ana.click("[data-act=confirm]");
+  await ana.waitForFunction(() => window.__onuw.view.game.prompt.as === "seer");
+  assert.match(await ana.locator(".ms-prompt-text").innerText(), /You're now the Seer\. You may look at another player's card/);
+  assert.equal(await ana.locator(".ms-centers").count(), 1, "the Seer's choice of center cards is offered");
+  await ana.click(`[data-target="${t.hostId ?? (await view(t.host)).you}"]`);
+  assert.match(await ana.locator("[data-act=confirm]").innerText(), /Look at Mike's card/);
+  await ana.click("[data-act=confirm]");
+  await ana.waitForFunction(() => window.__onuw.view.game.prompt.done);
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});

@@ -274,6 +274,7 @@ function deal(s, now, rng) {
     info: {},
     log: [],
     copied: {},      // card id -> the role it became (Copycat, Lookalike, Investigator)
+    actedEarly: {},  // Doppelgangers who already did their copied role's action
     touched: {},     // players who moved or looked at a card (for the Aura Reader)
     revealed: null,  // { pid, role }: a card the Unveiler left face up
     dayReady: {},
@@ -306,6 +307,9 @@ function logAction(s, step, actor, text) {
 // A card's role, counting what a Copycat, Lookalike or Investigator card became.
 export const effRole = (g, card) => g.copied?.[card] ?? card;
 // The role a player wakes as: their starting card, or what it became.
+// Copied roles the Doppelganger acts out right away instead of on their own turn: the ones that
+// look at or move cards. The Alpha Wolf waits for its turn so the spare card moves only once.
+const DOPPEL_NOW = ["prowler", "seer", "noviceseer", "investigator", "thief", "witch", "meddler", "imp", "sleepwalker"];
 const wakeRole = (g, pid) => effRole(g, g.dealt[pid]);
 const dealtWolves = (g) => g.seats.filter((id) => ROLES[wakeRole(g, id)].wolf);
 
@@ -317,7 +321,7 @@ function nextStep(s, now, rng) {
   const T = s.timing;
   const actors = g.seats.filter((pid) => {
     const r = wakeRole(g, pid);
-    return id === "wolves" ? ROLES[r].wolf && r !== "dozingwolf" : ROLES[r].step === id;
+    return id === "wolves" ? ROLES[r].wolf && r !== "dozingwolf" : ROLES[r].step === id && !g.actedEarly?.[pid];
   });
   g.step = {
     id, actors, done: {}, prompts: {},
@@ -436,9 +440,10 @@ function act(s, pid, msg, now, rng) {
   const prompt = st.prompts[pid];
   if (!prompt) return { error: "It's not your turn" };
   if (st.done[pid]) return { error: "Already done" };
-  const res = applyAction(s, pid, st.id, prompt, msg);
+  const res = applyAction(s, pid, prompt.as || st.id, prompt, msg);
   if (res.error) return res;
-  if (res.next) { st.prompts[pid] = res.next; return {}; }   // a two-part turn (the Witch)
+  // a turn with another part (the Witch's swap, a Doppelganger acting as the role it copied)
+  if (res.next) { st.prompts[pid] = { ...(prompt.as ? { as: prompt.as } : {}), ...res.next }; return {}; }
   st.done[pid] = true;
   st.prompts[pid] = { ...prompt, result: res.result };
   advanceIfDone(s, now, rng);
@@ -536,10 +541,20 @@ function applyAction1(s, pid, id, prompt, msg) {
       if (id === "lookalike") {
         const r = effRole(g, g.cards[t]);
         g.copied[g.dealt[pid]] = r;
-        const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
-        addInfo(s, pid, id, text, [{ label: them, role: r }]);
+        const cards = [{ label: them, role: r }];
         logAction(s, id, pid, `${me} (${N.lookalike}) looked at ${them}'s card and became the ${roleName(r)}.`);
-        return { result: { text, cards: [{ label: them, role: r }] } };
+        // Like the reference Doppelganger: a role that looks at or moves cards acts right away;
+        // a role that is shown something, or acts at the end of the night, wakes on its own turn.
+        if (DOPPEL_NOW.includes(ROLES[r].step)) {
+          g.actedEarly[pid] = true;
+          const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}`;
+          addInfo(s, pid, id, `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}`, cards);
+          const next = startStep(s, ROLES[r].step, pid, [pid]);
+          return { result: { text, cards }, next: { ...next, as: ROLES[r].step, stage: 2, cards, text: `${text} ${next.text}` } };
+        }
+        const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
+        addInfo(s, pid, id, text, cards);
+        return { result: { text, cards } };
       }
       if (id === "investigator") {
         const r = effRole(g, g.cards[t]);
@@ -629,12 +644,15 @@ function advanceIfDone(s, now, rng) {
     for (const a of st.actors) {
       if (st.done[a]) continue;
       const prompt = st.prompts[a];
-      let p2 = prompt;
-      let r = applyAction(s, a, st.id, p2, defaultAction(s, a, p2, rng));
-      if (r.next) { p2 = r.next; r = applyAction(s, a, st.id, p2, defaultAction(s, a, p2, rng)); }
-      if (r.error) r = { result: null };
+      let p2 = prompt, res = { result: null };
+      for (let part = 0; part < 4; part++) {
+        const r = applyAction(s, a, p2.as || st.id, p2, defaultAction(s, a, p2, rng));
+        if (r.next) { p2 = { ...(p2.as ? { as: p2.as } : {}), ...r.next }; continue; }
+        res = r.error ? { result: null } : r;
+        break;
+      }
       st.done[a] = true;
-      st.prompts[a] = { ...p2, result: r.result, timedOut: true };
+      st.prompts[a] = { ...p2, result: res.result, timedOut: true };
     }
     nextStep(s, now, rng);
   }
