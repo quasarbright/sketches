@@ -9,13 +9,13 @@ const tunic = blob([[218, 268], [262, 258], [292, 284], [300, 370], [310, 470], 
 const neck = brush([[258, 226], [258, 262]], [26, 30]);
 const head = blob([[230, 196], [244, 170], [270, 162], [290, 172], [298, 196], [312, 210, "c"], [300, 214], [302, 226], [296, 232], [298, 242], [282, 252], [256, 250], [236, 232]]);
 const coif = blob([[226, 214, "c"], [228, 180], [248, 160], [276, 156], [292, 170], [290, 188], [268, 182], [254, 196], [250, 226], [238, 244, "c"]]);
-// near arm swings the mallet up over the shoulder
-const malletArm = [brush([[274, 284], [324, 258], [326, 206]], [32, 26, 22]), blob([[314, 192], [338, 190], [342, 212], [318, 216]])];
-const mallet = [brush([[328, 206], [350, 132]], [10, 10]), rect(355, 114, 62, 36, 16, 6)];
-// far arm holds the chisel to the stone
-const chiselArm = [brush([[268, 296], [310, 356], [346, 392]], [30, 24, 20]), blob([[338, 380], [360, 378], [364, 400], [342, 404]])];
-const chisel = brush([[350, 388], [374, 432]], [8, 4]);
-const chips = [sparkle(392, 416, 10), sparkle(414, 402, 7), blob([[378, 404], [386, 398], [388, 408]])];
+// near arm cocks the mallet back at shoulder height; the handle runs through the fist
+const malletArm = [brush([[274, 284], [318, 326], [338, 292]], [32, 26, 22]), blob([[326, 276], [350, 272], [356, 296], [332, 302]])];
+const mallet = [brush([[332, 314], [358, 232]], [10, 10]), rect(362, 220, 64, 36, 17, 6)];
+// far arm sets the chisel's edge on the top of the stone, fist around its shank
+const chiselArm = [brush([[268, 296], [300, 372], [342, 404]], [30, 24, 20]), blob([[338, 392], [362, 390], [366, 414], [342, 418]])];
+const chisel = brush([[334, 386], [380, 438]], [9, 5]);
+const chips = [sparkle(402, 414, 10), sparkle(424, 398, 7), blob([[388, 418], [396, 412], [398, 422]])];
 const cuts = [
   brush([[226, 214], [252, 198], [256, 230], [244, 248]], [4, 4, 4, 3]),            // coif edge
   brush([[284, 196], [296, 196]], [4, 3]),                                          // eye
@@ -25,5 +25,5 @@ const cuts = [
   brush([[400, 434], [400, 470]], [4, 4]), brush([[380, 470], [380, 520]], [4, 4]), brush([[424, 520], [424, 556]], [4, 4]),
 ];
 export default card({ bg, ink, transform: "translate(-6 46) scale(.9)", layers: [sparkle(110, 150, 12), sparkle(120, 360, 9), { group: chiselArm }, legs, { d: tunic }, neck, { d: head }, { d: coif },
-cuts.map((d) => ({ d, fill: "bg" })), { group: block, halo: 4 }, cuts.slice(4).map((d) => ({ d, fill: "bg" })), chisel, chips,
+cuts.map((d) => ({ d, fill: "bg" })), { group: block, halo: 4 }, cuts.slice(4).map((d) => ({ d, fill: "bg" })), { group: [chisel], halo: 3 }, { group: chiselArm.slice(1), halo: 3 }, chips,
   { group: [mallet], halo: 4 }, { group: malletArm, halo: 4, roots: [[272, 284, 24]] }] });

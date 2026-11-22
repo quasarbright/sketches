@@ -1,6 +1,6 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, boot, card } from "../brush.mjs";
-// The hunter: a hooded archer standing at ease in a long cloak, bow held upright at his side, quiver over the shoulder.
+// The hunter: a hooded archer standing at ease in a long cloak, bow gripped upright at his side, quiver over the shoulder.
 const { card: bg, ink } = ROLE_COLORS.hunter;
 const legs = [brush([[238, 450], [232, 520], [228, 580]], [34, 28, 24]), boot(232, 596, { s: 24 }), brush([[272, 450], [280, 520], [286, 580]], [34, 28, 24]), boot(290, 596, { s: 24 })];
 // quiver on the back, arrows fletched above the shoulder
@@ -11,8 +11,9 @@ const hood = blob([[232, 210], [246, 184], [276, 176], [300, 190], [312, 218], [
 const face = blob([[290, 206], [306, 210], [312, 226], [318, 234, "c"], [308, 238], [308, 250], [292, 258]]);
 // near arm hangs straight, hand at the hip gripping the bow
 const arm = [brush([[288, 270], [300, 330], [306, 386]], [28, 24, 20]), blob([[296, 380], [318, 378], [322, 400], [300, 404]])];
-const bow = [brush([[330, 196], [362, 248], [374, 320], [362, 394], [330, 450], [312, 472]], [4, 8, 11, 11, 8, 4]),
-  brush([[330, 196], [312, 472]], [2, 2])];
+// the stave runs through his fist; the string hangs on the far side, away from the hand
+const bow = [brush([[354, 250], [328, 296], [313, 350], [309, 392], [313, 436], [328, 488], [354, 534]], [4, 8, 11, 12, 11, 8, 4]),
+  brush([[354, 250], [354, 534]], [2, 2])];
 const cuts = [
   brush([[296, 222], [306, 224]], [3, 3]),                                     // eye
   brush([[256, 182], [280, 212], [288, 262]], [4, 4, 2]),                       // hood edge

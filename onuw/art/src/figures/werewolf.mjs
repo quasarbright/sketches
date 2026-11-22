@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, claws, sparkle, eye, brow, card } from "../brush.mjs";
+import { blob, brush, fringe, claws, sparkle, eye, card } from "../brush.mjs";
 // A werewolf risen on its hind legs: barrel chest, shaggy mane, a 
 // one clawed hand raised. Facing right under a crescent moon.
 const { card: bg, ink } = ROLE_COLORS.werewolf;
@@ -20,7 +20,7 @@ const head = blob([[244, 190], [250, 160], [272, 144], [300, 150], [320, 164], [
 const ears = [blob([[248, 166, "c"], [246, 130], [254, 116, "c"], [276, 136], [286, 152]]), blob([[268, 154, "c"], [276, 126], [290, 112, "c"], [304, 136], [310, 162]])];
 const arm = [brush([[316, 254], [338, 312], [370, 296], [388, 270]], [42, 32, 26, 22]), ...claws([396, 258], -60, { size: 1.05, spread: 80, curl: 16, len: 40 })];
 const cuts = [
-  eye(328, 181, { len: 26, h: 8 }), brow(328, 181, { len: 26, h: 8 }),   // eye and brow
+  eye(328, 181, { len: 26, h: 8 }), brush([[310, 169], [328, 171], [344, 179]], [2, 4, 1])  /* brow, the Pack Leader's shape */,   // eye and brow
   brush([[338, 198], [362, 197], [376, 194]], [3, 4, 2]),                                                 // mouth
   brush([[256, 148], [256, 126]], [6, 0]), brush([[288, 146], [292, 122]], [7, 0]),                       // inner ears
   brush([[286, 262], [290, 300], [282, 340]], [4, 5, 1]), brush([[306, 270], [314, 310], [306, 350]], [3, 4, 1]),   // chest fur
