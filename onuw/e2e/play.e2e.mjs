@@ -312,7 +312,7 @@ test("right after your night turn, what you saw shows for a few seconds, then go
   await t.ctx.close();
 });
 
-test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and it closes when your turn comes", async () => {
+test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score, villagers cost, and it closes when your turn comes", async () => {
   const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
   // 4 cards that never wake among 7, so at least one player can play undisturbed
   await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 2, seer: 1, villager: 3, hunter: 1 } }));
@@ -330,7 +330,14 @@ test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and i
   const free = await w.evaluate(() => [...document.querySelectorAll(".wk-hole")].findIndex((h) => !h.classList.contains("is-up")));
   await w.evaluate((i) => window.__onuw.wack.spawn(i, "wolf", 5000), free);
   await w.waitForTimeout(400);
-  await w.locator(`[data-hole="${free}"] .ms-card`).click();
+  // only the top half of the card comes up out of the hole
+  const shown = await w.evaluate((i) => {
+    const c = document.querySelector(`[data-hole="${i}"] .ms-card`).getBoundingClientRect();
+    const pit = document.querySelector(`[data-hole="${i}"] .wk-pit`).getBoundingClientRect();
+    return (pit.bottom - c.top) / c.height;
+  }, free);
+  assert.ok(shown > 0.3 && shown < 0.6, `${Math.round(shown * 100)}% of the card shows`);
+  await w.locator(`[data-hole="${free}"] .ms-card-name`).click();
   assert.equal(await w.evaluate(() => window.__onuw.wack.score()), 1);
   assert.ok(await w.locator(`[data-hole="${free}"].is-bonked`).count());
   assert.ok(await w.locator(".wk-star").count() > 0);
@@ -339,7 +346,7 @@ test("whack-a-wolf: waiting players can play, bonks score, villagers cost, and i
   await w.waitForTimeout(400);
   // the figures are the game's own cards
   assert.match(await w.locator(`[data-hole="${free}"] .ms-card-name`).innerText(), /\S/);
-  await w.locator(`[data-hole="${free}"] .ms-card`).click();
+  await w.locator(`[data-hole="${free}"] .ms-card-name`).click();
   assert.equal(await w.evaluate(() => window.__onuw.wack.score()), -1);
   assert.match(await w.locator(".wk-pop.is-bad").innerText(), /2/);
   await w.click("[data-wk=close]");
