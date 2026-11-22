@@ -273,6 +273,9 @@ function deal(s, now, rng) {
     ready: {},
     info: {},
     log: [],
+    copied: {},      // card id -> the role it became (Copycat, Lookalike, Investigator)
+    touched: {},     // players who moved or looked at a card (for the Aura Reader)
+    revealed: null,  // { pid, role }: a card the Unveiler left face up
     dayReady: {},
     votes: {},
     dayEndsAt: null,
@@ -300,7 +303,11 @@ function logAction(s, step, actor, text) {
   s.g.log.push({ step, actor, text });
 }
 
-const dealtWolves = (g) => g.seats.filter((id) => ROLES[g.dealt[id]].wolf);
+// A card's role, counting what a Copycat, Lookalike or Investigator card became.
+export const effRole = (g, card) => g.copied?.[card] ?? card;
+// The role a player wakes as: their starting card, or what it became.
+const wakeRole = (g, pid) => effRole(g, g.dealt[pid]);
+const dealtWolves = (g) => g.seats.filter((id) => ROLES[wakeRole(g, id)].wolf);
 
 function nextStep(s, now, rng) {
   const g = s.g;
@@ -308,8 +315,10 @@ function nextStep(s, now, rng) {
   if (g.stepIdx >= g.steps.length) { startDay(s, now); return; }
   const id = g.steps[g.stepIdx];
   const T = s.timing;
-  const actors = g.seats.filter((pid) =>
-    id === "wolves" ? ROLES[g.dealt[pid]].wolf : ROLES[g.dealt[pid]].step === id);
+  const actors = g.seats.filter((pid) => {
+    const r = wakeRole(g, pid);
+    return id === "wolves" ? ROLES[r].wolf && r !== "dozingwolf" : ROLES[r].step === id;
+  });
   g.step = {
     id, actors, done: {}, prompts: {},
     startedAt: now,
@@ -327,9 +336,12 @@ function startStep(s, id, pid, actors) {
   switch (id) {
     case "wolves": {
       const others = actors.filter((x) => x !== pid);
-      if (others.length) {
-        addInfo(s, pid, id, `The other ${others.length === 1 ? "wolf is" : "wolves are"} ${names(others)}.`);
-        return { kind: "ack", text: `The other ${others.length === 1 ? "wolf is" : "wolves are"} ${names(others)}.` };
+      const dozing = g.seats.filter((x) => wakeRole(g, x) === "dozingwolf");
+      if (others.length || dozing.length) {
+        const all = [...others, ...dozing];
+        const t = `The other ${all.length === 1 ? "wolf is" : "wolves are"} ${names(all)}.${dozing.length ? ` ${names(dozing)} ${dozing.length === 1 ? "is" : "are"} the ${N.dozingwolf} and didn't wake up.` : ""}`;
+        addInfo(s, pid, id, t);
+        return { kind: "ack", text: t };
       }
       addInfo(s, pid, id, "You're the only wolf.");
       return { kind: "center1", optional: true, text: "You're the only wolf. You may look at one of the 3 center cards." };
@@ -370,6 +382,38 @@ function startStep(s, id, pid, actors) {
       return { kind: "seer", optional: true, exclude: [pid], text: "You may look at another player's card, or at two of the center cards." };
     case "thief":
       return { kind: "player", optional: true, exclude: [pid], text: "You may swap cards with another player. You'll see the card you take." };
+    case "copycat":
+      return { kind: "center1", required: true, text: "Look at a center card. You become that role, and you'll wake again on its turn." };
+    case "lookalike":
+      return { kind: "player", required: true, exclude: [pid], text: "Look at another player's card. You become that role, and you'll wake again on its turn." };
+    case "apprentice": {
+      const sk = g.seats.filter((x) => g.dealt[x] === "jester");
+      const t = sk.length ? `The ${N.jester} is ${names(sk)}.` : `No player is the ${N.jester}. You win only if you die.`;
+      addInfo(s, pid, id, t);
+      return { kind: "ack", text: t };
+    }
+    case "noviceseer":
+      return { kind: "center1", optional: true, text: "You may look at one of the center cards." };
+    case "watcher": {
+      const seers = g.seats.filter((x) => x !== pid && ["seer", "noviceseer"].includes(g.dealt[x]));
+      if (!seers.length) { addInfo(s, pid, id, `No player started as the ${N.seer} or ${N.noviceseer}.`); return { kind: "ack", text: `No player started as the ${N.seer} or ${N.noviceseer}.` }; }
+      const cards = seers.map((x) => ({ label: nameOf(s, x), role: g.cards[x] }));
+      const t = seers.map((x) => `${nameOf(s, x)} started as the ${roleName(g.dealt[x])}.`).join(" ") + ` Here ${seers.length === 1 ? "is their card" : "are their cards"} now.`;
+      addInfo(s, pid, id, t, cards);
+      return { kind: "ack", text: t, cards };
+    }
+    case "investigator":
+      return { kind: "player", optional: true, exclude: [pid], text: `You may look at another player's card. If it's a wolf or the ${N.jester}, you become that role.` };
+    case "imp":
+      return { kind: "two", optional: true, exclude: [], text: "You may swap the cards of any two players, yours included. You won't see them." };
+    case "aurareader": {
+      const seen = g.seats.filter((x) => x !== pid && g.touched[x]);
+      const t = seen.length ? `${names(seen)} moved or looked at a card tonight.` : "Nobody else moved or looked at a card tonight.";
+      addInfo(s, pid, id, t);
+      return { kind: "ack", text: t };
+    }
+    case "unveiler":
+      return { kind: "player", optional: true, exclude: [pid], text: `You may turn another player's card face up for the day. If it's a wolf or the ${N.jester}, it goes back face down.` };
     case "witch":
       return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with any player's card, your own included." };
     case "meddler":
@@ -406,14 +450,21 @@ const validPlayer = (g, prompt, t) => g.seats.includes(t) && !(prompt.exclude ||
 const validCenter = (i) => Number.isInteger(i) && i >= 0 && i < 3;
 
 // Applies an action (or a skip) and returns { result } — what the actor sees afterwards.
+// Anyone who moved or looked at a card is remembered for the Aura Reader.
 function applyAction(s, pid, id, prompt, msg) {
+  const r = applyAction1(s, pid, id, prompt, msg);
+  if (!r.error && !msg.skip && prompt.kind !== "ack") s.g.touched[pid] = true;
+  return r;
+}
+
+function applyAction1(s, pid, id, prompt, msg) {
   const g = s.g;
   const me = nameOf(s, pid);
   if (msg.skip) {
     if (prompt.required) return { error: "You have to choose" };
     if (prompt.kind === "ack") return { result: null };
     logAction(s, id, pid, `${me} (${roleName(g.dealt[pid])}) did nothing.`);
-    const text = id === "wolves" ? "You didn't look at a center card." : `You didn't use your ${roleName(g.dealt[pid])} power.`;
+    const text = id === "wolves" ? "You didn't look at a center card." : prompt.stage === 2 ? "You stopped there." : `You didn't use your ${roleName(id === "masons" ? "mason" : (ROLES[id] ? id : g.dealt[pid]))} power.`;
     addInfo(s, pid, id, msg.timedOut ? `Time ran out. ${text}` : text);
     return { result: { text } };
   }
@@ -439,9 +490,17 @@ function applyAction(s, pid, id, prompt, msg) {
             text: `${centerLabel(i)} is the ${roleName(g.center[i])}. Swap it with a player's card, your own included.` },
         };
       }
+      if (id === "copycat") {
+        const r = g.center[i];
+        g.copied[g.dealt[pid]] = r;
+        const text = `${centerLabel(i)} is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("copycat", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
+        addInfo(s, pid, id, text, [{ label: centerLabel(i), role: r }]);
+        logAction(s, id, pid, `${me} (${N.copycat}) looked at ${centerLabel(i).toLowerCase()} and became the ${roleName(r)}.`);
+        return { result: { text, cards: [{ label: centerLabel(i), role: r }] } };
+      }
       const t = `${centerLabel(i)} is the ${roleName(g.center[i])}.`;
       addInfo(s, pid, id, t, [{ label: centerLabel(i), role: g.center[i] }]);
-      logAction(s, id, pid, `${me} (lone wolf) looked at ${centerLabel(i).toLowerCase()}: the ${roleName(g.center[i])}.`);
+      logAction(s, id, pid, `${me} (${id === "wolves" ? "lone wolf" : roleName(id)}) looked at ${centerLabel(i).toLowerCase()}: the ${roleName(g.center[i])}.`);
       return { result: { text: t, cards: [{ label: centerLabel(i), role: g.center[i] }] } };
     }
     case "player": {
@@ -473,6 +532,44 @@ function applyAction(s, pid, id, prompt, msg) {
         const cards = [{ label: mine ? "Your new card" : `${them} now holds`, role: seen }];
         addInfo(s, pid, id, text, cards);
         logAction(s, id, pid, `${me} (${N.witch}) looked at ${centerLabel(i).toLowerCase()}, the ${roleName(seen)}, and swapped it with ${mine ? "their own" : `${them}'s`} ${roleName(old)}.`);
+        return { result: { text, cards } };
+      }
+      if (id === "lookalike") {
+        const r = effRole(g, g.cards[t]);
+        g.copied[g.dealt[pid]] = r;
+        const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
+        addInfo(s, pid, id, text, [{ label: them, role: r }]);
+        logAction(s, id, pid, `${me} (${N.lookalike}) looked at ${them}'s card and became the ${roleName(r)}.`);
+        return { result: { text, cards: [{ label: them, role: r }] } };
+      }
+      if (id === "investigator") {
+        const r = effRole(g, g.cards[t]);
+        const cards = [{ label: them, role: r }];
+        const turns = ROLES[r].wolf || r === "jester";
+        logAction(s, id, pid, `${me} (${N.investigator}) looked at ${them}'s card: the ${roleName(r)}${turns ? `, and became the ${roleName(r)}` : ""}.`);
+        if (turns) {
+          g.copied[g.dealt[pid]] = r;
+          const text = `${them}'s card is the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("investigator", r)}`;
+          addInfo(s, pid, id, text, cards);
+          return { result: { text, cards } };
+        }
+        const text = `${them}'s card is the ${roleName(r)}.`;
+        addInfo(s, pid, id, text, cards);
+        if (prompt.stage === 2) return { result: { text, cards } };
+        return {
+          result: { text, cards },
+          next: { kind: "player", optional: true, exclude: [pid, t], cards, stage: 2,
+            text: `${text} You may look at one more player's card.` },
+        };
+      }
+      if (id === "unveiler") {
+        const r = effRole(g, g.cards[t]);
+        const cards = [{ label: them, role: r }];
+        const hide = ROLES[r].wolf || r === "jester";
+        if (!hide) g.revealed = { pid: t, role: r };
+        const text = hide ? `${them}'s card is the ${roleName(r)}, so you turned it back face down. Only you saw it.` : `${them}'s card is the ${roleName(r)}. It stays face up for everyone to see.`;
+        addInfo(s, pid, id, text, cards);
+        logAction(s, id, pid, `${me} (${N.unveiler}) turned over ${them}'s card: the ${roleName(r)}${hide ? ", and turned it back" : ", left face up"}.`);
         return { result: { text, cards } };
       }
       if (id === "thief") {
@@ -507,9 +604,10 @@ function applyAction(s, pid, id, prompt, msg) {
       if (!Array.isArray(ts) || ts.length !== 2 || ts[0] === ts[1] || !ts.every((t) => validPlayer(g, prompt, t))) return { error: "Pick two other players" };
       const [a, b] = ts;
       [g.cards[a], g.cards[b]] = [g.cards[b], g.cards[a]];
-      const text = `You swapped ${nameOf(s, a)}'s and ${nameOf(s, b)}'s cards.`;
+      const nm = (x) => (x === pid ? "your" : `${nameOf(s, x)}'s`);
+      const text = `You swapped ${nm(a)} and ${nm(b)} cards.`;
       addInfo(s, pid, id, text);
-      logAction(s, id, pid, `${me} (${N.meddler}) swapped ${nameOf(s, a)}'s and ${nameOf(s, b)}'s cards.`);
+      logAction(s, id, pid, `${me} (${roleName(id === "imp" ? "imp" : "meddler")}) swapped ${nameOf(s, a)}'s and ${nameOf(s, b)}'s cards.`);
       return { result: { text } };
     }
   }
@@ -557,7 +655,8 @@ function startVote(s, now) {
 
 export function resolveVotes(seats, votes, cards) {
   const counts = {};
-  for (const v of seats) if (votes[v]) counts[votes[v]] = (counts[votes[v]] || 0) + 1;
+  // the Great Wolf's vote counts twice
+  for (const v of seats) if (votes[v]) counts[votes[v]] = (counts[votes[v]] || 0) + (cards[v] === "greatwolf" ? 2 : 1);
   // The Prince, and whoever the Bodyguard votes for, can't die: the next most votes count instead.
   const guarded = new Set(seats.filter((p) => cards[p] === "prince"));
   for (const b of seats) if (cards[b] === "bodyguard" && votes[b]) guarded.add(votes[b]);
@@ -585,7 +684,9 @@ export function resolveVotes(seats, votes, cards) {
   const deadWolf = died(isWolf);
   const deadScout = died((p) => cards[p] === "scout");
   const deadLackey = died((p) => cards[p] === "lackey");
-  const deadJester = died((p) => cards[p] === "jester");
+  // With no Skinner among the players, the Apprentice is one: they win, and stop the wolves, by dying.
+  const skinners = seats.some((p) => cards[p] === "jester") ? ["jester"] : ["jester", "apprentice"];
+  const deadJester = died((p) => skinners.includes(cards[p]));
   let village, wolfTeam;
   if (seats.some(isWolf)) {
     village = deadWolf || deadScout;
@@ -599,13 +700,16 @@ export function resolveVotes(seats, votes, cards) {
     wolfTeam = false;
   }
   const winners = seats.filter((p) =>
-    cards[p] === "jester" ? dead.includes(p) : team(p) === "village" ? village : wolfTeam);
+    cards[p] === "jester" ? dead.includes(p)
+      : cards[p] === "apprentice" ? (skinners.length === 1 ? died((x) => cards[x] === "jester") : dead.includes(p))
+      : team(p) === "village" ? village : wolfTeam);
   return { counts, dead, hunterShots, hunterBlocked, saved, guarded: [...guarded], turned, village, wolfTeam, jester: deadJester, winners };
 }
 
 function resolve(s, now) {
   const g = s.g;
-  g.result = { ...resolveVotes(g.seats, g.votes, g.cards), votes: { ...g.votes } };
+  const eff = Object.fromEntries(g.seats.map((p) => [p, effRole(g, g.cards[p])]));
+  g.result = { ...resolveVotes(g.seats, g.votes, eff), effective: eff, votes: { ...g.votes } };
   s.phase = "results";
 }
 
@@ -673,17 +777,18 @@ export function viewFor(s, pid, now) {
     info: g.info[pid] || [],
     dayEndsAt: g.dayEndsAt,
     myVote: g.votes[pid] || null,
+    revealed: s.phase !== "night" || spectator ? g.revealed : null,
     result: null,
   };
   // Spectators see everything, at every moment: every card, the night log and the votes.
   if (spectator) {
     v.game.omni = {
-      dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log,
+      dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log, copied: g.copied,
       actors: st ? st.actors : [], votes: g.votes, dayReady: g.dayReady,
     };
   }
   if (s.phase === "results") {
-    v.game.result = { ...g.result, dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log };
+    v.game.result = { ...g.result, dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log, copied: g.copied, revealed: g.revealed };
   }
   return v;
 }

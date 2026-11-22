@@ -430,7 +430,7 @@ const teamMark = (role) => `<span class="ms-team-mark" aria-label="${esc(TEAMS[R
 function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
   const R = ROLES[role];
   return `<div class="ms-card ms-${size} ${cls}" style="${cardStyle(role)}" ${attrs}>
-    <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
+    <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}${R.name.length > 11 ? " is-xlong" : ""}" style="--len:${R.name.length}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}
@@ -863,9 +863,9 @@ function promptPanel(p, g) {
         ready = sel.length === 1;
         confirm = !ready ? "Pick a player" : sel[0] === myId ? "Swap it with your card" : `Swap it with ${playerName(sel[0])}'s card`;
       } else {
-        body = `<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
+        body = `${resultCards(p.cards)}<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
-        confirm = !ready ? "Pick a player" : p.step === "thief" ? `Swap with ${playerName(sel[0])}` : `Look at ${playerName(sel[0])}'s card`;
+        confirm = !ready ? "Pick a player" : p.step === "thief" ? `Swap with ${playerName(sel[0])}` : p.step === "unveiler" ? `Turn over ${playerName(sel[0])}'s card` : `Look at ${playerName(sel[0])}'s card`;
       }
       break;
     case "seer":
@@ -951,12 +951,20 @@ function dayScreen() {
       ${countdown(g.dayEndsAt, "ms-bigtime")}
       <p class="ms-lede">Talk it over. When the timer runs out, or everyone's ready, you vote on who to kill.</p>
     </section>
+    ${revealedPanel(g)}
     ${secretPanel(g)}
     ${inGameStrip()}
     <mike-footer></mike-footer>
   </main>
   ${bar(`<div class="ms-bar-note">${readyN} of ${seated.length} ready to vote</div>
     <button class="ms-btn ${me?.dayReady ? "" : "ms-primary"} ms-wide" data-act="dayready">${me?.dayReady ? "Not ready yet" : "Ready to vote"}</button>`)}`;
+}
+
+// The card the Unveiler left face up, for everyone, through the day and the vote.
+function revealedPanel(g) {
+  const rv = g.revealed;
+  if (!rv) return "";
+  return `<section class="ms-panel ms-revealed"><div class="ms-row">${wrap(card(rv.role, { size: "sm" }))}<p class="ms-lede">${esc(playerName(rv.pid))}'s card is face up: the ${esc(ROLES[rv.role].name)}.</p></div></section>`;
 }
 
 // ---- vote
@@ -977,6 +985,7 @@ function voteScreen() {
     <div class="ms-targets ms-vote-grid">
       ${seated.filter((p) => p.id !== myId).map((p) => `<button class="ms-target ${g.myVote === p.id ? "is-on" : ""}" data-vote="${p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
     </div>
+    ${revealedPanel(g)}
     ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>
@@ -1015,6 +1024,7 @@ function resultsScreen() {
       <div class="ms-res-cards">
         ${wrap(card(r.dealt[id], { size: "sm", label: "started" }))}
         ${changed ? `${icon("arrow", "ms-ico ms-res-arrow")}${wrap(card(r.cards[id], { size: "sm", label: "ended" }))}` : `<span class="ms-res-same">Same card at the end</span>`}
+        ${r.copied?.[r.cards[id]] ? `<span class="ms-res-same">The ${esc(ROLES[r.cards[id]].name)} card became the ${esc(ROLES[r.copied[r.cards[id]]].name)}</span>` : ""}
       </div>
     </li>`;
   }).join("");
@@ -1048,7 +1058,7 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 // Who died and why that decides the game, in plain sentences.
 function whyLine(r, seats) {
-  const c = r.cards;
+  const c = r.effective || r.cards;
   const named = (ids) => listNames(ids.map(playerName));
   const parts = [];
   const shot = new Set(r.hunterShots.map(([, t]) => t));
@@ -1070,7 +1080,10 @@ function whyLine(r, seats) {
   const jesters = deadAs((x) => x === "jester");
   const anyWolf = seats.some((id) => ROLES[c[id]].wolf || turned.includes(id));
   const as = (ids, what) => `${named(ids)} ${ids.length > 1 ? "were" : "was"} ${what}`;
-  if (jesters.length) parts.push(`${as(jesters, `the ${N.jester}`)}, so the ${N.jester} wins${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
+  const apprentices = seats.filter((id) => c[id] === "apprentice");
+  const lonePupil = !seats.some((id) => c[id] === "jester") ? deadAs((x) => x === "apprentice") : [];
+  if (jesters.length) parts.push(`${as(jesters, `the ${N.jester}`)}, so the ${N.jester} wins${apprentices.length ? ` with the ${N.apprentice}` : ""}${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
+  if (lonePupil.length) parts.push(`${as(lonePupil, `the ${N.apprentice}`)} with no ${N.jester} in play, so the ${N.apprentice} wins${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
   if (r.village) {
     if (wolves.length) parts.push(`${as(wolves, wolves.length > 1 ? "wolves" : "a wolf")}, so the village wins.`);
     else if (scouts.length) parts.push(`${as(scouts, `the ${N.scout}`)}, so the village wins.`);
@@ -1078,7 +1091,7 @@ function whyLine(r, seats) {
     else parts.push(`${as(deadAs((x) => x === "lackey"), `the ${N.lackey}`)}, and no player was a wolf, so the village wins.`);
   } else if (r.wolfTeam) {
     parts.push(anyWolf ? "No wolf died, so the wolves win." : `No player was a wolf, and someone off the wolf team died, so the ${N.lackey} and ${N.scout} win.`);
-  } else if (!anyWolf && r.dead.length && !jesters.length) {
+  } else if (!anyWolf && r.dead.length && !jesters.length && !lonePupil.length) {
     parts.push("No player was a wolf, so anyone dying meant the village lost.");
   }
   return parts.join(" ");
