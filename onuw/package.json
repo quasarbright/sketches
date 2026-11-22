@@ -1,0 +1,8 @@
+{
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "e2e": "node --test \"e2e/*.e2e.mjs\""
+  }
+}
