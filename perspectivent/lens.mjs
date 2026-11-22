@@ -211,7 +211,7 @@ export const PRESETS = [
   { id: "orthographic", label: "orthographic", src: "1", s: 1,
     tip: "Parallel rays: things stay the same size however far away they are." },
   { id: "reverse", label: "reverse", src: "1/(z + 5)",
-    tip: "Multiply by distance instead of dividing: far things look bigger. The rays start on a plane bigger than the screen and bend in toward each other, meeting only infinitely far away. (1/z alone would need an infinitely big plane.)" },
+    tip: "Far things look bigger. The rays start on a sensor bigger than the screen and bend in toward each other, meeting only infinitely far away. (1/z would need an infinitely big sensor.)" },
   { id: "log", label: "log", src: "log(1 + z)",
     tip: "Shrinks with the log of distance: gentler than a normal camera." },
   { id: "sqrt", label: "√z", src: "sqrt(z)",
@@ -219,7 +219,7 @@ export const PRESETS = [
   { id: "square", label: "z²", src: "z^2",
     tip: "Shrinks with distance squared: perspective, exaggerated." },
   { id: "exp", label: "1.1ᶻ", src: "1.1^z",
-    tip: "Exponential: every meter farther away divides by another 1.1, so things shrink slowly up close and to a dot a few hundred meters out." },
+    tip: "Exponential: the rays spread 1.1 times wider with every meter, so things shrink slowly up close and to a dot a few hundred meters out." },
   { id: "wobble", label: "wobble", src: "z + log(z)*sin(z)",
     tip: "Perspective with a wobble: sizes swell and shrink in waves about 6 m apart, and in some stretches farther things look bigger. f is negative closer than 0.37 m, so nothing that near is drawn." },
 ];

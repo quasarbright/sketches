@@ -11,7 +11,8 @@ import {
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
 import { drawRenderDemo, EYE_LENS, SENSOR_LENS, RENDER_PIXELS } from "./render-demo.mjs";
-import { drawAbout3D, FUNCTIONS, FUNCTION_PERIOD, sensorSweep } from "./about3d.mjs";
+import { drawAbout3D, FUNCTIONS, FUNCTION_PERIOD, sensorSweep, setEngine } from "./about3d.mjs";
+import { SCENE3, axes } from "./render3d.mjs";
 import { drawGraphDemo, GRAPHS } from "./graph-demo.mjs";
 import { PHYS, COURSE, TOWER } from "./course.mjs";
 
@@ -141,12 +142,12 @@ vec3 pvHaze(float e) { // linear color; e = sine of the elevation, 0 at the hori
   return mix(${linHex(0xdde8f1)}, ${linHex(0x93b08a)}, smoothstep(0.0, 0.3, -e));
 }
 float pvHazeAmount(vec3 p, vec3 eye) { return smoothstep(${HAZE_NEAR.toFixed(1)}, ${HAZE_FAR.toFixed(1)}, length(p.xz - eye.xz)); }`;
-function lensify(mat, extra) {
+function lensify(mat, extra, uniforms = lensUniforms) {
   // three.js caches compiled programs by onBeforeCompile's source text, which is the same for
   // every material here, so materials with extra shader code need their own key
   mat.customProgramCacheKey = () => "lens:" + (extra ? extra.toString() : "");
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, lensUniforms);
+    Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace("#include <common>", "#include <common>\n" + LENS_PARS + "varying vec3 vHazeW;")
       .replace("#include <project_vertex>",
@@ -1287,6 +1288,73 @@ const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;
 /* =====================================================================
  * about-modal diagrams (the same drawing code, with lenses that animate on their own)
  * ===================================================================== */
+// The About's live pictures (the sensor sweep and the sliders) come from this game's own
+// renderer: the About's small scene built in three.js with the same lens shader, drawn by a second
+// renderer of its own into a hidden canvas, with its own lens table so the game's isn't touched.
+// The About's scene has x right, y up and z ahead; three.js looks down -z, so the scene sits in a
+// group flipped along z.
+const engineDemo = (() => {
+  let r = null, sc, cam, lut, uni;
+  function build() {
+    const cv = document.createElement("canvas");
+    r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
+    r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+    lut = new Float32Array(LUT.N * 4);
+    const tex = new THREE.DataTexture(lut, LUT.N, 1, THREE.RGBAFormat, THREE.FloatType);
+    tex.minFilter = tex.magFilter = THREE.NearestFilter;
+    uni = {
+      lensLUT: { value: tex }, lensHalf: { value: new THREE.Vector2(1, 1) },
+      lensRange: { value: lensUniforms.lensRange.value.clone() }, lensC: { value: LUT.C },
+      lensOn: { value: 1 }, lensSphere: { value: new THREE.Vector3(0, 1, 1) },
+    };
+    sc = new THREE.Scene();
+    const sky = new THREE.Color(`rgb(${SCENE3.sky})`);
+    sc.background = sky; sc.fog = new THREE.FogExp2(sky, 0.022);
+    const g = new THREE.Group(); g.scale.z = -1; sc.add(g);
+    const mat = (o) => lensify(new THREE.MeshLambertMaterial(o), null, uni);
+    // the ground: 1 m checks, like the traced pictures
+    const ck = document.createElement("canvas"); ck.width = ck.height = 2;
+    const cx = ck.getContext("2d"), gr = SCENE3.grass;
+    cx.fillStyle = `rgb(${gr})`; cx.fillRect(0, 0, 2, 2);
+    cx.fillStyle = `rgb(${gr.map((v) => v * 0.9)})`; cx.fillRect(1, 0, 1, 1); cx.fillRect(0, 1, 1, 1);
+    const gt = new THREE.CanvasTexture(ck); gt.colorSpace = THREE.SRGBColorSpace;
+    gt.magFilter = THREE.NearestFilter; gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(150, 150);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300, 120, 120), mat({ map: gt }));
+    ground.rotation.x = -Math.PI / 2; ground.position.y = SCENE3.ground; ground.receiveShadow = true;
+    g.add(ground);
+    for (const b of SCENE3.boxes) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(2 * b.half[0], 2 * b.half[1], 2 * b.half[2], 4, 4, 4), mat({ color: b.color }));
+      m.position.set(...b.c); m.rotation.y = b.rot; m.castShadow = m.receiveShadow = true; g.add(m);
+    }
+    for (const [x, y, z, rad, color] of SCENE3.balls) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(rad, 48, 32), mat({ color }));
+      m.position.set(x, y, z); m.castShadow = true; g.add(m);
+    }
+    // the sun from the same direction as the traced pictures' (ambient + direct ≈ their 0.5 + 0.55 lit)
+    g.add(new THREE.AmbientLight(0xffffff, 0.68));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.8);
+    const dir = new THREE.Vector3(-0.5, 0.8, -0.35).normalize();
+    sun.position.copy(dir.multiplyScalar(30)).add(new THREE.Vector3(0, 0, 5)); sun.target.position.set(0, 0, 5);
+    sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+    Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 1, far: 70 });
+    g.add(sun, sun.target);
+    cam = new THREE.PerspectiveCamera(60, 1, 0.05, 400);
+  }
+  // the picture `lens` makes, w × w pixels; returns the canvas it's drawn on
+  return (lens, w) => {
+    if (!r) build();
+    if (r.domElement.width !== w) r.setSize(w, w, false);
+    const { Ax, tx, Ay, ty } = axes(lens);
+    const tmp = new Float32Array(LUT.N * 2);
+    sampleLens((z) => Ax + z * tx, (z) => Ay + z * ty, tmp, NEAR);
+    for (let i = 0; i < LUT.N; i++) { lut[4 * i] = tmp[2 * i]; lut[4 * i + 1] = tmp[2 * i + 1]; }
+    uni.lensLUT.value.needsUpdate = true;
+    r.render(sc, cam);
+    return r.domElement;
+  };
+})();
+setEngine(engineDemo);
+
 let aboutRAF = 0, aboutOpen = false;
 const stores = new WeakMap(); // per canvas, for the 3D demos that keep state
 document.addEventListener("cohesion-modal-open", (e) => {
@@ -1296,6 +1364,19 @@ document.addEventListener("cohesion-modal-open", (e) => {
   const canvases = [...el.querySelectorAll(".pv-about-diagram")];
   const t0 = performance.now();
   const D = 10;
+  // the sensor size and spread sliders: their lens, f(z) written out with their numbers
+  const play = {};
+  const readPlay = () => {
+    const S = +el.querySelector("#playS").value, pIn = el.querySelector("#playP");
+    if (S < 0.05 && +pIn.value < 5) pIn.value = 5; // an eye needs some spread
+    const P = +pIn.value, A = S / 2, tn = Math.tan((P / 2) * Math.PI / 180);
+    el.querySelector("#playSv").textContent = `${S.toFixed(2)} m`;
+    el.querySelector("#playPv").textContent = `${P}°`;
+    const n = (v) => (v < 0 ? "− " : "+ ") + Math.abs(v).toFixed(2);
+    play.lens = { A, t: tn };
+    play.graph = { label: `f(z) = ${S.toFixed(2)}/2 + z·tan(${P}°/2) = ${A.toFixed(2)} ${n(tn)} z`, f: (z) => A + z * tn };
+  };
+  if (el.querySelector("#playS")) { readPlay(); el.querySelectorAll(".pv-play input").forEach((i) => i.addEventListener("input", readPlay)); }
   const tick = (now) => {
     const t = Math.max(0, now - t0) / 1000; // the first frame can be stamped before t0
     for (const cv of canvases) {
@@ -1310,6 +1391,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
       if (demo === "render") drawRenderDemo(ctx, r.width, r.height, t, { lens: EYE_LENS });
       else if (demo === "render-ortho") drawRenderDemo(ctx, r.width, r.height, t, { lens: SENSOR_LENS });
       else if (GRAPHS[demo]) drawGraphDemo(ctx, r.width, r.height, demo, t);
+      else if (demo === "graph-sliders") drawGraphDemo(ctx, r.width, r.height, demo, t, play.graph);
       else if (demo === "plane") {
         const s = sensorSweep(t), lens = { A: s * 1.1, t: (1 - s) * 0.55 }; // the 3D sweep's lens, in its meters
         drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
@@ -1325,9 +1407,10 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
         const u = Math.min(1, into), ease = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
         drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => ga(z) + (gb(z) - ga(z)) * ease, s: null });
-        cap(`Divide the offset by ${cur.name}.`);
+        cap(`f(z) = ${cur.name}.`);
       } else {
         let st = stores.get(cv); if (!st) { st = {}; stores.set(cv, st); }
+        if (demo === "sliders3d") st.lens = play.lens;
         cap(drawAbout3D(demo, ctx, r.width, r.height, dpr, t, st));
       }
     }

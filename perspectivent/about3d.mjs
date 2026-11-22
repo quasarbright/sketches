@@ -2,7 +2,7 @@
 // sensor) firing its rays into it; on the right the picture those rays make, built pixel by
 // pixel. A grid of rays is always shown faintly; the rays of the pixels being worked out right
 // now are bright yellow. Everything is in CSS pixels; `dpr` sets how finely the images are made.
-import { Scan, rayPath, outsidePixel, outsideXY, projectBoxes, CORNERS, withoutBalls, axes } from "./render3d.mjs";
+import { Scan, rayPath, outsidePixel, outsideXY, withoutBalls, axes, SCENE3 } from "./render3d.mjs";
 import { parseExpr, normalizedLens } from "./lens.mjs";
 import { drawOrthoPair } from "./ortho-pair.mjs";
 import { RENDER_PIXELS, EYE_LENS, SENSOR_LENS } from "./render-demo.mjs";
@@ -10,7 +10,7 @@ import { RENDER_PIXELS, EYE_LENS, SENSOR_LENS } from "./render-demo.mjs";
 // the lenses the "any function of distance" demos cycle through, 2D and 3D alike
 export const FUNCTIONS = [
   { name: "√z", src: "sqrt(z)" }, { name: "z²", src: "z^2" }, { name: "log(1 + z)", src: "log(1+z)" },
-  { name: "1/(z + 5)", src: "1/(z+5)" }, { name: "1/z", src: "1/z" },
+  { name: "1/(z + 5)", src: "1/(z+5)" },
 ].map((d) => ({ ...d, f: parseExpr(d.src) }));
 export const FUNCTION_PERIOD = 5.5;
 // one of them as a 3D lens: the view is 2.2 m tall 2 m ahead, like the others
@@ -146,134 +146,18 @@ function prewarm(key, W, H, dpr, lens) {
   advanceScan(sc, sc.total, 4);
 }
 
-// The sensor sweep: the lens changes every frame, so its pictures are worked out at fixed steps
-// of the sweep (once each, nearest first) and each frame blends the two steps either side.
-// Until those two are ready, a quick coarse picture stands in.
-const SWEEP_STEPS = 40, SWEEP_MAX = 1.45;
+// Pictures of a lens that changes every frame (the sensor sweep, the sliders) come from the game's
+// own renderer, set by main.mjs: engine(lens, w) draws the scene through `lens`, w × w pixels,
+// and returns the canvas it drew on.
+let engine = null;
+export const setEngine = (fn) => { engine = fn; };
 export const sweepLens = (s) => ({ A: s * 1.1, t: (1 - s) * 0.55 });
-export function drawSweepDemo(ctx, W, H, dpr, st, s) {
-  const L = layout(W, H), pw = Math.min(360, Math.round(L.pic.w * dpr)), lens = sweepLens(s);
-  if (!st.levels || st.pw !== pw) {
-    st.pw = pw; st.low = new Scan();
-    st.levels = Array.from({ length: SWEEP_STEPS + 1 }, (_, i) => {
-      const sc = new Scan(); sc.reset(`${i}`, pw, pw, sweepLens((i / SWEEP_STEPS) * SWEEP_MAX)); return sc;
-    });
-  }
-  const x = Math.max(0, Math.min(SWEEP_STEPS, (s / SWEEP_MAX) * SWEEP_STEPS)), i0 = Math.floor(x), i1 = Math.min(SWEEP_STEPS, i0 + 1), f = x - i0;
-  // spend this frame's time on the steps nearest the sweep first
-  const t0 = performance.now();
-  for (let d = 0; d <= SWEEP_STEPS && performance.now() - t0 < 10; d++) for (const i of d ? [i0 - d, i1 + d] : [i0, i1]) {
-    const sc = st.levels[i];
-    if (sc && sc.done < sc.total) advanceScan(sc, sc.total, 10 - (performance.now() - t0));
-  }
+export function drawEngineDemo(ctx, W, H, dpr, lens) {
+  const L = layout(W, H), pw = Math.round(L.pic.w * dpr);
   ctx.clearRect(0, 0, W, H);
   drawView(ctx, L.view, dpr, lens, []);
-  const a = st.levels[i0], b = st.levels[i1], ready = (sc) => sc.done === sc.total;
-  if (ready(a) && ready(b)) {
-    a.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y });
-    if (f > 0.01 && b !== a) { ctx.globalAlpha = f; b.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y }); ctx.globalAlpha = 1; }
-  } else {
-    const lw = Math.max(8, Math.round(pw / 4));
-    st.low.reset("", lw, lw, lens); st.low.advance(st.low.total);
-    st.low.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y });
-  }
+  if (engine) ctx.drawImage(engine(lens, pw), L.pic.x, L.pic.y, L.pic.w, L.pic.h);
   labels(ctx, L);
-}
-
-/* ---------------- the corner demo: what gets divided ---------------- */
-
-// its clock: two corners placed slowly with the division shown, the rest quickly, then the
-// triangles joined, then filled while the wireframe fades
-const SLOW = 3.6, FAST = 0.18, JOIN = 1.2, FILL = 1.4, HOLD = 2.2;
-const N_SLOW = 2, PLACE = N_SLOW * SLOW + (CORNERS.length - N_SLOW) * FAST;
-export const CORNER_PERIOD = PLACE + JOIN + FILL + HOLD;
-function cornerClock(t) {
-  const tc = t % CORNER_PERIOD;
-  if (tc < N_SLOW * SLOW) return { cur: Math.floor(tc / SLOW), into: (tc % SLOW) / SLOW, slow: true, join: 0, fill: 0 };
-  if (tc < PLACE) return { cur: N_SLOW + Math.floor((tc - N_SLOW * SLOW) / FAST), into: 1, slow: false, join: 0, fill: 0 };
-  const e = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
-  return { cur: CORNERS.length, into: 1, slow: false,
-    join: e(Math.min(1, (tc - PLACE) / JOIN)), fill: e(Math.max(0, Math.min(1, (tc - PLACE - JOIN) / FILL))) };
-}
-const ACROSS = "#62d0c3", UP = "#ff8a5c";
-const fmt = (v) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
-
-// The graphics card's way: each corner gets a line to your eye as it's placed. For the first two,
-// the square the view covers at that corner's distance is drawn around it, with the corner's
-// offset across and up; the picture is that square shrunk down, so the corner lands at the same
-// fraction of the way to the edges. Returns the caption.
-export function drawCornerDemo(ctx, W, H, dpr, lens, t) {
-  const L = layout(W, H), V = L.view, k = cornerClock(t);
-  const placed = Math.min(CORNERS.length, k.cur + 1), wire = 1 - k.fill;
-  ctx.clearRect(0, 0, W, H);
-  drawView(ctx, V, dpr, lens, [], { grid: 0, noBall: true });
-  const X = (p) => outsideXY(p, V.x, V.y, V.w, V.h);
-  const seg = (a, b, color, w = 2, dash = []) => {
-    const p = X(a), q = X(b); if (!p || !q) return;
-    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash);
-    ctx.beginPath(); ctx.moveTo(...p); ctx.lineTo(...q); ctx.stroke(); ctx.setLineDash([]);
-  };
-  const cur = k.cur < CORNERS.length ? CORNERS[k.cur].p : null;
-  const f = cur ? lens.A + cur[2] * lens.t : 0;
-  const show = k.slow ? Math.min(1, k.into / 0.12, (1 - k.into) / 0.06) : 0; // the slice fades in and out
-  ctx.save(); ctx.beginPath(); ctx.rect(V.x, V.y, V.w, V.h); ctx.clip();
-  const eye = [0, 0, 0];
-  // the square the view covers at the current corner's distance
-  if (show > 0) {
-    const [x, y, z] = cur, sq = [[-f, -f, z], [f, -f, z], [f, f, z], [-f, f, z]].map(X);
-    ctx.globalAlpha = show;
-    if (sq.every(Boolean)) {
-      ctx.fillStyle = "rgba(255,210,63,0.14)"; ctx.strokeStyle = "rgba(255,210,63,0.9)"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); sq.forEach((q, i) => (i ? ctx.lineTo(...q) : ctx.moveTo(...q))); ctx.closePath(); ctx.fill(); ctx.stroke();
-    }
-    seg(eye, [0, 0, z], "rgba(255,255,255,0.8)", 1.2, [4, 4]); // the line you're looking along
-    seg([0, 0, z], [x, 0, z], ACROSS, 2.5);
-    seg([x, 0, z], [x, y, z], UP, 2.5);
-    ctx.globalAlpha = 1;
-  }
-  // the corners placed so far, each on the ray from your eye; the newest in yellow
-  for (let i = 0; i < placed; i++) {
-    const now = i === k.cur, q = X(CORNERS[i].p);
-    if (!q) continue;
-    if (k.join === 0 || wire > 0) seg(eye, CORNERS[i].p, now ? "#ffd23f" : `rgba(255,255,255,${0.35 * wire})`, now ? 2 : 1);
-    ctx.fillStyle = now ? "#ffd23f" : `rgba(20,22,26,${Math.max(wire, 0.0)})`;
-    ctx.beginPath(); ctx.arc(...q, now ? 4 : 2.5, 0, 7); ctx.fill();
-  }
-  ctx.restore();
-  // the picture
-  ctx.save();
-  ctx.translate(L.pic.x, L.pic.y);
-  ctx.beginPath(); ctx.rect(0, 0, L.pic.w, L.pic.h); ctx.clip();
-  const P = projectBoxes(ctx, L.pic.w, L.pic.h, lens, { placed, join: k.join, fill: k.fill });
-  if (cur) {
-    const [px, py] = P(...cur), c = [L.pic.w / 2, L.pic.h / 2];
-    if (show > 0) { // the same offsets, shrunk with the square into the picture
-      ctx.globalAlpha = show;
-      ctx.strokeStyle = "rgba(20,22,26,0.5)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
-      ctx.beginPath(); ctx.moveTo(c[0], 0); ctx.lineTo(c[0], L.pic.h); ctx.moveTo(0, c[1]); ctx.lineTo(L.pic.w, c[1]); ctx.stroke();
-      ctx.setLineDash([]); ctx.lineWidth = 3;
-      ctx.strokeStyle = ACROSS; ctx.beginPath(); ctx.moveTo(...c); ctx.lineTo(px, c[1]); ctx.stroke();
-      ctx.strokeStyle = UP; ctx.beginPath(); ctx.moveTo(px, c[1]); ctx.lineTo(px, py); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    ctx.fillStyle = "#ffd23f"; ctx.strokeStyle = "#14161a"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(px, py, 5, 0, 7); ctx.fill(); ctx.stroke();
-  }
-  ctx.restore();
-  labels(ctx, L);
-  if (show > 0) { // the picture's frame is the square, shrunk
-    ctx.globalAlpha = show; ctx.strokeStyle = "rgba(255,210,63,0.9)"; ctx.lineWidth = 2;
-    ctx.strokeRect(L.pic.x - 1, L.pic.y - 1, L.pic.w + 2, L.pic.h + 2); ctx.globalAlpha = 1;
-  }
-  if (k.slow) {
-    const [x, y, z] = cur;
-    const ax = fmt(Math.abs(x)), ay = fmt(Math.abs(y)), F = f.toFixed(2);
-    return `This corner is ${ax} m ${x < 0 ? "left" : "right"} of the line you're looking along and ${ay} m ${y < 0 ? "below" : "above"} it, ${z.toFixed(2)} m ahead. `
-      + `The view there reaches 0.55 × ${z.toFixed(2)} = ${F} m from the middle to each edge, so the corner lands `
-      + `${(Math.abs(x) / f).toFixed(2)} of the way ${x < 0 ? "left" : "right"} (${ax} ÷ ${F}) and ${(Math.abs(y) / f).toFixed(2)} of the way ${y < 0 ? "down" : "up"} (${ay} ÷ ${F}).`;
-  }
-  if (k.cur < CORNERS.length) return "Every other corner is placed the same way: its offset divided by 0.55 times its distance.";
-  return k.fill === 0 ? "Neighboring corners are joined into triangles." : "The triangles are filled in, nearest in front.";
 }
 
 /* ---------------- every 3D demo, by name ---------------- */
@@ -287,16 +171,17 @@ export function drawAbout3D(demo, ctx, W, H, dpr, t, store) {
   if (demo === "render3d") return drawTraceDemo(ctx, W, H, dpr, { key: "eye", lens: EYE_LENS, frac });
   if (demo === "render3d-ortho") return drawTraceDemo(ctx, W, H, dpr, { key: "sensor", lens: SENSOR_LENS, frac });
   if (demo === "twolens3d") return drawTraceDemo(ctx, W, H, dpr, { key: "twolens", lens: TWO_LENS, frac });
-  if (demo === "divide3d") return drawCornerDemo(ctx, W, H, dpr, EYE_LENS, t);
   if (demo === "orthopair") return drawOrthoPair(ctx, W, H, dpr, t, store);
-  if (demo === "plane3d") return drawSweepDemo(ctx, W, H, dpr, store, sensorSweep(t));
+  if (demo === "vertex") return drawVertexDemo(ctx, W, H, dpr, t);
+  if (demo === "plane3d") return drawEngineDemo(ctx, W, H, dpr, sweepLens(sensorSweep(t)));
+  if (demo === "sliders3d") return drawEngineDemo(ctx, W, H, dpr, store.lens ?? EYE_LENS);
   if (demo === "functions3d") {
     const i = Math.floor(t / FUNCTION_PERIOD) % FUNCTIONS.length, j = (i + 1) % FUNCTIONS.length;
     const into = (t % FUNCTION_PERIOD) / 4.5;
     drawTraceDemo(ctx, W, H, dpr, { key: FUNCTIONS[i].src, lens: curved[i], frac: Math.min(1, into) });
     prewarm(FUNCTIONS[j].src, W, H, dpr, curved[j]);
     const s = sensorOf(curved[i]);
-    return `Divide by ${FUNCTIONS[i].name}. `
+    return `f(z) = ${FUNCTIONS[i].name}. `
       + (!s ? "f is infinite at your eye, so the rays don't start there: they come in from infinitely far away."
         : s[0] > 0.01 ? `f(0) isn't 0, so the rays start on a ${(2 * s[0]).toFixed(1)} m sensor.`
         : "f(0) is 0, so the rays start at your eye.");
@@ -309,4 +194,170 @@ export function sensorSweep(t) {
   const seg = u * (keysS.length - 1), i = Math.floor(seg), f = seg - i;
   const ease = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
   return keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
+}
+
+/* ---------------- how it actually works: triangle by triangle ---------------- */
+
+// The scene's boxes and ground as triangles, in camera coordinates (the eye at 0, x right, y up,
+// z ahead), with the faces that point away from the eye left out. Each is { p: [3 points], color }.
+const SUN_D = (() => { const v = [-0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
+const shadeHex = (hex, n) => {
+  const k = 0.55 + 0.5 * Math.max(0, n[0] * SUN_D[0] + n[1] * SUN_D[1] + n[2] * SUN_D[2]);
+  return [1, 3, 5].map((i) => Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * k)));
+};
+const TRIS = (() => {
+  const out = [];
+  // the red cube first (its first triangle is the one worked through slowly), then the blue box
+  for (const b of [SCENE3.boxes[0], SCENE3.boxes[1]]) {
+    const c = Math.cos(b.rot), sn = Math.sin(b.rot);
+    const W = ([x, y, z]) => [b.c[0] + c * x + sn * z, b.c[1] + y, b.c[2] - sn * x + c * z];
+    const N = ([x, y, z]) => [c * x + sn * z, y, -sn * x + c * z];
+    const h = b.half, P = (sx, sy, sz) => W([sx * h[0], sy * h[1], sz * h[2]]);
+    const faces = [ // corners counterclockwise seen from outside, and the outward normal
+      [[P(-1, -1, -1), P(-1, 1, -1), P(1, 1, -1), P(1, -1, -1)], [0, 0, -1]],
+      [[P(-1, 1, -1), P(-1, 1, 1), P(1, 1, 1), P(1, 1, -1)], [0, 1, 0]],
+      [[P(1, -1, -1), P(1, 1, -1), P(1, 1, 1), P(1, -1, 1)], [1, 0, 0]],
+      [[P(-1, -1, 1), P(-1, 1, 1), P(-1, 1, -1), P(-1, -1, -1)], [-1, 0, 0]],
+      [[P(1, -1, 1), P(1, 1, 1), P(-1, 1, 1), P(-1, -1, 1)], [0, 0, 1]],
+    ];
+    for (const [q, n0] of faces) {
+      const n = N(n0), mid = [0, 1, 2].map((a) => q.reduce((s2, p) => s2 + p[a], 0) / 4);
+      if (n[0] * mid[0] + n[1] * mid[1] + n[2] * mid[2] >= 0) continue; // facing away
+      const color = shadeHex(b.color, n);
+      out.push({ p: [q[0], q[1], q[2]], color }, { p: [q[0], q[2], q[3]], color });
+    }
+  }
+  // the ground: two big triangles, most of their corners far off the picture
+  const g = SCENE3.ground, gc = SCENE3.grass;
+  const G = [[-40, g, 0.6], [40, g, 0.6], [40, g, 90], [-40, g, 90]];
+  out.push({ p: [G[0], G[1], G[2]], color: gc, ground: true }, { p: [G[0], G[2], G[3]], color: gc, ground: true });
+  return out;
+})();
+const NAMES = ["A", "B", "C"];
+const VSTEP = 3.6, FILL1 = 1.1, FASTT = 0.4, HOLDT = 2.6;
+const SLOW_END = 3 * VSTEP + FILL1, FAST_END = SLOW_END + (TRIS.length - 1) * FASTT;
+export const VERTEX_PERIOD = FAST_END + HOLDT;
+const ACROSS = "#62d0c3", UP = "#ff8a5c";
+const num = (v) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
+
+export function drawVertexDemo(ctx, W, H, dpr, t) {
+  const lens = EYE_LENS, narrow = W < 520, eqH = narrow ? 88 : 56;
+  const L = layout(W, H - eqH), V = L.view, P = L.pic, f = (z) => lens.A + z * lens.t;
+  const tc = t % VERTEX_PERIOD;
+  // where the animation is: the slow first triangle (vertex k, step 1 or 2), or the rest quickly
+  const slow = tc < SLOW_END, k = slow ? Math.min(3, Math.floor(tc / VSTEP)) : 3, into = slow ? (tc % VSTEP) / VSTEP : 1;
+  const step2 = into > 0.42;
+  const done = slow ? (k >= 3 ? Math.min(1, (tc - 3 * VSTEP) / 0.6) : 0) : 1; // first triangle's fill
+  const fastN = slow ? 0 : Math.min(TRIS.length - 1, Math.floor((tc - SLOW_END) / FASTT) + 1);
+  const curTri = slow ? 0 : Math.min(TRIS.length - 1, fastN), filled = slow ? (done > 0 ? 1 : 0) : fastN + (tc >= FAST_END ? 1 : 0);
+  ctx.clearRect(0, 0, W, H);
+  drawView(ctx, V, dpr, lens, [], { grid: 0, noBall: true });
+  const X = (p) => outsideXY(p, V.x, V.y, V.w, V.h);
+  const seg = (a, b, color, w = 2, dash = []) => {
+    const p = X(a), q = X(b); if (!p || !q) return;
+    ctx.strokeStyle = color; ctx.lineWidth = w; ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(...p); ctx.lineTo(...q); ctx.stroke(); ctx.setLineDash([]);
+  };
+  const tri = TRIS[curTri], cur = slow && k < 3 ? tri.p[k] : null;
+  ctx.save(); ctx.beginPath(); ctx.rect(V.x, V.y, V.w, V.h); ctx.clip();
+  // the triangle being drawn, outlined in the world
+  if (tc < FAST_END && !tri.ground) {
+    const q = tri.p.map(X);
+    if (q.every(Boolean)) {
+      ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 2; ctx.fillStyle = "rgba(255,210,63,0.25)";
+      ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+  }
+  if (cur) { // step 1: the vertex's x, y and z; step 2: how far the view reaches at its z
+    const [x, y, z] = cur, a = Math.min(1, into / 0.1);
+    ctx.globalAlpha = a;
+    seg([0, 0, 0], [0, 0, z], "rgba(255,255,255,0.85)", 1.5, [4, 4]);
+    seg([0, 0, z], [x, 0, z], ACROSS, 2.5);
+    seg([x, 0, z], [x, y, z], UP, 2.5);
+    if (step2) {
+      const F = f(z), sq = [[-F, -F, z], [F, -F, z], [F, F, z], [-F, F, z]].map(X);
+      if (sq.every(Boolean)) {
+        ctx.fillStyle = "rgba(255,210,63,0.1)"; ctx.strokeStyle = "rgba(255,210,63,0.85)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); sq.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (slow) {
+    ctx.font = "bold 12px 'JetBrains Mono', monospace";
+    const sp = TRIS[0].p.map(X), mid = [0, 1].map((a) => sp.reduce((s3, q) => s3 + q[a], 0) / 3);
+    sp.forEach((s2, i) => {
+      if (i > k || !s2) return;
+      ctx.fillStyle = i === k ? "#ffd23f" : "#14161a"; ctx.beginPath(); ctx.arc(...s2, i === k ? 4.5 : 3, 0, 7); ctx.fill();
+      const d = [s2[0] - mid[0], s2[1] - mid[1]], l = Math.hypot(...d) || 1;
+      const lx = s2[0] + (d[0] / l) * 16 - 6, ly = s2[1] + (d[1] / l) * 16 + 4;
+      ctx.fillStyle = "rgba(17,19,23,0.85)"; ctx.fillRect(lx - 2, ly - 12, 13, 15);
+      ctx.fillStyle = "#e9e4d8"; ctx.fillText(NAMES[i], lx, ly);
+    });
+  }
+  ctx.restore();
+  // the picture: the triangles drawn so far, farthest first, so nearer ones cover them
+  ctx.save(); ctx.beginPath(); ctx.rect(P.x, P.y, P.w, P.h); ctx.clip();
+  ctx.fillStyle = "#1a1d22"; ctx.fillRect(P.x, P.y, P.w, P.h);
+  const S = ([x, y, z]) => [P.x + (x / f(z) + 1) / 2 * P.w, P.y + (1 - y / f(z)) / 2 * P.h];
+  const list = TRIS.slice(0, filled).map((tr, i) => ({ tr, i, z: tr.ground ? 1e9 : (tr.p[0][2] + tr.p[1][2] + tr.p[2][2]) / 3 }));
+  if (filled > 0 || tc >= FAST_END) { /* sky behind everything once anything is drawn */ }
+  list.sort((a, b) => b.z - a.z);
+  for (const { tr, i } of list) {
+    const alpha = i === 0 && slow ? done : 1;
+    ctx.globalAlpha = alpha; ctx.fillStyle = `rgb(${tr.color})`;
+    ctx.beginPath(); tr.p.map(S).forEach((p, j) => (j ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  if (tc >= FAST_END) { // the finished picture: sky where nothing was drawn
+    ctx.globalCompositeOperation = "destination-over"; ctx.fillStyle = `rgb(${SCENE3.sky})`;
+    ctx.fillRect(P.x, P.y, P.w, P.h); ctx.globalCompositeOperation = "source-over";
+  }
+  // grid: the picture's u and v from −1 to 1
+  ctx.strokeStyle = "rgba(233,228,216,0.18)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(P.x + P.w / 2, P.y); ctx.lineTo(P.x + P.w / 2, P.y + P.h); ctx.moveTo(P.x, P.y + P.h / 2); ctx.lineTo(P.x + P.w, P.y + P.h / 2); ctx.stroke();
+  if (tc < FAST_END && !slow) { // the triangle being drawn now, outlined
+    ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 2;
+    ctx.beginPath(); tri.p.map(S).forEach((p, j) => (j ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.stroke();
+  }
+  if (slow) {
+    ctx.font = "bold 12px 'JetBrains Mono', monospace";
+    TRIS[0].p.forEach((p, i) => {
+      if (i > k || (i === k && !step2)) return;
+      const [px, py] = S(p);
+      if (i === k && cur) { // the offsets in the picture
+        const c = [P.x + P.w / 2, P.y + P.h / 2];
+        ctx.lineWidth = 2.5; ctx.strokeStyle = ACROSS; ctx.beginPath(); ctx.moveTo(...c); ctx.lineTo(px, c[1]); ctx.stroke();
+        ctx.strokeStyle = UP; ctx.beginPath(); ctx.moveTo(px, c[1]); ctx.lineTo(px, py); ctx.stroke();
+      }
+      ctx.fillStyle = i === k ? "#ffd23f" : "#e9e4d8"; ctx.beginPath(); ctx.arc(px, py, i === k ? 4.5 : 3.5, 0, 7); ctx.fill();
+      ctx.fillText(NAMES[i], px + 6, py - 5);
+    });
+  }
+  ctx.restore();
+  ctx.font = "10px 'JetBrains Mono', monospace"; ctx.fillStyle = "#7d7a72";
+  ctx.fillText("v = 1", P.x + P.w / 2 + 3, P.y + 10); ctx.textAlign = "right"; ctx.fillText("u = 1", P.x + P.w - 3, P.y + P.h / 2 - 3); ctx.textAlign = "left";
+  labels(ctx, L);
+  // the numbers
+  const y0 = H - eqH + 16, lh = 17;
+  ctx.font = "12px 'JetBrains Mono', monospace"; ctx.textAlign = "left";
+  const line = (parts, row) => { let x = 4; for (const [txt, col] of parts) { ctx.fillStyle = col; ctx.fillText(txt, x, y0 + row * lh); x += ctx.measureText(txt).width; } };
+  const W1 = "#e9e4d8", MUTE = "#9a978e", Y = "#ffd23f";
+  if (cur) {
+    const [x, y, z] = cur, F = f(z), nm = NAMES[k];
+    line([[narrow ? `1. ${nm} = (` : `1. ${nm} in camera coordinates: (`, MUTE], [num(x), ACROSS], [", ", MUTE], [num(y), UP], [", ", MUTE], [num(z), W1], [")", MUTE]], 0);
+    if (step2) {
+      const a = [[`2. u = x ÷ f(z) = ${num(x / F)}`, ACROSS]], b = [[`v = y ÷ f(z) = ${num(y / F)}`, UP]];
+      line([["   f(z) = 0.55 × ", MUTE], [num(z), W1], [" = ", MUTE], [num(F), Y]], narrow ? 1 : 1);
+      if (narrow) { line(a, 2); line([["   ", W1], ...b], 3); } else line([...a, ["    ", W1], ...b], 2);
+    }
+  } else if (slow) {
+    line([["3. Fill the triangle between A, B and C.", W1]], 0);
+  } else if (tc < FAST_END) {
+    line([[`The same for every triangle: ${fastN + 1} of ${TRIS.length}.`, W1]], 0);
+    if (tri.ground) line([["The ground's corners are far off the picture, so it's clipped at the edges.", MUTE]], 1);
+    else line([["Nearer triangles cover farther ones (the depth test).", MUTE]], 1);
+  } else {
+    line([["Every triangle drawn: that's the picture.", W1]], 0);
+  }
 }
