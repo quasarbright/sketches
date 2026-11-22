@@ -10,25 +10,26 @@ export const TEAMS = {
 
 // `max`: how many copies the role picker allows. `pair`: comes in twos (Masons).
 // `wolf`: counts as a Werewolf (wakes with the wolves, killing one wins it for the village).
+// `more`: the rules need more than the card's one line, so the card gets an info button.
 // `step`: the night step this role acts in (see NIGHT_STEPS), or null for no night action.
 export const ROLES = {
   copycat: {
-    name: N.copycat, team: "village", wolf: false, max: 1, step: "copycat",
+    more: true, name: N.copycat, team: "village", wolf: false, max: 1, step: "copycat",
     short: "Becomes a center card's role",
     text: "You wake first and look at one of the 3 center cards. You become that role: you're on its team, and you wake again on its turn to do what it does.",
   },
   lookalike: {
-    name: N.lookalike, team: "village", wolf: false, max: 1, step: "lookalike",
+    more: true, name: N.lookalike, team: "village", wolf: false, max: 1, step: "lookalike",
     short: "Copies another player's role",
     text: "You look at another player's card and become that role: you're on its team, and you wake again on its turn to do what it does. Whoever holds your card at the end is the role you copied.",
   },
   werewolf: {
-    name: N.werewolf, team: "wolf", wolf: true, max: 3, step: "wolves",
+    more: true, name: N.werewolf, team: "wolf", wolf: true, max: 3, step: "wolves",
     short: "Sees the other wolves",
     text: "You wake with the other wolves and see who they are. If you're the only wolf, you may look at one of the 3 center cards.",
   },
   packleader: {
-    name: N.packleader, team: "wolf", wolf: true, max: 1, step: "packleader",
+    more: true, name: N.packleader, team: "wolf", wolf: true, max: 1, step: "packleader",
     short: `Gives a player the spare ${N.werewolf} card`,
     text: `You're a wolf and wake with the other wolves. Then, on your own turn, you give the spare ${N.werewolf} card to a player who isn't a wolf. The two cards swap places: that player now holds the ${N.werewolf} card and is on the wolf team without knowing it, and their old card goes face down into the spare slot.`,
     note: `Picking the ${N.packleader} adds a spare ${N.werewolf} card to the deck. It sits apart from the 3 center cards and only the ${N.packleader} can move it.`,
@@ -44,27 +45,27 @@ export const ROLES = {
     text: "You're a wolf and wake with the other wolves. When you vote, your vote counts as two.",
   },
   dozingwolf: {
-    name: N.dozingwolf, team: "wolf", wolf: true, max: 1, step: null,
+    more: true, name: N.dozingwolf, team: "wolf", wolf: true, max: 1, step: null,
     short: "A wolf who sleeps through the night",
     text: "You're a wolf, but you don't wake up, so you don't know who the other wolves are. They see who you are.",
   },
   lackey: {
-    name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
+    more: true, name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
     short: "Sees the wolves, wins with them",
     text: "You're on the wolf team, but you aren't a wolf. You wake and see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win as long as someone other than you dies.",
   },
   scout: {
-    name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
+    more: true, name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
     short: "Sees the wolves and their cards",
     text: `You're on the wolf team, but you aren't a wolf. You wake, see who the wolves are and look at their cards, so you know whether they're still wolves. If you die, the village wins.`,
   },
   apprentice: {
-    name: N.apprentice, team: "jester", wolf: false, max: 1, step: "apprentice",
+    more: true, name: N.apprentice, team: "jester", wolf: false, max: 1, step: "apprentice",
     short: `Wins if the ${N.jester} dies`,
     text: `You wake and see who the ${N.jester} is. You win if the ${N.jester} dies. If no player is the ${N.jester}, you win only if you die, like the ${N.jester}.`,
   },
   mason: {
-    name: N.mason, team: "village", wolf: false, max: 2, pair: true, step: "masons",
+    more: true, name: N.mason, team: "village", wolf: false, max: 2, pair: true, step: "masons",
     short: `Sees the other ${N.mason}`,
     text: `${N.mason}s come in pairs. You wake with the other ${N.mason} and see each other. If you wake alone, the other ${N.mason} card is in the center.`,
   },
@@ -84,7 +85,7 @@ export const ROLES = {
     text: `You wake and see who started as the ${N.seer} or ${N.noviceseer}, and what card they hold now.`,
   },
   investigator: {
-    name: N.investigator, team: "village", wolf: false, max: 1, step: "investigator",
+    more: true, name: N.investigator, team: "village", wolf: false, max: 1, step: "investigator",
     short: "Looks at up to two cards, may turn",
     text: `You may look at up to two other players' cards, one at a time. If you see a wolf or the ${N.jester}, you stop and become that role, on its team.`,
   },
@@ -119,7 +120,7 @@ export const ROLES = {
     text: "You wake last and look at your own card, to see whether someone swapped it.",
   },
   unveiler: {
-    name: N.unveiler, team: "village", wolf: false, max: 1, step: "unveiler",
+    more: true, name: N.unveiler, team: "village", wolf: false, max: 1, step: "unveiler",
     short: "Turns a player's card face up",
     text: `You wake last and may turn another player's card face up for everyone to see during the day. If it's a wolf or the ${N.jester}, you turn it back face down and only you saw it.`,
   },
@@ -134,27 +135,27 @@ export const ROLES = {
     text: "No night action. If you die, the player you voted for dies too.",
   },
   witch: {
-    name: N.witch, team: "village", wolf: false, max: 1, step: "witch",
+    more: true, name: N.witch, team: "village", wolf: false, max: 1, step: "witch",
     short: "Swaps a center card with another player's card",
     text: "You may look at one of the 3 center cards. If you do, you must swap it with any player's card, your own included. That player doesn't see it.",
   },
   bodyguard: {
-    name: N.bodyguard, team: "village", wolf: false, max: 1, step: null,
+    more: true, name: N.bodyguard, team: "village", wolf: false, max: 1, step: null,
     short: "Protects whoever they vote for",
     text: `No night action. The player you vote for can't die. If they get the most votes, the player with the next most votes dies instead, and the ${N.hunter} can't take them down.`,
   },
   prince: {
-    name: N.prince, team: "village", wolf: false, max: 1, step: null,
+    more: true, name: N.prince, team: "village", wolf: false, max: 1, step: null,
     short: "Can't be killed",
     text: `No night action. You can't die: if you get the most votes, the player with the next most votes dies instead, and the ${N.hunter} can't take you down.`,
   },
   cursed: {
-    name: N.cursed, team: "village", wolf: false, max: 1, step: null,
+    more: true, name: N.cursed, team: "village", wolf: false, max: 1, step: null,
     short: "A wolf's vote turns them wolf",
     text: `No night action. You're on the village team, but if any wolf votes for you, you become a ${N.werewolf}: you're on the wolf team, and if you die, a wolf died.`,
   },
   jester: {
-    name: N.jester, team: "jester", wolf: false, max: 1, step: null,
+    more: true, name: N.jester, team: "jester", wolf: false, max: 1, step: null,
     short: "Wins only by dying",
     text: "You're on nobody's team, and you win only if you die. If you die, the wolves can't win, though the village still can.",
   },
@@ -193,11 +194,25 @@ export const NIGHT_STEPS = [
   { id: "unveiler", label: N.unveiler, roles: ["unveiler"] },
 ];
 
-export const WIN_RULES = [
-  ["village", `The village wins if at least one wolf dies (a ${N.cursed} a wolf voted for counts as a wolf), or if the ${N.scout} dies. If no player is a wolf, the village wins when nobody dies (or the ${N.lackey} or ${N.scout} dies).`],
-  ["wolf", `The wolf team wins if no wolf and no ${N.scout} dies, and the ${N.jester} doesn't die. If no player is a wolf, the ${N.lackey} and ${N.scout} win when someone else dies.`],
-  ["jester", `The ${N.jester} wins if the ${N.jester} dies. The ${N.apprentice} wins if the ${N.jester} dies, or, with no ${N.jester} among the players, if the ${N.apprentice} dies.`],
-];
+// How each team wins, mentioning only the cards in this deck (all of them when there's no deck yet).
+export function winRules(roles) {
+  const all = !roles || !Object.values(roles).some(Boolean);
+  const has = (r) => all || !!roles[r];
+  const list = (xs) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] || "";
+  const helpers = [has("lackey") && `the ${N.lackey}`, has("scout") && `the ${N.scout}`].filter(Boolean);
+  const skinner = has("jester") || has("apprentice");
+  const rules = [
+    ["village", `The village wins if at least one wolf dies${has("cursed") ? ` (a ${N.cursed} a wolf voted for counts as a wolf)` : ""}${has("scout") ? `, or if the ${N.scout} dies` : ""}. If no player is a wolf, the village wins when nobody dies${helpers.length ? ` (or ${helpers.join(" or ")} dies)` : ""}.`],
+    ["wolf", `The wolf team wins if no wolf${has("scout") ? ` and no ${N.scout}` : ""} dies${skinner ? `, and the ${N.jester} doesn't die` : ""}.${helpers.length ? ` If no player is a wolf, ${list(helpers)} win when someone else dies.` : ""}`],
+  ];
+  if (skinner) {
+    const t = [];
+    if (has("jester")) t.push(`The ${N.jester} wins if the ${N.jester} dies.`);
+    if (has("apprentice")) t.push(`The ${N.apprentice} wins if the ${N.jester} dies, or, with no ${N.jester} among the players, if the ${N.apprentice} dies.`);
+    rules.push(["jester", t.join(" ")]);
+  }
+  return rules;
+}
 
 // Suggested decks by player count (player count + 3 cards). Used until the host edits the picker.
 const SUGGESTED = {

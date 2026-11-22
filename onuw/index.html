@@ -203,9 +203,7 @@
     /* team letter in the top-right corner, on the name band */
     .ms-team-mark { position: absolute; top: 0; right: 4cqw; z-index: 2; width: 12cqw; height: calc(max(12.2cqw, 11px) * 1.43 + 3.6cqw); display: grid; place-items: center;
       font-weight: 400; font-size: max(12.2cqw, 11px); line-height: 1; color: var(--band-ink, #fff); }
-    .ms-off .ms-team-mark { color: var(--muted); }
     .ms-info, .ms-lock, .ms-badge { z-index: 2; }
-    .ms-off .ms-art { opacity: .3; filter: grayscale(.7); }
     .ms-card-label { font-size: .78rem; color: var(--muted); text-align: center; max-width: 120px; }
     .ms-info { position: absolute; right: 4cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.1cqw); width: max(15cqw, 20px); height: max(15cqw, 20px); border-radius: 50%; border: none; display: grid; place-items: center;
       background: rgba(0, 0, 0, .3); color: #fff; cursor: pointer; padding: 0; }
@@ -235,15 +233,22 @@
     .ms-pickable { cursor: pointer; transition: transform .12s; }
     .ms-pickable:hover { transform: translateY(-2px); }
     .ms-pickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-    .ms-off { background: var(--panel); border: 1.5px dashed #3a4670; box-shadow: none; }
-    .ms-off .ms-card-name { background: var(--panel-2); color: var(--muted); }
-    .ms-off .ms-card-art { color: #56628c; }
-    .ms-off .ms-card-short { color: var(--muted); background: none; }
+    /* a card not in the deck: the same card, dimmed */
+    .ms-off { filter: brightness(.42) saturate(.8); box-shadow: none; transition: filter .15s, transform .12s; }
+    .ms-off.ms-pickable:hover { filter: brightness(.6) saturate(.9); }
     .ms-badge { position: absolute; left: 3cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.6cqw); font: 700 .78rem var(--font-mono); background: rgba(5,8,20,.7); color: var(--text); border-radius: 999px; padding: 1px 7px; }
-    .ms-stepper { display: flex; align-items: center; gap: 4px; }
-    .ms-stepper button { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); cursor: pointer; padding: 0; }
-    .ms-stepper button:disabled { background: none; color: var(--faint); cursor: not-allowed; }
-    .ms-stepper span { min-width: 22px; text-align: center; font-weight: 700; }
+    /* how many copies, on the card's art, so changing it never moves anything */
+    .ms-count { position: absolute; z-index: 2; left: 50%; bottom: calc(34.4cqw + 4cqw); transform: translateX(-50%); display: flex; align-items: center;
+      background: rgba(5, 8, 20, .72); border-radius: 999px; padding: 2px; color: #fff; font: 700 max(10cqw, 13px)/1 var(--font-mono); white-space: nowrap; }
+    .ms-count span { min-width: 2.4em; text-align: center; }
+    .ms-count button { width: max(21cqw, 30px); height: max(21cqw, 30px); border-radius: 50%; border: none; background: none; color: inherit; display: grid; place-items: center; cursor: pointer; padding: 0; position: relative; }
+    .ms-count button::after { content: ""; position: absolute; inset: -6px; }  /* finger-sized hit area */
+    .ms-count button:hover { background: rgba(255, 255, 255, .14); }
+    .ms-count button:disabled { opacity: .3; cursor: not-allowed; background: none; }
+    .ms-count .ms-ico { width: 60%; height: 60%; }
+    .ms-name-first { margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .ms-rename-row { display: flex; gap: 8px; }
+    .ms-rename-row .ms-input { flex: 1; min-width: 0; }
     .ms-locked { opacity: 1; }
     .ms-lock { position: absolute; left: 3cqw; top: calc(max(12.2cqw, 11px) * 1.43 + 6.6cqw); color: var(--text); background: rgba(5,8,20,.6); border-radius: 50%; width: 24px; height: 24px; display: grid; place-items: center; }
     .ms-lock .ms-ico { width: 14px; height: 14px; }
