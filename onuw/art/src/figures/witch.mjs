@@ -25,5 +25,5 @@ const cuts = [
   rect(356, 204, 32, 50, 8, 4),                                                      // card face
 ];
 const sigil = blob([[356, 190], [364, 204], [356, 218], [348, 204]]);
-export default card({ bg, ink, transform: "translate(-50 40) scale(.92)", layers: [feet, { d: robe }, hair, { d: head }, { d: cone }, tip, brim, cuts.map((d) => ({ d, fill: "bg" })),
+export default card({ bg, ink, transform: "translate(-38 62) scale(.86)", layers: [feet, { d: robe }, hair, { d: head }, { d: cone }, tip, brim, cuts.map((d) => ({ d, fill: "bg" })),
   { group: [cardShape], halo: 4 }, { d: cuts[cuts.length - 1], fill: "bg" }, sigil, { group: arm, halo: 4, roots: [[284, 290, 22]] }, steam, { group: pot, halo: 4 }] });

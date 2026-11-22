@@ -32,6 +32,10 @@ export const NAMES = {
   dozingwolf: "Dozing Wolf",
   copycat: "Copycat",
   lookalike: "Lookalike",
+  apprentice: "Apprentice Skinner",
+  noviceseer: "Novice Seer",
+  investigator: "Investigator",
+  aurareader: "Aura Reader",
 };
 
 export const ART = {
@@ -57,6 +61,10 @@ export const ART = {
   dozingwolf: "art/dozingwolf.svg",
   copycat: "art/copycat.svg",
   lookalike: "art/lookalike.svg",
+  apprentice: "art/apprentice.svg",
+  noviceseer: "art/noviceseer.svg",
+  investigator: "art/investigator.svg",
+  aurareader: "art/aurareader.svg",
   back: "art/back.svg",
 };
 
@@ -88,4 +96,8 @@ export const ROLE_COLORS = {
   dozingwolf: { card: "#d45c54", band: "#de837d", ink: "#542421" },
   copycat: { card: "#3c4a6b", band: "#52648f", ink: "#181d2a" },
   lookalike: { card: "#4a4a4a", band: "#666666", ink: "#1d1d1d" },
+  apprentice: { card: "#ff7f00", band: "#ff9933", ink: "#663200" },
+  noviceseer: { card: "#8b3ab6", band: "#a359ca", ink: "#371748" },
+  investigator: { card: "#59a68c", band: "#7ab8a3", ink: "#234238" },
+  aurareader: { card: "#3f1980", band: "#5421ab", ink: "#190a33" },
 };
