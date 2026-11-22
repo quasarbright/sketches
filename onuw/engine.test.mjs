@@ -451,14 +451,17 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.match(s.g.log.at(-1).text, /Witch.*hunter|Hunter/);
 });
 
-test("the Witch can take the card herself, can skip, and a timed-out Witch who looked still swaps", () => {
+test("the Witch can't take the card herself, can skip, and a timed-out Witch who looked still swaps", () => {
   let s = room(["a", "b", "c"]);
   rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
   nightTo(s, "witch");
   handle(s, "a", { t: "act", step: "witch", center: 0 }, 0);
-  assert.equal(handle(s, "a", { t: "act", step: "witch", target: "a" }, 0).error, undefined);
-  assert.equal(s.g.cards.a, "seer");
-  assert.equal(s.g.center[0], "witch");
+  assert.deepEqual(s.g.step.prompts.a.exclude, ["a"], "her own name isn't offered");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", target: "a" }, 0).error, "Pick another player");
+  assert.equal(s.g.cards.a, "witch");
+  assert.equal(s.g.center[0], "seer");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", target: "b" }, 0).error, undefined);
+  assert.equal(s.g.cards.b, "seer");
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
