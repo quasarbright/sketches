@@ -2,8 +2,9 @@ import { ROLE_COLORS } from "../../../skin.mjs";
 import { blob, brush, fringe, card } from "../brush.mjs";
 // The lackey: a hunched servant in a long coat, bowing low and holding a lantern up for the wolves.
 const { card: bg, ink } = ROLE_COLORS.lackey;
-const coat = blob([[206, 262], [262, 228], [318, 244], [348, 300], [352, 400], [362, 500], [366, 590, "c"], [326, 582], [300, 594], [262, 584], [226, 594], [196, 586, "c"], [200, 500], [192, 420], [186, 330]]);
-const hump = blob([[224, 236], [270, 206], [322, 222], [346, 270], [300, 290], [240, 284]]);
+const coat = blob([[206, 262], [262, 228], [318, 244], [376, 310], [374, 410], [368, 500], [366, 590, "c"], [326, 582], [300, 594], [262, 584], [226, 594], [196, 586, "c"], [200, 500], [192, 420], [186, 330]]);
+// a big rounded hump rising above the head, so the head hangs forward below the shoulders
+const hump = blob([[220, 240], [238, 198], [280, 166], [328, 168], [364, 204], [376, 262], [376, 330], [366, 400], [320, 360], [240, 290]]);
 const legs = [brush([[238, 560], [232, 600]], [30, 28]), brush([[300, 560], [310, 600]], [30, 28]),
   blob([[200, 592], [244, 590], [250, 608], [196, 610]]), blob([[300, 592], [344, 590], [352, 608], [298, 610]])];
 // a deep hood with a plain human face in profile, peering at the lantern
