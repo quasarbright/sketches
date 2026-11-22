@@ -416,7 +416,7 @@ test("at night, players who aren't acting see nothing about which card is awake 
   await t.ctx.close();
 });
 
-test("new roles: the Witch looks, then swaps the card onto another player; a Prince with the most votes lives", async () => {
+test("new roles: the Witch looks, then swaps the card onto a player; a Prince with the most votes lives", async () => {
   const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
   await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 2, witch: 1, bodyguard: 1, prince: 1, cursed: 1, villager: 1 } }));
   await t.host.waitForTimeout(200);
@@ -453,16 +453,14 @@ test("new roles: the Witch looks, then swaps the card onto another player; a Pri
   await ana.waitForFunction(() => window.__onuw.view.game.prompt.stage === 2);
   assert.equal(await ana.locator(".ms-prompt .ms-result-cards .ms-card").count(), 1, "she sees the card she looked at");
   assert.equal(await ana.locator("[data-act=skip]").count(), 0, "she can't back out after looking");
-  const me = (await view(ana)).you, cleo = (await view(t.pages[3])).you;
-  assert.equal(await ana.locator("[data-target]").count(), 3, "only the other players");
-  assert.equal(await ana.locator(`[data-target="${me}"]`).count(), 0, "not herself");
-  await ana.click(`[data-target="${cleo}"]`);
-  assert.match(await ana.locator("[data-act=confirm]").innerText(), /Swap it with Cleo's card/);
+  assert.equal(await ana.locator("[data-target]").count(), 4, "any player, herself included");
+  const me = (await view(ana)).you;
+  await ana.click(`[data-target="${me}"]`);
+  assert.match(await ana.locator("[data-act=confirm]").innerText(), /Swap it with your card/);
   const seen = await t.host.evaluate(() => window.__onuw.state.g.center[1]);
   await ana.click("[data-act=confirm]");
-  await t.host.waitForFunction(([id, r]) => window.__onuw.state.g.cards[id] === r, [cleo, seen]);
-  assert.equal(await t.host.evaluate((id) => window.__onuw.state.g.cards[id], me), "witch");
-  assert.equal(await t.host.evaluate((id) => window.__onuw.state.g.cards[id], cleo), seen);
+  await t.host.waitForFunction((id) => window.__onuw.state.g.cards[id] !== "witch", me);
+  assert.equal(await t.host.evaluate((id) => window.__onuw.state.g.cards[id], me), seen);
   await playNight(t.host, t.pages);
   // the vote: three votes on the Prince, so nobody else reaches two and nobody dies
   for (const p of t.pages) await p.click("[data-act=dayready]");

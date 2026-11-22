@@ -415,7 +415,7 @@ function startStep(s, id, pid, actors) {
     case "unveiler":
       return { kind: "player", optional: true, exclude: [pid], text: `You may turn another player's card face up for the day. If it's a wolf or the ${N.jester}, it goes back face down.` };
     case "witch":
-      return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with another player's card." };
+      return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with any player's card, your own included." };
     case "meddler":
       return { kind: "two", optional: true, exclude: [pid], text: "You may swap the cards of two other players. You won't see them." };
     case "sleepwalker":
@@ -483,11 +483,11 @@ function applyAction1(s, pid, id, prompt, msg) {
       }
       if (id === "witch") {
         const cards = [{ label: centerLabel(i), role: g.center[i] }];
-        const text = `${centerLabel(i)} is the ${roleName(g.center[i])}. Now swap it with another player's card.`;
+        const text = `${centerLabel(i)} is the ${roleName(g.center[i])}. Now swap it with a player's card.`;
         return {
           result: { text, cards },
-          next: { kind: "player", required: true, witch: i, exclude: [pid], cards, stage: 2,
-            text: `${centerLabel(i)} is the ${roleName(g.center[i])}. Swap it with another player's card.` },
+          next: { kind: "player", required: true, witch: i, exclude: [], cards, stage: 2,
+            text: `${centerLabel(i)} is the ${roleName(g.center[i])}. Swap it with a player's card, your own included.` },
         };
       }
       if (id === "copycat") {

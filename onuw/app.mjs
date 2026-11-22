@@ -874,7 +874,7 @@ function promptPanel(p, g) {
       } else if (p.witch != null) {
         body = `${resultCards(p.cards)}<div class="ms-label">Swap it with</div><div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
-        confirm = !ready ? "Pick a player" : `Swap it with ${playerName(sel[0])}'s card`;
+        confirm = !ready ? "Pick a player" : sel[0] === myId ? "Swap it with your card" : `Swap it with ${playerName(sel[0])}'s card`;
       } else {
         body = `${resultCards(p.cards)}<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
