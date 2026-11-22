@@ -370,6 +370,8 @@ function startStep(s, id, pid, actors) {
       return { kind: "seer", optional: true, exclude: [pid], text: "You may look at another player's card, or at two of the center cards." };
     case "thief":
       return { kind: "player", optional: true, exclude: [pid], text: "You may swap cards with another player. You'll see the card you take." };
+    case "witch":
+      return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with any player's card, your own included." };
     case "meddler":
       return { kind: "two", optional: true, exclude: [pid], text: "You may swap the cards of two other players. You won't see them." };
     case "sleepwalker":
@@ -393,6 +395,7 @@ function act(s, pid, msg, now, rng) {
   if (st.done[pid]) return { error: "Already done" };
   const res = applyAction(s, pid, st.id, prompt, msg);
   if (res.error) return res;
+  if (res.next) { st.prompts[pid] = res.next; return {}; }   // a two-part turn (the Witch)
   st.done[pid] = true;
   st.prompts[pid] = { ...prompt, result: res.result };
   advanceIfDone(s, now, rng);
@@ -427,6 +430,15 @@ function applyAction(s, pid, id, prompt, msg) {
         logAction(s, id, pid, `${me} (${N.sleepwalker}) swapped with ${centerLabel(i).toLowerCase()}, getting the ${roleName(g.cards[pid])}.`);
         return { result: { text: t } };
       }
+      if (id === "witch") {
+        const cards = [{ label: centerLabel(i), role: g.center[i] }];
+        const text = `${centerLabel(i)} is the ${roleName(g.center[i])}. Now swap it with a player's card.`;
+        return {
+          result: { text, cards },
+          next: { kind: "player", required: true, witch: i, exclude: [], cards, stage: 2,
+            text: `${centerLabel(i)} is the ${roleName(g.center[i])}. Swap it with a player's card, your own included.` },
+        };
+      }
       const t = `${centerLabel(i)} is the ${roleName(g.center[i])}.`;
       addInfo(s, pid, id, t, [{ label: centerLabel(i), role: g.center[i] }]);
       logAction(s, id, pid, `${me} (lone wolf) looked at ${centerLabel(i).toLowerCase()}: the ${roleName(g.center[i])}.`);
@@ -450,6 +462,18 @@ function applyAction(s, pid, id, prompt, msg) {
         addInfo(s, pid, id, text, [{ label: them, role: g.cards[t] }]);
         logAction(s, id, pid, `${me} (${N.prowler}) looked at ${them}'s card: the ${roleName(g.cards[t])}.`);
         return { result: { text, cards: [{ label: them, role: g.cards[t] }] } };
+      }
+      if (id === "witch") {
+        const i = prompt.witch, seen = g.center[i], old = g.cards[t];
+        [g.cards[t], g.center[i]] = [g.center[i], g.cards[t]];
+        const mine = t === pid;
+        const text = mine
+          ? `You looked at ${centerLabel(i).toLowerCase()} and swapped it with your own card. Your card is now the ${roleName(seen)}.${teamNote("witch", seen)}`
+          : `You looked at ${centerLabel(i).toLowerCase()}, the ${roleName(seen)}, and swapped it with ${them}'s card. ${them} now holds the ${roleName(seen)}.`;
+        const cards = [{ label: mine ? "Your new card" : `${them} now holds`, role: seen }];
+        addInfo(s, pid, id, text, cards);
+        logAction(s, id, pid, `${me} (${N.witch}) looked at ${centerLabel(i).toLowerCase()}, the ${roleName(seen)}, and swapped it with ${mine ? "their own" : `${them}'s`} ${roleName(old)}.`);
+        return { result: { text, cards } };
       }
       if (id === "thief") {
         [g.cards[pid], g.cards[t]] = [g.cards[t], g.cards[pid]];
@@ -507,10 +531,12 @@ function advanceIfDone(s, now, rng) {
     for (const a of st.actors) {
       if (st.done[a]) continue;
       const prompt = st.prompts[a];
-      let r = applyAction(s, a, st.id, prompt, defaultAction(s, a, prompt, rng));
+      let p2 = prompt;
+      let r = applyAction(s, a, st.id, p2, defaultAction(s, a, p2, rng));
+      if (r.next) { p2 = r.next; r = applyAction(s, a, st.id, p2, defaultAction(s, a, p2, rng)); }
       if (r.error) r = { result: null };
       st.done[a] = true;
-      st.prompts[a] = { ...prompt, result: r.result, timedOut: true };
+      st.prompts[a] = { ...p2, result: r.result, timedOut: true };
     }
     nextStep(s, now, rng);
   }
@@ -532,20 +558,29 @@ function startVote(s, now) {
 export function resolveVotes(seats, votes, cards) {
   const counts = {};
   for (const v of seats) if (votes[v]) counts[votes[v]] = (counts[votes[v]] || 0) + 1;
-  const max = Math.max(0, ...Object.values(counts));
+  // The Prince, and whoever the Bodyguard votes for, can't die: the next most votes count instead.
+  const guarded = new Set(seats.filter((p) => cards[p] === "prince"));
+  for (const b of seats) if (cards[b] === "bodyguard" && votes[b]) guarded.add(votes[b]);
+  const open = seats.filter((p) => !guarded.has(p));
+  const max = Math.max(0, ...open.map((p) => counts[p] || 0));
   // nobody dies unless someone got at least two votes; ties all die
-  const dead = max >= 2 ? seats.filter((p) => counts[p] === max) : [];
-  const hunterShots = [];
+  const dead = max >= 2 ? open.filter((p) => counts[p] === max) : [];
+  const saved = seats.filter((p) => guarded.has(p) && (counts[p] || 0) >= 2 && (counts[p] || 0) >= max);
+  const hunterShots = [], hunterBlocked = [];
   const queue = [...dead];
   while (queue.length) {
     const p = queue.shift();
     const t = votes[p];
     if (cards[p] === "hunter" && t && !dead.includes(t)) {
+      if (guarded.has(t)) { hunterBlocked.push([p, t]); continue; }
       dead.push(t); queue.push(t); hunterShots.push([p, t]);
     }
   }
-  const team = (p) => ROLES[cards[p]].team;
-  const isWolf = (p) => ROLES[cards[p]].wolf;
+  // A Cursed that any wolf voted for becomes a wolf.
+  const born = (p) => ROLES[cards[p]].wolf;
+  const turned = seats.filter((p) => cards[p] === "cursed" && seats.some((v) => votes[v] === p && born(v)));
+  const team = (p) => (turned.includes(p) ? "wolf" : ROLES[cards[p]].team);
+  const isWolf = (p) => born(p) || turned.includes(p);
   const died = (pred) => dead.some(pred);
   const deadWolf = died(isWolf);
   const deadScout = died((p) => cards[p] === "scout");
@@ -565,7 +600,7 @@ export function resolveVotes(seats, votes, cards) {
   }
   const winners = seats.filter((p) =>
     cards[p] === "jester" ? dead.includes(p) : team(p) === "village" ? village : wolfTeam);
-  return { counts, dead, hunterShots, village, wolfTeam, jester: deadJester, winners };
+  return { counts, dead, hunterShots, hunterBlocked, saved, guarded: [...guarded], turned, village, wolfTeam, jester: deadJester, winners };
 }
 
 function resolve(s, now) {

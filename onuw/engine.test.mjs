@@ -419,3 +419,114 @@ test("spectators can't act, ready up or vote", () => {
   assert.ok(handle(s, "w", { t: "vote", target: "a" }, 0).error);
   assert.equal(s.g.votes.w, undefined);
 });
+
+// ---- batch 1 of the missing roles: Witch, Bodyguard, Prince, Cursed
+
+function nightTo(s, stepId, now = 0) {
+  for (const id of s.g.seats) handle(s, id, { t: "peeked" }, now);
+  while (s.phase === "night" && s.g.step.id !== stepId) {
+    for (const a of s.g.step.actors) if (!s.g.step.done[a]) handle(s, a, { t: "act", step: s.g.step.id, skip: true }, now);
+    now += 150; tick(s, now);
+  }
+  return now;
+}
+
+test("the Witch looks at a center card, then must swap it onto a player", () => {
+  const s = room(["a", "b", "c"]);
+  rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
+  assert.ok(s.g.steps.indexOf("thief") < s.g.steps.indexOf("witch") || !s.g.steps.includes("thief"));
+  nightTo(s, "witch");
+  assert.equal(s.g.step.prompts.a.kind, "center1");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", center: 2 }, 0).error, undefined);
+  const p2 = viewFor(s, "a", 0).game.prompt;
+  assert.equal(p2.kind, "player");
+  assert.equal(p2.done, false, "looking isn't the end of the turn");
+  assert.equal(p2.required, true, "once she looks she has to swap");
+  assert.deepEqual(p2.cards, [{ label: "Center card 3", role: "hunter" }]);
+  assert.equal(handle(s, "a", { t: "act", step: "witch", skip: true }, 0).error, "You have to choose");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", target: "b" }, 0).error, undefined);
+  assert.equal(s.g.cards.b, "hunter");
+  assert.equal(s.g.center[2], "villager");
+  assert.ok(s.g.step.done.a);
+  assert.match(s.g.log.at(-1).text, /Witch.*hunter|Hunter/);
+});
+
+test("the Witch can take the card herself, can skip, and a timed-out Witch who looked still swaps", () => {
+  let s = room(["a", "b", "c"]);
+  rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
+  nightTo(s, "witch");
+  handle(s, "a", { t: "act", step: "witch", center: 0 }, 0);
+  assert.equal(handle(s, "a", { t: "act", step: "witch", target: "a" }, 0).error, undefined);
+  assert.equal(s.g.cards.a, "seer");
+  assert.equal(s.g.center[0], "witch");
+
+  s = room(["a", "b", "c"]);
+  rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
+  nightTo(s, "witch");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", skip: true }, 0).error, undefined);
+  assert.deepEqual(s.g.center, ["seer", "werewolf", "hunter"]);
+
+  s = room(["a", "b", "c"]);
+  rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
+  let now = nightTo(s, "witch");
+  handle(s, "a", { t: "act", step: "witch", center: 1 }, now);
+  while (s.phase === "night") { now += 500; tick(s, now, seeded(3)); }
+  assert.equal(s.g.center[1] === "werewolf", false, "the card she looked at went to a player");
+});
+
+test("the Prince can't die: the next most votes die instead, and the Hunter can't take him down", () => {
+  const cards = { a: "prince", b: "werewolf", c: "villager", d: "hunter", e: "seer", f: "villager" };
+  const seats = Object.keys(cards);
+  // a: 3 votes, b: 2 votes -> b dies instead of a
+  let r = resolveVotes(seats, { a: "b", b: "a", c: "a", d: "a", e: "b", f: "c" }, cards);
+  assert.deepEqual(r.dead, ["b"]);
+  assert.deepEqual(r.saved, ["a"]);
+  assert.equal(r.village, true);
+  // only the Prince got two votes -> nobody dies
+  r = resolveVotes(seats, { a: "b", b: "a", c: "a", d: "c", e: "d", f: "e" }, cards);
+  assert.deepEqual(r.dead, []);
+  assert.deepEqual(r.saved, ["a"]);
+  // the Hunter dies and voted for the Prince: the Prince lives
+  r = resolveVotes(seats, { a: "d", b: "d", c: "d", d: "a", e: "c", f: "c" }, cards);
+  assert.deepEqual(r.dead, ["d"]);
+  assert.deepEqual(r.hunterBlocked, [["d", "a"]]);
+  assert.deepEqual(r.hunterShots, []);
+});
+
+test("whoever the Bodyguard votes for can't die", () => {
+  const cards = { a: "bodyguard", b: "werewolf", c: "villager", d: "seer", e: "hunter" };
+  const seats = Object.keys(cards);
+  // the wolf gets 3 votes, but the Bodyguard voted for them: c (2 votes) dies instead
+  let r = resolveVotes(seats, { a: "b", b: "c", c: "b", d: "b", e: "c" }, cards);
+  assert.deepEqual(r.dead, ["c"]);
+  assert.deepEqual(r.saved, ["b"]);
+  assert.equal(r.wolfTeam, true);
+  // the protected player is safe from the Hunter too
+  r = resolveVotes(seats, { a: "c", b: "e", c: "e", d: "a", e: "c" }, cards);
+  assert.deepEqual(r.dead, ["e"]);
+  assert.deepEqual(r.hunterBlocked, [["e", "c"]]);
+  // it's the card at the end that counts: no Bodyguard card among players, no protection
+  r = resolveVotes(seats, { a: "b", b: "c", c: "b", d: "b", e: "c" }, { ...cards, a: "villager" });
+  assert.deepEqual(r.dead, ["b"]);
+});
+
+test("the Cursed turns wolf only when a wolf votes for them", () => {
+  const cards = { a: "cursed", b: "werewolf", c: "villager", d: "seer" };
+  const seats = Object.keys(cards);
+  // villagers vote the Cursed out: still a villager, so the wolves win
+  let r = resolveVotes(seats, { a: "b", b: "c", c: "a", d: "a" }, cards);
+  assert.deepEqual(r.turned, []);
+  assert.deepEqual(r.dead, ["a"]);
+  assert.equal(r.wolfTeam, true);
+  // a wolf votes for the Cursed: they turn, and dying counts as a wolf dying
+  r = resolveVotes(seats, { a: "c", b: "a", c: "a", d: "c" }, cards);
+  assert.deepEqual(r.turned, ["a"]);
+  assert.deepEqual(r.dead.sort(), ["a", "c"]);
+  assert.equal(r.village, true);
+  assert.ok(!r.winners.includes("a"), "a turned Cursed is on the wolf team");
+  // a turned Cursed who lives wins with the wolves
+  r = resolveVotes(seats, { a: "c", b: "a", c: "d", d: "c" }, cards);
+  assert.deepEqual(r.turned, ["a"]);
+  assert.equal(r.wolfTeam, true);
+  assert.ok(r.winners.includes("a") && r.winners.includes("b"));
+});

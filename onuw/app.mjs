@@ -366,7 +366,7 @@ function receiveView(v) {
     if (h) toast(`${h.name} is the host now`);
   }
   lastHostId = v.hostId;
-  const key = `${v.round}:${v.phase}:${v.game?.stepId ?? ""}`;
+  const key = `${v.round}:${v.phase}:${v.game?.stepId ?? ""}:${v.game?.prompt?.stage ?? ""}`;
   if (key !== ui.key && v.phase === "night" && v.game?.prompt && !v.game.prompt.done) {
     try { navigator.vibrate?.([120, 80, 120]); } catch {}   // it's your turn: a buzz, since eyes are on your own screen
   }
@@ -833,7 +833,7 @@ function promptPanel(p, g) {
   const csel = ui.center;
   const playerBtn = (id) => {
     const pl = v.players.find((x) => x.id === id);
-    return `<button class="ms-target ${sel.includes(id) ? "is-on" : ""}" data-target="${id}">${avatar(pl.name, pl.id)}<span>${esc(pl.name)}</span></button>`;
+    return `<button class="ms-target ${sel.includes(id) ? "is-on" : ""}" data-target="${id}">${avatar(pl.name, pl.id)}<span>${esc(pl.name)}${id === myId ? " (you)" : ""}</span></button>`;
   };
   const centerBtn = (i) => `<button class="ms-center-card ${csel.includes(i) ? "is-on" : ""}" data-center="${i}" aria-label="Center card ${i + 1}">${cardBack({ size: "sm" })}<span class="ms-card-label">Center ${i + 1}</span></button>`;
   const centers = `<div class="ms-row ms-centers">${[0, 1, 2].map(centerBtn).join("")}</div>`;
@@ -858,6 +858,10 @@ function promptPanel(p, g) {
         <div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
         confirm = ready ? `Give it to ${playerName(sel[0])}` : "Pick a player";
+      } else if (p.witch != null) {
+        body = `${resultCards(p.cards)}<div class="ms-label">Swap it with</div><div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
+        ready = sel.length === 1;
+        confirm = !ready ? "Pick a player" : sel[0] === myId ? "Swap it with your card" : `Swap it with ${playerName(sel[0])}'s card`;
       } else {
         body = `<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
@@ -1049,15 +1053,22 @@ function whyLine(r, seats) {
   const parts = [];
   const shot = new Set(r.hunterShots.map(([, t]) => t));
   const voted = r.dead.filter((id) => !shot.has(id));
-  if (!r.dead.length) parts.push("Nobody got more than one vote, so nobody died.");
-  else if (voted.length > 1) parts.push(`${named(voted)} tied with ${r.counts[voted[0]]} votes each, so they all died.`);
-  else parts.push(`${named(voted)} got the most votes and died.`);
+  const turned = r.turned || [];
+  const saved = r.saved || [];
+  const guardOf = (id) => (c[id] === "prince" ? `the ${N.prince}` : `protected by the ${N.bodyguard}`);
+  for (const id of saved) parts.push(`${playerName(id)} had the most votes but was ${guardOf(id)}, so they couldn't die.`);
+  const most = saved.length ? "the next most votes" : "the most votes";
+  if (!r.dead.length) parts.push(saved.length ? "Nobody else got more than one vote, so nobody died." : "Nobody got more than one vote, so nobody died.");
+  else if (voted.length > 1) parts.push(`${named(voted)} tied with ${most}, ${r.counts[voted[0]]} each, so they all died.`);
+  else parts.push(`${named(voted)} got ${most} and died.`);
   for (const [h, t] of r.hunterShots) parts.push(`${playerName(h)} was the ${N.hunter}, so ${playerName(t)}, who they voted for, died too.`);
-  const deadAs = (pred) => r.dead.filter((id) => pred(c[id]));
+  for (const [h, t] of r.hunterBlocked || []) parts.push(`${playerName(h)} was the ${N.hunter}, but ${playerName(t)}, who they voted for, was ${guardOf(t)} and lived.`);
+  if (turned.length) parts.push(`A wolf voted for ${named(turned)}, the ${N.cursed}, who became a ${N.werewolf}.`);
+  const deadAs = (pred) => r.dead.filter((id) => pred(c[id]) || (turned.includes(id) && pred("werewolf")));
   const wolves = deadAs((x) => ROLES[x].wolf);
   const scouts = deadAs((x) => x === "scout");
   const jesters = deadAs((x) => x === "jester");
-  const anyWolf = seats.some((id) => ROLES[c[id]].wolf);
+  const anyWolf = seats.some((id) => ROLES[c[id]].wolf || turned.includes(id));
   const as = (ids, what) => `${named(ids)} ${ids.length > 1 ? "were" : "was"} ${what}`;
   if (jesters.length) parts.push(`${as(jesters, `the ${N.jester}`)}, so the ${N.jester} wins${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
   if (r.village) {
