@@ -410,3 +410,66 @@ test("at night, players who aren't acting see nothing about which card is awake 
   assert.deepEqual([...leaks], []);
   await t.ctx.close();
 });
+
+test("new roles: the Witch looks, then swaps the card onto a player; a Prince with the most votes lives", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 2, witch: 1, bodyguard: 1, prince: 1, cursed: 1, villager: 1 } }));
+  await t.host.waitForTimeout(200);
+  await t.host.click("[data-act=start]");
+  // put the Witch with Ana and the Prince with Ben
+  const anaId = (await view(t.pages[1])).you, benId = (await view(t.pages[2])).you;
+  await t.host.evaluate(([ana, ben]) => {
+    const g = window.__onuw.state.g;
+    const give = (pid, role) => {
+      const from = g.seats.find((x) => g.dealt[x] === role);
+      if (from) { [g.dealt[from], g.dealt[pid]] = [g.dealt[pid], g.dealt[from]]; }
+      else { const i = g.center.indexOf(role); [g.center[i], g.dealt[pid]] = [g.dealt[pid], g.center[i]]; }
+      g.cards = { ...g.dealt };
+    };
+    give(ana, "witch"); give(ben, "prince");
+    window.__onuw.publish();
+  }, [anaId, benId]);
+  const [, ana] = t.pages;
+  await dealAndReady(t.pages);
+  // everyone else plays their turns; Ana plays the Witch by hand
+  const others = t.pages.filter((p) => p !== ana);
+  for (let i = 0; i < 300; i++) {
+    const pr = await ana.evaluate(() => { const g = window.__onuw.view.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
+    if (pr?.step === "witch") break;
+    for (const p of others) {
+      const q = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
+      if (q) await p.click((await p.locator("[data-act=skip]").count()) ? "[data-act=skip]" : "[data-act=confirm]");
+    }
+    await ana.waitForTimeout(100);
+  }
+  await ana.click('[data-center="1"]');
+  assert.match(await ana.locator("[data-act=confirm]").innerText(), /Look at center 2/);
+  await ana.click("[data-act=confirm]");
+  await ana.waitForFunction(() => window.__onuw.view.game.prompt.stage === 2);
+  assert.equal(await ana.locator(".ms-prompt .ms-result-cards .ms-card").count(), 1, "she sees the card she looked at");
+  assert.equal(await ana.locator("[data-act=skip]").count(), 0, "she can't back out after looking");
+  assert.equal(await ana.locator("[data-target]").count(), 4, "any player, herself included");
+  const me = (await view(ana)).you;
+  await ana.click(`[data-target="${me}"]`);
+  assert.match(await ana.locator("[data-act=confirm]").innerText(), /Swap it with your card/);
+  const seen = await t.host.evaluate(() => window.__onuw.state.g.center[1]);
+  await ana.click("[data-act=confirm]");
+  await t.host.waitForFunction((id) => window.__onuw.state.g.cards[id] !== "witch", me);
+  assert.equal(await t.host.evaluate((id) => window.__onuw.state.g.cards[id], me), seen);
+  await playNight(t.host, t.pages);
+  // the vote: three votes on the Prince, so nobody else reaches two and nobody dies
+  for (const p of t.pages) await p.click("[data-act=dayready]");
+  await t.host.waitForFunction(() => window.__onuw.view.phase === "vote");
+  const prince = await t.host.evaluate(() => { const g = window.__onuw.state.g; return g.seats.find((x) => g.cards[x] === "prince"); });
+  const ids = (await view(t.host)).game.seats;
+  for (const p of t.pages) {
+    const you = (await view(p)).you;
+    await p.click(`[data-vote="${you === prince ? ids.find((x) => x !== you) : prince}"]`);
+  }
+  await t.host.waitForFunction(() => window.__onuw.view.phase === "results");
+  const lede = await t.host.locator(".ms-results .ms-lede").innerText();
+  assert.match(lede, /most votes but was the Prince/);
+  assert.match(lede, /Nobody else got more than one vote/);
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});
