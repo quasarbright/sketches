@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, rect, sparkle, card } from "../brush.mjs";
+import { blob, brush, rect, sparkle, card, minicard } from "../brush.mjs";
 // The imp: a small grinning creature with long pointed ears, crouched on its haunches and holding a card in
 // each hand, caught in the act of swapping them. Arcs show the cards changing hands. Facing right.
 const { card: bg, ink } = ROLE_COLORS.imp;
@@ -14,8 +14,6 @@ const nose = blob([[322, 312], [346, 326, "c"], [324, 334]]);
 // arms out to both sides, a card in each hand
 const armL = [brush([[236, 400], [190, 380], [160, 340]], [22, 18, 14]), blob([[146, 330], [166, 324], [172, 342], [152, 348]])];
 const armR = [brush([[306, 400], [356, 384], [384, 346]], [22, 18, 14]), blob([[376, 334], [396, 328], [402, 346], [382, 352]])];
-const cards = [rect(150, 300, 48, 66, -18, 6), rect(398, 298, 48, 66, 16, 6)];
-const faces = [rect(150, 300, 34, 52, -18, 4), rect(398, 298, 34, 52, 16, 4)];
 const arcs = [brush([[180, 250], [270, 206], [366, 246]], [2, 4, 2]), blob([[358, 236], [376, 250, "c"], [354, 256]]),
   brush([[364, 400], [274, 440], [184, 398]], [2, 4, 2]), blob([[192, 390], [174, 396, "c"], [194, 410]])];
 const cuts = [
@@ -25,5 +23,4 @@ const cuts = [
   brush([[260, 420], [270, 470]], [3, 1]),
 ];
 export default card({ bg, ink, transform: "translate(-24 -30)", layers: [arcs, tail, tailTip, legs, { d: body }, ears, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: [...armL, ...armR], halo: 3, roots: [[236, 400, 16], [306, 400, 16]] }, { group: cards, halo: 4 }, faces.map((d) => ({ d, fill: "bg" })),
-  sparkle(150, 300, 9), sparkle(398, 298, 9)] });
+  { group: [...armL, ...armR], halo: 3, roots: [[236, 400, 16], [306, 400, 16]] }, minicard(150, 300, -18), minicard(398, 298, 16)] });

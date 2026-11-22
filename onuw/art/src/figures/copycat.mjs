@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, rect, sparkle, eye, card } from "../brush.mjs";
+import { blob, brush, rect, sparkle, eye, card, minicard } from "../brush.mjs";
 // The copycat: a cat sitting upright, tail curled round its feet, one paw resting on a card it has slid out
 // of the center to copy. Facing right.
 const { card: bg, ink } = ROLE_COLORS.copycat;
@@ -9,7 +9,6 @@ const ears = [blob([[244, 262, "c"], [240, 210, "c"], [276, 238]]), blob([[296, 
 const tailPath = [[206, 540], [150, 560], [130, 596], [190, 610], [300, 604], [360, 592]];
 const tail = brush(tailPath, [30, 26, 22, 20, 16, 6]);
 const foreleg = [brush([[312, 420], [334, 500], [352, 548]], [30, 24, 20]), blob([[340, 540], [372, 536], [380, 556], [344, 560]])];
-const cardShape = rect(394, 560, 84, 56, -6, 6);
 const cuts = [
   eye(298, 276, { len: 26, h: 12, a: -6 }),                                     // almond cat eye
   brush([[318, 300], [326, 304], [334, 300]], [2, 3, 1]),                       // mouth
@@ -19,6 +18,5 @@ const cuts = [
 ];
 // slit pupil, drawn back in ink over the eye cut
 const slit = blob([[300, 267, "c"], [303, 276], [300, 285, "c"], [297, 276]]);
-const cardFace = rect(394, 560, 66, 40, -6, 4);
 export default card({ bg, ink, transform: "translate(-20 -40)", layers: [sparkle(120, 200, 12), sparkle(420, 330, 10), { d: body }, { d: head }, ears, tail, cuts.map((d) => ({ d, fill: "bg" })), { d: slit },
-  { group: [cardShape], halo: 4 }, { d: cardFace, fill: "bg" }, blob([[394, 548], [402, 560], [394, 572], [386, 560]]), { group: foreleg, halo: 4, roots: [[312, 420, 22]] }] });
+  minicard(394, 556, 84), { group: foreleg, halo: 4, roots: [[312, 420, 22]] }] });

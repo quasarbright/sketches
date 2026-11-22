@@ -130,6 +130,12 @@ export function rect(x, y, w, h, a = 0, rr = 6) {
   const q = (p) => `${p[0].toFixed(1)} ${p[1].toFixed(1)}`, C = [P(hw, -hh), P(hw, hh), P(-hw, hh), P(-hw, -hh)];
   return `M${q(pts[0])}L${q(pts[1])}Q${q(C[0])} ${q(pts[2])}L${q(pts[3])}Q${q(C[1])} ${q(pts[4])}L${q(pts[5])}Q${q(C[2])} ${q(pts[6])}L${q(pts[7])}Q${q(C[3])} ${q(pts[0])}Z`;
 }
+// The little card that appears in role art: always the same size, showing a simple version of the real card
+// back (a border and the full moon as a plain circle). s scales it back up inside a figure drawn at a smaller scale.
+export function minicard(x, y, a = 0, s = 1) {
+  const R = (w, h, r) => rect(x, y, w * s, h * s, a, r * s), r = 9 * s;
+  return [{ d: R(46, 66, 7), halo: 4 }, { d: R(36, 56, 5), fill: "bg" }, `M${x - r} ${y}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0z`];
+}
 // Transform a path's points: used to place a shape built at the origin.
 export const at = (x, y, a = 0, sc = 1) => `translate(${x} ${y}) rotate(${a}) scale(${sc})`;
 
