@@ -1,37 +1,33 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, boot, card } from "../brush.mjs";
-// The lackey: a conniving servant creeping forward bent double, knees bent, head thrust out low under his
-// hood with a narrow sidelong eye and a sly grin, rubbing his hands while he dangles a lantern for the wolves.
+import { blob, brush, fringe, card } from "../brush.mjs";
+// The lackey: a hunched, scheming servant in a long coat, holding a lantern up for the wolves with a sly grin.
 const { card: bg, ink } = ROLE_COLORS.lackey;
-// legs bent in a creeping step, toes pointing left
-const legs = [brush([[262, 460], [226, 518], [222, 584]], [34, 28, 24]), boot(222, 598, { s: 24, dir: -1 }),
-  brush([[306, 460], [334, 526], [326, 584]], [34, 28, 24]), boot(326, 598, { s: 24, dir: -1 })];
-// a knee-length coat on a back bent forward from the hips: the hump is the high point, the hem flares
-const coat = blob([[186, 300], [214, 256], [262, 222], [312, 222], [350, 252], [364, 306], [362, 380], [368, 470], [376, 500, "c"], [330, 492], [290, 502], [250, 494], [212, 502, "c"], [222, 440], [212, 370]]);
-// the hood thrust forward and low, joining the hump
-const hood = blob([[118, 296], [128, 262], [156, 238], [196, 230], [236, 240], [258, 270], [246, 312], [214, 336], [170, 342], [136, 330]]);
-const face = blob([[132, 282], [124, 296], [110, 308, "c"], [122, 312], [118, 322], [126, 330], [140, 338], [158, 336], [150, 290]]);
-// far hand: hands clasped and wrung together under the chin
-const rub = [brush([[210, 330], [186, 360], [168, 368]], [26, 22, 18]), blob([[140, 352], [162, 346], [180, 358], [178, 380], [156, 388], [138, 378]])];
-const knuckles = brush([[146, 366], [158, 364], [170, 370]], [2, 3, 1]);   // the crease between the clasped, wringing hands
-// near arm reaches out low, the lantern dangling from its ring
-const arm = [brush([[236, 330], [190, 400], [130, 418]], [32, 26, 20]), blob([[112, 406], [134, 404], [138, 426], [116, 430]])];
-const L = [104, 470];
-const R = (x, y, w, h) => `M${L[0] + x - w / 2} ${L[1] + y - h / 2}h${w}v${h}h-${w}z`;
-const ring = brush([[L[0] - 12, L[1] - 34], [L[0] - 10, L[1] - 52], [L[0], L[1] - 58], [L[0] + 10, L[1] - 52], [L[0] + 12, L[1] - 34]], [6, 6]);
-const lantern = [blob([[L[0] - 24, L[1] - 36, "c"], [L[0] + 24, L[1] - 36, "c"], [L[0] + 28, L[1] - 26], [L[0] - 28, L[1] - 26]]), R(0, 0, 44, 46),
-  blob([[L[0] - 28, L[1] + 24, "c"], [L[0] + 28, L[1] + 24, "c"], [L[0] + 20, L[1] + 36], [L[0] - 20, L[1] + 36]])];
-const glass = R(0, 0, 30, 34);
-const flame = blob([[L[0], L[1] - 14], [L[0] + 8, L[1] + 2], [L[0], L[1] + 14], [L[0] - 8, L[1] + 2]]);
-const rays = [[-60, -10], [-52, 26], [-30, 56], [56, 30], [30, 60]].map(([dx, dy]) => brush([[L[0] + dx * .55, L[1] + dy * .55], [L[0] + dx, L[1] + dy]], [6, 0]));
+const coat = blob([[206, 262], [262, 228], [318, 244], [348, 300], [352, 400], [362, 500], [366, 590, "c"], [326, 582], [300, 594], [262, 584], [226, 594], [196, 586, "c"], [200, 500], [192, 420], [186, 330]]);
+// a rounded hunch over the shoulders, a little higher than the head
+const hump = blob([[224, 236], [262, 200], [310, 194], [346, 226], [358, 280], [300, 296], [240, 284]]);
+const legs = [brush([[238, 560], [232, 600]], [30, 28]), brush([[300, 560], [310, 600]], [30, 28]),
+  blob([[200, 592], [244, 590], [250, 608], [196, 610]]), blob([[300, 592], [344, 590], [352, 608], [298, 610]])];
+// a deep hood with a plain human face in profile, peering at the lantern
+const head = blob([[188, 222], [204, 198], [236, 190], [262, 206], [270, 240], [262, 268], [236, 282], [206, 280], [194, 262]]);
+// the hood falls straight from the hump to the brow, so the head hangs forward and low like a hunchback's
+const hoodTip = blob([[200, 206], [226, 188], [262, 180], [300, 186], [334, 214], [346, 262], [300, 280], [262, 276], [230, 262]]);
+const nose = blob([[196, 220], [190, 236], [180, 248, "c"], [190, 252], [188, 262], [194, 268], [202, 276], [214, 276], [206, 230]]);
+const tuft = hoodTip;
+// near arm reaches forward and up holding the lantern by its ring
+const arm = brush([[220, 290], [178, 320], [146, 300], [128, 258]], [36, 30, 24, 20]);
+const hand = blob([[116, 252], [132, 236], [146, 248], [136, 266]]);
+const ring = brush([[112, 228], [114, 210], [124, 204], [134, 210], [136, 228]], [6, 6]);
+const lantern = [blob([[100, 226, "c"], [148, 226, "c"], [152, 236], [96, 236]]), rect2(124, 262, 44, 46), blob([[96, 286, "c"], [152, 286, "c"], [144, 298], [104, 298]])];
+function rect2(x, y, w, h) { return `M${x - w / 2} ${y - h / 2}h${w}v${h}h-${w}z`; }
+const glass = rect2(124, 262, 30, 34);
+const rays = [[-60, -10], [-56, 24], [-40, 52], [60, 0], [52, 34]].map(([dx, dy]) => brush([[124 + dx * .55, 262 + dy * .55], [124 + dx, 262 + dy]], [6, 0]));
 const cuts = [
-  brush([[126, 293], [138, 292], [148, 289]], [2, 3, 1]),                 // narrow slit of an eye
-  brush([[122, 286], [136, 281], [152, 272]], [3, 3.5, 1]),               // brow pulled down toward the nose: scheming
-  brush([[118, 318], [130, 322], [144, 316]], [1, 3, 1]),                 // sly grin curling up at the cheek
-  brush([[156, 252], [154, 290], [164, 340]], [3, 5, 3]),                 // hood opening
-  brush([[262, 300], [266, 400], [270, 490]], [3, 6, 2]), brush([[322, 270], [334, 380], [344, 488]], [3, 5, 2]), // coat folds
-  brush([[220, 420], [358, 412]], [5, 5]),                                 // belt
+  brush([[193, 240], [200, 240], [206, 238]], [2, 3, 1]), brush([[189, 233], [198, 231], [207, 226]], [3, 3.5, 1]),   // slit eye under a brow pulled down toward the nose: scheming
+  brush([[200, 212], [210, 240], [206, 270], [214, 280]], [4, 5, 5, 3]),   // eye, hood opening
+  brush([[186, 256], [193, 260], [201, 256]], [1, 3, 1]),           // sly grin curling up at the cheek
+  brush([[262, 310], [266, 420], [270, 560]], [3, 6, 2]), brush([[318, 300], [330, 420], [342, 560]], [3, 5, 2]), // coat folds
+  brush([[222, 440], [298, 436]], [5, 5]),                         // belt
+  ...[330, 362, 394].map((y) => blob([[236, y - 5], [244, y - 5], [244, y + 5], [236, y + 5]])),  // buttons
 ];
-export default card({ bg, ink, transform: "translate(40 -20)", layers: [legs, { d: coat }, { d: hood }, { d: face }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: rub, halo: 4, roots: [[210, 330, 20]] }, { d: knuckles, fill: "bg" }, { group: arm, halo: 4, roots: [[236, 330, 24]] }, rays, { d: ring }, { group: lantern, halo: 4 },
-  { d: glass, fill: "bg" }, { d: flame }] });
+export default card({ bg, ink, transform: "translate(30 0)", layers: [legs, { d: coat }, { d: hump }, tuft, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, rays, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }] });
