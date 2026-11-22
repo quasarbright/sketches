@@ -112,7 +112,7 @@ export const ROLES = {
   aurareader: {
     name: N.aurareader, team: "village", wolf: false, max: 1, step: "aurareader",
     short: "Sees who moved or looked at a card",
-    text: "You wake near the end and see which players moved or looked at a card during the night.",
+    text: `You wake after the ${N.meddler} and see which other players have moved or looked at a card so far tonight.`,
   },
   nightowl: {
     name: N.nightowl, team: "village", wolf: false, max: 1, step: "nightowl",
@@ -163,12 +163,14 @@ export const ROLES = {
 
 // Picker / cheat-sheet order is wake order, then the roles that sleep.
 export const ROLE_ORDER = [
-  "copycat", "lookalike", "werewolf", "packleader", "prowler", "greatwolf", "dozingwolf", "lackey", "scout",
-  "apprentice", "mason", "seer", "noviceseer", "watcher", "investigator", "thief", "witch", "meddler", "imp",
-  "sleepwalker", "aurareader", "nightowl", "unveiler", "villager", "hunter", "bodyguard", "prince", "cursed", "jester",
+  "copycat", "lookalike", "werewolf", "packleader", "prowler", "greatwolf", "dozingwolf", "lackey", "apprentice",
+  "mason", "seer", "noviceseer", "investigator", "thief", "witch", "meddler", "aurareader", "imp", "sleepwalker",
+  "nightowl", "scout", "watcher", "unveiler", "villager", "hunter", "bodyguard", "prince", "cursed", "jester",
 ];
 
-// Night steps in wake order. `roles`: a step runs when any of these cards is in the deck
+// Night steps in the official wake order (base game, Daybreak, the bonus packs, Vampire and Alien):
+// the Apprentice Tanner right after the Minion, the Aura Seer after the Troublemaker and before the
+// Gremlin and the Drunk, and the Squire and the Beholder after the Insomniac. `roles`: a step runs when any of these cards is in the deck
 // (center included, so a skipped step never gives away that a card is in the center).
 export const NIGHT_STEPS = [
   { id: "copycat", label: N.copycat, roles: ["copycat"] },
@@ -177,20 +179,20 @@ export const NIGHT_STEPS = [
   { id: "packleader", label: N.packleader, roles: ["packleader"] },
   { id: "prowler", label: N.prowler, roles: ["prowler"] },
   { id: "lackey", label: N.lackey, roles: ["lackey"] },
-  { id: "scout", label: N.scout, roles: ["scout"] },
   { id: "apprentice", label: N.apprentice, roles: ["apprentice"] },
   { id: "masons", label: `${N.mason}s`, roles: ["mason"] },
   { id: "seer", label: N.seer, roles: ["seer"] },
   { id: "noviceseer", label: N.noviceseer, roles: ["noviceseer"] },
-  { id: "watcher", label: N.watcher, roles: ["watcher"] },
   { id: "investigator", label: N.investigator, roles: ["investigator"] },
   { id: "thief", label: N.thief, roles: ["thief"] },
   { id: "witch", label: N.witch, roles: ["witch"] },
   { id: "meddler", label: N.meddler, roles: ["meddler"] },
+  { id: "aurareader", label: N.aurareader, roles: ["aurareader"] },
   { id: "imp", label: N.imp, roles: ["imp"] },
   { id: "sleepwalker", label: N.sleepwalker, roles: ["sleepwalker"] },
-  { id: "aurareader", label: N.aurareader, roles: ["aurareader"] },
   { id: "nightowl", label: N.nightowl, roles: ["nightowl"] },
+  { id: "scout", label: N.scout, roles: ["scout"] },
+  { id: "watcher", label: N.watcher, roles: ["watcher"] },
   { id: "unveiler", label: N.unveiler, roles: ["unveiler"] },
 ];
 

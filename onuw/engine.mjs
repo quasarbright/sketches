@@ -307,9 +307,11 @@ function logAction(s, step, actor, text) {
 // A card's role, counting what a Copycat, Lookalike or Investigator card became.
 export const effRole = (g, card) => g.copied?.[card] ?? card;
 // The role a player wakes as: their starting card, or what it became.
-// Copied roles the Doppelganger acts out right away instead of on their own turn: the ones that
-// look at or move cards. The Alpha Wolf waits for its turn so the spare card moves only once.
-const DOPPEL_NOW = ["prowler", "seer", "noviceseer", "investigator", "thief", "witch", "meddler", "imp", "sleepwalker"];
+// Copied roles the Doppelganger acts out right away instead of on their own turn, per the official
+// rules: the ones that look at or move cards. The Alpha Wolf too (a designer ruling: she swaps the
+// center Werewolf card on the spot). The Gremlin is the exception: the Vampire rulebook wakes the
+// Doppelganger-Gremlin right after the Gremlin.
+const DOPPEL_NOW = ["packleader", "prowler", "seer", "noviceseer", "investigator", "thief", "witch", "meddler", "sleepwalker"];
 const wakeRole = (g, pid) => effRole(g, g.dealt[pid]);
 const dealtWolves = (g) => g.seats.filter((id) => ROLES[wakeRole(g, id)].wolf);
 
@@ -545,11 +547,24 @@ function applyAction1(s, pid, id, prompt, msg) {
         logAction(s, id, pid, `${me} (${N.lookalike}) looked at ${them}'s card and became the ${roleName(r)}.`);
         // Like the reference Doppelganger: a role that looks at or moves cards acts right away;
         // a role that is shown something, or acts at the end of the night, wakes on its own turn.
+        // A Doppelganger who views the Copycat becomes the role the Copycat took, and does nothing
+        // with it: she doesn't act now or on its turn (Vampire rulebook).
+        if (g.cards[t] === "copycat") {
+          g.actedEarly[pid] = true;
+          const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}`;
+          addInfo(s, pid, id, text, cards);
+          return { result: { text, cards } };
+        }
         if (DOPPEL_NOW.includes(ROLES[r].step)) {
           g.actedEarly[pid] = true;
           const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}`;
           addInfo(s, pid, id, `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}`, cards);
-          const next = startStep(s, ROLES[r].step, pid, [pid]);
+          // A Doppelganger-Alpha Wolf hasn't met the wolves yet, so she may give the card to anyone
+          // but herself and the Alpha Wolf she copied (excluding the wolves would name them).
+          const next = r === "packleader"
+            ? { kind: "player", required: true, spare: true, exclude: [pid, t],
+                text: `Give the spare ${N.werewolf} card to another player. You swap it with their card without looking: their old card goes face down into the spare slot.` }
+            : startStep(s, ROLES[r].step, pid, [pid]);
           return { result: { text, cards }, next: { ...next, as: ROLES[r].step, stage: 2, cards, text: `${text} ${next.text}` } };
         }
         const text = `${them}'s card is the ${roleName(r)}. You're now the ${roleName(r)}.${teamNote("lookalike", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
