@@ -29,5 +29,8 @@ const cuts = [
   brush([[222, 440], [298, 436]], [5, 5]),                         // belt
   ...[330, 362, 394].map((y) => blob([[236, y - 5], [244, y - 5], [244, y + 5], [236, y + 5]])),  // buttons
 ];
-export default card({ bg, ink, transform: "translate(30 0)", layers: [legs, { d: coat }, { d: hump }, tuft, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
-  { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, rays, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }] });
+// the whole figure leans forward from the feet (skew), but the lantern hangs plumb, so undo the skew around it
+const unlean = "translate(124 262) skewX(-9) translate(-124 -262)";
+export default card({ bg, ink, transform: "translate(62 0) translate(0 600) skewX(9) translate(0 -600)", layers: [legs, { d: coat }, { d: hump }, tuft, { d: head }, { d: nose }, cuts.map((d) => ({ d, fill: "bg" })),
+  { group: [arm, hand], halo: 4, roots: [[220, 290, 26]] }, ...[{ group: rays }, { d: ring }, { group: lantern, halo: 4 }, { d: glass, fill: "bg" }, { d: blob([[124, 248], [132, 264], [124, 276], [116, 264]]) }]
+    .map((l) => ({ ...l, transform: unlean }))] });
