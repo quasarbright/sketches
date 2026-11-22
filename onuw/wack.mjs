@@ -36,7 +36,9 @@ const css = `
   box-shadow: inset 0 6px 10px #000, 0 0 0 3px #1b2350; }
 .wk-hole-front { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 9%; border-radius: 0 0 50% 50% / 0 0 100% 100%;
   border: 3px solid #3c4a96; border-top: none; margin: 0 -3px -3px; }
-.wk-pit { position: absolute; left: 9%; right: 9%; top: -80%; bottom: 13%; overflow: hidden; }
+.wk-pit { position: absolute; left: 9%; right: 9%; top: -80%; bottom: 13%; overflow: hidden; overflow: clip; pointer-events: none; }
+/* The pit reaches up over the row above, so only the card itself takes taps. */
+.wk-sprite { pointer-events: auto; }
 .wk-sprite .ms-card { --w: 100%; width: 100%; box-shadow: 0 0 5px rgba(0,0,0,.5); }
 /* Only the top half of a card comes up: translate keeps the bottom half below the rim, and transforms pivot at the rim. */
 .wk-sprite { position: absolute; left: 0; right: 0; bottom: -4%; translate: 0 50%; transform: translateY(105%); transform-origin: 50% 50%; }
@@ -51,15 +53,15 @@ const css = `
 @keyframes wk-bonk { 0% { transform: scale(1.35, .5); } 14% { transform: scale(.85, 1.15) rotate(10deg); } 28% { transform: scale(1.06, .95) rotate(-8deg); }
   42% { transform: rotate(5deg); } 56% { transform: rotate(-3deg); } 70% { transform: none; } 100% { transform: translateY(105%) scale(1.15, .75); } }
 .wk-fx { position: absolute; inset: -50% -10% 30%; pointer-events: none; z-index: 2; }
-.wk-star { position: absolute; left: 50%; top: 45%; width: 18%; aspect-ratio: 1; margin: -9% 0 0 -9%; color: #ffe08a;
+.wk-star { position: absolute; left: var(--cx, 50%); top: var(--cy, 45%); width: 18%; aspect-ratio: 1; margin: -9% 0 0 -9%; color: #ffe08a;
   animation: wk-star .6s cubic-bezier(.15,.8,.3,1) forwards; }
 .wk-star svg { width: 100%; height: 100%; display: block; fill: currentColor; }
 @keyframes wk-star { 0% { transform: translate(0, 0) scale(.3) rotate(0); opacity: 1; }
   70% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r)); opacity: 0; } }
-.wk-ring { position: absolute; left: 50%; top: 50%; width: 70%; aspect-ratio: 1; margin: -35% 0 0 -35%; border-radius: 50%;
+.wk-ring { position: absolute; left: var(--cx, 50%); top: var(--cy, 50%); width: 70%; aspect-ratio: 1; margin: -35% 0 0 -35%; border-radius: 50%;
   border: 3px solid #ffe08a; animation: wk-ring .35s ease-out forwards; }
 @keyframes wk-ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(1.2); opacity: 0; } }
-.wk-pop { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); font: 800 1.5rem/1 var(--font-mono, monospace); color: #ffe08a;
+.wk-pop { position: absolute; left: var(--cx, 50%); top: calc(var(--ctop, 30%) - 10%); transform: translateX(-50%); font: 800 1.5rem/1 var(--font-mono, monospace); color: #ffe08a;
   text-shadow: 0 2px 0 #00000080; animation: wk-float .75s cubic-bezier(.2,.8,.3,1) forwards; white-space: nowrap; }
 .wk-pop.is-bad { color: #ff8c8c; }
 @keyframes wk-float { 0% { transform: translate(-50%, 10px) scale(.5); opacity: 0; } 20% { transform: translate(-50%, -6px) scale(1.25); opacity: 1; }
@@ -209,8 +211,9 @@ function bonk(i, x, y) {
   if (h.state !== "up") return;
   h.state = "bonked";
   const id = h.id;
-  node.className = "wk-hole is-bonked is-hit";
   const fx = node.querySelector(".wk-fx");
+  aimFx(node, fx);
+  node.className = "wk-hole is-bonked is-hit";
   if (h.kind === "wolf") {
     setScore(st.score + 1, "bump");
     burst(fx, 7);
@@ -223,6 +226,17 @@ function bonk(i, x, y) {
     try { navigator.vibrate?.([30, 40, 30]); } catch {}
   }
   later(() => { if (h.id === id) { h.state = "down"; h.kind = null; node.className = "wk-hole"; } }, 760);
+}
+
+// Centers the stars, ring and score pop on the part of the card showing above the rim.
+function aimFx(node, fx) {
+  const c = node.querySelector(".ms-card")?.getBoundingClientRect(), pit = node.querySelector(".wk-pit").getBoundingClientRect();
+  const f = fx.getBoundingClientRect();
+  if (!c || !f.height) return;
+  const top = Math.max(c.top, pit.top), bottom = Math.min(c.bottom, pit.bottom);
+  fx.style.setProperty("--cx", `${((c.left + c.right) / 2 - f.left) / f.width * 100}%`);
+  fx.style.setProperty("--cy", `${((top + bottom) / 2 - f.top) / f.height * 100}%`);
+  fx.style.setProperty("--ctop", `${(top - f.top) / f.height * 100}%`);
 }
 
 function burst(fx, n) {

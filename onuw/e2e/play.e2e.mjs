@@ -337,8 +337,17 @@ test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score
     return (pit.bottom - c.top) / c.height;
   }, free);
   assert.ok(shown > 0.3 && shown < 0.6, `${Math.round(shown * 100)}% of the card shows`);
+  const vis = await w.evaluate((i) => {
+    const c = document.querySelector(`[data-hole="${i}"] .ms-card`).getBoundingClientRect();
+    const pit = document.querySelector(`[data-hole="${i}"] .wk-pit`).getBoundingClientRect();
+    return { left: c.left, right: c.right, top: c.top, bottom: Math.min(c.bottom, pit.bottom) };
+  }, free);
   await w.locator(`[data-hole="${free}"] .ms-card-name`).click();
   assert.equal(await w.evaluate(() => window.__onuw.wack.score()), 1);
+  // the stars burst from the middle of the part of the card that shows
+  const ring = await w.evaluate((i) => { const r = document.querySelector(`[data-hole="${i}"] .wk-ring`).getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; }, free);
+  assert.ok(Math.abs(ring.x - (vis.left + vis.right) / 2) < 3, `ring x ${ring.x} vs card ${vis.left}-${vis.right}`);
+  assert.ok(Math.abs(ring.y - (vis.top + vis.bottom) / 2) < 3, `ring y ${ring.y} vs card ${vis.top}-${vis.bottom}`);
   assert.ok(await w.locator(`[data-hole="${free}"].is-bonked`).count());
   assert.ok(await w.locator(".wk-star").count() > 0);
   await w.waitForTimeout(900);
