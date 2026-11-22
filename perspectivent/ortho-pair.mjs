@@ -3,12 +3,12 @@
 // (orthographic) side by side. The still parts of each picture are traced once; every frame only
 // the moving ball's patch (and its shadow) is traced again.
 
-const GROUND = -1.0, R = 0.35, NEAR_Z = 2.2, FAR_Z = 30, PERIOD = 9;
+const GROUND = -1.0, R = 0.35, NEAR_Z = 2, FAR_Z = 30, PERIOD = 9;
 // the eye spreads 0.55 m per meter ahead; the sensor is as tall as the eye's view at the balls'
 // starting distance, so up close both pictures are the same
 export const PAIR_LENSES = [
   { name: "perspective", A: 0, t: 0.55 },
-  { name: "orthographic", A: 0.55 * NEAR_Z, t: 0 },
+  { name: "orthographic", A: 0.55 * NEAR_Z, t: 0 }, // 2.2 m tall, like the other demos' sensor
 ];
 const SUN = (() => { const v = [-0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
 const SKY = [201, 220, 239], GRASS = [95, 138, 67];

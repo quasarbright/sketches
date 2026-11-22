@@ -87,11 +87,15 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
       ctx.fillStyle = u === 0.5 ? "#ffd23f" : "#e9e4d8";
       ctx.beginPath(); ctx.arc(x, Y(y), u === 0.5 ? 4 : 2.6, 0, 7); ctx.fill();
     }
-    // the label sits on a plate beside the bar
-    const txt = `f(${zs.toFixed(1)}) = ${fz.toFixed(2)}`, w = ctx.measureText(txt).width;
-    const lx = x + 8 + w < X(Z_MAX) ? x + 8 : x - 8 - w, ly = Y(Math.max(-Y_MAX + 0.6, Math.min(Y_MAX - 0.6, fz / 2))) + 4;
-    ctx.fillStyle = "rgba(17,19,23,0.9)"; ctx.fillRect(lx - 3, ly - 11, w + 6, 15);
-    ctx.fillStyle = "#e9e4d8"; ctx.fillText(txt, lx, ly);
+    // f(z) by the top dot, and the highlighted row's value by its dot, each on a plate
+    const tag = (txt, y, color) => {
+      const w = ctx.measureText(txt).width, lx = x + 8 + w < X(Z_MAX) ? x + 8 : x - 8 - w;
+      const ly = Y(Math.max(-Y_MAX + 0.4, Math.min(Y_MAX - 0.4, y))) + 4;
+      ctx.fillStyle = "rgba(17,19,23,0.9)"; ctx.fillRect(lx - 3, ly - 11, w + 6, 15);
+      ctx.fillStyle = color; ctx.fillText(txt, lx, ly);
+    };
+    tag(`f(${zs.toFixed(1)}) = ${fz.toFixed(2)}`, fz, "#e9e4d8");
+    if (Math.abs(Y(fz) - Y(0.5 * fz)) > 15) tag(`0.5·f = ${(0.5 * fz).toFixed(2)}`, 0.5 * fz, "#ffd23f");
     ctx.globalAlpha = 1;
   }
   // which f this is
