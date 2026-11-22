@@ -29,8 +29,14 @@ after(async () => { await browser?.close(); server?.close(); });
 
 // ---- helpers
 
+// The tests open several players as tabs of one browser, so turn on "Each tab is a different player".
+const tabsArePlayers = (ctx) => ctx.addInitScript(() => {
+  if (!localStorage.getItem("onuw:settings")) localStorage.setItem("onuw:settings", JSON.stringify({ tabsArePlayers: true }));
+});
+
 async function newTable(names, { watchers = [] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await tabsArePlayers(ctx);
   const errors = [];
   const open = async () => {
     const p = await ctx.newPage();
@@ -248,6 +254,7 @@ test("the host can end the vote when a player has dropped", async () => {
 test("card names fit their band, clear of the team letter and the card edge, at phone and desktop sizes", async () => {
   for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const ctx = await browser.newContext({ viewport });
+    await tabsArePlayers(ctx);
     const p = await ctx.newPage();
     await createAs(p, "Mike");
     await p.waitForSelector(".ms-grid .ms-card-name");
@@ -481,6 +488,7 @@ test("new roles: the Witch looks, then swaps the card onto a player; a Prince wi
 
 test("lobby: the host names themselves after making the room; card counts change in place; unpicked cards are dimmed; info only where the card can't say it all", async () => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await tabsArePlayers(ctx);
   const p = await ctx.newPage();
   const errors = [];
   p.on("pageerror", (e) => errors.push(e.message));
@@ -557,4 +565,31 @@ test("the Doppelganger who copies the Seer looks right away, on the Doppelganger
   await ana.waitForFunction(() => window.__onuw.view.game.prompt.done);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+});
+
+test("every tab is the same player until the setting is turned on", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const a = await ctx.newPage();
+  await a.goto(`${base}?net=local&fast`);
+  const b = await ctx.newPage();
+  await b.goto(`${base}?net=local&fast`);
+  const id = (p) => p.evaluate(() => window.__onuw.myId);
+  assert.equal(await id(a), await id(b));
+  // turn it on from the home screen's Settings
+  await a.click("button[data-act=settings]");
+  const sw = a.locator("button[data-act=tabs-toggle]");
+  assert.equal(await sw.getAttribute("aria-checked"), "false");
+  await Promise.all([a.waitForEvent("load"), sw.click()]);
+  await b.reload();
+  await a.waitForFunction(() => window.__onuw?.myId);
+  await b.waitForFunction(() => window.__onuw?.myId);
+  const [ia, ib] = [await id(a), await id(b)];
+  assert.notEqual(ia, ib);
+  // the main tab keeps its id, and a refresh keeps each tab's own
+  await b.reload();
+  await b.waitForFunction(() => window.__onuw?.myId);
+  assert.equal(await id(b), ib);
+  await a.click("button[data-act=settings]");
+  await a.getByText(/This tab is (your main tab|player tab 2)/).waitFor();
+  await ctx.close();
 });
