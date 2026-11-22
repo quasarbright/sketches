@@ -70,8 +70,7 @@ function sensorOf(lens) {
   return [Ax, Ay];
 }
 function drawSensor(ctx, V, lens) {
-  const s = sensorOf(lens);
-  if (!s) return;
+  const s = sensorOf(lens) ?? [0, 0]; // with no sensor (1/z), still show where your eye is
   const [ax, ay] = s;
   if (ax > 0.01 || ay > 0.01) { // a rectangle, or a strip when one side is 0
     const c = [[-ax, -ay, 0], [ax, -ay, 0], [ax, ay, 0], [-ax, ay, 0]].map((p) => outsideXY(p, V.x, V.y, V.w, V.h));
@@ -147,22 +146,37 @@ function prewarm(key, W, H, dpr, lens) {
   advanceScan(sc, sc.total, 4);
 }
 
-// A lens that changes every frame (the sensor sweep): a coarse picture while it moves, the full
-// one while it holds.
-export function drawLiveDemo(ctx, W, H, dpr, st, lens, holding) {
-  const L = layout(W, H), pw = Math.round(L.pic.w * dpr);
-  if (!holding) {
-    st.low.reset("", Math.max(8, Math.round(pw / 5)), Math.max(8, Math.round(pw / 5)), lens);
-    st.low.advance(st.low.total);
-    st.full.key = null;
-  } else {
-    const key = JSON.stringify(lens);
-    if (st.full.key !== key || st.full.w !== pw) st.full.reset(key, pw, pw, lens);
-    advanceScan(st.full, st.full.total, 10);
+// The sensor sweep: the lens changes every frame, so its pictures are worked out at fixed steps
+// of the sweep (once each, nearest first) and each frame blends the two steps either side.
+// Until those two are ready, a quick coarse picture stands in.
+const SWEEP_STEPS = 40, SWEEP_MAX = 1.45;
+export const sweepLens = (s) => ({ A: s * 1.1, t: (1 - s) * 0.55 });
+export function drawSweepDemo(ctx, W, H, dpr, st, s) {
+  const L = layout(W, H), pw = Math.min(360, Math.round(L.pic.w * dpr)), lens = sweepLens(s);
+  if (!st.levels || st.pw !== pw) {
+    st.pw = pw; st.low = new Scan();
+    st.levels = Array.from({ length: SWEEP_STEPS + 1 }, (_, i) => {
+      const sc = new Scan(); sc.reset(`${i}`, pw, pw, sweepLens((i / SWEEP_STEPS) * SWEEP_MAX)); return sc;
+    });
+  }
+  const x = Math.max(0, Math.min(SWEEP_STEPS, (s / SWEEP_MAX) * SWEEP_STEPS)), i0 = Math.floor(x), i1 = Math.min(SWEEP_STEPS, i0 + 1), f = x - i0;
+  // spend this frame's time on the steps nearest the sweep first
+  const t0 = performance.now();
+  for (let d = 0; d <= SWEEP_STEPS && performance.now() - t0 < 10; d++) for (const i of d ? [i0 - d, i1 + d] : [i0, i1]) {
+    const sc = st.levels[i];
+    if (sc && sc.done < sc.total) advanceScan(sc, sc.total, 10 - (performance.now() - t0));
   }
   ctx.clearRect(0, 0, W, H);
   drawView(ctx, L.view, dpr, lens, []);
-  (holding && st.full.done === st.full.total ? st.full : st.low).draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y });
+  const a = st.levels[i0], b = st.levels[i1], ready = (sc) => sc.done === sc.total;
+  if (ready(a) && ready(b)) {
+    a.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y });
+    if (f > 0.01 && b !== a) { ctx.globalAlpha = f; b.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y }); ctx.globalAlpha = 1; }
+  } else {
+    const lw = Math.max(8, Math.round(pw / 4));
+    st.low.reset("", lw, lw, lens); st.low.advance(st.low.total);
+    st.low.draw(ctx, L.pic.w, L.pic.h, { head: false, x: L.pic.x, y: L.pic.y });
+  }
   labels(ctx, L);
 }
 
@@ -275,15 +289,7 @@ export function drawAbout3D(demo, ctx, W, H, dpr, t, store) {
   if (demo === "twolens3d") return drawTraceDemo(ctx, W, H, dpr, { key: "twolens", lens: TWO_LENS, frac });
   if (demo === "divide3d") return drawCornerDemo(ctx, W, H, dpr, EYE_LENS, t);
   if (demo === "orthopair") return drawOrthoPair(ctx, W, H, dpr, t, store);
-  if (demo === "plane3d") {
-    // sweep the sensor from a point (an eye) to as tall as the picture with no spread, and on to
-    // bigger with the rays coming together, holding at each
-    const s = sensorSweep(t), lens = { A: s * 1.1, t: (1 - s) * 0.55 };
-    store.low ??= new Scan(); store.full ??= new Scan();
-    const holding = Math.abs(s - (store.s ?? -1)) < 1e-9;
-    store.s = s;
-    return drawLiveDemo(ctx, W, H, dpr, store, lens, holding);
-  }
+  if (demo === "plane3d") return drawSweepDemo(ctx, W, H, dpr, store, sensorSweep(t));
   if (demo === "functions3d") {
     const i = Math.floor(t / FUNCTION_PERIOD) % FUNCTIONS.length, j = (i + 1) % FUNCTIONS.length;
     const into = (t % FUNCTION_PERIOD) / 4.5;
@@ -291,7 +297,7 @@ export function drawAbout3D(demo, ctx, W, H, dpr, t, store) {
     prewarm(FUNCTIONS[j].src, W, H, dpr, curved[j]);
     const s = sensorOf(curved[i]);
     return `Divide by ${FUNCTIONS[i].name}. `
-      + (!s ? "f is infinite at your eye, so the rays come in from infinitely far away, with no sensor to start from."
+      + (!s ? "f is infinite at your eye, so the rays don't start there: they come in from infinitely far away."
         : s[0] > 0.01 ? `f(0) isn't 0, so the rays start on a ${(2 * s[0]).toFixed(1)} m sensor.`
         : "f(0) is 0, so the rays start at your eye.");
   }

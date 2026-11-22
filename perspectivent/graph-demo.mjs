@@ -21,7 +21,7 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
   const g = GRAPHS[demo];
   ctx.textBaseline = "alphabetic";
   ctx.clearRect(0, 0, W, H);
-  const padL = 30, padR = 92, padT = 30, padB = 22;
+  const padL = 30, padR = 100, padT = 30, padB = 22;
   const X = (z) => padL + (z / Z_MAX) * (W - padL - padR), Y = (y) => padT + (Y_MAX - y) / (2 * Y_MAX) * (H - padT - padB);
   const tc = t % PERIOD, zs = Math.min(Z_MAX, (tc / SWEEP) * Z_MAX), sweeping = tc < SWEEP;
   // axes: z along the line you're looking along, y up
@@ -61,7 +61,7 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
   ctx.font = mono; ctx.textAlign = "left";
   // (the middle one only when there's room between the others)
   const fEnd = g.f(Z_MAX), gap = Math.abs(Y(0.5 * fEnd) - Y(fEnd));
-  for (const [u, txt] of [[1, "u = 1"], [0.5, "u = 0.5"], [-1, "u = −1"]]) {
+  for (const [u, txt] of [[1, "y = 1·f(z)"], [0.5, "y = 0.5·f(z)"], [-1, "y = −1·f(z)"]]) {
     const y = u * fEnd;
     if (Math.abs(y) > Y_MAX || (u === 0.5 && gap < 14)) continue;
     ctx.fillStyle = "#ffd23f"; ctx.fillText(txt, X(Z_MAX) + 6, Y(y) + 4);
@@ -97,4 +97,5 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
   // which f this is
   ctx.font = "12px 'JetBrains Mono', monospace";
   ctx.fillStyle = "#ffd23f"; ctx.textAlign = "left"; ctx.fillText(g.label, 4, 14);
+  ctx.fillStyle = "#9a978e"; ctx.textAlign = "right"; ctx.fillText("ray of row u: y = u·f(z)", W - 4, 14); ctx.textAlign = "left";
 }

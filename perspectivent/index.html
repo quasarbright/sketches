@@ -205,7 +205,7 @@
     <p class="pv-caption" id="caption"></p>
 
     <div class="control" id="fRow">
-      <div class="control-head"><span class="name" id="fxName" title="Points are drawn at their offset from the middle of the view divided by f of their distance z (in meters). Bigger f means smaller on screen.">how size changes with distance</span></div>
+      <div class="control-head"><span class="name" id="fxName" title="f(z) is how far the view reaches from the middle to the edge, z meters ahead. Number the pixel rows u, from 1 at the top to −1 at the bottom: row u's ray is y = u·f(z). Bigger f means smaller on screen.">shape of the rays</span></div>
       <label class="pv-field" id="fxField"><span class="pv-fz" id="fxLabel">f(z) =</span>
         <input id="fx" spellcheck="false" autocomplete="off" value="z"
           title="Type any function of distance z: try 1/z, log(1+z), z^2, sin(z)+2" /></label>
@@ -335,7 +335,7 @@
         looks zoomed in, like a very narrow view, because its rays don't spread out: 30 m ahead
         they still only cover 2.4 m, the same as right in front of you.</p>
       <canvas class="pv-about-diagram pv-about-3d" data-demo="orthopair"></canvas>
-      <p class="pv-about-caption" data-caption="orthopair"></p>
+      <p class="pv-about-caption">As the red ball goes away, perspective draws it smaller and orthographic keeps it the same size.</p>
       <p>Make the spread negative and the rays come together in front of you, so far things are
         drawn bigger than near ones. That's <b>reverse perspective</b>. Past the point where they
         cross, the rays carry on crossed, so out there the world is upside down.</p>
@@ -358,13 +358,19 @@
         look down to see the world move.</p>
 
       <div class="section-label">the rays are a graph</div>
-      <p>Every ray so far comes from one rule. Say a pixel is $u$ of the way from the middle of the
-        picture to the top edge: 1 at the top, 0 in the middle, −1 at the bottom. A point lands on
-        that pixel when its offset divided by $f(z)$ is $u$, so the pixel's ray is every point
-        where $y = u\,f(z)$. That's a graph. Plot $y = f(z)$ and you have the top pixel's ray.
-        Halve it for the pixel halfway up, and flip it for the bottom one. Below, $z$ runs to the
-        right and $y$ up. A line sweeps along $z$, marking how tall $f(z)$ is there and the evenly
-        spaced points the pixels' rays pass through.</p>
+      <p>Give every pixel a number, $u$, for where it sits in the picture: $u = 1$ on the top row,
+        $u = 0$ on the middle row, $u = -1$ on the bottom row, and evenly spaced in between.
+        That number is the answer to the division. A point $y$ meters above the line you're
+        looking along and $z$ meters ahead lands on the row with $u = y \div f(z)$.</p>
+      <p>Now turn that around and ask which points land on row $u$. They're the points where
+        $y \div f(z) = u$, which is the same as
+        <span style="white-space:nowrap">$y = u \cdot f(z)$.</span>
+        That's the pixel's ray: at each distance $z$, it's $u \cdot f(z)$ meters above the line
+        you're looking along. So $f(z)$ is how far the view reaches above that line $z$ meters
+        ahead. The top row's ray is the graph of $f$ itself, the bottom row's is $-f$, and every
+        row in between is the same curve scaled by its $u$. Left and right work the same way.</p>
+      <p>Below, $z$ runs to the right and $y$ up. A line sweeps along $z$ marking $f(z)$, and
+        the dots on it are $u \cdot f(z)$ for each row: evenly spaced, from $-f(z)$ to $f(z)$.</p>
       <p>For an eye, $f(z) = 0.55\,z$. Every ray is a straight line through 0, so they all
         start at your eye and fan out.</p>
       <canvas class="pv-about-diagram pv-about-graph" data-demo="graph-persp"></canvas>
