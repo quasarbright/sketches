@@ -26,16 +26,47 @@ const safe = (store) => ({
   set(k, v) { try { store.setItem(k, v); } catch {} },
   del(k) { try { store.removeItem(k); } catch {} },
 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ls = safe(window.localStorage);
 const ss = safe(window.sessionStorage);
 
-// One id per tab (so two tabs are two players), kept across refreshes of that tab.
-let myId = ss.get("onuw:id");
-if (!myId) { myId = Math.random().toString(36).slice(2, 12); ss.set("onuw:id", myId); }
-let myName = ls.get("onuw:name") || "";
+// Who this tab is. Normally every tab on a device is the same player, so reopening the link
+// brings you back as yourself. With the "Each tab is a different player" setting on (for testing
+// alone on one device), each open tab claims a numbered slot, a Web Lock held while the tab lives:
+// slot 0 keeps the plain namespace, and every extra tab gets its own id and name. ?ns= sets the
+// namespace outright.
+const SETTINGS_KEY = "onuw:settings";
+const settings = () => { try { return JSON.parse(ls.get(SETTINGS_KEY)) || {}; } catch { return {}; } };
+const saveSettings = (x) => ls.set(SETTINGS_KEY, JSON.stringify({ ...settings(), ...x }));
+let NS = "onuw:", tabSlot = 0;
+async function claimSlot() {
+  if (params.get("ns")) { NS = `onuw:${params.get("ns")}:`; return; }
+  if (!settings().tabsArePlayers || !navigator.locks) return;
+  const held = new Set();
+  const grab = (n) => new Promise((res) => {
+    navigator.locks.request(`onuw-slot-${n}`, { ifAvailable: true }, (lock) => {
+      if (lock) held.add(n);
+      res(!!lock);
+      return lock ? new Promise(() => {}) : undefined; // hold it until the tab goes away
+    }).catch(() => res(false));
+  });
+  const want = ss.get("onuw:slot");
+  let slot = +want || 0;
+  // after a refresh the old page may still hold this tab's slot for a moment, so wait for it
+  const tries = want == null || want === "" ? 1 : 8;
+  for (let i = 0; i < tries && !(await grab(slot)); i++) if (i < tries - 1) await sleep(150);
+  if (!held.has(slot)) for (slot = 0; slot < 50 && !(await grab(slot)); slot++);
+  ss.set("onuw:slot", String(slot));
+  tabSlot = slot;
+  if (slot) NS = `onuw:tab${slot}:`;
+}
+await claimSlot();
+
+let myId = ls.get(NS + "id");
+if (!myId) { myId = Math.random().toString(36).slice(2, 12); ls.set(NS + "id", myId); }
+let myName = ls.get(NS + "name") || "";
 
 const app = document.getElementById("app");
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 // ---------------------------------------------------------------- icons (Lucide)
@@ -87,7 +118,7 @@ let lastHostId = null;
 
 const now = () => Date.now();
 const hostNow = () => now() + clockOffset;
-const hostKey = (code) => `onuw:host:${code}`;
+const hostKey = (code) => `${NS}host:${code}`;
 
 function setRoomInUrl(code) {
   const u = new URL(location.href);
@@ -222,7 +253,7 @@ function handOffHost() {
 // ---------------------------------------------------------------- joining
 
 // Whether this tab joined a room as a spectator. Remembered per room so a refresh rejoins the same way.
-const joinedKey = (code) => `onuw:joined:${code}`;
+const joinedKey = (code) => `${NS}joined:${code}`;
 
 function joinAsGuest(code, as) {
   if (as) ss.set(joinedKey(code), as);
@@ -381,7 +412,7 @@ function receiveView(v) {
     ui.peeked = keepPeek;
   }
   const me = v.players.find((p) => p.id === myId);
-  if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set("onuw:name", myName); }
+  if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set(NS + "name", myName); }
   render();
   // right after your turn, what you saw shows for a few seconds in your card-and-night panel
   const was = prev?.game?.prompt, cur = v.game?.prompt;
@@ -548,6 +579,7 @@ function homeScreen() {
              <button class="ms-btn" type="button" data-act="join-code">Join</button>
            </div>`}
     </form>
+    <button class="ms-link ms-settings-link" type="button" data-act="settings">Settings</button>
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -1141,6 +1173,7 @@ function refreshPanel(force = false) {
   if (panel.kind === "players") html = playersPanel();
   else if (panel.kind === "host") html = hostPanel();
   else if (panel.kind === "cheatsheet") html = cheatsheetPanel();
+  else if (panel.kind === "settings") html = settingsPanel();
   else if (panel.kind.startsWith("info:")) html = infoPanel(panel.kind.slice(5));
   if (!force && html === panel.html) return;
   const focused = document.activeElement?.id;
@@ -1168,7 +1201,19 @@ ${v.phase === "lobby" ? `    <form class="ms-rename" data-form="rename">
       </div>
     </form>` : `<p class="ms-hint">Names can only be changed in the lobby.</p>`}
     <button class="ms-btn ms-wide ms-leave" data-act="leave">${icon("logout")}<span>Leave room</span></button>
-    ${v.isHost && v.players.length > 1 ? `<p class="ms-hint">If you leave, a random player becomes the host and the game carries on.</p>` : ""}`;
+    ${v.isHost && v.players.length > 1 ? `<p class="ms-hint">If you leave, a random player becomes the host and the game carries on.</p>` : ""}
+    <button class="ms-link ms-settings-link" type="button" data-act="settings">Settings</button>`;
+}
+
+function settingsPanel() {
+  const on = !!settings().tabsArePlayers;
+  return `<h2 class="ms-h2">Settings</h2>
+    <button class="ms-switch-row" role="switch" aria-checked="${on}" data-act="tabs-toggle">
+      <span><b>Each tab is a different player</b><small>For testing alone on one device: every tab you open joins as its own player. When it's off, every tab on this device is you.</small></span>
+      <span class="ms-switch" aria-hidden="true"></span>
+    </button>
+    ${on && !params.get("ns") ? `<p class="ms-hint">This tab is ${tabSlot ? `player tab ${tabSlot + 1}` : "your main tab"}.</p>` : ""}
+    ${screen === "room" ? `<p class="ms-hint">Changing this reloads the page.</p>` : ""}`;
 }
 
 function hostPanel() {
@@ -1247,13 +1292,13 @@ function onSubmit(e) {
     if (kind === "create") { needName = !myName; createRoom(); return; }
     const n = E.cleanName(document.getElementById("name-input").value);
     if (!n) { toast("Enter your name"); document.getElementById("name-input").focus(); return; }
-    myName = n; ls.set("onuw:name", n);
+    myName = n; ls.set(NS + "name", n);
     joinAsGuest(roomCode, e.submitter?.dataset.as === "spectator" ? "spectator" : "player");
   }
   if (kind === "firstname") {
     const n = E.cleanName(document.getElementById("name-input").value);
     if (!n) { toast("Enter your name"); return; }
-    myName = n; ls.set("onuw:name", n);
+    myName = n; ls.set(NS + "name", n);
     send({ t: "rename", name: n });
     needName = false;
     render();
@@ -1262,7 +1307,7 @@ function onSubmit(e) {
   if (kind === "rename") {
     const n = E.cleanName(document.getElementById("rename-input").value);
     if (!n) { toast("Enter a name"); return; }
-    myName = n; ls.set("onuw:name", n);
+    myName = n; ls.set(NS + "name", n);
     send({ t: "rename", name: n });
     ui.renaming = false;
     toast("Name changed");
@@ -1320,6 +1365,16 @@ function onClick(e) {
       return;
     }
     case "cheatsheet": openPanel("cheatsheet"); return;
+    case "settings": openPanel("settings"); return;
+    case "tabs-toggle": {
+      const next = !settings().tabsArePlayers;
+      saveSettings({ tabsArePlayers: next });
+      ss.set("onuw:slot", "");
+      t.setAttribute?.("aria-checked", String(next));
+      // who this tab is gets decided on load
+      setTimeout(() => location.reload(), 250);
+      return;
+    }
     case "players": openPanel("players"); return;
     case "host": openPanel("host"); return;
     case "kick-cancel": ui.confirmKick = null; refreshPanel(); return;
@@ -1381,8 +1436,8 @@ app.addEventListener("keydown", (e) => {
 app.addEventListener("input", (e) => {
   if (e.target.id === "code-input") e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
   if (e.target.id === "name-input") {
-    const btn = e.target.closest("form")?.querySelector('button[type="submit"]');
-    if (btn) btn.disabled = !E.cleanName(e.target.value);
+    // every submit button in the form (Join Room and Spectate) needs a name
+    for (const btn of e.target.closest("form")?.querySelectorAll('button[type="submit"]') || []) btn.disabled = !E.cleanName(e.target.value);
   }
 });
 
@@ -1455,4 +1510,4 @@ if (!LOCAL && !window.Peer) {
 }
 
 // for tests
-window.__onuw = { get view() { return view; }, get mode() { return mode; }, get state() { return S; }, send, publish, wack: WACK };
+window.__onuw = { get view() { return view; }, get mode() { return mode; }, get myId() { return myId; }, get state() { return S; }, send, publish, wack: WACK };
