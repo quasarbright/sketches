@@ -1088,7 +1088,6 @@ function whyLine(r, seats) {
   if (turned.length) parts.push(`A wolf voted for ${named(turned)}, the ${N.cursed}, who became a ${N.werewolf}.`);
   const deadAs = (pred) => r.dead.filter((id) => pred(c[id]) || (turned.includes(id) && pred("werewolf")));
   const wolves = deadAs((x) => ROLES[x].wolf);
-  const scouts = deadAs((x) => x === "scout");
   const jesters = deadAs((x) => x === "jester");
   const anyWolf = seats.some((id) => ROLES[c[id]].wolf || turned.includes(id));
   const as = (ids, what) => `${named(ids)} ${ids.length > 1 ? "were" : "was"} ${what}`;
@@ -1098,13 +1097,17 @@ function whyLine(r, seats) {
   if (lonePupil.length) parts.push(`${as(lonePupil, `the ${N.apprentice}`)} with no ${N.jester} in play, so the ${N.apprentice} wins${anyWolf && !r.village ? " and the wolves can't" : ""}.`);
   if (r.village) {
     if (wolves.length) parts.push(`${as(wolves, wolves.length > 1 ? "wolves" : "a wolf")}, so the village wins.`);
-    else if (scouts.length) parts.push(`${as(scouts, `the ${N.scout}`)}, so the village wins.`);
-    else if (!anyWolf && !r.dead.length) parts.push("No player was a wolf and nobody died, so the village wins.");
-    else parts.push(`${as(deadAs((x) => x === "lackey"), `the ${N.lackey}`)}, and no player was a wolf, so the village wins.`);
-  } else if (r.wolfTeam) {
-    parts.push(anyWolf ? "No wolf died, so the wolves win." : `No player was a wolf, and someone off the wolf team died, so the ${N.lackey} and ${N.scout} win.`);
-  } else if (!anyWolf && r.dead.length && !jesters.length && !lonePupil.length) {
-    parts.push("No player was a wolf, so anyone dying meant the village lost.");
+    else parts.push("No player was a wolf and nobody died, so the village wins.");
+  } else if (anyWolf) {
+    if (r.wolfTeam) parts.push("No wolf died, so the wolf team wins.");
+  } else if (r.dead.length && !jesters.length && !lonePupil.length) {
+    const helpers = seats.filter((id) => ["lackey", "scout"].includes(c[id]));
+    const won = helpers.filter((id) => r.winners.includes(id));
+    const lost = helpers.filter((id) => r.dead.includes(id));
+    let t = "No player was a wolf, so someone dying meant the village lost.";
+    if (won.length) t += ` ${named(won)} stayed alive while someone else died, so ${won.length > 1 ? "they win" : `the ${ROLES[c[won[0]]].name} wins`}.`;
+    if (lost.length) t += ` ${as(lost, lost.length > 1 ? "on the wolf team" : `the ${ROLES[c[lost[0]]].name}`)} and died, so ${won.length ? "they lose" : "nobody wins"}.`;
+    parts.push(t);
   }
   return parts.join(" ");
 }

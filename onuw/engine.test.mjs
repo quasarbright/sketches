@@ -176,17 +176,39 @@ test("killing a wolf wins it for the village", () => {
   assert.deepEqual(r.winners.sort(), ["b", "c"]);
 });
 
-test("the Scout dying wins it for the village (issue 279)", () => {
-  const cards = { a: "werewolf", b: "scout", c: "villager", d: "seer" };
-  const r = resolveVotes(["a", "b", "c", "d"], { a: "c", b: "c", c: "b", d: "b" }, cards);
-  // a tie: the Scout and a villager both die, no wolf does
-  assert.deepEqual(r.dead.sort(), ["b", "c"]);
-  assert.equal(r.village, true);
-  assert.equal(r.wolfTeam, false);
-  assert.deepEqual(r.winners.sort(), ["c", "d"]);
-  const r2 = resolveVotes(["a", "b", "c", "d"], { a: "b", b: "c", c: "b", d: "b" }, cards);
-  assert.deepEqual(r2.dead, ["b"]);
-  assert.equal(r2.village, true);
+test("Minion and Squire edge cases follow the official rules", () => {
+  const seats = ["a", "b", "c", "d"];
+  for (const helper of ["lackey", "scout"]) {
+    // a wolf among the players, and only the helper dies: the wolf team wins, the helper included
+    let cards = { a: "werewolf", b: helper, c: "villager", d: "seer" };
+    let r = resolveVotes(seats, { a: "b", b: "c", c: "b", d: "b" }, cards);
+    assert.deepEqual(r.dead, ["b"]);
+    assert.equal(r.village, false, helper);
+    assert.deepEqual(r.winners.sort(), ["a", "b"], helper);
+
+    // no wolf among the players, only the helper dies: nobody wins
+    cards = { a: "villager", b: helper, c: "villager", d: "seer" };
+    r = resolveVotes(seats, { a: "b", b: "c", c: "b", d: "b" }, cards);
+    assert.deepEqual(r.dead, ["b"]);
+    assert.equal(r.village, false, helper);
+    assert.deepEqual(r.winners, [], helper);
+
+    // no wolf, someone else dies: the helper wins alone
+    r = resolveVotes(seats, { a: "c", b: "c", c: "b", d: "c" }, cards);
+    assert.deepEqual(r.dead, ["c"]);
+    assert.equal(r.village, false);
+    assert.deepEqual(r.winners, ["b"], helper);
+
+    // no wolf, nobody dies: the village wins, the helper loses
+    r = resolveVotes(seats, { a: "b", b: "c", c: "d", d: "a" }, cards);
+    assert.deepEqual(r.dead, []);
+    assert.equal(r.village, true);
+    assert.deepEqual(r.winners.sort(), ["a", "c", "d"], helper);
+  }
+  // a lone Minion and a lone Squire each need someone else to die
+  const r = resolveVotes(seats, { a: "b", b: "c", c: "b", d: "b" }, { a: "lackey", b: "scout", c: "villager", d: "seer" });
+  assert.deepEqual(r.dead, ["b"]);
+  assert.deepEqual(r.winners, ["a"]);
 });
 
 test("the Minion dying alone still wins it for the wolves", () => {
@@ -337,9 +359,10 @@ test("taking a card from another team says so", () => {
 
 test("display names live only in skin.mjs", async () => {
   const fs = await import("node:fs");
-  const { NAMES } = await import("./skin.mjs");
+  const { NAMES, TITLE } = await import("./skin.mjs");
   const names = Object.values(NAMES);
-  const strip = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "");
+  // The game's title (which contains a card name) may appear in index.html's <title> and og:title.
+  const strip = (src) => src.split(TITLE).join("").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "");
   for (const f of ["app.mjs", "engine.mjs", "roles.mjs", "net.mjs", "art.mjs", "index.html"]) {
     if (!fs.existsSync(new URL(f, import.meta.url))) continue;
     const src = strip(fs.readFileSync(new URL(f, import.meta.url), "utf8"));
@@ -715,7 +738,7 @@ test("win rules mention only the cards in the deck", async () => {
   assert.equal(winRules({ werewolf: 2, seer: 1, villager: 3 }).length, 2);
   assert.match(text({ werewolf: 2, jester: 1 }), /Tanner wins if the Tanner dies/);
   assert.ok(!text({ werewolf: 2, jester: 1 }).includes("Apprentice"));
-  assert.match(text({ werewolf: 2, scout: 1 }), /Squire dies/);
+  assert.match(text({ werewolf: 2, scout: 1 }), /Squire wins with the wolves even if killed\. If no player is a wolf, the Squire wins only by staying alive while someone else dies/);
   assert.match(text({}), /Tanner.*Apprentice/s, "with no deck yet (how to play), every rule shows");
 });
 

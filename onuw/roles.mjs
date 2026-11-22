@@ -52,16 +52,16 @@ export const ROLES = {
   lackey: {
     more: true, name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
     short: "Sees the wolves, wins with them",
-    text: "You're on the wolf team, but you aren't a wolf. You wake and see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win as long as someone other than you dies.",
+    text: "You're on the wolf team, but you aren't a wolf. You wake and see who the wolves are; they don't learn who you are. You win if the wolves win, even if you die. If no player is a wolf, you win only if you stay alive and someone else dies.",
   },
   scout: {
     more: true, name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
     short: "Sees the wolves and their cards",
-    text: `You're on the wolf team, but you aren't a wolf. You wake, see who the wolves are and look at their cards, so you know whether they're still wolves. If you die, the village wins.`,
+    text: `You're on the wolf team, but you aren't a wolf. You wake, see who the wolves are and look at their cards, so you know whether they're still wolves. You win if the wolves win, even if you die. If no player is a wolf, you win only if you stay alive and someone else dies.`,
   },
   apprentice: {
     more: true, name: N.apprentice, team: "jester", wolf: false, max: 1, step: "apprentice",
-    short: `Wins if the ${N.jester} dies`,
+    short: "Wins if the Skinner dies",
     text: `You wake and see who the ${N.jester} is. You win if the ${N.jester} dies. If no player is the ${N.jester}, you win only if you die, like the ${N.jester}.`,
   },
   mason: {
@@ -198,12 +198,13 @@ export const NIGHT_STEPS = [
 export function winRules(roles) {
   const all = !roles || !Object.values(roles).some(Boolean);
   const has = (r) => all || !!roles[r];
+  const cap = (t) => t[0].toUpperCase() + t.slice(1);
   const list = (xs) => xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] || "";
   const helpers = [has("lackey") && `the ${N.lackey}`, has("scout") && `the ${N.scout}`].filter(Boolean);
   const skinner = has("jester") || has("apprentice");
   const rules = [
-    ["village", `The village wins if at least one wolf dies${has("cursed") ? ` (a ${N.cursed} a wolf voted for counts as a wolf)` : ""}${has("scout") ? `, or if the ${N.scout} dies` : ""}. If no player is a wolf, the village wins when nobody dies${helpers.length ? ` (or ${helpers.join(" or ")} dies)` : ""}.`],
-    ["wolf", `The wolf team wins if no wolf${has("scout") ? ` and no ${N.scout}` : ""} dies${skinner ? `, and the ${N.jester} doesn't die` : ""}.${helpers.length ? ` If no player is a wolf, ${list(helpers)} win when someone else dies.` : ""}`],
+    ["village", `The village wins if at least one wolf dies${has("cursed") ? ` (a ${N.cursed} a wolf voted for counts as a wolf)` : ""}. If no player is a wolf, the village wins only if nobody dies${helpers.length ? `, not even ${helpers.join(" or ")}` : ""}.`],
+    ["wolf", `The wolf team wins if at least one player is a wolf and no wolf dies${skinner ? ` and the ${N.jester} doesn't die` : ""}.${helpers.length ? ` ${cap(list(helpers))} ${helpers.length > 1 ? "win" : "wins"} with the wolves even if killed. If no player is a wolf, ${list(helpers)} ${helpers.length > 1 ? "each win" : "wins"} only by staying alive while someone else dies.` : ""}`],
   ];
   if (skinner) {
     const t = [];

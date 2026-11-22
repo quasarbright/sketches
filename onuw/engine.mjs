@@ -700,27 +700,22 @@ export function resolveVotes(seats, votes, cards) {
   const isWolf = (p) => born(p) || turned.includes(p);
   const died = (pred) => dead.some(pred);
   const deadWolf = died(isWolf);
-  const deadScout = died((p) => cards[p] === "scout");
-  const deadLackey = died((p) => cards[p] === "lackey");
   // With no Skinner among the players, the Apprentice is one: they win, and stop the wolves, by dying.
   const skinners = seats.some((p) => cards[p] === "jester") ? ["jester"] : ["jester", "apprentice"];
   const deadJester = died((p) => skinners.includes(cards[p]));
-  let village, wolfTeam;
-  if (seats.some(isWolf)) {
-    village = deadWolf || deadScout;
-    wolfTeam = !deadWolf && !deadScout && !deadJester;
-  } else if (seats.some((p) => team(p) === "wolf")) {
-    // only a Lackey and/or Scout: they win if someone off their team dies
-    village = dead.length === 0 || deadLackey || deadScout;
-    wolfTeam = !deadLackey && !deadScout && !deadJester && died((p) => team(p) !== "wolf");
-  } else {
-    village = dead.length === 0;
-    wolfTeam = false;
-  }
+  // The official rules: with a wolf among the players, the village wins if a wolf dies and the wolf
+  // team (Minion and Squire included, even if they die) wins if no wolf and no Tanner dies. With no
+  // wolf among the players, the village wins only if nobody dies, and a Minion or Squire wins alone,
+  // by staying alive while someone else dies (and the Tanner doesn't).
+  const anyWolf = seats.some(isWolf);
+  const village = anyWolf ? deadWolf : dead.length === 0;
+  const helperWins = (p) => !dead.includes(p) && dead.length > 0 && !deadJester;
+  const wolfWins = (p) => (anyWolf ? !deadWolf && !deadJester : helperWins(p));
   const winners = seats.filter((p) =>
     cards[p] === "jester" ? dead.includes(p)
       : cards[p] === "apprentice" ? (skinners.length === 1 ? died((x) => cards[x] === "jester") : dead.includes(p))
-      : team(p) === "village" ? village : wolfTeam);
+      : team(p) === "village" ? village : wolfWins(p));
+  const wolfTeam = seats.some((p) => team(p) === "wolf" && winners.includes(p));
   return { counts, dead, hunterShots, hunterBlocked, saved, guarded: [...guarded], turned, village, wolfTeam, jester: deadJester, winners };
 }
 

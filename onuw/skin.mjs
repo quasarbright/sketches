@@ -7,7 +7,7 @@
 //        art/ and give the path, e.g. werewolf: "art/werewolf.png". "back" is the card back.
 //        Any card left null keeps its line art from roles.mjs.
 
-export const TITLE = "onuw";
+export const TITLE = "One Night Ultimate Werewolf";
 
 export const NAMES = {
   werewolf: "Werewolf",
