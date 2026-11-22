@@ -1162,8 +1162,8 @@ function syncPanel() {
   $("hVal").textContent = fmtD(2 * state.H) + " tall";
   const atClear = Math.abs(state.H - CLEAR_H) < 1e-3, same = s != null && Math.abs(s - 1) < 1e-9;
   $("hNote").textContent = [
-    state.H < state.Hasked - 1e-6 ? "Shrunk so where the rays start stays above the rails." : atClear ? "Tallest that clears the rails." : "",
-    same && !state.split ? "As tall as the plane the rays start from, so they run parallel." : "",
+    state.H < state.Hasked - 1e-6 ? "Shrunk so the sensor stays above the rails." : atClear ? "Tallest that clears the rails." : "",
+    same && !state.split ? "As tall as the sensor, so the rays run parallel." : "",
   ].filter(Boolean).join(" ");
   // tick marks where the screen's bottom is at your feet, and where it matches the back plane
   $("hGroundTick").value = sliderFromH(CLEAR_H);
@@ -1172,13 +1172,13 @@ function syncPanel() {
 }
 // the back plane's own height, and how it compares with the screen's
 function sLabel(s) {
-  if (Math.abs(s) < 1e-9) return "your eye";
-  return `a ${fmtD(2 * s * state.H)} plane`;
+  if (Math.abs(s) < 1e-9) return "a point (your eye)";
+  return fmtD(2 * s * state.H);
 }
 // and how it compares with the screen, in words
 function sNote(s) {
   if (s == null) return "";
-  if (Math.abs(s) < 1e-9) return "One point: a normal camera. Slide right to start the rays from a plane; as tall as the screen, they run parallel.";
+  if (Math.abs(s) < 1e-9) return "A point: your eye, a normal camera. Make the sensor as tall as the screen and the rays run parallel.";
   const low = s * state.H > CLEAR_H + 1e-3 ? " Dips into the ground." : "";
   if (Math.abs(s - 1) < 1e-9) return "As tall as the screen, so the rays run parallel: orthographic." + low;
   return `${+s.toFixed(2)}× the screen's height.` + (s > 1 ? " Bigger than the screen, so the rays cross ahead." : "") + low;
@@ -1270,10 +1270,10 @@ function updateCaption() {
   let c;
   if (s != null) {
     if (Math.abs(s) < 1e-9) c = "Rays fan out from <b>one point</b> at your eye: a normal camera.";
-    else if (s < 0) c = "The rays start from a flipped plane, so they cross <b>behind</b> you.";
-    else if (s < 1) c = `The rays start on a plane <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
+    else if (s < 0) c = "The sensor is flipped, so the rays cross <b>behind</b> you.";
+    else if (s < 1) c = `The rays start on a sensor <b>${+s.toFixed(2)}×</b> the screen's size, so far things shrink less.`;
     else if (Math.abs(s - 1) < 1e-9) c = "Rays are <b>parallel</b>, so nothing shrinks. Looking level, the ground is edge-on.";
-    else c = `The rays start from a plane <b>bigger than the screen</b>, so they cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
+    else c = `The rays start on a sensor <b>bigger than the screen</b>, so they cross <b>${fmtD(convergenceDepth(s, state.D))}</b> ahead. Past that the world is upside down.`;
   } else {
     c = `Rays bend to follow <b>f(z) = ${escapeHtml(st.src)}</b>.`;
   }
@@ -1283,7 +1283,7 @@ function updateCaption() {
       if (v == null) return `f(z) = ${escapeHtml(state[a].src)}`;
       if (Math.abs(v) < 1e-9) return "rays fan out from your eye, like a camera";
       if (Math.abs(v - 1) < 1e-9) return "rays run parallel, so nothing shrinks";
-      return `rays start on a plane ${+v.toFixed(2)}× the screen`;
+      return `rays start on a sensor ${+v.toFixed(2)}× the screen`;
     };
     c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
@@ -1376,17 +1376,19 @@ const rectGeo = new LineSegmentsGeometry().setPositions(
   [-.5, -.5, 0, .5, -.5, 0, .5, -.5, 0, .5, .5, 0, .5, .5, 0, -.5, .5, 0, -.5, .5, 0, -.5, -.5, 0]);
 const flat = (color, opacity) => new THREE.MeshBasicMaterial({
   color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
-const planeFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0x5aa9e6, 0.14));
+const planeFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0x5aa9e6, 0.45));
+// When the sensor shrinks to a point, you're drawn as a floating eyeball looking where you look.
+const eyeball = new THREE.Group();
+{
+  const white = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), new THREE.MeshLambertMaterial({ color: 0xf4f1ea }));
+  const iris = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24), new THREE.MeshBasicMaterial({ color: 0x3d8fd6 }));
+  const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.035, 20), new THREE.MeshBasicMaterial({ color: 0x0d0f12 }));
+  iris.position.z = -0.142; iris.rotation.y = Math.PI; pupil.position.z = -0.144; pupil.rotation.y = Math.PI;
+  eyeball.add(white, iris, pupil);
+}
 const planeEdge = new LineSegments2(rectGeo, fat(0x3d9be9, 2.5));
 const screenFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), flat(0xe8553d, 0.3));
 const screenEdge = new LineSegments2(rectGeo, fat(0xff5a3c, 3));
-// you: a plain figure whose head holds the eye (the side view only; it casts no shadow)
-const figMat = new THREE.MeshLambertMaterial({ color: 0x8d929b });
-const figBody = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.0, 4, 10), figMat);
-const figHead = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 10), figMat);
-const eyeDot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8),
-  new THREE.MeshBasicMaterial({ color: 0x5aa9e6, depthTest: false }));
-eyeDot.renderOrder = 10;
 const RAY_U = [-1, 0, 1], RAY_STEPS = 48, N_RAYS = RAY_U.length ** 2;
 const rayPos = new Float32Array(N_RAYS * RAY_STEPS * 2 * 3);
 const rayGeo = new LineSegmentsGeometry();
@@ -1437,7 +1439,7 @@ function updateSpherePatch() {
   run(SPH_V, (t) => at(-1, -1 + 2 * t)); run(SPH_V, (t) => at(1, -1 + 2 * t));
   sphereEdgeGeo.setPositions(edge);
 }
-helpers.add(planeFill, planeEdge, screenFill, screenEdge, sphereFill, sphereEdge, figBody, figHead, eyeDot, rays);
+helpers.add(planeFill, planeEdge, eyeball, screenFill, screenEdge, sphereFill, sphereEdge, rays);
 helpers.traverse((o) => o.layers.set(INSET));
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -1458,12 +1460,10 @@ function updateInset(aspect) {
   for (const o of [screenFill, screenEdge]) {
     o.position.copy(eye).addScaledVector(fwd, state.D); o.quaternion.copy(q); o.scale.set(2 * hx, 2 * hy, 1);
   }
-  eyeDot.position.copy(eye);
-  figHead.position.copy(eye);
+  eyeball.visible = !isPlane || state.sphere; eyeball.position.copy(eye); eyeball.quaternion.copy(q); eyeball.scale.setScalar(2);
   for (const o of [screenFill, screenEdge]) o.visible = !state.sphere;
   for (const o of [sphereFill, sphereEdge]) { o.visible = state.sphere; o.position.copy(eye); o.quaternion.copy(q); }
   if (state.sphere) return updateInsetSphere(aspect, eye, q, fwd);
-  figBody.position.set(player.pos.x, player.pos.y + 0.72, player.pos.z);
   // the rays through the screen's corners, edge middles and center, as far as they go
   // long enough to show converging rays crossing and carrying on
   const sc = effS(state.split ? "y" : "x");
@@ -1571,7 +1571,7 @@ function renderInset() {
     tag("screen", _w.applyMatrix4(camera.matrixWorld), "#ff7a5e", -11);
   }
   else tag("screen", top(screenEdge, 1), "#ff7a5e", -11);
-  tag(planeEdge.visible ? "rays start" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -15);
+  tag(planeEdge.visible ? "sensor" : "eye", planeEdge.visible ? top(planeEdge, -1) : camera.position, "#7cc0f2", planeEdge.visible ? 11 : -30);
   insetFog.near = noFog.near; insetFog.far = noFog.far;
   lensUniforms.lensOn.value = 1; sky.visible = earth.visible = true;
   renderer.setScissorTest(false);
