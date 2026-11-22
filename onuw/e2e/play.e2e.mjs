@@ -506,6 +506,15 @@ test("lobby: the host names themselves after making the room; card counts change
   await p.click('[data-toggle="lackey"]');
   await p.waitForFunction(() => window.__onuw.view.roles.lackey === 1);
   assert.equal(await boxes(), before, "picking a card shifted the grid");
+  // every card with copies gets the same count pill; the Masons' pair is fixed, so both buttons are disabled
+  await p.click('[data-toggle="mason"]');
+  await p.waitForFunction(() => window.__onuw.view.roles.mason === 2);
+  const pills = await p.evaluate(() => [...document.querySelectorAll(".ms-grid .ms-card")].filter((c) => c.querySelector(".ms-count")).map((c) => ({
+    role: c.dataset.toggle, n: c.querySelector(".ms-count span").textContent, buttons: c.querySelectorAll(".ms-count button").length,
+    disabled: [...c.querySelectorAll(".ms-count button")].map((b) => b.disabled) })));
+  assert.deepEqual(pills.find((x) => x.role === "mason"), { role: "mason", n: "×2", buttons: 2, disabled: [true, true] });
+  assert.deepEqual(pills.find((x) => x.role === "werewolf"), { role: "werewolf", n: "×2", buttons: 2, disabled: [false, false] });
+  assert.equal(await p.locator(".ms-grid .ms-badge").count(), 0, "no second way of showing a count");
   // unpicked cards keep their own colors, dimmed
   const off = await p.locator('[data-toggle="hunter"]').evaluate((c) => ({ f: getComputedStyle(c).filter, band: getComputedStyle(c.querySelector(".ms-card-name")).backgroundColor }));
   assert.match(off.f, /brightness/);

@@ -645,21 +645,24 @@ function lobby() {
 function pickerCard(r, count, host) {
   const R = ROLES[r];
   const on = count > 0;
-  // copies of a card are counted on the card itself, so nothing below it appears or moves
-  const stepper = host && on && R.max > 1 && !R.pair
+  // Every card that can have more than one copy shows the same count pill, for the host and
+  // the guests alike; buttons that can't be used (guests, the Masons' fixed pair, the limits)
+  // are disabled rather than left out, so all the cards look and behave the same.
+  const counted = on && (R.max > 1 || R.pair);
+  const fixed = !host || R.pair;
+  const stepper = counted
     ? `<div class="ms-count">
-        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}">${icon("minus")}</button>
+        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" ${fixed ? "disabled" : ""}>${icon("minus")}</button>
         <span>×${count}</span>
-        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
+        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${fixed || count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
       </div>`
     : "";
-  const badge = on && !stepper && (count > 1 || R.pair) ? `<span class="ms-badge">×${count}</span>` : "";
   const label = "";
   return `<div class="ms-cardwrap ${on ? "is-on" : "is-off"}">
     ${card(r, {
       cls: `${on ? "" : "ms-off"} ${host ? "ms-pickable" : ""}`,
       attrs: host ? `data-toggle="${r}" role="button" tabindex="0" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} the ${esc(R.name)}"` : "",
-    }).replace("</div>", `</div>${badge}${stepper}`)}
+    }).replace("</div>", `</div>${stepper}`)}
     ${label ? `<div class="ms-card-label">${label}</div>` : ""}
   </div>`;
 }
