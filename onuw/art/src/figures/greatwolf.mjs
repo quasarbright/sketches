@@ -15,7 +15,6 @@ const head = blob([[364, 236], [390, 222], [418, 232], [458, 252, "c"], [452, 26
 const ears = [blob([[368, 244, "c"], [368, 216], [378, 202, "c"], [396, 218], [400, 234]])];
 const nearHind = [brush([[182, 390], [222, 458], [178, 504], [186, 552]], [80, 46, 20, 16]), paw(190, 566, { s: 20 })];
 const nearFore = [brush([[330, 384], [338, 450], [344, 520], [346, 552]], [48, 30, 20, 16]), paw(350, 566, { s: 20 })];
-const belly = fringe([[150, 428], [220, 436], [290, 430]], { n: 8, len: [10, 18], w: 12, side: -1, lean: .3, seed: 63 });
 // a tiny village at its feet: a cottage and two pines, no taller than its wrist
 const cottage = [blob([[388, 572, "c"], [388, 540, "c"], [408, 520, "c"], [428, 540, "c"], [428, 572, "c"]]), brush([[384, 542], [408, 518], [432, 542]], [6, 6])];
 const pine = (x, h) => blob([[x, 572 - h, "c"], [x + h * .32, 572, "c"], [x - h * .32, 572, "c"]]);
@@ -28,5 +27,5 @@ const cuts = [
   brush([[250, 364], [272, 396], [270, 420]], [4, 1]), brush([[226, 366], [246, 396], [244, 420]], [4, 1]),
 ];
 const window_ = blob([[402, 552], [414, 552], [414, 562], [402, 562]]);
-export default card({ bg, ink, transform: "translate(-26 -6)", layers: [farLegs, farPaws, tail, { d: body }, back, belly, { d: neck }, mane, ears, { d: head },
+export default card({ bg, ink, transform: "translate(-26 -6)", layers: [farLegs, farPaws, tail, { d: body }, back, { d: neck }, mane, ears, { d: head },
   nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" })), { group: village, halo: 4 }, { d: window_, fill: "bg" }] });
