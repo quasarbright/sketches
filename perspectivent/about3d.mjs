@@ -316,18 +316,15 @@ export function drawVertexDemo(ctx, W, H, dpr, t) {
   ctx.restore();
   // the picture: the triangles filled so far, farthest first, so nearer ones cover them
   ctx.save(); ctx.beginPath(); ctx.rect(P.x, P.y, P.w, P.h); ctx.clip();
-  ctx.fillStyle = "#1a1d22"; ctx.fillRect(P.x, P.y, P.w, P.h);
+  // dark until the picture is finished, then sky where no triangle was drawn
+  ctx.fillStyle = tc >= FAST_END ? `rgb(${SCENE3.sky})` : "#1a1d22"; ctx.fillRect(P.x, P.y, P.w, P.h);
   const S = ([x, y, z]) => [P.x + (x / f(z) + 1) / 2 * P.w, P.y + (1 - y / f(z)) / 2 * P.h];
   const list = TRIS.slice(0, filled).map((tr, i) => ({ tr, i, z: tr.ground ? 1e9 : (tr.p[0][2] + tr.p[1][2] + tr.p[2][2]) / 3 }));
   list.sort((a, b) => b.z - a.z);
   for (const { tr, i } of list) {
-    ctx.globalAlpha = i === 0 && slow ? done : 1; ctx.fillStyle = `rgb(${tr.color})`;
-    ctx.beginPath(); tr.p.map(S).forEach((p, j) => (j ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = i === 0 && slow ? done : 1; ctx.fillStyle = ctx.strokeStyle = `rgb(${tr.color})`; ctx.lineWidth = 0.75;
+    ctx.beginPath(); tr.p.map(S).forEach((p, j) => (j ? ctx.lineTo(...p) : ctx.moveTo(...p))); ctx.closePath(); ctx.fill(); ctx.stroke(); // the stroke hides seams
     ctx.globalAlpha = 1;
-  }
-  if (tc >= FAST_END) { // the finished picture: sky where nothing was drawn
-    ctx.globalCompositeOperation = "destination-over"; ctx.fillStyle = `rgb(${SCENE3.sky})`;
-    ctx.fillRect(P.x, P.y, P.w, P.h); ctx.globalCompositeOperation = "source-over";
   }
   // grid: the picture's u and v from −1 to 1
   ctx.strokeStyle = "rgba(233,228,216,0.18)"; ctx.lineWidth = 1;
