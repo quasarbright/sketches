@@ -31,7 +31,7 @@
   <link rel="stylesheet" href="../shared/cohesion.css" />
   <script type="module" src="../shared/cohesion.js"></script>
 
-  <!-- identity: a drafting table. Graphite and chalk, a red screen line and blue back plane from
+  <!-- identity: a drafting table. Graphite and chalk, a red accent and a blue sensor from
        the perspective-drawing diagrams the whole thing is about -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,7 +46,7 @@
       --text:      #e9e4d8;   /* chalk */
       --muted:     #9a978e;
       --faint:     #5f6066;
-      --accent:    #e8553d;   /* the screen line / vanishing point red */
+      --accent:    #e8553d;   /* the accent / vanishing point red */
       --accent-hi: #ff7258;
       --on-accent: #14161a;
       --plane:     #5aa9e6;   /* the back plane, and parallel rays */
@@ -124,6 +124,7 @@
     .pv-chip .pv-chip-f { font-family: var(--font-mono); font-size: .72rem; opacity: .75; margin-left: 4px; }
 
     .pv-about-diagram { display: block; width: 100%; max-width: 440px; height: 170px; margin: 12px auto 4px; border-radius: var(--radius-sm); background: #111317; }
+    .pv-about-3d { height: auto; aspect-ratio: 16 / 9; margin-top: 4px; }
     .pv-about-caption { text-align: center; font-size: .8rem; color: var(--muted); margin: 0 0 14px; min-height: 1.2em; }
     .pv-na input[type=range] { opacity: .35; }
     .pv-na .value { color: var(--faint); }
@@ -268,84 +269,102 @@
       back to start</button>
     <about-modal label="about">
       <h2 class="title">Perspectiven't</h2>
-      <p class="intro">A camera decides how big things look from how far away they are. A normal
-        camera divides by distance: something twice as far away is drawn half as big. Here you can
-        swap distance for any function of it, $f(z)$, and walk around inside the result.</p>
+      <p class="intro">A normal camera draws far things smaller, and exactly how much smaller
+        comes from one division. Take a point in the world and measure how far it is above, below or
+        beside the line you're looking along: its offset. The camera divides that offset by how far
+        ahead of you the point is, and the answer is how far from the middle of the picture it's
+        drawn. Twice as far ahead, it lands half as far from the middle, so a pole twice as far away
+        is drawn half as tall. Here you can divide the offset by any function of the distance
+        ahead, $f(z)$, instead of the distance $z$ itself, and walk around inside the result.</p>
 
       <div class="section-label">how a picture gets made</div>
       <p>A picture is a grid of pixels, and every pixel gets its color the same way: a ray goes out
-        from your eye, and the pixel takes the color of the first thing the ray hits. Here's one
-        column of pixels being worked out, top to bottom, for a small scene seen from the side.</p>
+        from your eye in that pixel's direction, and the pixel takes the color of the first thing
+        the ray hits. The rays fan out evenly between the top pixel's ray and the bottom pixel's.
+        The angle between those two is the <b>spread</b>. Here's one column of pixels being worked
+        out, top to bottom, for a small scene seen from the side.</p>
       <canvas class="pv-about-diagram" data-demo="render"></canvas>
-      <p class="pv-about-caption">Each pixel's ray leaves your eye through that pixel's spot on the screen.</p>
-      <p>To aim the rays, the panel puts a <span style="color:var(--accent)">screen</span> in front
-        of you, the same shape as the picture, and each pixel's ray passes through that pixel's spot
-        on it. You don't see the screen or look through it. A ray that hits something before it gets
-        to the screen shows that thing, which is why a platform right in front of you still shows.
-        The screen only sets how widely the rays spread, and so how much of the world fits in the
-        picture.</p>
-      <p>That's where the division comes from. The rays spread evenly, so the ray through height $u$
-        on a screen $D$ meters away is at height $u\,z/D$ when it's $z$ meters away. Turn that
-        around: a point at height $y$, $z$ meters away, is on the ray for screen height
-        <span style="white-space:nowrap">$u = y\,D/z$.</span> Its place in the picture is its height
-        divided by its distance, so twice as far away is half as big.</p>
+      <p class="pv-about-caption">Each pixel's ray leaves your eye in its own direction, and the pixel takes the color of what the ray hits.</p>
+      <p>Do that for every pixel in the grid, row by row, and you have the whole picture. Here it is
+        for the same scene, seen from your eye. The middle column is the one above.</p>
+      <canvas class="pv-about-diagram pv-about-3d" data-demo="render3d"></canvas>
+      <p class="pv-about-caption">Every pixel's ray, traced in turn.</p>
 
-      <div class="section-label">rays from a sensor</div>
-      <p>The rays don't have to start at one point. Give the eye some size: a blue
-        <span style="color:var(--plane)">sensor</span> centered where your eye was, the same shape
-        as the screen. Each pixel's ray starts at that pixel's spot on the sensor and goes through its
-        spot on the screen. With a sensor there's no single eye any more; it's just where the
-        rays begin.</p>
-      <p>The sensor size slider sets how tall it is. At zero it's a point, your eye, and you have a
-        normal camera. As tall as the screen, every ray runs straight ahead, parallel to the rest,
-        so nothing shrinks with distance. That's an <b>orthographic</b> view, the kind used in
-        technical drawings.</p>
+      <div class="section-label">what gets divided</div>
+      <p>Tracing a ray for every pixel is slow, so the game works the other way around. It takes
+        each corner of each shape and works out which spot in the picture it lands on. Because the
+        rays fan out evenly, $z$ meters ahead they cover a band of heights that grows in proportion
+        to $z$: with a 58° spread, the top ray is $0.55\,z$ meters above the line you're looking
+        along. A corner $y$ meters above that line (negative for below) is on the ray whose place in
+        the picture is $y \div 0.55\,z$, where 1 is the top edge, 0 the middle and −1 the bottom.
+        Its distance to the left or right is divided by $z$ the same way. That's the division: a
+        corner's offset from the line you're looking along, divided by how far ahead it is.</p>
+      <canvas class="pv-about-diagram" data-demo="divide"></canvas>
+      <p class="pv-about-caption" data-caption="divide"></p>
+      <p>A corner lands on exactly the pixel whose ray goes through it, so the two ways give the
+        same picture. Once the corners are placed, the graphics card fills in the flat faces between
+        them, nearest in front. That's how the game draws every frame.</p>
+      <canvas class="pv-about-diagram pv-about-3d" data-demo="divide3d"></canvas>
+      <p class="pv-about-caption">Each box corner placed by dividing, then joined up and filled in.</p>
+
+      <div class="section-label">a sensor and a spread</div>
+      <p>The rays don't have to start at one point. Give them a blue
+        <span style="color:var(--plane)">sensor</span> to start from instead, a rectangle centered
+        where your eye was, and start each pixel's ray at that pixel's spot on it. That's the
+        <b>sensor size</b> slider. At zero it's a point, your eye. The <b>spread</b> slider still
+        sets the angle between the top and bottom rays.</p>
+      <p>With a sensor you can set the spread to 0. Then every ray runs straight ahead, parallel to
+        the rest, so nothing shrinks with distance. That's an <b>orthographic</b> view, the kind
+        used in technical drawings. (From a point with no spread, every pixel would get the same
+        ray, so the spread stops above 0 while the sensor is a point.)</p>
       <canvas class="pv-about-diagram" data-demo="render-ortho"></canvas>
-      <p class="pv-about-caption">The same scene from a sensor as tall as the screen. The rays are parallel, so the far blue box keeps its real size.</p>
-      <p>Bigger than the screen, the rays come together in front of you, so far things are drawn
-        bigger than near ones. That's <b>reverse perspective</b>. Past the point where they meet,
-        the rays carry on crossed, so out there the world is upside down.</p>
+      <p class="pv-about-caption">The same scene from a sensor 2.2 m tall, with no spread. The far blue box keeps its real size.</p>
+      <canvas class="pv-about-diagram pv-about-3d" data-demo="render3d-ortho"></canvas>
+      <p class="pv-about-caption">The whole picture with parallel rays. You see the cube's sides but never its top.</p>
+      <p>Make the spread negative and the rays come together in front of you, so far things are
+        drawn bigger than near ones. That's <b>reverse perspective</b>. Past the point where they
+        cross, the rays carry on crossed, so out there the world is upside down.</p>
       <canvas class="pv-about-diagram" data-demo="plane"></canvas>
       <p class="pv-about-caption" data-caption="plane"></p>
-      <p>The division still works. With a sensor $s$ times the screen's size, the ray for screen
-        height $u$ starts at $s\,u$ and reaches $u$ at the screen, so $z$ meters away it's at
-        <span style="white-space:nowrap">$u\,(s + (1-s)\,z/D)$.</span> A point at height $y$ is on
-        the ray <span style="white-space:nowrap">$u = y / (s + (1-s)\,z/D)$:</span> its height
-        divided by how spread out the rays are at its distance. Call that spread $f(z)$. For a
-        normal camera it's $z$ (give or take the constant $D$), and as the sensor grows to the
-        screen's size it flattens to a constant, which is how the view morphs smoothly from
-        perspective to orthographic instead of cutting between them.</p>
+      <canvas class="pv-about-diagram pv-about-3d" data-demo="plane3d"></canvas>
+      <p class="pv-about-caption">The scene through the same lens as it changes.</p>
+      <p>The division still works. With a sensor reaching $A$ meters above the line you're looking
+        along and a spread of $2\phi$, the top ray is $A + z\tan\phi$ meters above that line
+        $z$ meters ahead, so a corner $y$ meters above it lands at
+        <span style="white-space:nowrap">$y \div (A + z\tan\phi)$</span> of the way to the top
+        edge. That's the corner's offset divided by how spread out the rays are at its distance.
+        Call that $f(z)$. For an eye it's $0.55\,z$, a multiple of $z$. With no spread it's the
+        constant $A$, so a corner's place doesn't depend on its distance at all. Sliding the
+        sensor and spread between the two moves $f$ smoothly from one to the other, which is how
+        the view morphs from perspective to orthographic instead of cutting between them.</p>
       <p>The sensor is centered on your eye, so you stay in the same place whichever lens you pick.
-        Its lower part reaches below your feet, and rays that start there begin inside the ground,
-        so they see solid ground. Looking straight ahead in orthographic, the ground is edge-on,
-        and walking forward changes nothing until you pass something, because distance no longer
-        changes size. Step sideways or look down to see the world move.</p>
+        Looking straight ahead in orthographic, the ground is edge-on, and walking forward changes
+        nothing until you pass something, because distance no longer changes size. Step sideways or
+        look down to see the world move.</p>
 
       <div class="section-label">any function of distance</div>
-      <p>Once the picture is "divide by $f(z)$", $f$ doesn't have to be a straight line. The ray for
-        screen height $u$ is then the curve $u\,f(z)$, which bends. Divide by $\sqrt z$ and things
-        shrink more slowly than normal. Divide by $z^2$ and they shrink faster. Divide by
+      <p>Once the picture is "offset divided by $f(z)$", $f$ doesn't have to be a straight line.
+        The pixel at height $u$ in the picture sees the points with $y = u\,f(z)$, and when $f$
+        bends, that ray is a curve. Divide the offset by $\sqrt z$ and things shrink more slowly
+        than normal. Divide by $z^2$ and they shrink faster. Divide by
         <span style="white-space:nowrap">$1/z$,</span> which is multiplying by distance, and the world
-        turns inside out. The reverse button uses $1/(z + 5)$ instead: its rays start on a sensor a
-        couple of times bigger than the screen and bend in toward each other, meeting only infinitely
-        far away. With the rays curved, straight edges in the world come out curved.</p>
+        turns inside out. The reverse button uses $1/(z + 5)$ instead: its rays start on a big
+        sensor and bend in toward each other, meeting only infinitely far away.</p>
       <canvas class="pv-about-diagram" data-demo="functions"></canvas>
       <p class="pv-about-caption" data-caption="functions"></p>
-      <p>Everything is scaled so that things at the screen's distance keep their size, which is why
-        switching lenses doesn't make the thing you're looking at jump. Where $f$ is zero or
-        negative, no ray gets there, so that part of the world disappears.</p>
+      <canvas class="pv-about-diagram pv-about-3d" data-demo="functions3d"></canvas>
+      <p class="pv-about-caption">The scene traced along the curved rays, pixel by pixel.</p>
+      <p>With curved rays, straight edges in the world come out curved. The graphics card can only
+        fill flat triangles between corners, so the game cuts every shape into small pieces and
+        places each piece's corners, and the edges bend. Each lens is scaled so that things about
+        2.4 m ahead keep their size, which is why switching lenses doesn't make the thing you're
+        looking at jump. Where $f$ is zero or negative, no ray gets there, so that part of the world
+        disappears. With curved rays the spread slider zooms.</p>
 
       <div class="section-label">two lenses at once</div>
-      <p>Horizontal and vertical positions are divided separately, so they can use different
-        functions. Orthographic horizontally and perspective vertically keeps the rails parallel
-        while the telegraph poles still shrink.</p>
-
-      <div class="section-label">drawing it</div>
-      <p>The demo at the top traces each pixel's ray. The game runs it the other way around, which
-        gives the same picture much faster: each corner of every shape is divided by $f$ of its
-        distance on the graphics card, and the shapes are cut into small pieces so the curves come
-        out smooth. For the sensor family the math is an ordinary projection matrix, so those views
-        are exact.</p>
+      <p>The offset up or down and the offset left or right are divided separately, so they can use
+        different functions. Orthographic horizontally and perspective vertically keeps the rails
+        parallel while the telegraph poles still shrink.</p>
     </about-modal>
   </div>
 

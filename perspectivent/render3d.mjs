@@ -1,0 +1,244 @@
+// The About's 3D pictures: the same small scene as the side-view demos, drawn the two ways the
+// About explains. `traceImage` follows every pixel's ray (straight from a sensor with a spread,
+// or curved for any f), and `projectBoxes` places each box corner by dividing its offset by
+// f(z), the way the game's graphics card does. Both draw into ImageData / a 2D canvas, a few
+// thousand pixels a frame, so the picture builds up while you watch.
+
+export const SCENE3 = {
+  ground: -1.6,
+  // center, half sizes, turn about the vertical (radians), color. The red cube is turned so you
+  // see two of its sides; straight through its middle it's 0.9 / cos 30° = 1.04 m deep, which is
+  // what the side view (render-demo.mjs) shows.
+  boxes: [
+    { c: [0, -1.15, 3.9], half: [0.45, 0.45, 0.45], rot: Math.PI / 6, color: "#e8553d" },
+    { c: [0.6, -0.15, 7.4], half: [1.1, 1.45, 0.8], rot: 0, color: "#5aa9e6" },
+  ],
+  balls: [[0, 0.55, 5.3, 0.38, "#f2c14e"]], // x, y, z, r, color
+  sky: [201, 220, 239], grass: [95, 138, 67],
+};
+const FAR_Z = 8.4; // past the far side of the farthest box
+const SUN = (() => { const v = [0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
+const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const BOX_RGB = SCENE3.boxes.map((b) => rgb(b.color)), BALL_RGB = SCENE3.balls.map((b) => rgb(b[4]));
+
+// into and out of a box's own frame (centered, unturned)
+const toLocal = (b, x, y, z, dir = false) => {
+  const c = Math.cos(b.rot), s = Math.sin(b.rot);
+  if (!dir) { x -= b.c[0]; y -= b.c[1]; z -= b.c[2]; }
+  return [c * x - s * z, y, s * x + c * z];
+};
+const toWorld = (b, v) => { const c = Math.cos(b.rot), s = Math.sin(b.rot); return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]]; };
+// the nearest hit along O + t·d, t > tMin: { t, n, c } or null
+function hit(ox, oy, oz, dx, dy, dz, tMin = 1e-6, any = false) {
+  let best = null;
+  const take = (t, n, c) => { if (t > tMin && (!best || t < best.t)) best = { t, n, c }; };
+  if (dy < 0 && !any) take((SCENE3.ground - oy) / dy, [0, 1, 0], null);
+  SCENE3.boxes.forEach((b, k) => {
+    let t0 = -Infinity, t1 = Infinity, axis = 0, sign = 0;
+    const o = toLocal(b, ox, oy, oz), d = toLocal(b, dx, dy, dz, true);
+    for (let a = 0; a < 3; a++) {
+      const lo = -b.half[a], hi = b.half[a];
+      if (Math.abs(d[a]) < 1e-12) { if (o[a] < lo || o[a] > hi) return; continue; }
+      let ta = (lo - o[a]) / d[a], tb = (hi - o[a]) / d[a], sg = -1;
+      if (ta > tb) { [ta, tb] = [tb, ta]; sg = 1; }
+      if (ta > t0) { t0 = ta; axis = a; sign = sg; }
+      if (tb < t1) t1 = tb;
+    }
+    if (t0 <= t1) { const n = [0, 0, 0]; n[axis] = sign; take(t0, toWorld(b, n), BOX_RGB[k]); }
+  });
+  SCENE3.balls.forEach(([bx, by, bz, r], k) => {
+    const px = ox - bx, py = oy - by, pz = oz - bz;
+    const a = dx * dx + dy * dy + dz * dz, b = 2 * (px * dx + py * dy + pz * dz), c = px * px + py * py + pz * pz - r * r;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return;
+    const t = (-b - Math.sqrt(disc)) / (2 * a);
+    take(t, null, BALL_RGB[k]);
+    if (best && best.c === BALL_RGB[k] && !best.n) {
+      const x = ox + dx * t - bx, y = oy + dy * t - by, z = oz + dz * t - bz;
+      best.n = [x / r, y / r, z / r];
+    }
+  });
+  return best;
+}
+
+// the color of a surface point, lit by the sun, with shadows and a little haze far off
+function shade(x, y, z, n, c) {
+  let base = c;
+  if (!c) { // the ground: a checkerboard of 1 m tiles, so you can see it recede
+    const k = (Math.floor(x) + Math.floor(z)) & 1 ? 1 : 0.9;
+    base = SCENE3.grass.map((v) => v * k);
+  }
+  const lit = Math.max(0, n[0] * SUN[0] + n[1] * SUN[1] + n[2] * SUN[2]);
+  const shadow = lit > 0 && hit(x + n[0] * 1e-3, y + n[1] * 1e-3, z + n[2] * 1e-3, ...SUN, 1e-4, true) ? 0 : 1;
+  const k = 0.5 + 0.55 * lit * shadow;
+  const haze = 1 - Math.exp(-Math.max(0, z) / 45);
+  return base.map((v, i) => Math.min(255, v * k) * (1 - haze) + SCENE3.sky[i] * haze);
+}
+const skyAt = (v) => SCENE3.sky.map((c, i) => c * (0.88 + 0.12 * v) + [24, 20, 10][i] * (1 - v) * 0.3);
+
+// One pixel's color. `lens` is { A, t } for straight rays from a sensor of half-height A whose
+// rays leave at half-angle atan(t), or { h } for curved rays: the view's half-height at depth z.
+// u and v run from -1 to 1 across and up; `aspect` is width / height.
+export function pixel(lens, u, v, aspect) {
+  if (lens.h) return curvedPixel(lens.h, u, v, aspect);
+  const ox = u * lens.A * aspect, oy = v * lens.A, dx = u * lens.t * aspect, dy = v * lens.t;
+  const h = hit(ox, oy, 0, dx, dy, 1);
+  if (!h) return skyAt(v);
+  const x = ox + dx * h.t, y = oy + dy * h.t, z = h.t;
+  return shade(x, y, z, h.n, h.c);
+}
+function inBox(x, y, z, b) { // no arrays: this runs for every step of every curved ray
+  const c = Math.cos(b.rot), sn = Math.sin(b.rot), dx = x - b.c[0], dy = y - b.c[1], dz = z - b.c[2];
+  return Math.abs(dy) <= b.half[1] && Math.abs(c * dx - sn * dz) <= b.half[0] && Math.abs(sn * dx + c * dz) <= b.half[2];
+}
+function inside(x, y, z) {
+  if (y < SCENE3.ground) return -1;
+  for (let k = 0; k < SCENE3.boxes.length; k++) if (inBox(x, y, z, SCENE3.boxes[k])) return k;
+  for (let k = 0; k < SCENE3.balls.length; k++) {
+    const [bx, by, bz, r] = SCENE3.balls[k];
+    if ((x - bx) ** 2 + (y - by) ** 2 + (z - bz) ** 2 < r * r) return 100 + k;
+  }
+  return null;
+}
+// curved rays: walk out along the curve until it's inside something, then home in on the surface.
+// Every ray steps through the same depths, so the lens is worked out there once per lens.
+const STEPS = (() => { const zs = []; for (let z = 0.02; z < 40; z += 0.08 * (1 + z / 4)) zs.push(z); return zs; })();
+const tables = new WeakMap();
+function curvedPixel(h, u, v, aspect) {
+  let hs = tables.get(h);
+  if (!hs) { hs = STEPS.map(h); tables.set(h, hs); }
+  const at = (z, s = h(z)) => (Number.isFinite(s) && s > 0 ? [u * s * aspect, v * s, z] : null);
+  let zPrev = null;
+  // everything but the ground is closer than FAR_Z, and a ray in the top half never reaches the
+  // ground (it's above your line of sight, and the ground is below), so it can stop there
+  const zEnd = v >= 0 ? FAR_Z : 40;
+  for (let i = 0; i < STEPS.length && STEPS[i] < zEnd; i++) {
+    const z = STEPS[i], sz = hs[i];
+    if (!(sz > 0) || !Number.isFinite(sz)) { zPrev = null; continue; }
+    const k = inside(u * sz * aspect, v * sz, z);
+    if (k === null) { zPrev = z; continue; }
+    // a ray that starts inside something (the ground, for the rays that begin far below you) sees it
+    let lo = zPrev ?? z, hi = z;
+    if (zPrev !== null) for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2, q = at(m); if (q && inside(...q) !== null) hi = m; else lo = m; }
+    const [x, y, zz] = at(hi), kk = inside(x, y, zz) ?? k;
+    let n, c = null;
+    if (kk === -1) n = [0, 1, 0];
+    else if (kk >= 100) { const [bx, by, bz, r] = SCENE3.balls[kk - 100]; n = [(x - bx) / r, (y - by) / r, (zz - bz) / r]; c = BALL_RGB[kk - 100]; }
+    else { // the box face nearest the point
+      const b = SCENE3.boxes[kk], p = toLocal(b, x, y, zz);
+      let best = Infinity;
+      for (let a = 0; a < 3; a++) for (const sg of [-1, 1]) {
+        const d = Math.abs(p[a] - sg * b.half[a]);
+        if (d < best) { best = d; n = [0, 0, 0]; n[a] = sg; }
+      }
+      n = toWorld(b, n);
+      c = BOX_RGB[kk];
+    }
+    return shade(x, y, zz, n, c);
+  }
+  return skyAt(v);
+}
+
+// A picture built up pixel by pixel, row by row from the top. `reset` starts a new one,
+// `advance(n)` works out n more pixels, and `draw` puts what's done onto a 2D context.
+export class Scan {
+  constructor() { this.key = null; this.w = 0; this.h = 0; this.done = 0; }
+  reset(key, w, h, lens) {
+    this.key = key; this.lens = lens; this.done = 0;
+    if (w !== this.w || h !== this.h || !this.img) {
+      this.w = w; this.h = h;
+      this.img = new ImageData(w, h);
+      this.cv = new OffscreenCanvas(w, h);
+    }
+    const d = this.img.data;
+    for (let i = 0; i < d.length; i += 4) { d[i] = 17; d[i + 1] = 19; d[i + 2] = 23; d[i + 3] = 255; }
+  }
+  get total() { return this.w * this.h; }
+  advance(n) {
+    const end = Math.min(this.total, this.done + n), d = this.img.data, aspect = this.w / this.h;
+    for (let i = this.done; i < end; i++) {
+      const px = i % this.w, py = (i / this.w) | 0;
+      const c = pixel(this.lens, -1 + (2 * px + 1) / this.w, 1 - (2 * py + 1) / this.h, aspect);
+      d[4 * i] = c[0]; d[4 * i + 1] = c[1]; d[4 * i + 2] = c[2];
+    }
+    this.done = end;
+  }
+  draw(ctx, W, H, { head = true } = {}) {
+    this.cv.getContext("2d").putImageData(this.img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.cv, 0, 0, W, H);
+    if (head && this.done < this.total) { // where the scan is: a yellow mark on the current pixel
+      const px = this.done % this.w, py = (this.done / this.w) | 0, sx = W / this.w, sy = H / this.h;
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(px * sx - 2, py * sy - 2, Math.max(4, sx + 4), Math.max(4, sy + 4));
+    }
+  }
+}
+
+// The graphics card's way, for straight rays: each corner of each box goes to the place in the
+// picture where its offset from the line of sight, divided by f(z) = A + z·t, puts it. `k` says
+// how far along the animation is: 0..1 placing corners one at a time, 1..2 joining them with
+// edges, 2..3 filling the faces.
+export function projectBoxes(ctx, W, H, lens, k) {
+  const aspect = W / H, f = (z) => lens.A + z * lens.t;
+  const P = (x, y, z) => [W / 2 + (x / (f(z) * aspect)) * W / 2, H / 2 - (y / f(z)) * H / 2];
+  // sky, and the ground below the horizon (where the ground plane meets the line of sight)
+  ctx.fillStyle = `rgb(${SCENE3.sky})`; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = `rgb(${SCENE3.grass.map((c) => c * 0.95)})`; ctx.fillRect(0, H / 2, W, H / 2);
+  const corners = [], faces = [];
+  SCENE3.boxes.forEach((b, bi) => {
+    const pts = [];
+    for (const sz of [-1, 1]) for (const sy of [-1, 1]) for (const sx of [-1, 1]) {
+      const v = toWorld(b, [sx * b.half[0], sy * b.half[1], sz * b.half[2]]);
+      pts.push([v[0] + b.c[0], v[1] + b.c[1], v[2] + b.c[2]]);
+    }
+    pts.forEach((p) => corners.push({ p, q: P(...p), color: b.color }));
+    // faces as corner indices (x fastest, then y, then z), with their outward normals
+    const F = [[[0, 1, 3, 2], [0, 0, -1]], [[4, 5, 7, 6], [0, 0, 1]], [[0, 2, 6, 4], [-1, 0, 0]],
+      [[1, 3, 7, 5], [1, 0, 0]], [[2, 3, 7, 6], [0, 1, 0]], [[0, 1, 5, 4], [0, -1, 0]]];
+    for (const [idx, n0] of F) {
+      const n = toWorld(b, n0);
+      const c = idx.map((i) => pts[i]);
+      const mid = [0, 1, 2].map((a) => c.reduce((s, p) => s + p[a], 0) / 4);
+      // a face shows when the ray that reaches its middle is heading into it: that ray goes
+      // (x, y)·t/f(z) sideways and up for every meter forward
+      const fz = f(mid[2]);
+      const toward = n[0] * mid[0] * lens.t / fz + n[1] * mid[1] * lens.t / fz + n[2] < 0;
+      if (!toward) continue;
+      faces.push({ q: c.map((p) => P(...p)), z: mid[2], color: shade(...mid, n, rgb(b.color)), box: bi });
+    }
+  });
+  const nC = corners.length;
+  if (k >= 2) { // fill the faces, far ones first
+    const e = Math.min(1, k - 2);
+    faces.sort((a, b) => b.z - a.z);
+    ctx.globalAlpha = e;
+    for (const fc of faces) {
+      ctx.fillStyle = `rgb(${fc.color.map(Math.round)})`; ctx.beginPath();
+      fc.q.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (k >= 1 && k < 3) { // join each box's corners
+    const e = Math.min(1, k - 1);
+    ctx.strokeStyle = "rgba(20,22,26,0.85)"; ctx.lineWidth = 1.5;
+    const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    for (let bi = 0; bi < SCENE3.boxes.length; bi++) {
+      const c = corners.slice(8 * bi, 8 * bi + 8);
+      for (const [a, b] of edges) {
+        const [x0, y0] = c[a].q, [x1, y1] = c[b].q;
+        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e); ctx.stroke();
+      }
+    }
+  }
+  if (k < 3) { // the corners, appearing one at a time; the newest is yellow
+    const shown = k >= 1 ? nC : Math.floor(k * nC) + 1;
+    for (let i = 0; i < Math.min(nC, shown); i++) {
+      const [x, y] = corners[i].q;
+      ctx.fillStyle = i === shown - 1 && k < 1 ? "#ffd23f" : "#14161a";
+      ctx.beginPath(); ctx.arc(x, y, i === shown - 1 && k < 1 ? 4.5 : 3, 0, 7); ctx.fill();
+    }
+    return k < 1 ? corners[Math.min(nC - 1, Math.floor(k * nC))].p : null;
+  }
+  return null;
+}
