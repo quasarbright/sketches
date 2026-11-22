@@ -200,6 +200,9 @@
     .ms-card-name.is-long { font-size: max(10.2cqw, 10px); line-height: calc(max(12.2cqw, 11px) * 1.43); }
     /* very long names (Apprentice Skinner) shrink with their length and use the band's left side too */
     .ms-card-name.is-xlong { font-size: max(min(10.2cqw, calc(76cqw / (var(--len) * .56))), 7px); padding-left: 4cqw; padding-right: 18cqw; }
+    /* two-word names too long for one line (Paranormal Investigator) take two lines in the same band height */
+    .ms-card-name.is-wrap { white-space: normal; font-size: max(8.6cqw, 8px); line-height: 1.05; box-sizing: border-box;
+      height: calc(max(12.2cqw, 11px) * 1.43 + 3.6cqw); padding-top: 0; padding-bottom: 0; display: flex; align-items: center; justify-content: center; text-align: center; }
     /* team letter in the top-right corner, on the name band */
     .ms-team-mark { position: absolute; top: 0; right: 4cqw; z-index: 2; width: 12cqw; height: calc(max(12.2cqw, 11px) * 1.43 + 3.6cqw); display: grid; place-items: center;
       font-weight: 400; font-size: max(12.2cqw, 11px); line-height: 1; color: var(--band-ink, #fff); }

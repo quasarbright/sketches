@@ -5,7 +5,7 @@ import { NAMES as N, ART } from "./skin.mjs";
 export const TEAMS = {
   village: { name: "Village", color: "#5aa9e6", letter: "V" },
   wolf: { name: "Wolf team", color: "#e0485a", letter: "W" },
-  jester: { name: "On their own", color: "#f2a541", letter: "S" },
+  jester: { name: "On their own", color: "#f2a541", letter: "T" },
 };
 
 // `max`: how many copies the role picker allows. `pair`: comes in twos (Masons).

@@ -75,7 +75,7 @@ test("only the host changes cards", () => {
   assert.ok(handle(s, "b", { t: "setRoles", roles: {} }, 0).error);
 });
 
-test("the Pack Leader's spare card is added on its own and isn't a center card", () => {
+test("the Alpha Wolf's spare card is added on its own and isn't a center card", () => {
   const s = room(["a", "b", "c"]);
   handle(s, "a", { t: "setRoles", roles: { packleader: 1, werewolf: 1, seer: 1, villager: 3 } }, 0);
   assert.equal(startProblem(s), null);
@@ -85,7 +85,7 @@ test("the Pack Leader's spare card is added on its own and isn't a center card",
   assert.ok(viewFor(s, "a", 0).game.hasSpare);
 });
 
-test("Pack Leader gives the spare card; a lone Pack Leader peeks at a real center card first", () => {
+test("Alpha Wolf gives the spare card; a lone Alpha Wolf peeks at a real center card first", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "packleader", b: "seer", c: "villager" }, ["werewolf", "villager", "villager"], "werewolf");
   runNight(s, {
@@ -100,7 +100,7 @@ test("Pack Leader gives the spare card; a lone Pack Leader peeks at a real cente
   assert.match(info, /spare Werewolf card with B.s card/);
 });
 
-test("Pack Leader can't target a known wolf", () => {
+test("Alpha Wolf can't target a known wolf", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "packleader", b: "werewolf", c: "villager" }, ["seer", "villager", "villager"], "werewolf");
   for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0);
@@ -144,7 +144,7 @@ test("night actions have no time limit; a player who leaves mid-turn gets the de
   rig(s, { a: "sleepwalker", b: "villager", c: "villager" }, ["werewolf", "werewolf", "seer"]);
   let now = nightTo(s, "sleepwalker");
   for (let i = 0; i < 2000; i++) { now += 500; tick(s, now, seeded(5)); }   // over 16 minutes
-  assert.equal(s.g.step.id, "sleepwalker", "still waiting on the Alcoholic");
+  assert.equal(s.g.step.id, "sleepwalker", "still waiting on the Drunk");
   assert.equal(s.g.cards.a, "sleepwalker");
   assert.equal("stepEndsAt" in viewFor(s, "a").game, false, "no countdown is sent");
   handle(s, "a", { t: "disconnect" }, now);
@@ -152,7 +152,7 @@ test("night actions have no time limit; a player who leaves mid-turn gets the de
   assert.notEqual(s.g.cards.a, "sleepwalker"); // the required swap still happened
 });
 
-test("Meddler and Sleepwalker swap", () => {
+test("Troublemaker and Sleepwalker swap", () => {
   const s = room(["a", "b", "c", "d"]);
   rig(s, { a: "meddler", b: "sleepwalker", c: "werewolf", d: "villager" }, ["seer", "villager", "hunter"]);
   runNight(s, { meddler: { a: { targets: ["c", "d"] } }, sleepwalker: { b: { center: 2 } } });
@@ -189,7 +189,7 @@ test("the Scout dying wins it for the village (issue 279)", () => {
   assert.equal(r2.village, true);
 });
 
-test("the Lackey dying alone still wins it for the wolves", () => {
+test("the Minion dying alone still wins it for the wolves", () => {
   const r = resolveVotes(["a", "b", "c"], { a: "b", b: "a", c: "b" }, { a: "werewolf", b: "lackey", c: "villager" });
   assert.deepEqual(r.dead, ["b"]);
   assert.equal(r.village, false);
@@ -325,7 +325,7 @@ test("a player who skips their turn is told they didn't use their power", () => 
   rig(s, { a: "seer", b: "thief", c: "werewolf" }, ["villager", "villager", "meddler"]);
   finishNight(s, nightTo(s, "seer"));
   assert.match(s.g.info.a.at(-1).text, /^You didn't use your Seer power/);
-  assert.match(s.g.info.b.at(-1).text, /didn't use your Thief power/);
+  assert.match(s.g.info.b.at(-1).text, /didn't use your Robber power/);
 });
 
 test("taking a card from another team says so", () => {
@@ -401,7 +401,7 @@ test("spectators see every card and the night log at every moment; players never
   for (const id of ["a", "b", "c"]) assert.equal(viewFor(s, id, 0).game.omni, undefined);
   runNight(s, { seer: { b: { target: "a" } }, thief: { c: { target: "a" } } });
   v = viewFor(s, "w", 0);
-  assert.equal(v.game.omni.cards.c, "werewolf");      // the Thief took the Werewolf
+  assert.equal(v.game.omni.cards.c, "werewolf");      // the Robber took the Werewolf
   assert.ok(v.game.omni.log.some((l) => l.actor === "b"));
   assert.ok(v.game.omni.log.some((l) => l.actor === "c"));
   for (const id of ["a", "b", "c"]) {
@@ -552,20 +552,20 @@ test("the Cursed turns wolf only when a wolf votes for them", () => {
 const act = (s, pid, body, now = 0) => handle(s, pid, { t: "act", step: s.g.step.id, ...body }, now);
 const info = (s, pid) => (s.g.info[pid] || []).map((i) => i.text).join(" | ");
 
-test("the Great Wolf's vote counts twice", () => {
+test("the Giant Wolf's vote counts twice", () => {
   const cards = { a: "greatwolf", b: "villager", c: "seer", d: "thief" };
   const r = resolveVotes(Object.keys(cards), { a: "b", b: "c", c: "d", d: "a" }, cards);
   assert.equal(r.counts.b, 2);
   assert.deepEqual(r.dead, ["b"]);
 });
 
-test("the Dozing Wolf doesn't wake, the wolves see them, and a wolf with a Dozing Wolf isn't alone", () => {
+test("the Dream Wolf doesn't wake, the wolves see them, and a wolf with a Dream Wolf isn't alone", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "werewolf", b: "dozingwolf", c: "lackey" }, ["seer", "villager", "thief"]);
   nightTo(s, "wolves");
   assert.deepEqual(s.g.step.actors, ["a"]);
   assert.equal(s.g.step.prompts.a.kind, "ack");
-  assert.match(s.g.step.prompts.a.text, /B .*Dozing Wolf/);
+  assert.match(s.g.step.prompts.a.text, /B .*Dream Wolf/);
   act(s, "a", {});
   nightTo(s, "lackey", 1000);
   assert.match(s.g.step.prompts.c.text, /A and B/);
@@ -583,7 +583,7 @@ test("the Copycat becomes a center card and acts on that role's turn", () => {
   act(s, "a", { target: "b" }, now);
   assert.equal(s.g.cards.a, "werewolf");
   assert.equal(s.g.cards.b, "copycat");
-  // b now holds the Copycat card, which became the Thief: village team
+  // b now holds the Copycat card, which became the Robber: village team
   now = finishNight(s, now);
   s.g.votes = { a: "c", b: "c", c: "a" };
   handle(s, s.hostId, { t: "hostEndVote" }, now);
@@ -601,7 +601,7 @@ test("a Copycat who copies a wolf wakes with the wolves and wins with them", () 
   assert.ok(r.winners.includes("a"));
 });
 
-test("the Lookalike copies a player; whoever holds the Lookalike card at the end is that role", () => {
+test("the Doppelganger copies a player; whoever holds the Doppelganger card at the end is that role", () => {
   const s = room(["a", "b", "c", "d"]);
   rig(s, { a: "lookalike", b: "werewolf", c: "meddler", d: "villager" }, ["seer", "villager", "thief"]);
   nightTo(s, "lookalike");
@@ -612,7 +612,7 @@ test("the Lookalike copies a player; whoever holds the Lookalike card at the end
   now = nightTo(s, "meddler", now);
   act(s, "c", { targets: ["a", "d"] }, now);
   now = finishNight(s, now);
-  // d now holds the Lookalike card, which became a Werewolf; a holds the Villager
+  // d now holds the Doppelganger card, which became a Werewolf; a holds the Villager
   for (const p of s.g.seats) handle(s, p, { t: "dayReady", ready: true }, now);
   for (const [p, t] of [["a", "d"], ["b", "d"], ["c", "a"], ["d", "a"]]) handle(s, p, { t: "vote", target: t }, now);
   assert.equal(s.phase, "results");
@@ -621,16 +621,16 @@ test("the Lookalike copies a player; whoever holds the Lookalike card at the end
   assert.equal(s.g.result.village, true);
 });
 
-test("the Apprentice Skinner sees the Skinner and wins when the Skinner dies, or alone by dying", () => {
+test("the Apprentice Tanner sees the Tanner and wins when the Tanner dies, or alone by dying", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "apprentice", b: "jester", c: "werewolf" }, ["seer", "villager", "thief"]);
   nightTo(s, "apprentice");
-  assert.match(s.g.step.prompts.a.text, /Skinner is B/);
+  assert.match(s.g.step.prompts.a.text, /Tanner is B/);
   let cards = { a: "apprentice", b: "jester", c: "werewolf", d: "villager" };
   let r = resolveVotes(Object.keys(cards), { a: "b", b: "c", c: "b", d: "a" }, cards);
   assert.deepEqual(r.winners.sort(), ["a", "b"]);
   r = resolveVotes(Object.keys(cards), { a: "c", b: "a", c: "a", d: "b" }, cards);
-  assert.ok(!r.winners.includes("a"), "with a Skinner in play the Apprentice doesn't win by dying");
+  assert.ok(!r.winners.includes("a"), "with a Tanner in play the Apprentice doesn't win by dying");
   cards = { a: "apprentice", b: "villager", c: "werewolf", d: "seer" };
   r = resolveVotes(Object.keys(cards), { a: "c", b: "a", c: "a", d: "b" }, cards);
   assert.deepEqual(r.dead, ["a"]);
@@ -638,7 +638,7 @@ test("the Apprentice Skinner sees the Skinner and wins when the Skinner dies, or
   assert.equal(r.wolfTeam, false);
 });
 
-test("the Novice Seer looks at a center card; the Watcher sees who started as a seer", () => {
+test("the Apprentice Seer looks at a center card; the Beholder sees who started as a seer", () => {
   const s = room(["a", "b", "c", "d"]);
   rig(s, { a: "noviceseer", b: "watcher", c: "seer", d: "werewolf" }, ["villager", "werewolf", "thief"]);
   nightTo(s, "noviceseer");
@@ -646,11 +646,11 @@ test("the Novice Seer looks at a center card; the Watcher sees who started as a 
   assert.match(info(s, "a"), /Center card 2 is the Werewolf/);
   nightTo(s, "watcher", 1000);
   const p = s.g.step.prompts.b;
-  assert.match(p.text, /A started as the Novice Seer.*C started as the Seer/);
+  assert.match(p.text, /A started as the Apprentice Seer.*C started as the Seer/);
   assert.equal(p.cards.length, 2);
 });
 
-test("the Investigator stops and turns on seeing a wolf, and may look twice otherwise", () => {
+test("the Paranormal Investigator stops and turns on seeing a wolf, and may look twice otherwise", () => {
   let s = room(["a", "b", "c", "d"]);
   rig(s, { a: "investigator", b: "werewolf", c: "villager", d: "seer" }, ["villager", "werewolf", "thief"]);
   nightTo(s, "investigator");
@@ -669,7 +669,7 @@ test("the Investigator stops and turns on seeing a wolf, and may look twice othe
   assert.equal(s.g.copied.investigator, "werewolf");
 });
 
-test("the Imp swaps any two players, their own card included", () => {
+test("the Gremlin swaps any two players, their own card included", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "imp", b: "werewolf", c: "villager" }, ["seer", "villager", "thief"]);
   nightTo(s, "imp");
@@ -678,7 +678,7 @@ test("the Imp swaps any two players, their own card included", () => {
   assert.equal(s.g.cards.b, "imp");
 });
 
-test("the Aura Reader sees who moved or looked at a card", () => {
+test("the Aura Seer sees who moved or looked at a card", () => {
   const s = room(["a", "b", "c", "d"]);
   rig(s, { a: "aurareader", b: "seer", c: "villager", d: "thief" }, ["werewolf", "werewolf", "meddler"]);
   let now = nightTo(s, "seer");
@@ -689,7 +689,7 @@ test("the Aura Reader sees who moved or looked at a card", () => {
   assert.match(s.g.step.prompts.a.text, /^B moved or looked/);
 });
 
-test("the Unveiler leaves a village card face up for the day, but turns a wolf back over", () => {
+test("the Revealer leaves a village card face up for the day, but turns a wolf back over", () => {
   let s = room(["a", "b", "c"]);
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   let now = nightTo(s, "unveiler");
@@ -711,15 +711,15 @@ test("win rules mention only the cards in the deck", async () => {
   const { winRules } = await import("./roles.mjs");
   const text = (roles) => winRules(roles).map(([, t]) => t).join(" ");
   const plain = text({ werewolf: 2, seer: 1, villager: 3 });
-  for (const n of ["Skinner", "Apprentice", "Ward", "Lackey", "Cursed"]) assert.ok(!plain.includes(n), `${n} in ${plain}`);
+  for (const n of ["Tanner", "Apprentice", "Squire", "Minion", "Cursed"]) assert.ok(!plain.includes(n), `${n} in ${plain}`);
   assert.equal(winRules({ werewolf: 2, seer: 1, villager: 3 }).length, 2);
-  assert.match(text({ werewolf: 2, jester: 1 }), /Skinner wins if the Skinner dies/);
+  assert.match(text({ werewolf: 2, jester: 1 }), /Tanner wins if the Tanner dies/);
   assert.ok(!text({ werewolf: 2, jester: 1 }).includes("Apprentice"));
-  assert.match(text({ werewolf: 2, scout: 1 }), /Ward dies/);
-  assert.match(text({}), /Skinner.*Apprentice/s, "with no deck yet (how to play), every rule shows");
+  assert.match(text({ werewolf: 2, scout: 1 }), /Squire dies/);
+  assert.match(text({}), /Tanner.*Apprentice/s, "with no deck yet (how to play), every rule shows");
 });
 
-test("anyone who looks at a Copycat or Lookalike card sees the role it became", () => {
+test("anyone who looks at a Copycat or Doppelganger card sees the role it became", () => {
   const s = room(["a", "b", "c", "d"]);
   rig(s, { a: "copycat", b: "seer", c: "thief", d: "werewolf" }, ["villager", "hunter", "meddler"]);
   nightTo(s, "copycat");
