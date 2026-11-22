@@ -1,6 +1,6 @@
 // Browser layout check: on a 1400×860 laptop window the whole Lens panel fits without scrolling,
-// for every preset (the sphere's sliders too), with the back plane at its maximum, and with
-// separate x and y lenses. Iris caught this regressing four times.
+// for every preset (the sphere's sliders and the two-lens "ortho x, persp y" too), with the rays'
+// start at its biggest. Iris caught this regressing four times.
 // Needs Playwright (skipped without it). Run: node --test perspectivent/layout.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -37,20 +37,21 @@ test("the Lens panel fits a 1400×860 window in every state", { skip: !chromium 
       if (r.bottom > r.vh || r.scroll > 1) bad.push(`${what}: overflows by ${Math.max(r.scroll, r.bottom - r.vh)}px`);
     };
     const setS = (v) => page.evaluate((v) => { const s = document.getElementById("s"); s.value = v; s.dispatchEvent(new Event("input", { bubbles: true })); }, v);
-    for (const split of [false, true]) {
-      for (const id of ids) {
-        await page.click(`#chips .pv-chip[data-id="${id}"]`);
-        const canSplit = await page.$eval("#split", (c) => c.offsetParent !== null);
-        if (split && !canSplit) continue; // (the sphere lens has no separate x and y)
-        if (canSplit && split !== (await page.$eval("#split", (c) => c.checked))) await page.click("#split");
-        await page.waitForTimeout(150);
-        await check(`${id}${split ? " (split)" : ""}`);
-        if (!(await page.$eval("#sRow", (r) => r.hidden || r.classList.contains("pv-na")))) {
-          await setS(3); await page.waitForTimeout(150);
-          await check(`${id}${split ? " (split)" : ""}, back plane at max`);
-        }
+    // every chip ("ortho x, persp y" is the two-lens state), and the rays' start at its biggest
+    for (const id of ids) {
+      await page.click(`#chips .pv-chip[data-id="${id}"]`);
+      await page.waitForTimeout(150);
+      await check(id);
+      if (!(await page.$eval("#sRow", (r) => r.hidden || r.classList.contains("pv-na")))) {
+        await setS(3); await page.waitForTimeout(150);
+        await check(`${id}, rays start from the biggest plane`);
       }
     }
+    // a typed function too long for one line still fits
+    await page.click('#chips .pv-chip[data-id="mixed"]');
+    await page.fill("#fy", "z + log(1 + z) * sin(z) / 2 + sqrt(z)");
+    await page.waitForTimeout(150);
+    await check("two lenses with a long typed function");
     assert.deepEqual(bad, [], "the panel needs scrolling:\n" + bad.join("\n"));
   } finally {
     await browser.close();

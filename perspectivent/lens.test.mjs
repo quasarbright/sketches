@@ -240,7 +240,7 @@ test("every preset's back plane clears the rails at the default settings", () =>
     assert.ok(h > 0.3, `${p.id}: screen still usable`);
   }
   assert.ok(planeRatio(parseExpr("1/(z + 5)"), D) > 1, "reverse really does need the fit");
-  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*setAxis\(.*\);\s*fitScreen\(\);/);
+  assert.match(MAIN, /function choosePreset\(p\) \{\s*state\.sphere = false;\s*state\.split = false;.*\s*setAxis\(.*\);\s*fitScreen\(\);/);
   assert.match(MAIN, /const CLEAR_H = EYE - RAIL_H - 0\.08;/);
 });
 
@@ -270,4 +270,21 @@ test("the sphere lens maps longitude across and latitude up, everywhere it draws
   assert.match(html, /id="ah" min="10" max="180"/, "straight down to straight up");
   assert.doesNotMatch(html, /id="rad"/, "Mike: remove the radius, it does nothing");
   assert.doesNotMatch(html, /data-mode=/, "Mike dropped the world-grid toggle: the patch only turns with you");
+});
+
+// Mike, 2026-11-21: hide where the ground ends when flying high. Everything lensified fades into
+// the haze past HAZE_NEAR, and the sky below the horizon is the same haze, so the 4 km edge of the
+// ground is already sky-colored. The haze must end before the ground does.
+test("the far ground fades into the same haze the sky shows below the horizon", () => {
+  const HTML = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const far = Number(MAIN.match(/HAZE_FAR = (\d+)/)[1]);
+  const edge = Number(MAIN.match(/Math\.asinh\((\d+) \/ c\)/)[1]);
+  assert.ok(far < edge, "haze must be complete before the ground's edge");
+  assert.match(MAIN, /c = e < 0\.0 \? pvHaze\(e\)/, "the sky below the horizon is the haze");
+  assert.match(MAIN, /gl_FragColor\.rgb = mix\(gl_FragColor\.rgb, sRGBTransferOETF\(vec4\(pvHaze/, "lensify hazes every material");
+  assert.match(MAIN, /k = mix\(k, pvHaze\(/, "the sphere lens's ground backdrop hazes too");
+  // and the two-lens fields say horizontal and vertical (Mike), nowhere across / up-down
+  assert.match(MAIN, /"horizontal: f\(z\) ="/);
+  assert.match(HTML, /vertical: f\(z\) =/);
+  assert.doesNotMatch(MAIN + HTML, /across: f\(z\)|up\/down: f\(z\)/);
 });
