@@ -36,6 +36,9 @@ export const NAMES = {
   noviceseer: "Novice Seer",
   investigator: "Investigator",
   aurareader: "Aura Reader",
+  imp: "Imp",
+  watcher: "Watcher",
+  unveiler: "Unveiler",
 };
 
 export const ART = {
@@ -65,6 +68,9 @@ export const ART = {
   noviceseer: "art/noviceseer.svg",
   investigator: "art/investigator.svg",
   aurareader: "art/aurareader.svg",
+  imp: "art/imp.svg",
+  watcher: "art/watcher.svg",
+  unveiler: "art/unveiler.svg",
   back: "art/back.svg",
 };
 
@@ -100,4 +106,7 @@ export const ROLE_COLORS = {
   noviceseer: { card: "#8b3ab6", band: "#a359ca", ink: "#371748" },
   investigator: { card: "#59a68c", band: "#7ab8a3", ink: "#234238" },
   aurareader: { card: "#3f1980", band: "#5421ab", ink: "#190a33" },
+  imp: { card: "#5a1666", band: "#7f1f90", ink: "#240828" },
+  watcher: { card: "#291980", band: "#3721ab", ink: "#100a33" },
+  unveiler: { card: "#1a537e", band: "#236fa8", ink: "#0a2132" },
 };
