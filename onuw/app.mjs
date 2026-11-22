@@ -98,6 +98,10 @@ const ICONS = {
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
   vote: `<path d="m9 12 2 2 4-4"/><path d="M5 7c0-1.1.9-2 2-2h10a2 2 0 0 1 2 2v12H5V7Z"/><path d="M22 19H2"/>`,
 };
+// "Click" with a mouse, "Tap" on a touch screen, decided when the text is drawn.
+const mouse = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
+const Tap = () => (mouse() ? "Click" : "Tap");
+const tap = () => Tap().toLowerCase();
 const icon = (n, cls = "ms-ico") => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 
 // ---------------------------------------------------------------- connection state
@@ -419,9 +423,9 @@ function receiveView(v) {
   const me = v.players.find((p) => p.id === myId);
   if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set(NS + "name", myName); }
   render();
-  // right after your turn, what you saw shows for a few seconds in your card-and-night panel
+  // right after your turn, what you saw shows in your card-and-night panel until you hide it
   const was = prev?.game?.prompt, cur = v.game?.prompt;
-  if (v.phase === "night" && was && !was.done && cur?.done && was.step === cur.step) turnCard("secret", true, 6000);
+  if (v.phase === "night" && was && !was.done && cur?.done && was.step === cur.step) turnCard("secret", true);
   // the game closes the moment your turn comes, or when the night ends
   if (wackOpen() && (v.phase !== "night" || (cur && !cur.done))) closeWack();
 }
@@ -471,7 +475,7 @@ function card(role, { size = "md", label = "", info = true, cls = "", attrs = ""
     <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}${R.name.length > 10 && !(R.name.length > 18 && R.name.includes(" ")) ? " is-xlong" : ""}${R.name.length > 18 && R.name.includes(" ") ? " is-wrap" : ""}" style="--len:${R.name.length}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
-    ${info && (R.more || size === "sm" || size === "xs") ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="What the ${esc(R.name)} does">${icon("info")}</button>` : ""}
+    ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="What the ${esc(R.name)} does">${icon("info")}</button>` : ""}
   </div>${label ? `<div class="ms-card-label">${esc(label)}</div>` : ""}`;
 }
 
@@ -619,17 +623,6 @@ function lobby() {
   const have = deckSize(v.roles);
   const need = Math.max(3, v.players.length) + 3;   // the deck is sized for at least 3 players
   const okCount = have === need;
-  const spare = v.roles.packleader ? `<div class="ms-cardwrap ms-spare-wrap">
-      <div class="ms-card ms-md ms-locked" style="${cardStyle("werewolf")}">
-        <div class="ms-card-name">${N.werewolf}</div>
-        <div class="ms-card-art">${artSvg("werewolf")}</div>
-        <div class="ms-card-short">Spare card</div>
-        <span class="ms-lock" aria-hidden="true">${icon("lock")}</span>
-        <button class="ms-info" data-info="spare" aria-label="Why there's a spare card" data-tooltip="Spare card: added for the ${N.packleader} to hand out">${icon("info")}</button>
-      </div>
-      <div class="ms-card-label">Added for the ${N.packleader}</div>
-    </div>` : "";
-  const cards = ROLE_ORDER.map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
   const problem = v.startProblem;
   const namePrompt = needName ? `<form class="ms-panel ms-name-first" data-form="firstname">
       <label class="ms-h2" for="name-input">Enter your name</label>
@@ -667,8 +660,8 @@ function lobby() {
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use Suggested Cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""} Cards are listed in wake-up order.${host ? " Tap a card to add or remove it." : ""}</p>
-      <div class="ms-grid">${cards}</div>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""} Cards are listed in wake-up order.${host ? ` ${Tap()} a card to add or remove it.` : ""}</p>
+      ${deckGrid(v.roles, { all: true, host })}
     </section>
 
     <section class="ms-day-len">
@@ -682,6 +675,15 @@ function lobby() {
   ${bar(host
     ? `${problem && v.players.length >= 3 ? `<div class="ms-bar-note">${esc(problem)}</div>` : ""}<button class="ms-btn ms-primary ms-wide" data-act="start" ${problem ? "disabled" : ""}>${v.players.length < 3 ? "Need 3 Players" : "Start Game"}</button>`
     : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start</div>`)}`;
+}
+
+// The one way a list of the game's cards is shown: the lobby's grid, in wake-up order, with the
+// count pill and info buttons. The lobby shows every card (unpicked ones dimmed, and the host can
+// change them); everywhere else shows the cards in this game.
+function deckGrid(roles, { all = false, host = false } = {}) {
+  const spare = roles.packleader ? spareCard(`Added for the ${N.packleader}`, { size: "md", locked: true }) : "";
+  const list = all ? ROLE_ORDER : ROLE_ORDER.filter((r) => roles[r]);
+  return `<div class="ms-grid">${list.map((r) => pickerCard(r, roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("")}</div>`;
 }
 
 function pickerCard(r, count, host) {
@@ -710,8 +712,9 @@ function pickerCard(r, count, host) {
 
 // Your own row in the lobby: a pencil to rename, which turns the row into a name field.
 // Names are fixed once the game starts.
-function myLobbyRow(p) {
-  if (!ui.renaming) return playerRow(p, { extra: `<button class="ms-icon-btn ms-edit-name" data-act="edit-name" aria-label="Change your name" data-tooltip="Change your name">${icon("pencil")}</button>` });
+// `where` ("lobby" or "panel") keeps the two lists from both opening the same field.
+function myLobbyRow(p, where = "lobby", extra = "") {
+  if (ui.renaming !== where) return playerRow(p, { extra: `<button class="ms-icon-btn ms-edit-name" data-act="edit-name" data-where="${where}" aria-label="Change your name" data-tooltip="Change your name">${icon("pencil")}</button>${extra}` });
   return `<li class="ms-player ms-player-edit">${avatar(p.name, p.id)}<form class="ms-rename-inline" data-form="rename">
     <input id="rename-input" class="ms-input" maxlength="20" value="${esc(myName)}" autocomplete="nickname" aria-label="Your name" />
     <button class="ms-btn ms-sm-btn ms-primary" type="submit">Save</button>
@@ -799,15 +802,14 @@ function dealScreen() {
   const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
-    <p class="ms-lede">Tap the card to see your role. It flips back after a few seconds.</p>
+    <p class="ms-lede">${Tap()} the card to see your role, and ${tap()} it again to turn it back over.</p>
     <div class="ms-flipscope ${ui.up.deal ? "is-up" : ""}" data-flip="deal">
       <div class="ms-flip ms-turner" data-flip-tap tabindex="0" role="button" aria-pressed="${!!ui.up.deal}" aria-label="Flip your card">
-        <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg", info: false })}</div>
-        <div class="ms-flip-face is-back">${cardBack({ size: "lg" })}<span class="ms-flip-hint">Tap to flip</span></div>
+        <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg" })}</div>
+        <div class="ms-flip-face is-back">${cardBack({ size: "lg" })}<span class="ms-flip-hint">${Tap()} to flip</span></div>
       </div>
       <div class="ms-after-peek is-front-soft">
         <p class="ms-hint">You act as this card tonight, even if someone swaps it away from you. In the morning you're on the team of whatever card you hold.</p>
-        <button class="ms-link" data-info="${g.myCard}">What does the ${esc(ROLES[g.myCard].name)} do?</button>
       </div>
     </div>
     <mike-footer></mike-footer>
@@ -829,8 +831,10 @@ function listNames(names) {
 
 // ---- night
 
-// The moon's path across the night. Players only see where it is during their own turn (and
-// spectators always); otherwise it hangs still at the top, so the screen says nothing about the night.
+// The moon's path across the night. Only spectators see it move along the turns. For players it
+// hangs still at the top for the whole night, their own turn included, so nothing on any player's
+// screen moves because of what someone else does at night (someone watching a neighbor's screen
+// would see the moon jump when that neighbor's turn came).
 function moonArc(g) {
   const n = g.steps?.length || 0;
   const W = 320, H = 130, cx = W / 2, cy = 140, r = 128;
@@ -840,7 +844,7 @@ function moonArc(g) {
   };
   const t = n && g.stepIdx != null ? (g.stepIdx + 0.5) / n : 0.5;
   const [mx, my] = at(t);
-  const ticks = n ? g.steps.map((_, i) => {
+  const ticks = n && g.stepIdx != null ? g.steps.map((_, i) => {
     const [x, y] = at((i + 0.5) / n);
     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" class="${i < g.stepIdx ? "past" : i === g.stepIdx ? "now" : "next"}"/>`;
   }).join("") : "";
@@ -861,8 +865,8 @@ function nightScreen() {
   const p = g.prompt;
   let panel;
   if (p && !p.done) panel = promptPanel(p, g);
-  else panel = `<p class="ms-lede">Your turn will appear here.</p>
-    <p class="ms-hint">Tap and scroll now and then so nobody can tell when your turn comes.</p>
+  else panel = `<p class="ms-lede">When there is an action for you to perform, it will appear here.</p>
+    <p class="ms-hint">${Tap()} and scroll occasionally so nobody can tell when your turn comes.</p>
     <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play Whack-a-Wolf</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
@@ -947,8 +951,8 @@ function promptPanel(p, g) {
 
 // ---- day
 
-// Your starting card and what you learned at night, face down until you tap it, then hidden again
-// after a few seconds, so nobody reads it over your shoulder. Shown at night, in the day and at the vote.
+// Your starting card and what you learned at night, face down until you tap it and face up until
+// you tap it again. Shown at night, in the day and at the vote.
 function secretPanel(g) {
   const up = !!ui.up.secret;
   const items = g.info.length
@@ -956,18 +960,18 @@ function secretPanel(g) {
     : `<li><p>${view.phase === "night" ? "Nothing yet." : "No night actions."}</p></li>`;
   return `<section class="ms-panel ms-secret ms-flipscope ${up ? "is-up" : ""}" data-flip="secret">
     <div class="ms-secret-head">
-      <div class="ms-turner ms-secret-card" data-flip-tap tabindex="0" role="button" aria-pressed="${up}" aria-label="Show your card and your night for a few seconds">
-        <div class="is-front">${card(g.myCard, { size: "sm", info: false })}</div>
+      <div class="ms-turner ms-secret-card" data-flip-tap tabindex="0" role="button" aria-pressed="${up}" aria-label="Show or hide the card you started with and your night">
+        <div class="is-front">${card(g.myCard, { size: "sm" })}</div>
         <div class="is-back">${cardBack({ size: "sm" })}</div>
       </div>
       <div class="ms-secret-text">
-        <h2 class="ms-h2">Your Card</h2>
+        <h2 class="ms-h2">The Card You Started With</h2>
         <div class="is-back">
-          <p class="ms-hint">Hidden. Tap Show to view it for a few seconds.</p>
+          <p class="ms-hint">Hidden. ${Tap()} Show to see it.</p>
           <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eye")}<span>Show</span></button>
         </div>
         <div class="is-front">
-          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>. <button class="ms-link" data-info="${g.myCard}">Rules</button></p>
+          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>.</p>
           <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eyeOff")}<span>Hide</span></button>
         </div>
       </div>
@@ -976,9 +980,20 @@ function secretPanel(g) {
   </section>`;
 }
 
-// The Alpha Wolf's spare Werewolf card, drawn apart from the role cards.
-function spareCard(label) {
-  return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
+// The Alpha Wolf's spare Werewolf card, drawn apart from the role cards. The one renderer for it:
+// the lobby (locked, since it comes with the Alpha Wolf), the cards in this game, the night table
+// and its info panel.
+function spareFace({ size = "sm", locked = false, info = true } = {}) {
+  return `<div class="ms-card ms-${size} ${locked ? "ms-locked" : ""}" style="${cardStyle("werewolf")}">
+    <div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}
+    <div class="ms-card-art">${artSvg("werewolf")}</div>
+    ${size === "md" || size === "lg" ? `<div class="ms-card-short">Spare card</div>` : ""}
+    ${locked ? `<span class="ms-lock" aria-hidden="true">${icon("lock")}</span>` : ""}
+    ${info ? `<button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card" data-tooltip="Spare card: added for the ${N.packleader} to hand out">${icon("info")}</button>` : ""}
+  </div>`;
+}
+function spareCard(label, opts) {
+  return `<div class="ms-cardwrap ${opts?.locked ? "ms-spare-wrap" : ""}">${spareFace(opts)}<div class="ms-card-label">${label}</div></div>`;
 }
 
 function inGameStrip() {
@@ -986,9 +1001,7 @@ function inGameStrip() {
   return `<section>
     <h2 class="ms-h2">Cards in This Game</h2>
     <p class="ms-hint">Cards are listed in wake-up order.</p>
-    <div class="ms-row ms-deck-row">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "sm", label: v.roles[r] > 1 ? `×${v.roles[r]}` : "" }))).join("")}
-    ${v.game.hasSpare ? spareCard("Spare") : ""}
-    </div>
+    ${deckGrid(v.roles)}
   </section>`;
 }
 
@@ -1195,20 +1208,14 @@ function playersPanel() {
   const v = view;
   const confirmKick = ui.confirmKick;
   return `<h2 class="ms-h2">Players in Room <span class="ms-mono">${esc(v.code)}</span></h2>
-    <ul class="ms-players">${v.players.map((p) => playerRow(p, {
+    <ul class="ms-players">${v.players.map((p) => p.id === myId && v.phase === "lobby" ? myLobbyRow(p, "panel") : playerRow(p, {
       extra: v.isHost && p.id !== myId
         ? (confirmKick === p.id
           ? `<span class="ms-kick-confirm">Kick ${esc(p.name)} from the room for good? <span class="ms-confirm-row"><button class="ms-btn ms-danger ms-sm-btn" data-kick="${p.id}">Kick</button><button class="ms-btn ms-sm-btn" data-act="kick-cancel">Cancel</button></span></span>`
           : `<button class="ms-icon-btn ms-kick" data-kick-ask="${p.id}" aria-label="Kick ${esc(p.name)} from the room" data-tooltip="Kick from room: removes ${esc(p.name)} and stops them rejoining">${icon("userX")}</button>`)
         : "",
     })).join("")}</ul>
-${v.phase === "lobby" ? `    <form class="ms-rename" data-form="rename">
-      <label class="ms-label" for="rename-input">Your name</label>
-      <div class="ms-join-row">
-        <input id="rename-input" class="ms-input" maxlength="20" value="${esc(myName)}" autocomplete="nickname" />
-        <button class="ms-btn" type="submit">${icon("pencil")}<span>Rename</span></button>
-      </div>
-    </form>` : `<p class="ms-hint">Names can only be changed in the lobby.</p>`}
+${v.phase === "lobby" ? "" : `    <p class="ms-hint">Names can only be changed in the lobby.</p>`}
     <button class="ms-btn ms-wide ms-leave" data-act="leave">${icon("logout")}<span>Leave room</span></button>
     ${v.isHost && v.players.length > 1 ? `<p class="ms-hint">If you leave, a random player becomes the host and the game carries on.</p>` : ""}
     <button class="ms-link ms-settings-link" type="button" data-act="settings">Settings</button>`;
@@ -1249,11 +1256,9 @@ function hostPanel() {
 
 function cheatsheetPanel() {
   const roles = view?.roles || {};
-  const inGame = ROLE_ORDER.filter((r) => roles[r]);
-  const list = (inGame.length ? inGame : ROLE_ORDER);
   return `<h2 class="ms-h2">Cards in This Game</h2>
     <p class="ms-hint">Cards are listed in wake-up order.</p>
-    <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
+    ${deckGrid(roles)}
     <h2 class="ms-h2">Who Wins</h2>
     <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>`;
 }
@@ -1261,7 +1266,7 @@ function cheatsheetPanel() {
 function infoPanel(r) {
   if (r === "spare") {
     return `<div class="ms-info-modal">
-      ${wrap(`<div class="ms-card ms-lg" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><div class="ms-card-short">Spare card</div></div>`)}
+      ${wrap(spareFace({ size: "lg", info: false }))}
       <div>
         <h2 class="ms-h2" style="color:${TEAMS.wolf.color}">The Spare ${N.werewolf} Card</h2>
         <div class="ms-label">Only in games with the ${N.packleader}</div>
@@ -1281,7 +1286,7 @@ function infoPanel(r) {
     ${wrap(card(r, { size: "lg", info: false }))}
     <div>
       <h2 class="ms-h2" style="color:${T.color}">${esc(R.name)}</h2>
-      <div class="ms-label">${esc(T.name)}${R.wolf ? " · counts as a wolf" : ""} · ${stepIdx >= 0 ? `wakes ${ordinal(stepIdx + 1)} of ${steps.length}` : R.step ? "not in this game" : "doesn't wake up"}</div>
+      <div class="ms-label">${esc(T.name)}${R.wolf ? " · counts as a wolf" : ""} · ${stepIdx >= 0 ? `wakes up on night turn ${stepIdx + 1} of ${steps.length}${Object.keys(deck).length ? " in this game" : ""}` : R.step ? "not in this game" : "doesn't wake up"}</div>
       <p>${esc(R.text)}</p>
       ${R.note ? `<p class="ms-hint">${esc(R.note)}</p>` : ""}
     </div>
@@ -1313,11 +1318,12 @@ function onSubmit(e) {
     return;
   }
   if (kind === "rename") {
-    const n = E.cleanName(document.getElementById("rename-input").value);
+    const n = E.cleanName(form.querySelector("#rename-input").value);
     if (!n) { toast("Enter a name"); return; }
     myName = n; ls.set(NS + "name", n);
     send({ t: "rename", name: n });
     ui.renaming = false;
+    render(); refreshPanel();
     toast("Name changed");
   }
 }
@@ -1391,12 +1397,12 @@ function onClick(e) {
     case "host-cancel": ui.confirmHost = null; refreshPanel(); return;
     case "leave": closePanel(); leaveRoom(); return;
     case "edit-name": {
-      ui.renaming = true; render();
-      const inp = document.getElementById("rename-input");
+      ui.renaming = d.where || "lobby"; render(); refreshPanel();
+      const inp = (ui.renaming === "panel" ? panel?.el : app)?.querySelector("#rename-input");
       if (inp) { inp.focus(); inp.select(); }
       return;
     }
-    case "edit-name-cancel": ui.renaming = false; render(); return;
+    case "edit-name-cancel": ui.renaming = false; render(); refreshPanel(); return;
     case "spec-on": ss.set(joinedKey(roomCode), "spectator"); send({ t: "setSpectator", on: true }); return;
     case "spec-off": ss.set(joinedKey(roomCode), "player"); send({ t: "setSpectator", on: false }); return;
     case "invite": {
@@ -1450,20 +1456,18 @@ app.addEventListener("input", (e) => {
 
 // Face-down things (your card at the deal; your card and night notes later): tap and the card
 // turns over like a card on the table (lifts, turns edge-on, comes down face up, as in card-table),
-// then turns back by itself after a few seconds. Everything role-specific in the same [data-flip]
+// and stays face up until it's tapped again. Everything role-specific in the same [data-flip]
 // scope is marked .is-front and only shows while it's face up.
-const FLIP_MS = 460, FACE_UP_MS = 4000;
-const flip = { busy: {}, timers: {}, turning: null };
-function turnCard(name, up, holdMs = FACE_UP_MS) {
+const FLIP_MS = 520;
+const flip = { busy: {}, turning: null };
+function turnCard(name, up) {
   const scope = app.querySelector(`[data-flip="${name}"]`);
   if (!scope || flip.busy[name] || !!ui.up[name] === up) return;
-  clearTimeout(flip.timers[name]);
   const swap = () => {
     ui.up[name] = up;
     const now = app.querySelector(`[data-flip="${name}"]`);
     now?.classList.toggle("is-up", up);
     now?.querySelectorAll("[aria-pressed]").forEach((e) => e.setAttribute("aria-pressed", String(up)));
-    if (up) flip.timers[name] = setTimeout(() => turnCard(name, false), holdMs);
     if (up && name === "deal" && !ui.peeked) { ui.peeked = true; render(); }   // enables "ready"
   };
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) { swap(); return; }
@@ -1488,7 +1492,7 @@ function restoreTurn() {
   el.classList.add("is-turning");
 }
 function flipScopeOf(t) { return t.closest("[data-flip-tap]")?.closest("[data-flip]")?.dataset.flip; }
-app.addEventListener("click", (e) => { const n = flipScopeOf(e.target); if (n) turnCard(n, !ui.up[n]); });
+app.addEventListener("click", (e) => { if (e.target.closest("[data-info]")) return; const n = flipScopeOf(e.target); if (n) turnCard(n, !ui.up[n]); });
 app.addEventListener("keydown", (e) => {
   const t = e.target.closest("[data-flip-tap]");
   if (t && t.tagName !== "BUTTON" && (e.key === " " || e.key === "Enter")) { e.preventDefault(); if (!e.repeat) turnCard(flipScopeOf(t), !ui.up[flipScopeOf(t)]); }

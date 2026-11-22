@@ -795,10 +795,11 @@ export function viewFor(s, pid, now) {
     seats: g.seats,
     myCard: seated ? g.dealt[pid] : null,
     hasSpare: !!g.spare,
-    // At night a player learns nothing about the night's progress (which card is awake, how many
-    // turns there are) except during their own turn. Spectators see it all.
-    steps: knowsStep ? g.steps : null,
-    stepIdx: knowsStep ? g.stepIdx : null,
+    // At night a player learns nothing about the night's progress: not which card is awake, how many
+    // turns there are or how far the night has gone. During their own turn they learn only that it's
+    // their turn. Spectators see it all.
+    steps: spectator || s.phase !== "night" ? g.steps : null,
+    stepIdx: spectator || s.phase !== "night" ? g.stepIdx : null,
     stepId: knowsStep ? st?.id ?? null : null,
     prompt: st && st.prompts[pid] ? { ...st.prompts[pid], step: st.id, done: !!st.done[pid] } : null,
     info: g.info[pid] || [],

@@ -795,3 +795,22 @@ test("no card text uses a retired name", async () => {
   const texts = [...Object.values(ROLES).flatMap((r) => [r.name, r.short, r.text, r.note]), ...Object.values(DETAILS), ...Object.values(TEAMS).map((t) => t.name)].filter(Boolean);
   for (const t of texts) for (const n of retired) assert.ok(!new RegExp(`\\b${n}\\b`).test(t), `"${n}" in: ${t}`);
 });
+
+test("at night a player's view never changes because of anyone else's turn", () => {
+  const s = room(["a", "b", "c", "d"]);
+  rig(s, { a: "villager", b: "werewolf", c: "seer", d: "thief" }, ["meddler", "werewolf", "nightowl"]);
+  for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0);
+  const seen = new Set(), actingViews = [];
+  let now = 0, guard = 0;
+  while (s.phase === "night") {
+    assert.ok(guard++ < 500);
+    seen.add(JSON.stringify(viewFor(s, "a", now).game));
+    // the acting player's view says it's their turn, but nothing about where the night is
+    for (const p of s.g.step.actors) { const v = viewFor(s, p, now).game; actingViews.push(v); }
+    for (const p of s.g.step.actors) if (!s.g.step.done[p]) handle(s, p, { t: "act", step: s.g.step.id, skip: true }, now);
+    now += 150; tick(s, now);
+  }
+  assert.equal(seen.size, 1, "the Villager's view changed during the night");
+  assert.ok(actingViews.length > 0);
+  for (const v of actingViews) { assert.equal(v.steps, null); assert.equal(v.stepIdx, null); }
+});

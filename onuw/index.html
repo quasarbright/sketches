@@ -170,8 +170,6 @@
     .ms-invite-btns { display: flex; gap: 8px; flex-wrap: wrap; }
     .ms-code { font: 700 2.2rem/1.1 var(--font-mono); letter-spacing: .18em; color: var(--accent); }
     .ms-code-words { font-size: .85rem; color: var(--muted); margin-top: 2px; }
-    .ms-deck-row { flex-wrap: wrap; justify-content: flex-start; gap: 10px 8px; }
-    .ms-deck-row .ms-card { --w: 76px; }
     .ms-players { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
     .ms-player { display: flex; align-items: center; gap: 8px 10px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; min-height: 60px; flex-wrap: wrap; }
     .ms-player.is-offline .ms-avatar { filter: grayscale(1); opacity: .6; }
@@ -238,7 +236,8 @@
     .ms-mycard { color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
     .ms-panel .ms-mycard { justify-content: flex-start; margin: 0 0 8px; }
 
-    .ms-back { --team: var(--accent); background: repeating-linear-gradient(45deg, #1b2240 0 8px, #182039 8px 16px); border-color: #3b4775; }
+    .ms-back { --team: var(--accent); background: #1b2350; border-color: #3b4775; }
+    .ms-back::after { content: ""; position: absolute; inset: 5.5cqw; border: max(1.1cqw, 1px) solid #3c4a96; border-radius: 4.5cqw; pointer-events: none; z-index: 2; }
     .ms-back .ms-card-art { color: var(--accent); }
     .ms-back .ms-emblem { width: 56%; }
 
@@ -279,8 +278,15 @@
     .ms-turner:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
     .ms-flip-face { position: relative; }
     /* the card lifts, turns edge-on about its middle and comes down the other side (as in card-table) */
-    .ms-turner.is-turning { animation: ms-turn .46s cubic-bezier(.45,0,.55,1); }
-    @keyframes ms-turn { 50% { transform: scale(0.02, 1.08); filter: drop-shadow(0 18px 24px rgba(0,0,0,.5)); } }
+    /* A 3D turn around the card's vertical center: it lifts and rotates edge-on, the faces swap at the
+       halfway point (app.mjs), and it keeps rotating the same way down onto the other face. */
+    .ms-turner.is-turning { animation: ms-turn .52s linear; }
+    @keyframes ms-turn {
+      0% { transform: perspective(900px) rotateY(0deg); animation-timing-function: cubic-bezier(.4,0,1,1); }
+      50% { transform: perspective(900px) translateY(-5%) rotateY(90deg) scale(1.06); filter: drop-shadow(0 22px 26px rgba(0,0,0,.55)); animation-timing-function: steps(1, end); }
+      50.01% { transform: perspective(900px) translateY(-5%) rotateY(-90deg) scale(1.06); filter: drop-shadow(0 22px 26px rgba(0,0,0,.55)); animation-timing-function: cubic-bezier(0,0,.6,1); }
+      100% { transform: perspective(900px) rotateY(0deg); }
+    }
     .ms-flip-hint { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-weight: 600; color: var(--accent); pointer-events: none; }
     .ms-after-peek { max-width: 40ch; }
     .ms-wack-btn { margin-top: 14px; }
@@ -296,8 +302,6 @@
 
     /* ---- night */
     .ms-arc { width: min(360px, 100%); height: auto; margin: 0 auto 4px; overflow: visible; }
-    .ms-night.is-acting { padding-top: 12px; }
-    .ms-night.is-acting .ms-arc { width: min(200px, 60%); }
     .ms-label .ms-countdown { font-size: .85rem; letter-spacing: 0; }
     .ms-arc-path { fill: none; stroke: #2a3456; stroke-width: 2; stroke-dasharray: 2 6; stroke-linecap: round; }
     .ms-arc circle.past { fill: var(--moon-shade); opacity: .6; }
@@ -393,14 +397,8 @@
     .ms-host-item.is-danger b { color: #ffc2ca; }
     .ms-host-item.is-confirming { cursor: default; }
     .ms-host-item .ms-confirm-row { margin-top: 8px; }
-    .ms-sheet { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-    .ms-sheet li { display: flex; gap: 12px; align-items: flex-start; }
-    .ms-sheet-card { flex: none; }
-    .ms-sheet-card .ms-card { --w: 64px; }
-    .ms-sheet-card .ms-card-name { font-size: max(12.2cqw, 9.5px); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
     /* the tiniest cards have no room for the team letter beside the name */
-    .ms-sheet-card .ms-team-mark, .ms-spec-cards .ms-team-mark, .ms-spec-center .ms-team-mark { display: none; }
-    .ms-sheet p { margin: 2px 0 0; color: var(--muted); line-height: 1.45; font-size: .92rem; }
+    .ms-spec-cards .ms-team-mark, .ms-spec-center .ms-team-mark { display: none; }
     .ms-wins { padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); line-height: 1.45; }
     .ms-info-modal { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .ms-info-modal .ms-lg { --w: 170px; }

@@ -127,7 +127,7 @@ test("a full game from lobby to results, with no console errors", async () => {
   await t.ctx.close();
 });
 
-test("your card is face down until you tap it, then turns back over by itself", async () => {
+test("your card is face down until you tap it, and stays face up until you tap it again", async () => {
   const t = await newTable(["Mike", "Ana", "Ben"]);
   await t.host.click("[data-act=start]");
   const p = t.pages[1];
@@ -140,16 +140,14 @@ test("your card is face down until you tap it, then turns back over by itself", 
   await p.waitForTimeout(300);
   assert.equal(await faceUp(), true);
   assert.equal(await notes(), true);
-  // a tap turns it back sooner
+  // left alone, it stays face up
+  await p.waitForTimeout(5000);
+  assert.equal(await faceUp(), true);
+  // a tap turns it back over
   await p.click("[data-flip=deal] .ms-turner");
   await p.waitForTimeout(600);
   assert.equal(await faceUp(), false);
   assert.equal(await notes(), false);   // the role's text goes face down with the card
-  // left alone, it turns back after a few seconds
-  await p.click("[data-flip=deal] .ms-turner");
-  await p.waitForTimeout(600);
-  assert.equal(await faceUp(), true);
-  await p.waitForFunction(() => !document.querySelector("[data-flip=deal]").classList.contains("is-up"), null, { timeout: 6000 });
   assert.equal(await p.locator("[data-act=ready]").isDisabled(), false);   // having looked once is enough
   await t.ctx.close();
 });
@@ -313,8 +311,10 @@ test("right after your night turn, what you saw shows for a few seconds, then go
       const up = () => p.evaluate(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"));
       if (await p.waitForFunction(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"), null, { timeout: 1500 }).then(() => true, () => false)) {
         saw++;
-        await p.waitForFunction(() => !document.querySelector("[data-flip=secret]")?.classList.contains("is-up"), null, { timeout: 8000 }).catch(() => {});
-        if ((await view(p)).phase === "night") assert.equal(await up(), false);
+        // it stays face up until tapped
+        await p.waitForTimeout(300);
+        assert.equal(await up(), true);
+        await p.click("[data-flip=secret] [data-flip-tap]").catch(() => {});
       }
     }
     await t.host.waitForTimeout(100);
@@ -391,17 +391,21 @@ test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score
   await t.ctx.close();
 });
 
-test("at night, players who aren't acting see nothing about which card is awake or how far the night has gone", async () => {
+test("at night, nothing on a player's screen shows which card is awake or how far the night has gone, and the moon never moves", async () => {
   const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
   await t.host.click("[data-act=start]");
   await dealAndReady(t.pages);
-  const leaks = new Set();
+  const leaks = new Set(), moons = new Set();
   const labels = (await t.host.evaluate(() => window.__onuw.state.g.steps));
   for (let k = 0; k < 300 && (await view(t.host)).phase === "night"; k++) {
     for (const p of t.pages) {
       const v = await view(p);
       if (v.phase !== "night") continue;
       const acting = v.game.prompt && !v.game.prompt.done;
+      // the moon never moves for a player, not even on their own turn, so a neighbor's screen gives nothing away
+      moons.add(await p.locator(".ms-arc-moon").evaluate((m) => m.style.transform).catch(() => "none"));
+      if (await p.locator(".ms-arc > circle").count()) leaks.add("moon arc has turn marks");
+      if (acting && (v.game.steps || v.game.stepIdx != null)) leaks.add("acting player's view has the night's progress");
       if (!acting) {
         if (v.game.stepId || v.game.steps || v.game.stepIdx != null || v.game.stepEndsAt) leaks.add("view has step info");
         const text = await p.locator("main").innerText();
@@ -420,6 +424,7 @@ test("at night, players who aren't acting see nothing about which card is awake 
   }
   assert.ok(labels.length > 0);
   assert.deepEqual([...leaks], []);
+  assert.equal(moons.size, 1, `the moon moved: ${[...moons].join(" / ")}`);
   await t.ctx.close();
 });
 
@@ -486,7 +491,7 @@ test("new roles: the Witch looks, then swaps the card onto a player; a Prince wi
   await t.ctx.close();
 });
 
-test("lobby: the host names themselves after making the room; card counts change in place; unpicked cards are dimmed; info only where the card can't say it all", async () => {
+test("lobby: the host names themselves after making the room; card counts change in place; unpicked cards are dimmed; every card has an info button", async () => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await tabsArePlayers(ctx);
   const p = await ctx.newPage();
@@ -527,9 +532,8 @@ test("lobby: the host names themselves after making the room; card counts change
   const off = await p.locator('[data-toggle="hunter"]').evaluate((c) => ({ f: getComputedStyle(c).filter, band: getComputedStyle(c.querySelector(".ms-card-name")).backgroundColor }));
   assert.match(off.f, /brightness/);
   assert.notEqual(off.band, "rgba(0, 0, 0, 0)");
-  // info buttons: on the confusing cards only
-  assert.equal(await p.locator('[data-toggle="seer"] .ms-info').count(), 0);
-  assert.equal(await p.locator('[data-toggle="copycat"] .ms-info').count(), 1);
+  // the same info button on every card
+  assert.equal(await p.locator('.ms-grid [data-toggle] .ms-info').count(), await p.locator(".ms-grid [data-toggle]").count());
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -618,7 +622,7 @@ test("guests see the host's full card list with live counts, and no − or + but
   assert.ok(await guest.locator(".ms-grid .ms-off").count() > 0, "unpicked cards show too, dimmed");
   assert.equal(await guest.locator(".ms-grid .ms-count button").count(), 0);
   const hint = (p) => p.locator(".ms-grid").locator("xpath=preceding-sibling::p[contains(@class,'ms-hint')][1]").innerText();
-  assert.match(await hint(t.host), /One card for each player.*Cards are listed in wake-up order\. Tap a card to add or remove it\./);
+  assert.match(await hint(t.host), /One card for each player.*Cards are listed in wake-up order\. Click a card to add or remove it\./);
   assert.match(await hint(guest), /One card for each player.*Cards are listed in wake-up order\.$/);
   assert.ok(await guest.locator(".ms-grid .ms-count.is-view").count() > 0);
   // a change by the host shows up for the guest
@@ -648,4 +652,17 @@ test("the lobby has a Share button that opens the system share sheet with the in
   assert.equal(await q.locator("button[data-act=share]").count(), 0);
   assert.equal(await q.locator("button[data-act=invite]").count(), 1);
   await ctx.close(); await q.context().close();
+});
+
+test("hints say click with a mouse and tap on a touch screen", async () => {
+  for (const [opts, verb] of [[{}, "Click"], [{ hasTouch: true, isMobile: true }, "Tap"]]) {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, ...opts });
+    await tabsArePlayers(ctx);
+    const p = await ctx.newPage();
+    await createAs(p, "Mike");
+    const hint = await p.locator(".ms-grid").locator("xpath=preceding-sibling::p[1]").innerText();
+    assert.match(hint, new RegExp(`${verb} a card to add or remove it`));
+    assert.doesNotMatch(await p.locator("main").innerText(), new RegExp(verb === "Click" ? "\\bTap\\b" : "\\bClick\\b"));
+    await ctx.close();
+  }
 });

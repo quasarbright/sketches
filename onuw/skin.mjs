@@ -72,7 +72,7 @@ export const ART = {
   imp: "art/gen/imp.webp",
   watcher: "art/gen/watcher.webp",
   unveiler: "art/gen/unveiler.webp",
-  back: "art/back.svg",
+  back: "art/gen/back.webp",
 };
 
 // ROLE_COLORS: each card's own colors, the same as the reference's role cards so players feel at

@@ -30,7 +30,7 @@ const css = `
 .wk-time i { display: block; height: 100%; width: 100%; background: var(--accent, #f1e2b8); transform-origin: left; border-radius: inherit; }
 .wk-hint { font-size: .85rem; color: var(--muted, #99a); margin: 0 0 6px; text-align: center; }
 .wk-board { position: relative; width: min(440px, 100%, 44vh); aspect-ratio: 3 / 3.4; display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 2% 5%; margin: auto 0; cursor: none; }
+  gap: 2% 5%; margin: auto 0; cursor: pointer; }
 .wk-hole { position: relative; }
 .wk-hole-back { position: absolute; left: 2%; right: 2%; bottom: 4%; height: 18%; border-radius: 50%; background: #02030a;
   box-shadow: inset 0 6px 10px #000, 0 0 0 3px #1b2350; }
@@ -66,17 +66,12 @@ const css = `
 .wk-pop.is-bad { color: #ff8c8c; }
 @keyframes wk-float { 0% { transform: translate(-50%, 10px) scale(.5); opacity: 0; } 20% { transform: translate(-50%, -6px) scale(1.25); opacity: 1; }
   100% { transform: translate(-50%, -48px) scale(1); opacity: 0; } }
-/* The mallet pivots at the end of its handle, up and to the right of the pointer. Raised, it's cocked back; on a swing it
-   turns to -90deg, so the handle lies flat and the head's left face comes straight down on the pointer. */
-.wk-mallet { position: fixed; z-index: 9001; width: 76px; height: 76px; margin: -100px 0 0 18px; pointer-events: none; transform-origin: 50% 96%;
-  transform: rotate(-28deg); transition: transform .14s ease-out, opacity .2s; opacity: 0; filter: drop-shadow(0 4px 4px #0008); }
-.wk-mallet.is-on { opacity: 1; }
-.wk-mallet.is-swing { transition: transform .06s cubic-bezier(.5,0,1,.5); transform: rotate(-90deg); }
 .wk-end { position: absolute; inset: 0; display: grid; place-items: center; background: #05070fcc; animation: wk-in .3s; z-index: 5; }
 .wk-end > div { text-align: center; padding: 22px; }
 .wk-end h2 { font: 650 1.7rem/1.15 var(--font-display, Georgia); margin: 0 0 8px; color: var(--accent, #f1e2b8); }
 .wk-end p { color: var(--muted, #99a); margin: 0 0 16px; }
 .wk-end b { color: var(--text, #eef); }
+.wk-end-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 @media (prefers-reduced-motion: reduce) {
   .wk-hole.is-up .wk-sprite, .wk-hole.is-bonked .wk-sprite, .wk-hole.is-ducking .wk-sprite, .wk-hole.is-taunt .wk-sprite { animation-duration: .01s; }
 }
@@ -86,15 +81,9 @@ const css = `
 // out of holes in the ground.
 const ROLE = { wolf: "werewolf", villager: "villager" };
 const STAR = `<svg viewBox="0 0 24 24"><path d="M12 1.5 14.9 8.6 22.5 9.2 16.7 14.2 18.5 21.6 12 17.6 5.5 21.6 7.3 14.2 1.5 9.2 9.1 8.6Z"/></svg>`;
-const MALLET = `<svg viewBox="0 0 80 80" aria-hidden="true">
-  <rect x="36" y="26" width="8" height="52" rx="3" fill="#8a5a2b"/>
-  <rect x="12" y="6" width="56" height="26" rx="8" fill="#b87a3c"/>
-  <rect x="12" y="6" width="56" height="8" rx="4" fill="#d89a58"/>
-  <rect x="12" y="6" width="9" height="26" rx="4" fill="#9c6630"/><rect x="59" y="6" width="9" height="26" rx="4" fill="#9c6630"/>
-</svg>`;
 const X = `<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
 
-let el = null, mallet = null, opts = {};
+let el = null, opts = {};
 const st = { score: 0, best: 0, startedAt: 0, holes: [], timers: [], spawnTimer: 0, tick: 0, auto: true, over: false };
 
 function bestGet() { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } }
@@ -119,12 +108,7 @@ export function openWack(o = {}) {
     <div class="wk-board">${Array.from({ length: HOLES }, (_, i) => `<div class="wk-hole" data-hole="${i}">
       <div class="wk-hole-back"></div><div class="wk-pit"><div class="wk-sprite"></div></div><div class="wk-hole-front"></div><div class="wk-fx"></div></div>`).join("")}</div>`;
   document.body.appendChild(el);
-  mallet = document.createElement("div");
-  mallet.className = "wk-mallet";
-  mallet.innerHTML = MALLET;
-  document.body.appendChild(mallet);
   el.addEventListener("pointerdown", onDown);
-  el.addEventListener("pointermove", onMove);
   el.addEventListener("click", (e) => { const a = e.target.closest("[data-wk]")?.dataset.wk; if (a === "close") closeWack(); if (a === "again") start(); });
   addEventListener("keydown", onKey);
   start();
@@ -134,8 +118,8 @@ export function closeWack() {
   if (!el) return;
   stopAll();
   removeEventListener("keydown", onKey);
-  el.remove(); mallet?.remove();
-  el = null; mallet = null;
+  el.remove();
+  el = null;
   opts.onClose?.();
 }
 
@@ -285,26 +269,12 @@ function end() {
   end.className = "wk-end";
   end.innerHTML = `<div><h2>${isNew ? "New best!" : "Time's up"}</h2>
     <p>You scored <b>${st.score}</b>. Your best is <b>${best}</b>.</p>
-    <button class="ms-btn ms-primary" data-wk="again">Play again</button></div>`;
+    <div class="wk-end-btns"><button class="ms-btn ms-primary" data-wk="again">Play Again</button><button class="ms-btn" data-wk="close">Stop Playing</button></div></div>`;
   el.appendChild(end);
 }
 
-function moveMallet(e) {
-  if (!mallet) return;
-  mallet.style.left = `${e.clientX}px`;
-  mallet.style.top = `${e.clientY}px`;
-}
-function onMove(e) {
-  const onBoard = !!e.target.closest(".wk-board") && !st.over;
-  mallet?.classList.toggle("is-on", onBoard);
-  moveMallet(e);
-}
 function onDown(e) {
   if (st.over || !e.target.closest(".wk-board")) return;
-  moveMallet(e);
-  mallet.classList.add("is-on", "is-swing");
-  later(() => mallet?.classList.remove("is-swing"), 150);
-  if (e.pointerType !== "mouse") later(() => mallet?.classList.remove("is-on"), 380);
   const hole = e.target.closest("[data-hole]");
   if (hole) bonk(Number(hole.dataset.hole), e.clientX, e.clientY);
 }
