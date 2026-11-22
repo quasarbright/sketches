@@ -66,10 +66,12 @@ const css = `
 .wk-pop.is-bad { color: #ff8c8c; }
 @keyframes wk-float { 0% { transform: translate(-50%, 10px) scale(.5); opacity: 0; } 20% { transform: translate(-50%, -6px) scale(1.25); opacity: 1; }
   100% { transform: translate(-50%, -48px) scale(1); opacity: 0; } }
-.wk-mallet { position: fixed; z-index: 9001; width: 76px; height: 76px; margin: -18px 0 0 -38px; pointer-events: none; transform-origin: 50% 96%;
-  transform: rotate(38deg); transition: transform .14s ease-out, opacity .2s; opacity: 0; filter: drop-shadow(0 4px 4px #0008); }
+/* The mallet pivots at the end of its handle, up and to the right of the pointer. Raised, it's cocked back; on a swing it
+   turns to -90deg, so the handle lies flat and the head's left face comes straight down on the pointer. */
+.wk-mallet { position: fixed; z-index: 9001; width: 76px; height: 76px; margin: -100px 0 0 18px; pointer-events: none; transform-origin: 50% 96%;
+  transform: rotate(-28deg); transition: transform .14s ease-out, opacity .2s; opacity: 0; filter: drop-shadow(0 4px 4px #0008); }
 .wk-mallet.is-on { opacity: 1; }
-.wk-mallet.is-swing { transition: transform .06s cubic-bezier(.5,0,1,.5); transform: rotate(-6deg); }
+.wk-mallet.is-swing { transition: transform .06s cubic-bezier(.5,0,1,.5); transform: rotate(-90deg); }
 .wk-end { position: absolute; inset: 0; display: grid; place-items: center; background: #05070fcc; animation: wk-in .3s; z-index: 5; }
 .wk-end > div { text-align: center; padding: 22px; }
 .wk-end h2 { font: 650 1.7rem/1.15 var(--font-display, Georgia); margin: 0 0 8px; color: var(--accent, #f1e2b8); }
@@ -301,12 +303,12 @@ function onDown(e) {
   if (st.over || !e.target.closest(".wk-board")) return;
   moveMallet(e);
   mallet.classList.add("is-on", "is-swing");
-  later(() => mallet?.classList.remove("is-swing"), 110);
+  later(() => mallet?.classList.remove("is-swing"), 150);
   if (e.pointerType !== "mouse") later(() => mallet?.classList.remove("is-on"), 380);
   const hole = e.target.closest("[data-hole]");
   if (hole) bonk(Number(hole.dataset.hole), e.clientX, e.clientY);
 }
 
 // For tests: stop the random spawning so a test can place wolves itself.
-export function setAuto(on) { st.auto = on; if (!on) clearTimeout(st.spawnTimer); }
+export function setAuto(on) { st.auto = on; clearTimeout(st.spawnTimer); if (on && !st.over) scheduleSpawn(300); }
 export const score = () => st.score;
