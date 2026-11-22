@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, rect, card } from "../brush.mjs";
+import { blob, brush, fringe, rect, card, minicard } from "../brush.mjs";
 // The thief: a hooded, masked cutpurse tiptoeing left with a sack over his shoulder, holding a stolen card out in front.
 const { card: bg, ink } = ROLE_COLORS.thief;
 const sack = blob([[290, 210], [340, 190], [392, 220], [410, 290], [390, 350], [340, 366], [300, 340], [286, 280]]);
@@ -27,5 +27,4 @@ const cuts = [
 export default card({ bg, ink, transform: "translate(-17 0) translate(6 4)", layers: [{ d: sack }, sackTie, backLeg, { d: torso }, { group: frontLeg, halo: 4, roots: [[236, 410, 34]] }, neck, maskTails, { d: head }, cap,
   farArm, cuts.slice(2).map((d) => ({ d, fill: "bg" })), { d: cuts[0], fill: ink }, { d: cuts[1], fill: "bg" },
   { group: nearArm, halo: 4, roots: [[238, 276, 24]] },
-  { d: rect(C[0], C[1], 44, 64, C[2], 6), halo: 4 }, { d: rect(C[0], C[1], 34, 54, C[2], 4), fill: "bg" }, { d: rect(C[0], C[1], 28, 48, C[2], 3) },
-  { d: `M${C[0] - 2} ${C[1] - 12}a12 12 0 1 0 9 21a9.5 9.5 0 1 1 -9 -21z`, fill: "bg" }] });
+  minicard(...C)] });

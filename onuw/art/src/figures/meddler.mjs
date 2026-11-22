@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, rect, card } from "../brush.mjs";
+import { blob, brush, rect, card, minicard } from "../brush.mjs";
 // The meddler (the troublemaker): a jester juggling two players' cards, swapping them hand to hand.
 const { card: bg, ink } = ROLE_COLORS.meddler;
 const legs = [brush([[236, 420], [224, 500], [216, 580]], [38, 30, 24]), blob([[216, 572], [172, 568], [152, 548, "c"], [170, 584], [224, 592]]),
@@ -23,4 +23,4 @@ const cuts = [
 ];
 export default card({ bg, ink, transform: "translate(15 20) scale(.94)", layers: [legs, { d: torso }, hat, bells, { d: head }, cuts.map((d) => ({ d, fill: "bg" })),
   { group: arms, halo: 4, roots: [[218, 300, 22], [296, 300, 22]] }, arcs,
-  cards.map(([x, y, a]) => [{ d: rect(x, y, 46, 66, a, 7), halo: 4 }, { d: rect(x, y, 34, 54, a, 5), fill: "bg" }, { d: rect(x, y, 28, 48, a, 4) }])] });
+  cards.map(([x, y, a]) => minicard(x, y, a, 1 / .94))] });

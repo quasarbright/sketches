@@ -9,16 +9,16 @@ const apron = blob([[236, 340], [292, 338], [300, 420], [306, 520], [244, 524], 
 const neck = brush([[260, 272], [262, 300]], [20, 24]);
 const head = blob([[238, 246], [250, 226], [274, 220], [292, 232], [298, 252], [308, 264, "c"], [298, 268], [300, 278], [294, 284], [294, 292], [280, 298], [258, 296], [242, 280]]);
 const cap = blob([[232, 256, "c"], [234, 226], [256, 208], [284, 208], [300, 224], [314, 236, "c"], [270, 236], [248, 250]]);
-// the rolled hide over his far shoulder, held by the near hand reaching up
-const roll = [brush([[160, 266], [210, 258], [280, 264], [346, 276]], [36, 42, 42, 36]), blob([[344, 258], [364, 266], [366, 290], [346, 296]])];
-const arm = [brush([[262, 330], [316, 330], [340, 300]], [24, 20, 16]), blob([[330, 286], [350, 284], [352, 304], [332, 306]])];
+// the rolled hide over his far shoulder, steadied by the far hand reaching back up to it; the near arm hangs
+const roll = [brush([[160, 266], [210, 258], [280, 264], [346, 276]], [36, 42, 42, 36]), blob([[340, 260], [356, 264], [358, 288], [342, 292]])];
+const farArm = [brush([[230, 318], [200, 334], [214, 290]], [24, 20, 16]), blob([[204, 270], [226, 266], [230, 286], [210, 292]])];
+const arm = [brush([[262, 330], [276, 396], [282, 446]], [24, 20, 16]), blob([[272, 440], [292, 438], [296, 460], [280, 468], [270, 456]])];
 const cuts = [
   brush([[284, 250], [294, 250]], [4, 3]),                                   // eye
   brush([[286, 284], [294, 284]], [2, 1]),                                   // mouth
   brush([[168, 264], [176, 252], [188, 252], [194, 266], [188, 278], [178, 278]], [3, 3, 3, 3, 3, 2]),   // the roll's spiral end
-  brush([[222, 252], [222, 280]], [3, 3]), // lacing on the roll
   brush([[264, 380], [268, 510]], [3, 2]),                                  // apron fold
   brush([[214, 352], [300, 350]], [4, 4]),                                  // apron tie
 ];
-export default card({ bg, ink, transform: "translate(0 -20)", layers: [legs, { d: tunic }, { d: apron }, { group: roll }, neck, { group: [head, cap], halo: 4 }, cuts.map((d) => ({ d, fill: "bg" })),
+export default card({ bg, ink, transform: "translate(0 -20)", layers: [{ group: farArm, halo: 3 }, legs, { d: tunic }, { d: apron }, { group: roll }, { group: farArm.slice(1), halo: 3 }, neck, { group: [head, cap], halo: 4 }, cuts.map((d) => ({ d, fill: "bg" })),
   { group: arm, halo: 3, roots: [[262, 330, 16]] }] });

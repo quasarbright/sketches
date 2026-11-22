@@ -1,5 +1,5 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, sparkle, rect, card } from "../brush.mjs";
+import { blob, brush, sparkle, rect, card, minicard } from "../brush.mjs";
 // A hooded seer in profile, peeking at a card held up to her face. Her scarf streams out behind her.
 const { card: bg, ink } = ROLE_COLORS.seer;
 const scarf = [
@@ -36,5 +36,4 @@ export default card({ bg, ink, transform: "translate(-13 0) translate(6 0)", lay
   folds.map((d) => ({ d, fill: "bg" })),
   sash.map((d) => ({ d, fill: "bg" })), { group: tassels, halo: 4 }, { d: braid, halo: 4 }, braidCuts.map((d) => ({ d, fill: "bg" })),
   { group: [sleeve, forearm, hand], halo: 4 }, brush([[302, 300], [322, 330], [312, 380]], [3, 4, 1]).replace(/^/, "") && { d: brush([[304, 300], [318, 334], [304, 392]], [3, 4, 1]), fill: "bg" },
-  { d: rect(...C.slice(0, 2), 46, 66, C[2], 7), halo: 4 }, { d: rect(...C.slice(0, 2), 36, 56, C[2], 5), fill: "bg" }, { d: rect(...C.slice(0, 2), 30, 50, C[2], 4) },
-  { d: `M370 194a12 12 0 1 0 9 21a9.5 9.5 0 1 1 -9 -21z`, fill: "bg" }] });
+  minicard(...C)] });
