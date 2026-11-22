@@ -718,3 +718,18 @@ test("win rules mention only the cards in the deck", async () => {
   assert.match(text({ werewolf: 2, scout: 1 }), /Ward dies/);
   assert.match(text({}), /Skinner.*Apprentice/s, "with no deck yet (how to play), every rule shows");
 });
+
+test("anyone who looks at a Copycat or Lookalike card sees the role it became", () => {
+  const s = room(["a", "b", "c", "d"]);
+  rig(s, { a: "copycat", b: "seer", c: "thief", d: "werewolf" }, ["villager", "hunter", "meddler"]);
+  nightTo(s, "copycat");
+  act(s, "a", { center: 1 });                       // the Copycat becomes the Hunter
+  let now = nightTo(s, "seer", 1000);
+  act(s, "b", { target: "a" }, now);
+  assert.match(info(s, "b"), /A's card is the Hunter\./);
+  assert.equal(s.g.step.prompts.b.result.cards[0].role, "hunter");
+  now = nightTo(s, "thief", now);
+  act(s, "c", { target: "a" }, now);
+  assert.match(info(s, "c"), /Your card is now the Hunter\./);
+  assert.doesNotMatch(info(s, "b") + info(s, "c"), /Copycat/);
+});

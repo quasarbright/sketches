@@ -366,7 +366,7 @@ function startStep(s, id, pid, actors) {
         addInfo(s, pid, id, "No player is a wolf.");
         return { kind: "ack", text: "No player is a wolf." };
       }
-      const cards = wolves.map((w) => ({ label: nameOf(s, w), role: g.cards[w] }));
+      const cards = wolves.map((w) => ({ label: nameOf(s, w), role: effRole(g, g.cards[w]) }));
       const t = `The ${wolves.length === 1 ? "wolf is" : "wolves are"} ${names(wolves)}. Here ${wolves.length === 1 ? "is their card" : "are their cards"} right now.`;
       addInfo(s, pid, id, t, cards);
       return { kind: "ack", text: t, cards };
@@ -396,7 +396,7 @@ function startStep(s, id, pid, actors) {
     case "watcher": {
       const seers = g.seats.filter((x) => x !== pid && ["seer", "noviceseer"].includes(g.dealt[x]));
       if (!seers.length) { addInfo(s, pid, id, `No player started as the ${N.seer} or ${N.noviceseer}.`); return { kind: "ack", text: `No player started as the ${N.seer} or ${N.noviceseer}.` }; }
-      const cards = seers.map((x) => ({ label: nameOf(s, x), role: g.cards[x] }));
+      const cards = seers.map((x) => ({ label: nameOf(s, x), role: effRole(g, g.cards[x]) }));
       const t = seers.map((x) => `${nameOf(s, x)} started as the ${roleName(g.dealt[x])}.`).join(" ") + ` Here ${seers.length === 1 ? "is their card" : "are their cards"} now.`;
       addInfo(s, pid, id, t, cards);
       return { kind: "ack", text: t, cards };
@@ -420,7 +420,7 @@ function startStep(s, id, pid, actors) {
     case "sleepwalker":
       return { kind: "center1", required: true, text: "Swap your card with a center card. You won't see your new card." };
     case "nightowl": {
-      const r = g.cards[pid];
+      const r = effRole(g, g.cards[pid]);
       const t = r === "nightowl" ? `Your card is still the ${N.nightowl}.` : `Your card is now the ${roleName(r)}.${teamNote("nightowl", r)}`;
       addInfo(s, pid, id, t, [{ label: "Your card", role: r }]);
       return { kind: "ack", text: t, cards: [{ label: "Your card", role: r }] };
@@ -477,16 +477,16 @@ function applyAction1(s, pid, id, prompt, msg) {
         [g.cards[pid], g.center[i]] = [g.center[i], g.cards[pid]];
         const t = `You swapped your card with center card ${i + 1}. You didn't see your new card.`;
         addInfo(s, pid, id, t);
-        logAction(s, id, pid, `${me} (${N.sleepwalker}) swapped with ${centerLabel(i).toLowerCase()}, getting the ${roleName(g.cards[pid])}.`);
+        logAction(s, id, pid, `${me} (${N.sleepwalker}) swapped with ${centerLabel(i).toLowerCase()}, getting the ${roleName(effRole(g, g.cards[pid]))}.`);
         return { result: { text: t } };
       }
       if (id === "witch") {
-        const cards = [{ label: centerLabel(i), role: g.center[i] }];
-        const text = `${centerLabel(i)} is the ${roleName(g.center[i])}. Now swap it with a player's card.`;
+        const cards = [{ label: centerLabel(i), role: effRole(g, g.center[i]) }];
+        const text = `${centerLabel(i)} is the ${roleName(effRole(g, g.center[i]))}. Now swap it with a player's card.`;
         return {
           result: { text, cards },
           next: { kind: "player", required: true, witch: i, exclude: [], cards, stage: 2,
-            text: `${centerLabel(i)} is the ${roleName(g.center[i])}. Swap it with a player's card, your own included.` },
+            text: `${centerLabel(i)} is the ${roleName(effRole(g, g.center[i]))}. Swap it with a player's card, your own included.` },
         };
       }
       if (id === "copycat") {
@@ -497,17 +497,17 @@ function applyAction1(s, pid, id, prompt, msg) {
         logAction(s, id, pid, `${me} (${N.copycat}) looked at ${centerLabel(i).toLowerCase()} and became the ${roleName(r)}.`);
         return { result: { text, cards: [{ label: centerLabel(i), role: r }] } };
       }
-      const t = `${centerLabel(i)} is the ${roleName(g.center[i])}.`;
-      addInfo(s, pid, id, t, [{ label: centerLabel(i), role: g.center[i] }]);
-      logAction(s, id, pid, `${me} (${id === "wolves" ? "lone wolf" : roleName(id)}) looked at ${centerLabel(i).toLowerCase()}: the ${roleName(g.center[i])}.`);
-      return { result: { text: t, cards: [{ label: centerLabel(i), role: g.center[i] }] } };
+      const t = `${centerLabel(i)} is the ${roleName(effRole(g, g.center[i]))}.`;
+      addInfo(s, pid, id, t, [{ label: centerLabel(i), role: effRole(g, g.center[i]) }]);
+      logAction(s, id, pid, `${me} (${id === "wolves" ? "lone wolf" : roleName(id)}) looked at ${centerLabel(i).toLowerCase()}: the ${roleName(effRole(g, g.center[i]))}.`);
+      return { result: { text: t, cards: [{ label: centerLabel(i), role: effRole(g, g.center[i]) }] } };
     }
     case "player": {
       const t = msg.target;
       if (!validPlayer(g, prompt, t)) return { error: "Pick another player" };
       const them = nameOf(s, t);
       if (id === "packleader") {
-        const old = g.cards[t];
+        const old = effRole(g, g.cards[t]);
         [g.cards[t], g.spare] = [g.spare, g.cards[t]];
         const text = `You swapped the spare ${N.werewolf} card with ${them}'s card. ${them} now holds the ${N.werewolf} card, and their old card is face down in the spare slot.`;
         const cards = [{ label: `${them} now holds`, role: "werewolf" }, { label: "Spare slot", back: true }];
@@ -516,13 +516,13 @@ function applyAction1(s, pid, id, prompt, msg) {
         return { result: { text, cards } };
       }
       if (id === "prowler") {
-        const text = `${them}'s card is the ${roleName(g.cards[t])}.`;
-        addInfo(s, pid, id, text, [{ label: them, role: g.cards[t] }]);
-        logAction(s, id, pid, `${me} (${N.prowler}) looked at ${them}'s card: the ${roleName(g.cards[t])}.`);
-        return { result: { text, cards: [{ label: them, role: g.cards[t] }] } };
+        const text = `${them}'s card is the ${roleName(effRole(g, g.cards[t]))}.`;
+        addInfo(s, pid, id, text, [{ label: them, role: effRole(g, g.cards[t]) }]);
+        logAction(s, id, pid, `${me} (${N.prowler}) looked at ${them}'s card: the ${roleName(effRole(g, g.cards[t]))}.`);
+        return { result: { text, cards: [{ label: them, role: effRole(g, g.cards[t]) }] } };
       }
       if (id === "witch") {
-        const i = prompt.witch, seen = g.center[i], old = g.cards[t];
+        const i = prompt.witch, seen = effRole(g, g.center[i]), old = effRole(g, g.cards[t]);
         [g.cards[t], g.center[i]] = [g.center[i], g.cards[t]];
         const mine = t === pid;
         const text = mine
@@ -573,10 +573,10 @@ function applyAction1(s, pid, id, prompt, msg) {
       }
       if (id === "thief") {
         [g.cards[pid], g.cards[t]] = [g.cards[t], g.cards[pid]];
-        const text = `You swapped cards with ${them}. Your card is now the ${roleName(g.cards[pid])}.${teamNote("thief", g.cards[pid])}`;
-        addInfo(s, pid, id, text, [{ label: "Your new card", role: g.cards[pid] }]);
-        logAction(s, id, pid, `${me} (${N.thief}) swapped with ${them} and took the ${roleName(g.cards[pid])}.`);
-        return { result: { text, cards: [{ label: "Your new card", role: g.cards[pid] }] } };
+        const text = `You swapped cards with ${them}. Your card is now the ${roleName(effRole(g, g.cards[pid]))}.${teamNote("thief", effRole(g, g.cards[pid]))}`;
+        addInfo(s, pid, id, text, [{ label: "Your new card", role: effRole(g, g.cards[pid]) }]);
+        logAction(s, id, pid, `${me} (${N.thief}) swapped with ${them} and took the ${roleName(effRole(g, g.cards[pid]))}.`);
+        return { result: { text, cards: [{ label: "Your new card", role: effRole(g, g.cards[pid]) }] } };
       }
       return { error: "Bad action" };
     }
@@ -585,17 +585,17 @@ function applyAction1(s, pid, id, prompt, msg) {
         const t = msg.target;
         if (!validPlayer(g, prompt, t)) return { error: "Pick another player" };
         const them = nameOf(s, t);
-        const text = `${them}'s card is the ${roleName(g.cards[t])}.`;
-        addInfo(s, pid, id, text, [{ label: them, role: g.cards[t] }]);
-        logAction(s, id, pid, `${me} (${N.seer}) looked at ${them}'s card: the ${roleName(g.cards[t])}.`);
-        return { result: { text, cards: [{ label: them, role: g.cards[t] }] } };
+        const text = `${them}'s card is the ${roleName(effRole(g, g.cards[t]))}.`;
+        addInfo(s, pid, id, text, [{ label: them, role: effRole(g, g.cards[t]) }]);
+        logAction(s, id, pid, `${me} (${N.seer}) looked at ${them}'s card: the ${roleName(effRole(g, g.cards[t]))}.`);
+        return { result: { text, cards: [{ label: them, role: effRole(g, g.cards[t]) }] } };
       }
       const c = msg.center;
       if (!Array.isArray(c) || c.length !== 2 || c[0] === c[1] || !c.every(validCenter)) return { error: "Pick two center cards" };
-      const cards = c.map((i) => ({ label: centerLabel(i), role: g.center[i] }));
-      const text = `${centerLabel(c[0])} is the ${roleName(g.center[c[0]])} and ${centerLabel(c[1]).toLowerCase()} is the ${roleName(g.center[c[1]])}.`;
+      const cards = c.map((i) => ({ label: centerLabel(i), role: effRole(g, g.center[i]) }));
+      const text = `${centerLabel(c[0])} is the ${roleName(effRole(g, g.center[c[0]]))} and ${centerLabel(c[1]).toLowerCase()} is the ${roleName(effRole(g, g.center[c[1]]))}.`;
       addInfo(s, pid, id, text, cards);
-      logAction(s, id, pid, `${me} (${N.seer}) looked at center cards ${c[0] + 1} and ${c[1] + 1}: the ${roleName(g.center[c[0]])} and the ${roleName(g.center[c[1]])}.`);
+      logAction(s, id, pid, `${me} (${N.seer}) looked at center cards ${c[0] + 1} and ${c[1] + 1}: the ${roleName(effRole(g, g.center[c[0]]))} and the ${roleName(effRole(g, g.center[c[1]]))}.`);
       return { result: { text, cards } };
     }
     case "two": {
