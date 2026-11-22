@@ -1,6 +1,7 @@
 import { ROLE_COLORS } from "../../../skin.mjs";
-import { blob, brush, fringe, eye, paw, card } from "../brush.mjs";
-// The prowler: a wolf on all fours, slinking right with its head low and one forepaw lifted mid-step.
+import { blob, brush, fringe, eye, paw, rect, sparkle, card } from "../brush.mjs";
+// The oracle wolf (the mystic wolf): a wolf on all fours, slinking right with one forepaw lifted, 
+// divining a player's card that floats before its eyes under the moon.
 const { card: bg, ink } = ROLE_COLORS.prowler;
 // legs bend where a wolf's do: elbow and wrist in front, stifle forward and hock back behind; every paw stands on its toes
 const farLegs = [brush([[304, 404], [298, 456], [300, 524], [310, 552]], [36, 24, 16, 14]), brush([[150, 396], [164, 452], [120, 500], [116, 552]], [58, 34, 16, 14])];
@@ -23,5 +24,10 @@ const cuts = [
   brush([[392, 352], [394, 338]], [5, 0]),                       // inner ear
   brush([[250, 368], [272, 396], [270, 420]], [4, 1]), brush([[226, 370], [246, 396], [244, 420]], [4, 1]), // ribs
 ];
-export default card({ bg, ink, transform: "translate(4 -132) scale(1.02)", layers: [farLegs, farPaws, tail, { d: body }, back, { d: neck }, ears, { d: head },
+// mystic touches: moon and sparkles, and a card floating above its head with a glint trail from its eye
+const moon = `M96 216a40 40 0 1 0 28 68a32 32 0 1 1 -28 -68z`;
+const stars = [sparkle(220, 230, 11), sparkle(300, 270, 8), sparkle(470, 500, 9), sparkle(50, 560, 8)];
+const floatCard = rect(404, 250, 54, 76, 10, 6), floatFace = rect(404, 250, 40, 62, 10, 4);
+const sight = [sparkle(420, 330, 6), sparkle(432, 310, 4), sparkle(380, 318, 5)];
+export default card({ bg, ink, transform: "translate(4 -96) scale(1.02)", layers: [{ d: moon }, stars, sight, { group: [floatCard], halo: 4 }, { d: floatFace, fill: "bg" }, sparkle(404, 250, 11), farLegs, farPaws, tail, { d: body }, back, { d: neck }, ears, { d: head },
   nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" }))] });
