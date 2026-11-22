@@ -591,3 +591,21 @@ test("every tab is the same player until the setting is turned on", async () => 
   assert.equal(await id(b), ib);
   await ctx.close();
 });
+
+test("with the setting off, a second tab joining your own room is told why and pointed at Settings", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const a = await ctx.newPage();
+  await createAs(a, "Mike");
+  const code = await a.evaluate(() => window.__onuw.view.code);
+  const b = await ctx.newPage();
+  await b.goto(`${base}?room=${code}&net=local&fast`);
+  await b.click("button[data-as=player]");
+  await b.getByText("You're already in this room").waitFor();
+  await b.click("main button[data-act=settings]");
+  await Promise.all([b.waitForEvent("load"), b.click("button[data-act=tabs-toggle]")]);
+  await b.fill("#name-input", "Ana");
+  await b.click("button[data-as=player]");
+  await b.waitForFunction(() => window.__onuw.view?.players?.length === 2);
+  await a.waitForFunction(() => window.__onuw.view.players.length === 2);
+  await ctx.close();
+});

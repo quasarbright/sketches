@@ -41,7 +41,7 @@ const saveSettings = (x) => ls.set(SETTINGS_KEY, JSON.stringify({ ...settings(),
 let NS = "onuw:";
 async function claimSlot() {
   if (params.get("ns")) { NS = `onuw:${params.get("ns")}:`; return; }
-  if (!settings().tabsArePlayers || !navigator.locks) return;
+  if (!navigator.locks) return;
   const held = new Set();
   const grab = (n) => new Promise((res) => {
     navigator.locks.request(`onuw-slot-${n}`, { ifAvailable: true }, (lock) => {
@@ -50,6 +50,9 @@ async function claimSlot() {
       return lock ? new Promise(() => {}) : undefined; // hold it until the tab goes away
     }).catch(() => res(false));
   });
+  // With the setting off, every tab is the plain namespace. One of them still holds slot 0, so a tab
+  // that turns the setting on later can't take slot 0 and end up the same player as the host tab.
+  if (!settings().tabsArePlayers) { await grab(0); ss.set("onuw:slot", "0"); return; }
   const want = ss.get("onuw:slot");
   let slot = +want || 0;
   // after a refresh the old page may still hold this tab's slot for a moment, so wait for it
@@ -111,7 +114,7 @@ let leaving = false;
 let migratingTo = null;   // guest: the player taking over as host
 let view = null;
 let clockOffset = 0;      // host clock minus ours
-let screen = "home";      // home | connecting | room | kicked | notfound
+let screen = "home";      // home | connecting | room | kicked | notfound | sameplayer
 let roomCode = (params.get("room") || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 4) || null;
 let lastHostId = null;
 
@@ -164,7 +167,9 @@ function hostOnMessage(id, msg) {
   if (msg.t === "pong") return;
   if (msg.t === "hello") {
     const pid = String(msg.id || "").slice(0, 40);
-    if (!pid || pid === myId) { hostNet.drop(id); return; }
+    if (!pid) { hostNet.drop(id); return; }
+    // another tab of this browser, which is the same player as this host tab
+    if (pid === myId) { hostNet.send(id, { t: "same-player" }); setTimeout(() => hostNet?.drop(id), 300); return; }
     // a refreshed tab replaces its old connection
     for (const [oid, oc] of conns) if (oid !== id && oc.pid === pid) { conns.delete(oid); hostNet.drop(oid); }
     c.pid = pid;
@@ -277,6 +282,7 @@ function joinAsGuest(code, as) {
         return;
       }
       if (m.t === "error") { toast(m.text); return; }
+      if (m.t === "same-player") { screen = "sameplayer"; mode = null; guestNet = null; net.close(); render(); return; }
       if (m.t === "kicked") { screen = "kicked"; mode = null; guestNet = null; net.close(); render(); return; }
       if (m.t === "migrate") { migratingTo = m.hostId; return; }
       if (m.t === "state" && m.state?.hostId === myId) {
@@ -514,6 +520,8 @@ function render() {
   if (screen === "home") html = homeScreen();
   else if (screen === "connecting") html = messageScreen("Connecting…", `Looking for room <b class="ms-mono">${esc(roomCode || "")}</b>.`, true);
   else if (screen === "notfound") html = messageScreen("Room not found", `Nobody is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> right now. Check the code, or start your own room.`, false, true, true);
+  else if (screen === "sameplayer") html = messageScreen("You're already in this room", `Another tab in this browser is hosting room <b class="ms-mono">${esc(roomCode || "")}</b> as you. To join as another player from this tab, turn on <b>Each tab is a different player</b> in Settings.`, false, true, false,
+    `<button class="ms-btn ms-primary" data-act="settings">Settings</button>`);
   else if (screen === "kicked") html = messageScreen("You were removed", "The host removed you from the room.", false, true);
   else if (!view) html = messageScreen("Connecting…", "", true);
   else html = roomScreen();
@@ -540,13 +548,13 @@ function render() {
   refreshPanel();
 }
 
-function messageScreen(title, body, spinner = false, back = false, retry = false) {
+function messageScreen(title, body, spinner = false, back = false, retry = false, first = "") {
   return `<main class="ms-center">
     <div class="ms-hero-moon">${bigMoon()}</div>
     <h1 class="ms-h1">${title}</h1>
     <p class="ms-lede">${body}</p>
     ${spinner ? `<div class="ms-dots"><span></span><span></span><span></span></div>` : ""}
-    ${retry || back ? `<div class="ms-msg-actions">${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry ? "" : "ms-primary"}" data-act="home">Main Menu</button>` : ""}</div>` : ""}
+    ${retry || back ? `<div class="ms-msg-actions">${first}${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry || first ? "" : "ms-primary"}" data-act="home">Main Menu</button>` : ""}</div>` : ""}
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -1367,7 +1375,8 @@ function onClick(e) {
     case "tabs-toggle": {
       const next = !settings().tabsArePlayers;
       saveSettings({ tabsArePlayers: next });
-      ss.set("onuw:slot", "");
+      // a tab turning it on stays the player it was (slot 0) if it can; turning it off, every tab is slot 0
+      if (!next) ss.set("onuw:slot", "0");
       t.setAttribute?.("aria-checked", String(next));
       // who this tab is gets decided on load
       setTimeout(() => location.reload(), 250);
