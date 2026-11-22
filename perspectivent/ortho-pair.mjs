@@ -14,6 +14,9 @@ const SUN = (() => { const v = [-0.5, 0.8, -0.35], l = Math.hypot(...v); return 
 const SKY = [201, 220, 239], GRASS = [95, 138, 67];
 const BALLS = [[-0.6, GROUND + R, NEAR_Z, [242, 193, 78]], [0.6, GROUND + R, NEAR_Z, [232, 85, 61]]];
 
+// the moving ball bounces as it goes: how high its bottom is off the ground at time t
+const BOUNCE = 0.8, HOP = 0.7; // seconds per bounce, meters high
+export const ballLift = (t) => { const u = (t % BOUNCE) / BOUNCE; return 4 * HOP * u * (1 - u); };
 // the moving ball's distance at time t: out and back, easing at each end
 export function farBallZ(t) {
   const u = (t % PERIOD) / PERIOD;
@@ -86,8 +89,8 @@ class Pic {
     const { A, t } = this.lens, f = A + z * t;
     return [(x / f + 1) / 2 * this.w, (1 - y / f) / 2 * this.w];
   }
-  frame(ballZ) {
-    const balls = [BALLS[0], [BALLS[1][0], BALLS[1][1], ballZ, BALLS[1][3]]], b = balls[1];
+  frame(ballZ, lift) {
+    const balls = [BALLS[0], [BALLS[1][0], BALLS[1][1] + lift, ballZ, BALLS[1][3]]], b = balls[1];
     this.img.data.set(this.bg.data);
     // the patch the ball and its shadow can cover
     const sc = (b[1] - GROUND) / SUN[1], sh = [b[0] - SUN[0] * sc, GROUND, b[2] - SUN[2] * sc];
@@ -121,7 +124,7 @@ export function drawOrthoPair(ctx, W, H, dpr, t, store) {
   ctx.clearRect(0, 0, W, H);
   store.pics.forEach((p, i) => {
     const B = boxes[i];
-    if (p.advanceBg(12)) { p.frame(z); ctx.imageSmoothingEnabled = true; ctx.drawImage(p.cv, B.x, B.y, B.w, B.h); }
+    if (p.advanceBg(12)) { p.frame(z, ballLift(t)); ctx.imageSmoothingEnabled = true; ctx.drawImage(p.cv, B.x, B.y, B.w, B.h); }
     else { ctx.fillStyle = "#111317"; ctx.fillRect(B.x, B.y, B.w, B.h); }
     ctx.strokeStyle = "rgba(233,228,216,0.25)"; ctx.lineWidth = 1;
     ctx.strokeRect(B.x - 0.5, B.y - 0.5, B.w + 1, B.h + 1);
