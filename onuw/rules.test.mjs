@@ -135,7 +135,7 @@ test("the wolves see each other; a lone wolf may look at one center card", () =>
   assert.equal(s.g.step.prompts.a.optional, true);
   assert.ok(act(s, "a", { center: 3 }).error, "only the 3 center cards");
   assert.equal(act(s, "a", { center: 0 }).error, undefined);
-  assert.match(info(s, "a"), /Center card 1 is the Werewolf/);
+  assert.match(info(s, "a"), /You saw center card 1\. It's the Werewolf/);
 });
 
 test("the Mystic Wolf may look at one other player's card on her own turn", () => {
@@ -144,7 +144,7 @@ test("the Mystic Wolf may look at one other player's card on her own turn", () =
   assert.equal(s.g.step.prompts.a.optional, true);
   assert.ok(act(s, "a", { target: "a" }).error, "not her own card");
   assert.equal(act(s, "a", { target: "b" }).error, undefined);
-  assert.match(info(s, "a"), /B's card is the Seer/);
+  assert.match(info(s, "a"), /You saw B's card\. It's the Seer/);
 });
 
 test("the Alpha Wolf must give the spare Werewolf card away; with only wolves left, nothing moves", () => {
@@ -214,7 +214,7 @@ test("the Seer looks at one other player or two different center cards, never he
   assert.ok(act(s, "a", { center: [1, 1] }).error);
   assert.ok(act(s, "a", { center: [0] }).error);
   assert.equal(act(s, "a", { center: [0, 2] }).error, undefined);
-  assert.match(info(s, "a"), /Robber and center card 3 is the Troublemaker/);
+  assert.match(info(s, "a"), /They're the Robber and the Troublemaker/);
 });
 
 test("the Apprentice Seer looks at exactly one center card, and may skip", () => {
@@ -375,9 +375,9 @@ function doppel(role, others = {}, center = ["villager", "villager", "cursed"]) 
 
 test("the Doppelganger acts out every look or swap role on the spot, and doesn't wake for it again", () => {
   const cases = {
-    prowler: [{ target: "c" }, (s) => assert.match(info(s, "a"), /C's card is the Werewolf/)],
-    seer: [{ center: [0, 1] }, (s) => assert.match(info(s, "a"), /Villager and center card 2/)],
-    noviceseer: [{ center: 2 }, (s) => assert.match(info(s, "a"), /Center card 3 is the Cursed/)],
+    prowler: [{ target: "c" }, (s) => assert.match(info(s, "a"), /You saw C's card\. It's the Werewolf/)],
+    seer: [{ center: [0, 1] }, (s) => assert.match(info(s, "a"), /You saw center cards 1 and 2\. They.re the Villager and the Villager/)],
+    noviceseer: [{ center: 2 }, (s) => assert.match(info(s, "a"), /You saw center card 3\. It's the Cursed/)],
     thief: [{ target: "c" }, (s) => assert.equal(s.g.cards.a, "werewolf")],
     meddler: [{ targets: ["b", "c"] }, (s) => assert.equal(s.g.cards.b, "werewolf")],
     sleepwalker: [{ center: 2 }, (s) => assert.equal(s.g.cards.a, "cursed")],

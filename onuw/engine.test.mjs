@@ -96,7 +96,7 @@ test("Alpha Wolf gives the spare card; a lone Alpha Wolf peeks at a real center 
   assert.equal(s.g.spare, "seer");
   assert.deepEqual(s.g.center, ["werewolf", "villager", "villager"]);
   const info = s.g.info.a.map((i) => i.text).join("\n");
-  assert.match(info, /Center card 1 is the Werewolf/);
+  assert.match(info, /You saw center card 1\. It's the Werewolf/);
   assert.match(info, /spare Werewolf card with B.s card/);
 });
 
@@ -119,7 +119,7 @@ test("night steps run in wake order and act on the card as it is at that moment"
     thief: { b: { target: "c" } },
   });
   // seer saw the wolf before the thief took it; the thief now holds it
-  assert.match(s.g.info.a[0].text, /C's card is the Werewolf/);
+  assert.match(s.g.info.a[0].text, /You saw C's card\. It's the Werewolf/);
   assert.equal(s.g.cards.b, "werewolf");
   assert.equal(s.g.cards.c, "thief");
   // the meddler step runs even though the card is in the center
@@ -479,7 +479,7 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.equal(p2.kind, "player");
   assert.equal(p2.done, false, "looking isn't the end of the turn");
   assert.equal(p2.required, true, "once she looks she has to swap");
-  assert.deepEqual(p2.cards, [{ label: "Center card 3", role: "hunter" }]);
+  assert.deepEqual(p2.cards, [{ label: "Center 1", back: true }, { label: "Center 2", back: true }, { label: "Center 3", role: "hunter" }]);
   assert.equal(handle(s, "a", { t: "act", step: "witch", skip: true }, 0).error, "A choice is required");
   assert.equal(handle(s, "a", { t: "act", step: "witch", target: "b" }, 0).error, undefined);
   assert.equal(s.g.cards.b, "hunter");
@@ -666,7 +666,7 @@ test("the Apprentice Seer looks at a center card; the Beholder sees who started 
   rig(s, { a: "noviceseer", b: "watcher", c: "seer", d: "werewolf" }, ["villager", "werewolf", "thief"]);
   nightTo(s, "noviceseer");
   act(s, "a", { center: 1 });
-  assert.match(info(s, "a"), /Center card 2 is the Werewolf/);
+  assert.match(info(s, "a"), /You saw center card 2\. It's the Werewolf/);
   nightTo(s, "watcher", 1000);
   const p = s.g.step.prompts.b;
   assert.match(p.text, /A started as the Apprentice Seer.*C started as the Seer/);
@@ -749,11 +749,11 @@ test("anyone who looks at a Copycat or Doppelganger card sees the role it became
   act(s, "a", { center: 1 });                       // the Copycat becomes the Hunter
   let now = nightTo(s, "seer", 1000);
   act(s, "b", { target: "a" }, now);
-  assert.match(info(s, "b"), /A's card is the Hunter\./);
+  assert.match(info(s, "b"), /You saw A's card\. It's the Hunter\./);
   assert.equal(s.g.step.prompts.b.result.cards[0].role, "hunter");
   now = nightTo(s, "thief", now);
   act(s, "c", { target: "a" }, now);
-  assert.match(info(s, "c"), /Your card is now the Hunter\./);
+  assert.match(info(s, "c"), /looked at your new card\. It's the Hunter\./);
   assert.doesNotMatch(info(s, "b") + info(s, "c"), /Copycat/);
 });
 
@@ -765,7 +765,7 @@ test("the Doppelganger does a look or swap right away, and doesn't wake again fo
   assert.equal(s.g.step.id, "lookalike", "still the Doppelganger's turn");
   assert.equal(s.g.step.prompts.a.kind, "seer");
   assert.equal(act(s, "a", { target: "c" }).error, undefined);
-  assert.match(info(s, "a"), /C's card is the Werewolf/);
+  assert.match(info(s, "a"), /You saw C's card\. It's the Werewolf/);
   const now = nightTo(s, "seer", 1000);
   assert.deepEqual(s.g.step.actors, ["b"], "only the real Seer wakes on the Seer's turn");
   finishNight(s, now);

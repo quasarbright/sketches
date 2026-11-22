@@ -423,9 +423,17 @@ function receiveView(v) {
   const me = v.players.find((p) => p.id === myId);
   if (me && me.name !== myName && !ui.renaming) { myName = me.name; ls.set(NS + "name", myName); }
   render();
-  // right after your turn, what you saw shows in your card-and-night panel until you hide it
-  const was = prev?.game?.prompt, cur = v.game?.prompt;
-  if (v.phase === "night" && was && !was.done && cur?.done && was.step === cur.step) turnCard("secret", true);
+  // Right after your turn, what you did and saw stays where you acted until you press OK (it's also
+  // kept in the card-and-night panel for later). It's taken from your night notes, which only grow,
+  // so it shows even if the night moved on before this view arrived.
+  const cur = v.game?.prompt;
+  // (a second part of the same turn waits; a different turn of yours shows after you press OK)
+  // The last turn of the night may end it before this view arrives, so this also runs in the day.
+  if (acted && v.game && !(v.phase === "night" && cur && !cur.done && cur.step === acted.promptStep) && v.game.info.length > acted.from) {
+    if (!acted.skipped) { shownResult = { step: acted.step, entries: v.game.info.slice(acted.from) }; render(); }
+    acted = null;
+  }
+  if ((v.phase === "lobby" || v.phase === "deal") && (shownResult || acted)) { shownResult = null; acted = null; render(); }
   // the game closes the moment your turn comes, or when the night ends
   if (wackOpen() && (v.phase !== "night" || (cur && !cur.done))) closeWack();
 }
@@ -858,20 +866,38 @@ function moonArc(g) {
   </svg>`;
 }
 
+function resultPanel() {
+  if (!shownResult) return "";
+  return `<div class="ms-panel ms-prompt ms-result">
+      ${shownResult.entries.map((e) => `<p class="ms-prompt-text">${esc(e.text)}</p>${resultCards(e.cards)}`).join("")}
+      <div class="ms-prompt-actions"><button class="ms-btn ms-primary" data-act="result-ok">OK</button></div>
+    </div>`;
+}
+
+// What you just did at night, shown where you did it until you press OK. `acted` marks where your
+// night notes stood when you started acting.
+let shownResult = null, acted = null;
+const noteActed = (skipped) => {
+  const p = view.game.prompt;
+  if (!acted) acted = { from: view.game.info.length, step: p.as || p.step, promptStep: p.step, skipped };
+  else acted.skipped = skipped;
+};
+
 function nightScreen() {
   const v = view;
   const g = v.game;
   const st = NIGHT_STEPS.find((s) => s.id === g.stepId);
   const p = g.prompt;
   let panel;
-  if (p && !p.done) panel = promptPanel(p, g);
+  if (shownResult) panel = resultPanel();
+  else if (p && !p.done) panel = promptPanel(p, g);
   else panel = `<p class="ms-lede">When there is an action for you to perform, it will appear here.</p>
     <p class="ms-hint">${Tap()} and scroll occasionally so nobody can tell when your turn comes.</p>
     <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play Whack-a-Wolf</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
     <div class="ms-label">Night</div>
-    <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : "Everyone is asleep"}</h1>
+    <h1 class="ms-h1">${shownResult ? `Your turn: the ${esc(shownResult.step === "wolves" ? "wolves" : NIGHT_STEPS.find((x) => x.id === shownResult.step)?.label ?? "")}` : p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : "Everyone is asleep"}</h1>
     ${panel}
     ${secretPanel(g)}
     <mike-footer></mike-footer>
@@ -880,7 +906,7 @@ function nightScreen() {
 
 function resultCards(cards) {
   if (!cards?.length) return "";
-  const swap = cards.some((c) => c.back);
+  const swap = cards.some((c) => c.swap);
   return `<div class="ms-row ms-result-cards">${cards.map((c) => wrap(c.back ? cardBack({ size: "sm", label: c.label }) : card(c.role, { size: "sm", label: c.label }))).join(swap ? icon("swap", "ms-ico ms-swap-ico") : "")}</div>`;
 }
 
@@ -1017,6 +1043,7 @@ function dayScreen() {
       ${countdown(g.dayEndsAt, "ms-bigtime")}
       <p class="ms-lede">Discuss. Voting starts when the timer ends or everyone is ready.</p>
     </section>
+    ${resultPanel()}
     ${revealedPanel(g)}
     ${secretPanel(g)}
     ${inGameStrip()}
@@ -1379,6 +1406,7 @@ function onClick(e) {
       return;
     }
     case "cheatsheet": openPanel("cheatsheet"); return;
+    case "result-ok": shownResult = null; render(); return;
     case "settings": openPanel("settings"); return;
     case "tabs-toggle": {
       const next = !settings().tabsArePlayers;
@@ -1416,7 +1444,7 @@ function onClick(e) {
     case "suggest": send({ t: "suggestRoles" }); return;
     case "start": send({ t: "start" }); return;
     case "ready": send({ t: "peeked" }); return;
-    case "skip": send({ t: "act", step: view.game.prompt.step, skip: true }); return;
+    case "skip": noteActed(true); send({ t: "act", step: view.game.prompt.step, skip: true }); return;
     case "confirm": {
       const p = view.game.prompt;
       const msg = { t: "act", step: p.step };
@@ -1424,6 +1452,7 @@ function onClick(e) {
       else if (p.kind === "player") msg.target = ui.sel[0];
       else if (p.kind === "two") msg.targets = ui.sel;
       else if (p.kind === "seer") { if (ui.sel.length) msg.target = ui.sel[0]; else msg.center = ui.center; }
+      if (p.kind !== "ack") noteActed(false);
       send(msg);
       return;
     }

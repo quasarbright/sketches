@@ -294,36 +294,6 @@ test("mid-game, your card and night are face down until you tap Show, and hide a
   await t.ctx.close();
 });
 
-test("right after your night turn, what you saw shows for a few seconds, then goes face down", async () => {
-  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
-  await t.host.click("[data-act=start]");
-  await dealAndReady(t.pages);
-  let saw = 0;
-  for (let k = 0; k < 300 && (await view(t.host)).phase === "night"; k++) {
-    for (const p of t.pages) {
-      const pr = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
-      if (!pr) continue;
-      if (pr.kind === "center1") await p.click('[data-center="0"]');
-      if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
-      if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
-      if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
-      await p.click("[data-act=confirm]").catch(() => {});
-      const up = () => p.evaluate(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"));
-      if (await p.waitForFunction(() => document.querySelector("[data-flip=secret]")?.classList.contains("is-up"), null, { timeout: 1500 }).then(() => true, () => false)) {
-        saw++;
-        // it stays face up until tapped
-        await p.waitForTimeout(300);
-        assert.equal(await up(), true);
-        await p.click("[data-flip=secret] [data-flip-tap]").catch(() => {});
-      }
-    }
-    await t.host.waitForTimeout(100);
-  }
-  assert.ok(saw > 0, "the night panel never opened after a turn");
-  assert.deepEqual(t.errors, []);
-  await t.ctx.close();
-});
-
 test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score, villagers cost, and it closes when your turn comes", async () => {
   const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
   // 4 cards that never wake among 7, so at least one player can play undisturbed
@@ -463,7 +433,8 @@ test("new roles: the Witch looks, then swaps the card onto a player; a Prince wi
   assert.match(await ana.locator("[data-act=confirm]").innerText(), /Look at center 2/);
   await ana.click("[data-act=confirm]");
   await ana.waitForFunction(() => window.__onuw.view.game.prompt.stage === 2);
-  assert.equal(await ana.locator(".ms-prompt .ms-result-cards .ms-card").count(), 1, "she sees the card she looked at");
+  assert.equal(await ana.locator(".ms-prompt .ms-result-cards .ms-card:not(.ms-back)").count(), 1, "she sees the card she looked at");
+  assert.equal(await ana.locator(".ms-prompt .ms-result-cards .ms-card").count(), 3, "among the 3 center cards");
   assert.equal(await ana.locator("[data-act=skip]").count(), 0, "she can't back out after looking");
   assert.equal(await ana.locator("[data-target]").count(), 4, "any player, herself included");
   const me = (await view(ana)).you;
@@ -561,7 +532,7 @@ test("the Doppelganger who copies the Seer looks right away, on the Doppelganger
   await ana.click(`[data-target="${benId}"]`);
   await ana.click("[data-act=confirm]");
   await ana.waitForFunction(() => window.__onuw.view.game.prompt.as === "seer");
-  assert.match(await ana.locator(".ms-prompt-text").innerText(), /You're now the Seer\. You may look at another player's card/);
+  assert.match(await ana.locator(".ms-prompt-text").innerText(), /you're now the Seer\. You may look at another player's card/);
   assert.equal(await ana.locator(".ms-centers").count(), 1, "the Seer's choice of center cards is offered");
   await ana.click(`[data-target="${t.hostId ?? (await view(t.host)).you}"]`);
   assert.match(await ana.locator("[data-act=confirm]").innerText(), /Look at Mike's card/);
@@ -665,4 +636,54 @@ test("hints say click with a mouse and tap on a touch screen", async () => {
     assert.doesNotMatch(await p.locator("main").innerText(), new RegExp(verb === "Click" ? "\\bTap\\b" : "\\bClick\\b"));
     await ctx.close();
   }
+});
+
+// Plays a night with the given cards. Every action's result must show where the player acted, as
+// "You ..." with the cards, and stay until they press OK.
+async function checkResults(names, roles) {
+  const t = await newTable(names);
+  await t.host.evaluate((r) => window.__onuw.send({ t: "setRoles", roles: r }), roles);
+  await t.host.waitForFunction(() => !window.__onuw.view.startProblem);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  const shown = [];
+  for (let k = 0; k < 400 && (await view(t.host)).phase === "night"; k++) {
+    for (const p of t.pages) {
+      const pr = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
+      if (!pr) continue;
+      if (await p.locator(".ms-result").count()) continue;   // still showing an earlier result
+      if (pr.kind === "ack") { await p.click("[data-act=confirm]"); continue; }
+      if (pr.kind === "center1") await p.click('[data-center="0"]');
+      if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
+      if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
+      if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
+      await p.click("[data-act=confirm]");
+      await p.waitForFunction(([s0, st0]) => { const q = window.__onuw.view.game.prompt; return document.querySelector(".ms-result") || (q && !q.done && q.step === st0 && (q.stage || 1) !== s0); }, [pr.stage || 1, pr.step], { timeout: 8000 })
+        .catch(async () => { throw new Error(`stuck after ${pr.step}/${pr.kind}: ${JSON.stringify(await p.evaluate(() => window.__onuw.view.game.prompt))}`); });
+      if (!(await p.locator(".ms-result").count())) continue;   // a second part of the same turn
+      const res = p.locator(".ms-result");
+      assert.equal(await res.count(), 1, `no result shown after the ${pr.step} action`);
+      const text = await res.innerText();
+      assert.match(text, /^You /, `the ${pr.step} result isn't worded as what you did: ${text}`);
+      await p.waitForTimeout(1500);
+      assert.equal(await res.count(), 1, `the ${pr.step} result went away by itself`);
+      shown.push(pr.step);
+      await p.click("[data-act=result-ok]");
+      assert.equal(await p.locator(".ms-result").count(), 0);
+    }
+    await t.host.waitForTimeout(100);
+  }
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+  return shown;
+}
+
+test("every night action's result stays where you acted, as what you did, until you press OK", async () => {
+  const a = await checkResults(["Mike", "Ana", "Ben", "Cleo", "Dan"],
+    { werewolf: 1, seer: 1, thief: 1, meddler: 1, sleepwalker: 1, nightowl: 1, witch: 1, noviceseer: 1 });
+  const b = await checkResults(["Mike", "Ana", "Ben", "Cleo", "Dan"],
+    { prowler: 1, investigator: 1, imp: 1, unveiler: 1, copycat: 1, lookalike: 1, villager: 2 });
+  const seen = new Set([...a, ...b]);
+  // the actions dealt to players (the rest landed in the center this time)
+  assert.ok(seen.size >= 5, `only saw results for ${[...seen].join(", ")}`);
 });
