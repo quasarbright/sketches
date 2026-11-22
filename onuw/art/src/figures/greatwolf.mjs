@@ -28,4 +28,4 @@ const cuts = [
 ];
 const window_ = blob([[402, 552], [414, 552], [414, 562], [402, 562]]);
 export default card({ bg, ink, transform: "translate(-26 -6)", layers: [farLegs, farPaws, tail, { d: body }, back, { d: neck }, mane, ears, { d: head },
-  nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" })), { group: village, halo: 4 }, { d: window_, fill: "bg" }] });
+  nearHind, nearFore, cuts.map((d) => ({ d, fill: "bg" })), { group: village, halo: 4, transform: "translate(0 -9)" }, { d: window_, fill: "bg", transform: "translate(0 -9)" }] });
