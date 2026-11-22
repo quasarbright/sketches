@@ -589,7 +589,5 @@ test("every tab is the same player until the setting is turned on", async () => 
   await b.reload();
   await b.waitForFunction(() => window.__onuw?.myId);
   assert.equal(await id(b), ib);
-  await a.click("button[data-act=settings]");
-  await a.getByText(/This tab is (your main tab|player tab 2)/).waitFor();
   await ctx.close();
 });

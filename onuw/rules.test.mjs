@@ -622,3 +622,22 @@ test("the Apprentice Tanner wins with the Tanner, and the wolves can't win when 
   assert.deepEqual(sorted(r.winners), ["a", "b"]);
   assert.equal(r.wolfTeam, false);
 });
+
+// ---------------------------------------------------------------- deliberate deviations
+
+// Mike, 2026-11-22: a copied card counts as the role it became for everyone. Officially a P.I. who
+// views a Doppelganger card keeps looking and the Revealer leaves it face up, but that only comes from
+// the physical card still showing the Doppelganger. Keep it this way.
+test("a Doppelganger card that copied a wolf turns the P.I. and is flipped back by the Revealer (on purpose)", () => {
+  let s = rig({ a: "lookalike", b: "werewolf", c: "investigator", d: "villager" }, ["seer", "villager", "thief"]);
+  nightTo(s, "lookalike"); act(s, "a", { target: "b" });
+  nightTo(s, "investigator"); act(s, "c", { target: "a" });
+  assert.ok(s.g.step.done.c);
+  assert.equal(s.g.copied.investigator, "werewolf");
+
+  s = rig({ a: "lookalike", b: "werewolf", c: "unveiler", d: "villager" }, ["seer", "villager", "thief"]);
+  nightTo(s, "lookalike"); act(s, "a", { target: "b" });
+  nightTo(s, "unveiler"); act(s, "c", { target: "a" });
+  finishNight(s);
+  assert.equal(s.g.revealed, null);
+});

@@ -38,7 +38,7 @@ const ss = safe(window.sessionStorage);
 const SETTINGS_KEY = "onuw:settings";
 const settings = () => { try { return JSON.parse(ls.get(SETTINGS_KEY)) || {}; } catch { return {}; } };
 const saveSettings = (x) => ls.set(SETTINGS_KEY, JSON.stringify({ ...settings(), ...x }));
-let NS = "onuw:", tabSlot = 0;
+let NS = "onuw:";
 async function claimSlot() {
   if (params.get("ns")) { NS = `onuw:${params.get("ns")}:`; return; }
   if (!settings().tabsArePlayers || !navigator.locks) return;
@@ -57,7 +57,6 @@ async function claimSlot() {
   for (let i = 0; i < tries && !(await grab(slot)); i++) if (i < tries - 1) await sleep(150);
   if (!held.has(slot)) for (slot = 0; slot < 50 && !(await grab(slot)); slot++);
   ss.set("onuw:slot", String(slot));
-  tabSlot = slot;
   if (slot) NS = `onuw:tab${slot}:`;
 }
 await claimSlot();
@@ -1212,7 +1211,6 @@ function settingsPanel() {
       <span><b>Each tab is a different player</b><small>For testing alone on one device: every tab you open joins as its own player. When it's off, every tab on this device is you.</small></span>
       <span class="ms-switch" aria-hidden="true"></span>
     </button>
-    ${on && !params.get("ns") ? `<p class="ms-hint">This tab is ${tabSlot ? `player tab ${tabSlot + 1}` : "your main tab"}.</p>` : ""}
     ${screen === "room" ? `<p class="ms-hint">Changing this reloads the page.</p>` : ""}`;
 }
 
