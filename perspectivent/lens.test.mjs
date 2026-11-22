@@ -193,10 +193,12 @@ test("the default screen and back plane stay above the ground and the rails", ()
 // shadow box and the ground grid, and none of those cast a shadow of you.
 test("nothing but the camera, sun and ground grid follows the player (no body, no body shadow)", () => {
   const followers = [...MAIN.matchAll(/([\w.]+)\.position\.(?:set|copy)\((?:Math\.round\()?player\.pos/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(followers)].sort(), ["camera", "figBody", "ground", "sun", "sun.target"].sort());
-  // the only figure of you is in the side view's own layer, which the main camera and the sun's
-  // shadow camera never draw
-  assert.match(MAIN, /helpers\.add\([^)]*figBody/);
+  assert.deepEqual([...new Set(followers)].sort(), ["camera", "ground", "sun", "sun.target"].sort());
+  // you're drawn only in the side view's own layer (which the main camera and the sun's shadow
+  // camera never draw), and only as the blue sensor or a floating eyeball: no body, no camera
+  // (Mike, 2026-11-22: "just make it a blue rectangle or an eyeball. no camera")
+  assert.match(MAIN, /helpers\.add\(planeFill, planeEdge, eyeball,/);
+  assert.doesNotMatch(MAIN, /figBody|camBody|camLens/);
   assert.match(MAIN, /helpers\.traverse\(\(o\) => o\.layers\.set\(INSET\)\)/);
   assert.doesNotMatch(MAIN, /fig\w*\.castShadow/);
   assert.doesNotMatch(MAIN, /CapsuleGeometry[\s\S]{0,200}castShadow = true/);
