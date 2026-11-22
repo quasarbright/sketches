@@ -393,7 +393,7 @@
       <canvas class="pv-about-diagram pv-about-3d" data-demo="twolens3d"></canvas>
       <p class="pv-about-caption">Orthographic across, perspective up and down. The ball comes out wide and flat: across it keeps its real width, but up and down it shrinks with distance like in a normal camera.</p>
 
-      <div class="section-label">how it actually works</div>
+      <div class="section-label">how the game cheats</div>
       <p>The game doesn't trace any rays. A ray for every pixel, every frame, would be far too slow,
         so it goes the other way, from the world to the picture. Every shape is made of triangles,
         and every triangle has three corners, its vertices. Each vertex goes through two steps.</p>
@@ -404,14 +404,15 @@
       <p><b>2. Screen coordinates.</b> Find which column's ray and which row's ray go through the
         vertex. Column $u$'s ray is $x = u \cdot f(z)$ and row $v$'s is $y = v \cdot f(z)$, so
         solve for $u$ and $v$:</p>
-      <p style="text-align:center">$u = x \div f(z) \qquad v = y \div f(z)$</p>
-      <p>That's where the vertex lands in the picture: $u$ from −1 at the left edge to 1 at the
-        right, $v$ from −1 at the bottom to 1 at the top. Then the graphics card fills the
+      <p style="text-align:center">$u = \dfrac{x}{f(z)} \qquad v = \dfrac{y}{f(z)}$</p>
+      <p>The pair $(u, v)$ is the vertex's <b>screen coordinate</b>, where it lands in the picture.
+        $u$ goes from −1 at the left edge to 1 at the right, and $v$ from −1 at the bottom to 1 at
+        the top, so $(0, 0)$ is the middle of the picture and $(1, 1)$ its top-right corner. Then the graphics card fills the
         triangle between the three placed vertices. Where $u$ or $v$ is beyond ±1 the vertex is off
         the picture, so the parts of triangles out there are clipped away and never drawn. Where
         triangles overlap, each pixel keeps the nearest one: the depth test.</p>
       <canvas class="pv-about-diagram pv-about-3d pv-about-vertex" data-demo="vertex"></canvas>
-      <p class="pv-about-caption">One triangle worked through slowly, then every other triangle the same way, until the picture is done.</p>
+      <p class="pv-about-caption">One triangle worked through slowly, then every other triangle a vertex at a time, until the picture is done.</p>
       <p>With curved rays, a big triangle's edges would stay straight where the picture should
         bend, so the game first cuts every shape into small triangles.</p>
     </about-modal>

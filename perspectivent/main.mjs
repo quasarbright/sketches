@@ -1398,7 +1398,7 @@ document.addEventListener("cohesion-modal-open", (e) => {
         const spread = Math.round(2 * Math.atan(lens.t) * 180 / Math.PI);
         cap(s < 0.02 ? `An eye, spreading ${spread}°: a normal camera.`
           : Math.abs(s - 1) < 0.02 ? `A ${fmtD(2 * lens.A)} sensor, spread 0°: parallel rays, orthographic.`
-          : s > 1.43 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(lens.A / -lens.t)} ahead, reverse perspective.`
+          : s > 1.58 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(lens.A / -lens.t)} ahead, reverse perspective.`
           : `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°.`);
       } else if (demo === "functions") {
         // hold each function, then morph to the next the way the lens does
