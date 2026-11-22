@@ -38,6 +38,9 @@ for (const id of ROLE_ORDER) {
     else { v = A; (toCode[id] ??= {})[f] = A; if (B !== undefined && C !== B) conflicts.push(`${id}.${f}`); }
     next[id][f] = v;
   }
+  // the list's order is the game's wake order, which only the code sets
+  const order = ROLE_ORDER.indexOf(id);
+  if (art[id].order !== order) (toArt[id] ??= {}).order = order;
 }
 
 // write Mike's values into the code

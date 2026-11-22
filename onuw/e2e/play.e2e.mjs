@@ -617,6 +617,9 @@ test("guests see the host's full card list with live counts, and no − or + but
   assert.equal(await guest.locator(".ms-grid .ms-cardwrap").count(), total, "the same list as the host");
   assert.ok(await guest.locator(".ms-grid .ms-off").count() > 0, "unpicked cards show too, dimmed");
   assert.equal(await guest.locator(".ms-grid .ms-count button").count(), 0);
+  const hint = (p) => p.locator(".ms-grid").locator("xpath=preceding-sibling::p[contains(@class,'ms-hint')][1]").innerText();
+  assert.match(await hint(t.host), /One card for each player.*Cards are listed in wake-up order\. Tap a card to add or remove it\./);
+  assert.match(await hint(guest), /One card for each player.*Cards are listed in wake-up order\.$/);
   assert.ok(await guest.locator(".ms-grid .ms-count.is-view").count() > 0);
   // a change by the host shows up for the guest
   const before = await guest.locator(".ms-grid .ms-cardwrap.is-on").count();

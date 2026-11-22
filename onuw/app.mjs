@@ -667,7 +667,7 @@ function lobby() {
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use Suggested Cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""}${host ? " Tap a card to add or remove it." : " The host picks the cards."}</p>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""} Cards are listed in wake-up order.${host ? " Tap a card to add or remove it." : ""}</p>
       <div class="ms-grid">${cards}</div>
     </section>
 
@@ -985,7 +985,7 @@ function inGameStrip() {
   const v = view;
   return `<section>
     <h2 class="ms-h2">Cards in This Game</h2>
-    <p class="ms-hint">In the order they wake up.</p>
+    <p class="ms-hint">Cards are listed in wake-up order.</p>
     <div class="ms-row ms-deck-row">${ROLE_ORDER.filter((r) => v.roles[r]).map((r) => wrap(card(r, { size: "sm", label: v.roles[r] > 1 ? `×${v.roles[r]}` : "" }))).join("")}
     ${v.game.hasSpare ? spareCard("Spare") : ""}
     </div>
@@ -1252,7 +1252,7 @@ function cheatsheetPanel() {
   const inGame = ROLE_ORDER.filter((r) => roles[r]);
   const list = (inGame.length ? inGame : ROLE_ORDER);
   return `<h2 class="ms-h2">Cards in This Game</h2>
-    <p class="ms-hint">In the order they wake up.</p>
+    <p class="ms-hint">Cards are listed in wake-up order.</p>
     <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
     <h2 class="ms-h2">Who Wins</h2>
     <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>`;
