@@ -24,6 +24,10 @@ export const NAMES = {
   villager: "Villager",
   hunter: "Hunter",
   jester: "Skinner",
+  witch: "Witch",
+  bodyguard: "Bodyguard",
+  prince: "Prince",
+  cursed: "Cursed",
 };
 
 export const ART = {
@@ -41,6 +45,10 @@ export const ART = {
   villager: "art/villager.svg",
   hunter: "art/hunter.svg",
   jester: "art/jester.svg",
+  witch: "art/witch.svg",
+  bodyguard: "art/bodyguard.svg",
+  prince: "art/prince.svg",
+  cursed: "art/cursed.svg",
   back: "art/back.svg",
 };
 
@@ -64,4 +72,8 @@ export const ROLE_COLORS = {
   hunter: { card: "#607d8b", band: "#7b96a3", ink: "#263238" },
   jester: { card: "#ff9800", band: "#ffad33", ink: "#663d00" },
   back: { card: "#1b2350", ink: "#3c4a96" },
+  witch: { card: "#457c0e", band: "#5faa13", ink: "#1b3105" },
+  bodyguard: { card: "#2d5071", band: "#3c6a95", ink: "#12202d" },
+  prince: { card: "#8c842a", band: "#b3a936", ink: "#383410" },
+  cursed: { card: "#574747", band: "#735e5e", ink: "#221c1c" },
 };
