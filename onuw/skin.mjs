@@ -28,6 +28,10 @@ export const NAMES = {
   bodyguard: "Bodyguard",
   prince: "Prince",
   cursed: "Cursed",
+  greatwolf: "Great Wolf",
+  dozingwolf: "Dozing Wolf",
+  copycat: "Copycat",
+  lookalike: "Lookalike",
 };
 
 export const ART = {
@@ -49,6 +53,10 @@ export const ART = {
   bodyguard: "art/bodyguard.svg",
   prince: "art/prince.svg",
   cursed: "art/cursed.svg",
+  greatwolf: "art/greatwolf.svg",
+  dozingwolf: "art/dozingwolf.svg",
+  copycat: "art/copycat.svg",
+  lookalike: "art/lookalike.svg",
   back: "art/back.svg",
 };
 
@@ -76,4 +84,8 @@ export const ROLE_COLORS = {
   bodyguard: { card: "#2d5071", band: "#3c6a95", ink: "#12202d" },
   prince: { card: "#8c842a", band: "#b3a936", ink: "#383410" },
   cursed: { card: "#574747", band: "#735e5e", ink: "#221c1c" },
+  greatwolf: { card: "#6a0b0b", band: "#8e1010", ink: "#1c0202" },
+  dozingwolf: { card: "#d45c54", band: "#de837d", ink: "#542421" },
+  copycat: { card: "#3c4a6b", band: "#52648f", ink: "#181d2a" },
+  lookalike: { card: "#4a4a4a", band: "#666666", ink: "#1d1d1d" },
 };
