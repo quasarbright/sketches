@@ -12,7 +12,7 @@ export const NAMES = {
   werewolf: "Werewolf",
   werewolves: "Werewolves",
   packleader: "Pack Leader",
-  prowler: "Prowler",
+  prowler: "Oracle Wolf",
   lackey: "Lackey",
   scout: "Ward",
   mason: "Mason",
