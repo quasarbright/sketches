@@ -12,6 +12,16 @@ export const TEAMS = {
 // `wolf`: counts as a Werewolf (wakes with the wolves, killing one wins it for the village).
 // `step`: the night step this role acts in (see NIGHT_STEPS), or null for no night action.
 export const ROLES = {
+  copycat: {
+    name: N.copycat, team: "village", wolf: false, max: 1, step: "copycat",
+    short: "Becomes a center card's role",
+    text: "You wake first and look at one of the 3 center cards. You become that role: you're on its team, and you wake again on its turn to do what it does.",
+  },
+  lookalike: {
+    name: N.lookalike, team: "village", wolf: false, max: 1, step: "lookalike",
+    short: "Copies another player's role",
+    text: "You look at another player's card and become that role: you're on its team, and you wake again on its turn to do what it does. Whoever holds your card at the end is the role you copied.",
+  },
   werewolf: {
     name: N.werewolf, team: "wolf", wolf: true, max: 3, step: "wolves",
     short: "Sees the other wolves",
@@ -28,6 +38,16 @@ export const ROLES = {
     short: "A wolf who may look at a player's card",
     text: "You're a wolf and wake with the other wolves. Then, on your own turn, you may look at one other player's card.",
   },
+  greatwolf: {
+    name: N.greatwolf, team: "wolf", wolf: true, max: 1, step: null,
+    short: "Their vote counts twice",
+    text: "You're a wolf and wake with the other wolves. When you vote, your vote counts as two.",
+  },
+  dozingwolf: {
+    name: N.dozingwolf, team: "wolf", wolf: true, max: 1, step: null,
+    short: "A wolf who sleeps through the night",
+    text: "You're a wolf, but you don't wake up, so you don't know who the other wolves are. They see who you are.",
+  },
   lackey: {
     name: N.lackey, team: "wolf", wolf: false, max: 1, step: "lackey",
     short: "Sees the wolves, wins with them",
@@ -37,6 +57,11 @@ export const ROLES = {
     name: N.scout, team: "wolf", wolf: false, max: 1, step: "scout",
     short: "Sees the wolves and their cards",
     text: `You're on the wolf team, but you aren't a wolf. You wake, see who the wolves are and look at their cards, so you know whether they're still wolves. If you die, the village wins.`,
+  },
+  apprentice: {
+    name: N.apprentice, team: "jester", wolf: false, max: 1, step: "apprentice",
+    short: `Wins if the ${N.jester} dies`,
+    text: `You wake and see who the ${N.jester} is. You win if the ${N.jester} dies. If no player is the ${N.jester}, you win only if you die, like the ${N.jester}.`,
   },
   mason: {
     name: N.mason, team: "village", wolf: false, max: 2, pair: true, step: "masons",
@@ -48,6 +73,21 @@ export const ROLES = {
     short: "Looks at a player's card or two center cards",
     text: "You may look at one other player's card, or at two of the 3 center cards.",
   },
+  noviceseer: {
+    name: N.noviceseer, team: "village", wolf: false, max: 1, step: "noviceseer",
+    short: "Looks at one center card",
+    text: "You may look at one of the 3 center cards.",
+  },
+  watcher: {
+    name: N.watcher, team: "village", wolf: false, max: 1, step: "watcher",
+    short: `Sees who the ${N.seer} is`,
+    text: `You wake and see who started as the ${N.seer} or ${N.noviceseer}, and what card they hold now.`,
+  },
+  investigator: {
+    name: N.investigator, team: "village", wolf: false, max: 1, step: "investigator",
+    short: "Looks at up to two cards, may turn",
+    text: `You may look at up to two other players' cards, one at a time. If you see a wolf or the ${N.jester}, you stop and become that role, on its team.`,
+  },
   thief: {
     name: N.thief, team: "village", wolf: false, max: 1, step: "thief",
     short: "Swaps with a player and looks",
@@ -58,15 +98,30 @@ export const ROLES = {
     short: "Swaps two other players' cards",
     text: "You may swap the cards of two other players without looking at them.",
   },
+  imp: {
+    name: N.imp, team: "village", wolf: false, max: 1, step: "imp",
+    short: "Swaps any two players' cards",
+    text: "You may swap the cards of any two players, yours included, without looking at them.",
+  },
   sleepwalker: {
     name: N.sleepwalker, team: "village", wolf: false, max: 1, step: "sleepwalker",
     short: "Swaps with a center card blind",
     text: "You must swap your card with one of the 3 center cards, without looking at your new one.",
   },
+  aurareader: {
+    name: N.aurareader, team: "village", wolf: false, max: 1, step: "aurareader",
+    short: "Sees who moved or looked at a card",
+    text: "You wake near the end and see which players moved or looked at a card during the night.",
+  },
   nightowl: {
     name: N.nightowl, team: "village", wolf: false, max: 1, step: "nightowl",
     short: "Checks their own card at the end",
     text: "You wake last and look at your own card, to see whether someone swapped it.",
+  },
+  unveiler: {
+    name: N.unveiler, team: "village", wolf: false, max: 1, step: "unveiler",
+    short: "Turns a player's card face up",
+    text: `You wake last and may turn another player's card face up for everyone to see during the day. If it's a wolf or the ${N.jester}, you turn it back face down and only you saw it.`,
   },
   villager: {
     name: N.villager, team: "village", wolf: false, max: 3, step: null,
@@ -107,32 +162,41 @@ export const ROLES = {
 
 // Picker / cheat-sheet order is wake order, then the roles that sleep.
 export const ROLE_ORDER = [
-  "werewolf", "packleader", "prowler", "lackey", "scout", "mason", "seer",
-  "thief", "witch", "meddler", "sleepwalker", "nightowl", "villager", "hunter", "bodyguard", "prince",
-  "cursed", "jester",
+  "copycat", "lookalike", "werewolf", "packleader", "prowler", "greatwolf", "dozingwolf", "lackey", "scout",
+  "apprentice", "mason", "seer", "noviceseer", "watcher", "investigator", "thief", "witch", "meddler", "imp",
+  "sleepwalker", "aurareader", "nightowl", "unveiler", "villager", "hunter", "bodyguard", "prince", "cursed", "jester",
 ];
 
 // Night steps in wake order. `roles`: a step runs when any of these cards is in the deck
 // (center included, so a skipped step never gives away that a card is in the center).
 export const NIGHT_STEPS = [
-  { id: "wolves", label: N.werewolves, roles: ["werewolf", "packleader", "prowler"] },
+  { id: "copycat", label: N.copycat, roles: ["copycat"] },
+  { id: "lookalike", label: N.lookalike, roles: ["lookalike"] },
+  { id: "wolves", label: N.werewolves, roles: ["werewolf", "packleader", "prowler", "greatwolf", "dozingwolf"] },
   { id: "packleader", label: N.packleader, roles: ["packleader"] },
   { id: "prowler", label: N.prowler, roles: ["prowler"] },
   { id: "lackey", label: N.lackey, roles: ["lackey"] },
   { id: "scout", label: N.scout, roles: ["scout"] },
+  { id: "apprentice", label: N.apprentice, roles: ["apprentice"] },
   { id: "masons", label: `${N.mason}s`, roles: ["mason"] },
   { id: "seer", label: N.seer, roles: ["seer"] },
+  { id: "noviceseer", label: N.noviceseer, roles: ["noviceseer"] },
+  { id: "watcher", label: N.watcher, roles: ["watcher"] },
+  { id: "investigator", label: N.investigator, roles: ["investigator"] },
   { id: "thief", label: N.thief, roles: ["thief"] },
   { id: "witch", label: N.witch, roles: ["witch"] },
   { id: "meddler", label: N.meddler, roles: ["meddler"] },
+  { id: "imp", label: N.imp, roles: ["imp"] },
   { id: "sleepwalker", label: N.sleepwalker, roles: ["sleepwalker"] },
+  { id: "aurareader", label: N.aurareader, roles: ["aurareader"] },
   { id: "nightowl", label: N.nightowl, roles: ["nightowl"] },
+  { id: "unveiler", label: N.unveiler, roles: ["unveiler"] },
 ];
 
 export const WIN_RULES = [
   ["village", `The village wins if at least one wolf dies (a ${N.cursed} a wolf voted for counts as a wolf), or if the ${N.scout} dies. If no player is a wolf, the village wins when nobody dies (or the ${N.lackey} or ${N.scout} dies).`],
   ["wolf", `The wolf team wins if no wolf and no ${N.scout} dies, and the ${N.jester} doesn't die. If no player is a wolf, the ${N.lackey} and ${N.scout} win when someone else dies.`],
-  ["jester", `The ${N.jester} wins if the ${N.jester} dies.`],
+  ["jester", `The ${N.jester} wins if the ${N.jester} dies. The ${N.apprentice} wins if the ${N.jester} dies, or, with no ${N.jester} among the players, if the ${N.apprentice} dies.`],
 ];
 
 // Suggested decks by player count (player count + 3 cards). Used until the host edits the picker.
