@@ -62,7 +62,7 @@ test("start explains what's missing", () => {
   assert.match(startProblem(s), /at least 3/);
   handle(s, "c", { t: "hello", name: "C" }, 0);
   handle(s, "a", { t: "setRoles", roles: { werewolf: 2, seer: 1 } }, 0);
-  assert.equal(startProblem(s), "Pick 3 more cards");
+  assert.equal(startProblem(s), "Add 3 more cards");
   handle(s, "a", { t: "setRoles", roles: { werewolf: 2, seer: 1, villager: 3, mason: 1 } }, 0);
   // a single mason is bumped to a pair
   assert.equal(s.roles.mason, 2);
@@ -443,7 +443,7 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.equal(p2.done, false, "looking isn't the end of the turn");
   assert.equal(p2.required, true, "once she looks she has to swap");
   assert.deepEqual(p2.cards, [{ label: "Center card 3", role: "hunter" }]);
-  assert.equal(handle(s, "a", { t: "act", step: "witch", skip: true }, 0).error, "You have to choose");
+  assert.equal(handle(s, "a", { t: "act", step: "witch", skip: true }, 0).error, "A choice is required");
   assert.equal(handle(s, "a", { t: "act", step: "witch", target: "b" }, 0).error, undefined);
   assert.equal(s.g.cards.b, "hunter");
   assert.equal(s.g.center[2], "villager");

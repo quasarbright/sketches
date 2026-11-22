@@ -73,7 +73,7 @@ export function startProblem(s) {
   if (n < MIN_PLAYERS) return `Needs at least ${MIN_PLAYERS} players`;
   const have = deckSize(s.roles);
   const need = n + 3;
-  if (have < need) return `Pick ${need - have} more card${need - have === 1 ? "" : "s"}`;
+  if (have < need) return `Add ${need - have} more card${need - have === 1 ? "" : "s"}`;
   if (have > need) return `Remove ${have - need} card${have - need === 1 ? "" : "s"}`;
   if ((s.roles.mason || 0) === 1) return `${N.mason}s come in pairs`;
   return null;
@@ -118,14 +118,14 @@ export function handle(s, pid, msg, now, rng = Math.random) {
       const p = player(s, pid);
       const n = cleanName(msg.name);
       if (!p || !n) return { error: "Name can't be empty" };
-      if (s.phase !== "lobby") return { error: "You can change your name in the lobby, between games" };
+      if (s.phase !== "lobby") return { error: "Names can only be changed in the lobby" };
       p.name = uniqueName(s, pid, n);
       return {};
     }
     case "setSpectator": {
       const p = player(s, pid);
       if (!p) return {};
-      if (s.phase !== "lobby") return { error: "You can switch between playing and watching in the lobby" };
+      if (s.phase !== "lobby") return { error: "This can only be changed in the lobby" };
       p.spectator = !!msg.on;
       delete p.autoSpectator;
       autoRoles(s);
@@ -461,7 +461,7 @@ function applyAction1(s, pid, id, prompt, msg) {
   const g = s.g;
   const me = nameOf(s, pid);
   if (msg.skip) {
-    if (prompt.required) return { error: "You have to choose" };
+    if (prompt.required) return { error: "A choice is required" };
     if (prompt.kind === "ack") return { result: null };
     logAction(s, id, pid, `${me} (${roleName(g.dealt[pid])}) did nothing.`);
     const text = id === "wolves" ? "You didn't look at a center card." : prompt.stage === 2 ? "You stopped there." : `You didn't use your ${roleName(id === "masons" ? "mason" : (ROLES[id] ? id : g.dealt[pid]))} power.`;

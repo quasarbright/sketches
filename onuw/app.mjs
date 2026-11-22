@@ -432,7 +432,7 @@ const teamMark = (role) => `<span class="ms-team-mark" aria-label="${esc(TEAMS[R
 function card(role, { size = "md", label = "", info = true, cls = "", attrs = "", times = 1 } = {}) {
   const R = ROLES[role];
   return `<div class="ms-card ms-${size} ${cls}" style="${cardStyle(role)}" ${attrs}>
-    <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}${R.name.length > 11 ? " is-xlong" : ""}" style="--len:${R.name.length}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
+    <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}${R.name.length > 10 ? " is-xlong" : ""}" style="--len:${R.name.length}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
     ${info && (R.more || size === "sm" || size === "xs") ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="What the ${esc(R.name)} does">${icon("info")}</button>` : ""}
@@ -537,12 +537,12 @@ function homeScreen() {
       ${joining ? `<label class="ms-label" for="name-input">Your name</label>
       <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="Enter your name" value="${esc(myName)}" />` : ""}
       ${joining
-        ? `<button class="ms-btn ms-primary ms-wide" type="submit" data-as="player" ${myName ? "" : "disabled"}>Join room <span class="ms-mono">${esc(roomCode)}</span> as a player</button>
-           <button class="ms-btn ms-wide" type="submit" data-as="spectator" ${myName ? "" : "disabled"}>${icon("eye")}<span>Watch as a spectator</span></button>
+        ? `<button class="ms-btn ms-primary ms-wide" type="submit" data-as="player" ${myName ? "" : "disabled"}>Join Room <span class="ms-mono">${esc(roomCode)}</span></button>
+           <button class="ms-btn ms-wide" type="submit" data-as="spectator" ${myName ? "" : "disabled"}>${icon("eye")}<span>Spectate</span></button>
            <p class="ms-hint">Spectators see every card and everything that happens at night. If a game is already going, you'll watch until the next round.</p>
-           <button class="ms-link" type="button" data-act="home">Start a different room instead</button>`
-        : `<button class="ms-btn ms-primary ms-wide" type="submit">Create a room</button>
-           <div class="ms-or"><span>or join one</span></div>
+           <button class="ms-link" type="button" data-act="home">Main Menu</button>`
+        : `<button class="ms-btn ms-primary ms-wide" type="submit">Create Room</button>
+           <div class="ms-or"><span>or</span></div>
            <div class="ms-join-row">
              <input id="code-input" class="ms-input ms-code-input" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code" />
              <button class="ms-btn" type="button" data-act="join-code">Join</button>
@@ -598,7 +598,6 @@ function lobby() {
         <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="Enter your name" />
         <button class="ms-btn ms-primary" type="submit" disabled>Done</button>
       </div>
-      <p class="ms-hint">It's how the others see you in the game.</p>
     </form>` : "";
   return `<main class="ms-page">
     ${namePrompt}
@@ -608,7 +607,7 @@ function lobby() {
         <div class="ms-code">${esc(v.code)}</div>
         <div class="ms-code-words">${esc(codeWords(v.code))}</div>
       </div>
-      <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy invite link</span></button>
+      <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy Invite Link</span></button>
     </section>
 
     <section>
@@ -616,15 +615,15 @@ function lobby() {
       <ul class="ms-players">${playing.map((p) => p.id === myId ? myLobbyRow(p) : playerRow(p)).join("")}</ul>
       ${watching.length ? `<h3 class="ms-watch-h">${icon("eye", "ms-ico-sm")} Watching</h3>
       <ul class="ms-players">${watching.map((p) => p.id === myId ? myLobbyRow(p) : playerRow(p)).join("")}</ul>` : ""}
-      <button class="ms-link ms-spec-toggle" data-act="${v.spectator ? "spec-off" : "spec-on"}">${v.spectator ? "Play in the next game instead" : "Watch as a spectator instead"}</button>
+      <button class="ms-link ms-spec-toggle" data-act="${v.spectator ? "spec-off" : "spec-on"}">${v.spectator ? "Play Instead" : "Spectate Instead"}</button>
       ${v.spectator ? `<p class="ms-hint">You're watching. You'll see every card and everything that happens at night, so keep your screen away from the players.</p>` : ""}
-      ${playing.length < 3 ? `<p class="ms-hint">Send the others the invite link or the room code. You need at least 3 players.</p>` : ""}
+      ${playing.length < 3 ? `<p class="ms-hint">Share the room code or invite link. At least 3 players are needed.</p>` : ""}
     </section>
 
     <section>
       <div class="ms-h2row">
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
-        ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use suggested cards</button>` : ""}
+        ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use Suggested Cards</button>` : ""}
       </div>
       <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""}${host ? " Tap a card to add or remove it." : ""}</p>
       <div class="ms-grid">${cards}</div>
@@ -639,8 +638,8 @@ function lobby() {
     <mike-footer></mike-footer>
   </main>
   ${bar(host
-    ? `${problem && v.players.length >= 3 ? `<div class="ms-bar-note">${esc(problem)}</div>` : ""}<button class="ms-btn ms-primary ms-wide" data-act="start" ${problem ? "disabled" : ""}>${v.players.length < 3 ? "Waiting for 3 players" : "Start the game"}</button>`
-    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start the game</div>`)}`;
+    ? `${problem && v.players.length >= 3 ? `<div class="ms-bar-note">${esc(problem)}</div>` : ""}<button class="ms-btn ms-primary ms-wide" data-act="start" ${problem ? "disabled" : ""}>${v.players.length < 3 ? "Need 3 Players" : "Start Game"}</button>`
+    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start</div>`)}`;
 }
 
 function pickerCard(r, count, host) {
@@ -723,7 +722,7 @@ function spectatorScreen() {
     const acting = v.phase === "night" && o.actors.includes(id);
     return `<li class="ms-spec-seat ${acting ? "is-acting" : ""}">
       <div class="ms-spec-who">${avatar(p?.name ?? "?", id)}<div><div class="ms-pname">${esc(p?.name ?? "?")}${p && !p.connected ? ` <span class="ms-tag ms-tag-off">${p.left ? "left" : "offline"}</span>` : ""}</div>
-        <div class="ms-hint">${acting ? "Acting now" : vote ? `Voted for ${esc(playerName(vote))}` : v.phase === "day" && o.dayReady[id] ? "Ready to vote" : ""}</div></div></div>
+        <div class="ms-hint">${acting ? "Acting now" : vote ? `Voted for ${esc(playerName(vote))}` : v.phase === "day" && o.dayReady[id] ? "Ready" : ""}</div></div></div>
       <div class="ms-row ms-spec-cards">${wrap(card(started, { size: "sm", label: "Started" }))}${now !== started ? icon("swap", "ms-ico ms-swap-ico") + wrap(card(now, { size: "sm", label: "Now" })) : ""}</div>
     </li>`;
   };
@@ -756,7 +755,7 @@ function dealScreen() {
   const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
   return `<main class="ms-center ms-deal">
     <h1 class="ms-h1">Your card</h1>
-    <p class="ms-lede">Tap the card to flip it. It turns back over by itself after a few seconds. Keep your screen to yourself.</p>
+    <p class="ms-lede">Tap the card to see your role. It flips back after a few seconds.</p>
     <div class="ms-flipscope ${ui.up.deal ? "is-up" : ""}" data-flip="deal">
       <div class="ms-flip ms-turner" data-flip-tap tabindex="0" role="button" aria-pressed="${!!ui.up.deal}" aria-label="Flip your card">
         <div class="ms-flip-face is-front">${card(g.myCard, { size: "lg", info: false })}</div>
@@ -771,7 +770,7 @@ function dealScreen() {
   </main>
   ${bar(me?.ready
     ? `<div class="ms-bar-wait">Night falls when everyone is ready. Waiting for ${waiting.length ? esc(waitNames(waiting)) : "the night"}.</div>`
-    : `<button class="ms-btn ms-primary ms-wide" data-act="ready" ${ui.peeked ? "" : "disabled"}>${ui.peeked ? "I'm ready for the night" : "Look at your card first"}</button>`)}`;
+    : `<button class="ms-btn ms-primary ms-wide" data-act="ready" ${ui.peeked ? "" : "disabled"}>${ui.peeked ? "Ready" : "Check Your Card First"}</button>`)}`;
 }
 
 // Names for a "waiting for …" line, with the local player called "you"
@@ -818,9 +817,9 @@ function nightScreen() {
   const p = g.prompt;
   let panel;
   if (p && !p.done) panel = promptPanel(p, g);
-  else panel = `<p class="ms-lede">Keep your eyes on your own screen. When it's your turn, it shows up here.</p>
-    <p class="ms-hint">Tap and scroll now and then, so nobody can tell when your turn comes.</p>
-    <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play whack-a-wolf while you wait</span></button>`;
+  else panel = `<p class="ms-lede">Your turn will appear here.</p>
+    <p class="ms-hint">Tap and scroll now and then so nobody can tell when your turn comes.</p>
+    <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play Whack-a-Wolf</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
     <div class="ms-label">Night${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
@@ -852,7 +851,7 @@ function promptPanel(p, g) {
   switch (p.kind) {
     case "ack":
       body = resultCards(p.cards);
-      ready = true; confirm = "Got it";
+      ready = true; confirm = "OK";
       break;
     case "center1":
       body = centers;
@@ -896,10 +895,10 @@ function promptPanel(p, g) {
     <p class="ms-prompt-text">${esc(p.text)}</p>
     ${body}
     <div class="ms-prompt-actions">
-      ${p.optional ? `<button class="ms-btn" data-act="skip">Do nothing</button>` : ""}
+      ${p.optional ? `<button class="ms-btn" data-act="skip">Skip</button>` : ""}
       <button class="ms-btn ms-primary" data-act="confirm" ${ready ? "" : "disabled"}>${esc(confirm)}</button>
     </div>
-    ${p.required ? `<div class="ms-hint ms-timer-line">When time runs out, one is picked for you.</div>` : ""}
+    ${p.required ? `<div class="ms-hint ms-timer-line">If time runs out, one is chosen at random.</div>` : ""}
   </div>`;
 }
 
@@ -911,7 +910,7 @@ function secretPanel(g) {
   const up = !!ui.up.secret;
   const items = g.info.length
     ? g.info.map((i) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === i.step)?.label ?? "")}</span><p>${esc(i.text)}</p>${resultCards(i.cards)}</li>`).join("")
-    : `<li><p>${view.phase === "night" ? "Nothing yet tonight." : "You slept through the night."}</p></li>`;
+    : `<li><p>${view.phase === "night" ? "Nothing yet." : "No night actions."}</p></li>`;
   return `<section class="ms-panel ms-secret ms-flipscope ${up ? "is-up" : ""}" data-flip="secret">
     <div class="ms-secret-head">
       <div class="ms-turner ms-secret-card" data-flip-tap tabindex="0" role="button" aria-pressed="${up}" aria-label="Show your card and your night for a few seconds">
@@ -919,13 +918,13 @@ function secretPanel(g) {
         <div class="is-back">${cardBack({ size: "sm" })}</div>
       </div>
       <div class="ms-secret-text">
-        <h2 class="ms-h2">Your Card and Your Night</h2>
+        <h2 class="ms-h2">Your Card</h2>
         <div class="is-back">
-          <p class="ms-hint">Face down so nobody reads it over your shoulder. Tap to look for a few seconds.</p>
+          <p class="ms-hint">Hidden. Tap Show to view it for a few seconds.</p>
           <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eye")}<span>Show</span></button>
         </div>
         <div class="is-front">
-          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>. <button class="ms-link" data-info="${g.myCard}">What does it do?</button></p>
+          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>. <button class="ms-link" data-info="${g.myCard}">Rules</button></p>
           <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eyeOff")}<span>Hide</span></button>
         </div>
       </div>
@@ -960,15 +959,15 @@ function dayScreen() {
     <section class="ms-dayhead">
       <div class="ms-label">${icon("sun", "ms-ico-sm")} Day</div>
       ${countdown(g.dayEndsAt, "ms-bigtime")}
-      <p class="ms-lede">Talk it over. When the timer runs out, or everyone's ready, you vote on who to kill.</p>
+      <p class="ms-lede">Discuss. Voting starts when the timer ends or everyone is ready.</p>
     </section>
     ${revealedPanel(g)}
     ${secretPanel(g)}
     ${inGameStrip()}
     <mike-footer></mike-footer>
   </main>
-  ${bar(`<div class="ms-bar-note">${readyN} of ${seated.length} ready to vote</div>
-    <button class="ms-btn ${me?.dayReady ? "" : "ms-primary"} ms-wide" data-act="dayready">${me?.dayReady ? "Not ready yet" : "Ready to vote"}</button>`)}`;
+  ${bar(`<div class="ms-bar-note">${readyN} of ${seated.length} ready</div>
+    <button class="ms-btn ${me?.dayReady ? "" : "ms-primary"} ms-wide" data-act="dayready">${me?.dayReady ? "Not Ready" : "Ready to Vote"}</button>`)}`;
 }
 
 // The card the Unveiler left face up, for everyone, through the day and the vote.
@@ -990,7 +989,7 @@ function voteScreen() {
   return `<main class="ms-page ms-vote">
     <section class="ms-dayhead">
       <div class="ms-label">${icon("vote", "ms-ico-sm")} Vote</div>
-      <h1 class="ms-h1">Who dies?</h1>
+      <h1 class="ms-h1">Vote</h1>
       <p class="ms-lede">Pick a player. Whoever gets the most votes dies, and ties all die. If nobody gets more than one vote, nobody dies. You can change your vote until everyone has voted.</p>
     </section>
     <div class="ms-targets ms-vote-grid">
@@ -1034,7 +1033,7 @@ function resultsScreen() {
       </div>
       <div class="ms-res-cards">
         ${wrap(card(r.dealt[id], { size: "sm", label: "started" }))}
-        ${changed ? `${icon("arrow", "ms-ico ms-res-arrow")}${wrap(card(r.cards[id], { size: "sm", label: "ended" }))}` : `<span class="ms-res-same">Same card at the end</span>`}
+        ${changed ? `${icon("arrow", "ms-ico ms-res-arrow")}${wrap(card(r.cards[id], { size: "sm", label: "ended" }))}` : `<span class="ms-res-same">Unchanged</span>`}
         ${r.copied?.[r.cards[id]] ? `<span class="ms-res-same">The ${esc(ROLES[r.cards[id]].name)} card became the ${esc(ROLES[r.copied[r.cards[id]]].name)}</span>` : ""}
       </div>
     </li>`;
@@ -1061,8 +1060,8 @@ function resultsScreen() {
     <mike-footer></mike-footer>
   </main>
   ${bar(v.isHost
-    ? `<button class="ms-btn ms-primary ms-wide" data-act="again">Play again</button>`
-    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start the next round</div>`)}`;
+    ? `<button class="ms-btn ms-primary ms-wide" data-act="again">Play Again</button>`
+    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start</div>`)}`;
 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -1152,7 +1151,7 @@ function playersPanel() {
     <ul class="ms-players">${v.players.map((p) => playerRow(p, {
       extra: v.isHost && p.id !== myId
         ? (confirmKick === p.id
-          ? `<span class="ms-kick-confirm">Kick ${esc(p.name)} from the room for good? <span class="ms-confirm-row"><button class="ms-btn ms-danger ms-sm-btn" data-kick="${p.id}">Kick from room</button><button class="ms-btn ms-sm-btn" data-act="kick-cancel">Cancel</button></span></span>`
+          ? `<span class="ms-kick-confirm">Kick ${esc(p.name)} from the room for good? <span class="ms-confirm-row"><button class="ms-btn ms-danger ms-sm-btn" data-kick="${p.id}">Kick</button><button class="ms-btn ms-sm-btn" data-act="kick-cancel">Cancel</button></span></span>`
           : `<button class="ms-icon-btn ms-kick" data-kick-ask="${p.id}" aria-label="Kick ${esc(p.name)} from the room" data-tooltip="Kick from room: removes ${esc(p.name)} and stops them rejoining">${icon("userX")}</button>`)
         : "",
     })).join("")}</ul>
@@ -1162,7 +1161,7 @@ ${v.phase === "lobby" ? `    <form class="ms-rename" data-form="rename">
         <input id="rename-input" class="ms-input" maxlength="20" value="${esc(myName)}" autocomplete="nickname" />
         <button class="ms-btn" type="submit">${icon("pencil")}<span>Rename</span></button>
       </div>
-    </form>` : `<p class="ms-hint">You can change your name in the lobby, between games.</p>`}
+    </form>` : `<p class="ms-hint">Names can only be changed in the lobby.</p>`}
     <button class="ms-btn ms-wide ms-leave" data-act="leave">${icon("logout")}<span>Leave room</span></button>
     ${v.isHost && v.players.length > 1 ? `<p class="ms-hint">If you leave, a random player becomes the host and the game carries on.</p>` : ""}`;
 }
@@ -1181,12 +1180,12 @@ function hostPanel() {
   return `<h2 class="ms-h2 ms-host-title">${icon("shield")} Host Controls</h2>
     <p class="ms-hint">Only you see these. Use them when someone is stuck, has left, or the group wants to move on.</p>
     <div class="ms-host-list">
-      ${ph === "deal" ? item("h-night", "Start the night now", missing ? `${missing} player${missing === 1 ? " hasn't" : "s haven't"} said they're ready.` : "Everyone is ready.") : ""}
-      ${ph === "day" ? item("h-skipday", "Skip to the vote", "Ends the talking now, for everyone.") : ""}
-      ${ph === "vote" ? item("h-endvote", "End the vote now", unvoted ? `${unvoted} player${unvoted === 1 ? " hasn't" : "s haven't"} voted. Their votes count as no vote.` : "Everyone has voted.") : ""}
+      ${ph === "deal" ? item("h-night", "Start Night", missing ? `${missing} player${missing === 1 ? " hasn't" : "s haven't"} said they're ready.` : "Everyone is ready.") : ""}
+      ${ph === "day" ? item("h-skipday", "Skip to Vote", "Ends the discussion for everyone.") : ""}
+      ${ph === "vote" ? item("h-endvote", "End Vote", unvoted ? `${unvoted} player${unvoted === 1 ? " hasn't" : "s haven't"} voted. Their votes count as no vote.` : "Everyone has voted.") : ""}
       ${item("players", "Kick a player", "Opens the player list, where each player has a kick button.")}
-      ${inRound ? item("h-reset", "Back to the lobby", "Ends this round for everyone, without results.", true) : ""}
-      ${item("leave", "Leave and hand off hosting", inRound ? "A random player becomes the host. The round keeps going." : "A random player becomes the host and you leave the room.", true)}
+      ${inRound ? item("h-reset", "Return to Lobby", "Ends this round for everyone, without results.", true) : ""}
+      ${item("leave", "Leave Room", inRound ? "A random player becomes the host. The round keeps going." : "A random player becomes the host and you leave the room.", true)}
     </div>`;
 }
 
@@ -1242,13 +1241,13 @@ function onSubmit(e) {
   if (kind === "create" || kind === "join") {
     if (kind === "create") { needName = !myName; createRoom(); return; }
     const n = E.cleanName(document.getElementById("name-input").value);
-    if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
+    if (!n) { toast("Enter your name"); document.getElementById("name-input").focus(); return; }
     myName = n; ls.set("onuw:name", n);
     joinAsGuest(roomCode, e.submitter?.dataset.as === "spectator" ? "spectator" : "player");
   }
   if (kind === "firstname") {
     const n = E.cleanName(document.getElementById("name-input").value);
-    if (!n) { toast("Type your name first"); return; }
+    if (!n) { toast("Enter your name"); return; }
     myName = n; ls.set("onuw:name", n);
     send({ t: "rename", name: n });
     needName = false;
@@ -1257,7 +1256,7 @@ function onSubmit(e) {
   }
   if (kind === "rename") {
     const n = E.cleanName(document.getElementById("rename-input").value);
-    if (!n) { toast("Name can't be empty"); return; }
+    if (!n) { toast("Enter a name"); return; }
     myName = n; ls.set("onuw:name", n);
     send({ t: "rename", name: n });
     ui.renaming = false;
@@ -1311,7 +1310,7 @@ function onClick(e) {
     case "retry": lostSince = null; joinAsGuest(roomCode); return;
     case "join-code": {
       const code = (document.getElementById("code-input").value || "").toUpperCase().replace(/[^A-Z]/g, "");
-      if (code.length !== 4) { toast("Room codes are 4 letters"); return; }
+      if (code.length !== 4) { toast("Enter a 4-letter room code"); return; }
       roomCode = code; setRoomInUrl(code); render();
       return;
     }
