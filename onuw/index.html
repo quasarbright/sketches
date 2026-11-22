@@ -337,31 +337,37 @@
     .ms-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
     .ms-notes p { margin: 2px 0 6px; }
     .ms-notes .ms-row { justify-content: flex-start; }
-    .ms-vote-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 220px)); justify-content: center; }
-    .ms-vote-grid .ms-target { min-height: 60px; font-size: 1.05rem; }
+    .ms-targets.ms-vote-list { grid-template-columns: minmax(0, 420px); justify-content: center; }
+    .ms-vote-list .ms-target { min-height: 56px; font-size: 1.05rem; }
+    .ms-vote-list .ms-target:disabled { opacity: .5; cursor: not-allowed; }
+    .ms-vote-list .ms-tag { margin-left: auto; }
 
     /* ---- results */
     .ms-headline { font-size: 2.1rem; }
     .ms-verdict { font: 650 1.2rem var(--font-display); padding: 6px 18px; border-radius: 999px; margin: 2px 0 8px; }
     .ms-verdict.is-won { background: #12301f; color: #a5efc2; border: 1px solid #2f6b4a; }
     .ms-verdict.is-lost { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
-    .ms-res-center { gap: 18px; align-items: flex-start; }
     .ms-spare-slot { padding: 8px; border: 1.5px dashed color-mix(in srgb, var(--wolf) 60%, transparent); border-radius: 12px; }
     .ms-result-cards { align-items: center; }
     .ms-swap-ico { color: var(--muted); margin-bottom: 20px; }
-    .ms-res { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-    .ms-res-row { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .ms-res-row.is-me { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: color-mix(in srgb, var(--accent) 6%, var(--panel)); }
-    .ms-res-who { display: flex; align-items: center; gap: 10px; }
-    .ms-res-who > div:nth-child(2) { flex: 1; min-width: 0; }
-    .ms-res-meta { color: var(--muted); font-size: .85rem; }
-    .ms-res-flags { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .ms-events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+    .ms-ev { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .ms-ev > .ms-h2 { margin: 0; display: flex; align-items: center; gap: 10px; }
+    .ms-ev > .ms-hint, .ms-ev > p { margin: 0; }
+    .ms-ev-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 600 .85rem var(--font-mono, monospace); background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+    .ms-table { display: flex; flex-direction: column; gap: 14px; }
+    .ms-table-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px 10px; align-items: start; }
+    .ms-table-center { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; padding-top: 12px; border-top: 1px solid var(--border); }
+    .ms-table-center > .ms-cardwrap { width: 96px; }
+    .ms-changed { color: #ffd88a; border-color: #7a5d22; }
+    .ms-ev-votes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .ms-ev-vote { display: flex; align-items: center; gap: 10px; }
+    .ms-ev-vote > div { flex: 1; min-width: 0; }
+    .ms-ev-vote .ms-hint { margin: 0; }
+    .ms-ev-why { line-height: 1.5; }
     .ms-flag { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
     .ms-flag-dead { color: #ffc2ca; border-color: #7a2c39; background: #3a1520; }
     .ms-flag-win { color: #a5efc2; border-color: #2f6b4a; background: #12301f; }
-    .ms-res-cards { display: flex; align-items: center; gap: 10px; }
-    .ms-res-arrow { color: var(--muted); }
-    .ms-res-same { color: var(--muted); font-size: .85rem; }
     .ms-spec-banner { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; margin-bottom: 14px;
       background: color-mix(in srgb, #f2a541 16%, var(--panel)); border: 1px solid color-mix(in srgb, #f2a541 55%, transparent); color: #ffe2b0; line-height: 1.4; }
     .ms-spec-banner .ms-ico { flex: none; width: 22px; height: 22px; margin-top: 1px; }

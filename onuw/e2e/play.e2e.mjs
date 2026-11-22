@@ -109,6 +109,7 @@ async function toResults(host, pages) {
   for (let i = 0; i < pages.length; i++) {
     const me = (await view(pages[i])).you;
     await pages[i].click(`[data-vote="${ids.find((id) => id !== me)}"]`);
+    await pages[i].click("[data-act=submit-vote]");
   }
   await host.waitForFunction(() => window.__onuw.view.phase === "results");
 }
@@ -241,6 +242,7 @@ test("the host can end the vote when a player has dropped", async () => {
   for (const p of t.pages.slice(0, 3)) {
     const me = (await view(p)).you;
     await p.click(`[data-vote="${ids.find((id) => id !== me)}"]`);
+    await p.click("[data-act=submit-vote]");
   }
   await t.pages[3].close();
   await t.host.click("[data-act=host]");
@@ -453,9 +455,10 @@ test("new roles: the Witch looks, then swaps the card onto a player; a Prince wi
   for (const p of t.pages) {
     const you = (await view(p)).you;
     await p.click(`[data-vote="${you === prince ? ids.find((x) => x !== you) : prince}"]`);
+    await p.click("[data-act=submit-vote]");
   }
   await t.host.waitForFunction(() => window.__onuw.view.phase === "results");
-  const lede = await t.host.locator(".ms-results .ms-lede").innerText();
+  const lede = await t.host.locator(".ms-results .ms-ev-why").innerText();
   assert.match(lede, /most votes but was the Prince/);
   assert.match(lede, /Nobody else got more than one vote/);
   assert.deepEqual(t.errors, []);
@@ -686,4 +689,97 @@ test("every night action's result stays where you acted, as what you did, until 
   const seen = new Set([...a, ...b]);
   // the actions dealt to players (the rest landed in the center this time)
   assert.ok(seen.size >= 5, `only saw results for ${[...seen].join(", ")}`);
+});
+
+// ---- voting and the end screen
+
+// Gets everyone to the vote, then each page votes for the player named in `votes` (by index).
+async function toVote(t) {
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  await playNight(t.host, t.pages);
+  for (const p of t.pages) await p.click("[data-act=dayready]");
+  await t.host.waitForFunction(() => window.__onuw.view.phase === "vote");
+}
+async function castVotes(t, targets) {
+  const ids = (await view(t.host)).players.map((p) => p.id);
+  for (let i = 0; i < t.pages.length; i++) {
+    await t.pages[i].click(`[data-vote="${ids[targets[i]]}"]`);
+    await t.pages[i].click("[data-act=submit-vote]");
+  }
+  await t.host.waitForFunction(() => window.__onuw.view.phase === "results");
+}
+
+test("voting: everyone sees the same list in lobby order, can't pick themselves, and must press Submit Vote", async () => {
+  const names = ["Mike", "Ana", "Ben", "Cleo"];
+  const t = await newTable(names);
+  await toVote(t);
+  for (const [i, p] of t.pages.entries()) {
+    const rows = (await p.locator(".ms-vote-list .ms-target").allInnerTexts()).map((s) => s.replace(/\s*\(you\)|\s*your vote/g, "").trim().replace(/^\S\s*/, ""));
+    assert.deepEqual(rows, names, `${names[i]} sees the lobby order`);
+    const mine = p.locator(".ms-vote-list .ms-target[disabled]");
+    assert.equal(await mine.count(), 1, "only your own row is disabled");
+    assert.match(await mine.innerText(), new RegExp(`${names[i]} \\(you\\)`));
+    assert.ok(await p.locator("[data-act=submit-vote]").isDisabled(), "Submit Vote waits for a pick");
+  }
+  const ids = (await view(t.host)).players.map((p) => p.id);
+  await t.pages[1].click(`[data-vote="${ids[2]}"]`);
+  assert.equal((await view(t.host)).players[1].voted, false, "selecting alone doesn't vote");
+  await t.pages[1].click("[data-act=submit-vote]");
+  await t.host.waitForFunction(() => window.__onuw.view.players[1].voted);
+  assert.match(await t.pages[1].locator("[data-act=submit-vote]").innerText(), /Vote Submitted/);
+  assert.match(await t.pages[0].locator("main").innerText(), /ties? for the most votes/i);
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});
+
+test("a tie for the most votes kills all of them, and one vote each kills nobody", async () => {
+  let t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await toVote(t);
+  await castVotes(t, [1, 0, 0, 1]);   // Mike and Ana get 2 each
+  let r = (await view(t.host)).game.result;
+  const ids = (await view(t.host)).players.map((p) => p.id);
+  assert.deepEqual([...r.dead].sort(), [ids[0], ids[1]].sort());
+  assert.match(await t.host.locator(".ms-ev-why").innerText(), /tied with the most votes/);
+  await t.ctx.close();
+
+  t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await toVote(t);
+  await castVotes(t, [1, 2, 3, 0]);   // everyone votes for the player after them
+  r = (await view(t.host)).game.result;
+  assert.deepEqual(r.dead, []);
+  assert.match(await t.host.locator(".ms-ev-why").innerText(), /Nobody got more than one vote, so nobody died/);
+  await t.ctx.close();
+});
+
+test("the end screen is an event log: the deal, the night, the cards at the end, the votes, who died; guests wait for the host", async () => {
+  const names = ["Mike", "Ana", "Ben", "Cleo"];
+  const t = await newTable(names);
+  await toVote(t);
+  await castVotes(t, [1, 0, 0, 1]);
+  const v = await view(t.host);
+  const r = v.game.result;
+  const ids = v.players.map((p) => p.id);
+  const steps = await t.host.locator(".ms-ev > .ms-h2").allInnerTexts();
+  assert.deepEqual(steps.map((s) => s.replace(/^\d+\s*/, "")), ["The Deal", "The Night", "When the Night Ended", "The Votes", "Who Died"]);
+  const deal = t.host.locator(".ms-ev").nth(0);
+  assert.deepEqual(await deal.locator(".ms-table-grid:not(.ms-table-center) .ms-card-label").allInnerTexts(), ["Mike (you)", "Ana", "Ben", "Cleo"]);
+  const { ROLES } = await import("../roles.mjs");
+  assert.deepEqual(await deal.locator(".ms-table-grid:not(.ms-table-center) .ms-card-name").allInnerTexts(), ids.map((id) => ROLES[r.dealt[id]].name), "each player's dealt card");
+  assert.equal(await deal.locator(".ms-table-center .ms-card").count(), 3, "the three center cards as dealt");
+  const night = await t.host.locator(".ms-ev").nth(1).innerText();
+  for (const l of r.log) assert.ok(night.includes(l.text), `night log has: ${l.text}`);
+  const changed = ids.filter((id) => r.dealt[id] !== r.cards[id]).length + r.center.filter((c, i) => c !== r.dealtCenter[i]).length;
+  assert.equal(await t.host.locator(".ms-ev").nth(2).locator(".ms-changed").count(), changed, "cards that moved are marked changed");
+  const votes = await t.host.locator(".ms-ev").nth(3).locator(".ms-ev-vote").allInnerTexts();
+  assert.equal(votes.length, 2, "only players who got votes are listed");
+  assert.match(votes[0], /Mike[\s\S]*2 votes, from Ana and Ben/);
+  assert.match(votes[1], /Ana[\s\S]*2 votes, from Mike and Cleo/);
+  assert.equal(await t.host.locator(".ms-ev").nth(4).locator(".ms-ev-vote").count(), 2);
+  assert.doesNotMatch(await t.host.locator("main").innerText(), /· voted for|didn't vote/i, "no old per-player vote lines");
+  assert.match(await t.pages[1].locator(".ms-bar-wait").innerText(), /^Waiting for Mike to start another game$/);
+  await t.host.click("[data-act=again]");
+  await t.pages[1].waitForFunction(() => window.__onuw.view.phase === "lobby");
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
 });

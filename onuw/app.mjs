@@ -795,7 +795,7 @@ function spectatorScreen() {
     </section>
     <section>
       <h2 class="ms-h2">Night Log</h2>
-      ${o.log.length ? `<ol class="ms-log">${o.log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((x) => x.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>` : `<p class="ms-hint">Nothing has happened yet.</p>`}
+      ${nightLog(o.log, "Nothing has happened yet.")}
     </section>
     <mike-footer></mike-footer>
   </main>`;
@@ -1069,20 +1069,25 @@ function voteScreen() {
   const live = seated.filter((p) => p.connected);
   const votedN = live.filter((p) => p.voted).length;
   const notYet = live.filter((p) => !p.voted);
+  const pick = ui.vote ?? g.myVote ?? null;
   return `<main class="ms-page ms-vote">
     <section class="ms-dayhead">
       <div class="ms-label">${icon("vote", "ms-ico-sm")} Vote</div>
       <h1 class="ms-h1">Vote</h1>
-      <p class="ms-lede">Pick a player. Whoever gets the most votes dies, and ties all die. If nobody gets more than one vote, nobody dies. You can change your vote until everyone has voted.</p>
+      <p class="ms-lede">Select a player, then submit your vote. You can change it until everyone has voted.</p>
+      <p class="ms-hint">Whoever gets the most votes dies. If there's a tie for the most votes, all of them die. Nobody dies if no one gets more than one vote: to do that, everyone votes for the player after them in this list, and the last player votes for the first.</p>
     </section>
-    <div class="ms-targets ms-vote-grid">
-      ${seated.filter((p) => p.id !== myId).map((p) => `<button class="ms-target ${g.myVote === p.id ? "is-on" : ""}" data-vote="${p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
+    <div class="ms-targets ms-vote-list">
+      ${seated.map((p) => p.id === myId
+        ? `<button class="ms-target" disabled aria-label="You can't vote for yourself">${avatar(p.name, p.id)}<span>${esc(p.name)} (you)</span></button>`
+        : `<button class="ms-target ${pick === p.id ? "is-on" : ""}" data-vote="${p.id}" aria-pressed="${pick === p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${g.myVote === p.id ? `<span class="ms-tag">your vote</span>` : ""}${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
     </div>
     ${revealedPanel(g)}
     ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>
-  ${bar(`<div class="ms-bar-wait">${votedN} of ${live.length} voted${notYet.length ? `. Waiting for ${esc(waitNames(notYet))}.` : ""}</div>`)}`;
+  ${bar(`<div class="ms-bar-note">${votedN} of ${live.length} voted${notYet.length ? `. Waiting for ${esc(waitNames(notYet))}.` : ""}</div>
+    <button class="ms-btn ms-primary ms-wide" data-act="submit-vote" ${pick && pick !== g.myVote ? "" : "disabled"}>${g.myVote && pick === g.myVote ? "Vote Submitted" : g.myVote ? "Change Vote" : "Submit Vote"}</button>`)}`;
 }
 
 // ---- results
@@ -1091,60 +1096,67 @@ function resultsScreen() {
   const v = view;
   const g = v.game;
   const r = g.result;
+  // Everything here lists players in lobby order, the same order as the vote list.
+  const at = (id) => { const i = v.players.findIndex((p) => p.id === id); return i < 0 ? Infinity : i; };
+  const seats = [...g.seats].sort((a, b) => at(a) - at(b));
   const won = r.winners.includes(myId);
   const teamsWon = [r.village && "the village", r.wolfTeam && "the wolves", r.jester && `the ${N.jester}`].filter(Boolean);
   const headline = teamsWon.length ? `${cap(listNames(teamsWon))} ${teamsWon.length > 1 || teamsWon[0] === "the wolves" ? "win" : "wins"}` : "Nobody wins";
   const color = r.village ? TEAMS.village.color : r.wolfTeam ? TEAMS.wolf.color : r.jester ? TEAMS.jester.color : "var(--muted)";
-  const deathLine = whyLine(r, g.seats);
-  const rows = g.seats.map((id) => {
-    const p = v.players.find((x) => x.id === id);
-    const votes = r.counts[id] || 0;
-    const dead = r.dead.includes(id);
-    const win = r.winners.includes(id);
-    const changed = r.dealt[id] !== r.cards[id];
-    return `<li class="ms-res-row ${id === myId ? "is-me" : ""}">
-      <div class="ms-res-who">
-        ${avatar(p?.name ?? "?", id)}
-        <div>
-          <div class="ms-pname">${esc(p?.name ?? "?")}${id === myId ? ` <span class="ms-tag">you</span>` : ""}${p && !p.connected ? ` <span class="ms-tag ms-tag-off">${p.left ? "left" : "offline"}</span>` : ""}</div>
-          <div class="ms-res-meta">${votes} vote${votes === 1 ? "" : "s"}${r.votes[id] ? ` · voted for ${esc(playerName(r.votes[id]))}` : " · didn't vote"}</div>
-        </div>
-        <div class="ms-res-flags">
-          ${dead ? `<span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span>` : ""}
-          ${win ? `<span class="ms-flag ms-flag-win">${icon("check", "ms-ico-sm")}won</span>` : `<span class="ms-flag">lost</span>`}
-        </div>
-      </div>
-      <div class="ms-res-cards">
-        ${wrap(card(r.dealt[id], { size: "sm", label: "started" }))}
-        ${changed ? `${icon("arrow", "ms-ico ms-res-arrow")}${wrap(card(r.cards[id], { size: "sm", label: "ended" }))}` : `<span class="ms-res-same">Unchanged</span>`}
-        ${r.copied?.[r.cards[id]] ? `<span class="ms-res-same">The ${esc(ROLES[r.cards[id]].name)} card became the ${esc(ROLES[r.copied[r.cards[id]]].name)}</span>` : ""}
-      </div>
-    </li>`;
+  // Votes: only the players who got any, most first, each with who voted for them.
+  const voted = seats.filter((id) => r.counts[id]).sort((a, b) => r.counts[b] - r.counts[a] || seats.indexOf(a) - seats.indexOf(b));
+  const voteRows = voted.map((id) => {
+    const from = seats.filter((x) => r.votes[x] === id);
+    return `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""}</div>
+      <div class="ms-hint">${r.counts[id]} vote${r.counts[id] === 1 ? "" : "s"}, from ${esc(listNames(from.map(playerName)))}</div></div>
+      ${r.dead.includes(id) ? `<span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span>` : ""}</li>`;
   }).join("");
+  const noVote = seats.filter((id) => !r.votes[id]);
+  const copied = Object.entries(r.copied || {}).filter(([c]) => seats.some((id) => r.cards[id] === c) || r.center.includes(c));
+  const winners = seats.filter((id) => r.winners.includes(id));
+  const step = (n, title, body) => `<li class="ms-ev"><h2 class="ms-h2"><span class="ms-ev-n">${n}</span>${title}</h2>${body}</li>`;
   return `<main class="ms-page ms-results">
     <section class="ms-dayhead">
       <div class="ms-label">Morning</div>
       <h1 class="ms-h1 ms-headline" style="color:${color}">${esc(headline)}</h1>
       ${g.seated ? `<div class="ms-verdict ${won ? "is-won" : "is-lost"}">${won ? "You won" : "You lost"}</div>` : ""}
-      <p class="ms-lede">${esc(deathLine)}</p>
     </section>
-    <ul class="ms-res">${rows}</ul>
-    <section>
-      <h2 class="ms-h2">Center Cards at the End</h2>
-      <div class="ms-row ms-res-center">
-        <div class="ms-row">${r.center.map((c, i) => wrap(card(c, { size: "sm", label: `Center ${i + 1}` }))).join("")}</div>
-        ${r.spare ? `<div class="ms-spare-slot">${wrap(card(r.spare, { size: "sm", label: "Spare slot" }))}</div>` : ""}
-      </div>
-    </section>
-    <section class="ms-panel">
-      <h2 class="ms-h2">What Happened in the Night</h2>
-      ${r.log.length ? `<ol class="ms-log">${r.log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>` : `<p class="ms-hint">Nobody moved or looked at a card.</p>`}
-    </section>
+    <ol class="ms-events">
+      ${step(1, "The Deal", tableCards(r.dealt, r.dealtCenter || r.center, r.dealtSpare, { seats: seats }))}
+      ${step(2, "The Night", `<p class="ms-hint">In wake-up order.</p>${nightLog(r.log, "Nobody moved or looked at a card.")}`)}
+      ${step(3, "When the Night Ended", tableCards(r.cards, r.center, r.spare, { seats: seats, before: r.dealt, beforeCenter: r.dealtCenter, beforeSpare: r.dealtSpare })
+        + copied.map(([c, to]) => `<p class="ms-hint">The ${esc(ROLES[c].name)} card became the ${esc(ROLES[to].name)}.</p>`).join(""))}
+      ${step(4, "The Votes", (voted.length ? `<ul class="ms-ev-votes">${voteRows}</ul>` : `<p class="ms-hint">Nobody got a vote.</p>`)
+        + (noVote.length ? `<p class="ms-hint">${esc(listNames(noVote.map(playerName)))} didn't vote.</p>` : ""))}
+      ${step(5, "Who Died", `${r.dead.length ? `<ul class="ms-ev-votes">${r.dead.map((id) => `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""}</div><div class="ms-hint">The ${esc(ROLES[(r.effective || r.cards)[id]].name)}</div></div><span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span></li>`).join("")}</ul>` : ""}
+        <p class="ms-ev-why">${esc(whyLine(r, seats))}</p>
+        <p class="ms-hint">${winners.length ? `Won: ${esc(listNames(winners.map(playerName)))}.` : "Nobody won."}</p>`)}
+    </ol>
     <mike-footer></mike-footer>
   </main>
   ${bar(v.isHost
     ? `<button class="ms-btn ms-primary ms-wide" data-act="again">Play Again</button>`
-    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start</div>`)}`;
+    : `<div class="ms-bar-wait">Waiting for ${esc(playerName(v.hostId))} to start another game</div>`)}`;
+}
+
+// The one renderer for a whole table of cards: each player's card under their name, then the center
+// cards and the spare slot. With before/beforeCenter, cards that changed since then are marked.
+function tableCards(cards, center, spare, { seats, before, beforeCenter, beforeSpare } = {}) {
+  const changed = (was, now) => before && was !== undefined && was !== now;
+  const one = (role, label, was) => wrap((role === "werewolf" && label === "Spare slot" ? spareFace() : card(role, { size: "sm" }))
+    + `<div class="ms-card-label">${esc(label)}</div>${changed(was, role) ? `<span class="ms-tag ms-changed">changed</span>` : ""}`, changed(was, role) ? "is-changed" : "");
+  return `<div class="ms-table">
+    <div class="ms-table-grid">${seats.map((id) => one(cards[id], playerName(id) + (id === myId ? " (you)" : ""), before?.[id])).join("")}</div>
+    <div class="ms-table-grid ms-table-center">${center.map((c, i) => one(c, `Center ${i + 1}`, beforeCenter?.[i])).join("")}
+      ${spare ? `<div class="ms-spare-slot">${one(spare, "Spare slot", beforeSpare ?? undefined)}</div>` : ""}</div>
+  </div>`;
+}
+
+// The one renderer for the night's events, in the order they happened.
+function nightLog(log, empty) {
+  return log.length
+    ? `<ol class="ms-log">${log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((x) => x.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>`
+    : `<p class="ms-hint">${esc(empty)}</p>`;
 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -1393,7 +1405,7 @@ function onClick(e) {
     render();
     return;
   }
-  if (d.vote) { send({ t: "vote", target: d.vote }); return; }
+  if (d.vote) { ui.vote = d.vote; render(); return; }
   if (d.kickAsk) { ui.confirmKick = d.kickAsk; refreshPanel(); return; }
   if (d.kick) { ui.confirmKick = null; send({ t: "hostKick", target: d.kick }); return; }
   switch (d.act) {
@@ -1406,6 +1418,7 @@ function onClick(e) {
       return;
     }
     case "cheatsheet": openPanel("cheatsheet"); return;
+    case "submit-vote": if (ui.vote) send({ t: "vote", target: ui.vote }); return;
     case "result-ok": shownResult = null; render(); return;
     case "settings": openPanel("settings"); return;
     case "tabs-toggle": {

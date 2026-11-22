@@ -268,6 +268,8 @@ function deal(s, now, rng) {
     cards: { ...dealt },
     center: deck.slice(seats.length, seats.length + 3),
     spare: s.roles.packleader ? "werewolf" : null, // the Alpha Wolf's extra Werewolf card
+    dealtCenter: deck.slice(seats.length, seats.length + 3),
+    dealtSpare: s.roles.packleader ? "werewolf" : null,
     roles: { ...s.roles },
     steps: NIGHT_STEPS.filter((st) => st.roles.some((r) => inDeck.has(r))).map((st) => st.id),
     step: null,
@@ -634,11 +636,13 @@ function applyAction1(s, pid, id, prompt, msg) {
       const ts = msg.targets;
       if (!Array.isArray(ts) || ts.length !== 2 || ts[0] === ts[1] || !ts.every((t) => validPlayer(g, prompt, t))) return { error: "Pick two other players" };
       const [a, b] = ts;
+      const was = (x) => roleName(effRole(g, g.cards[x]));
+      const swapped = `${nameOf(s, a)}'s ${was(a)} with ${nameOf(s, b)}'s ${was(b)}`;
       [g.cards[a], g.cards[b]] = [g.cards[b], g.cards[a]];
       const nm = (x) => (x === pid ? "your" : `${nameOf(s, x)}'s`);
       const text = `You swapped ${nm(a)} and ${nm(b)} cards.`;
       addInfo(s, pid, id, text);
-      logAction(s, id, pid, `${me} (${roleName(id === "imp" ? "imp" : "meddler")}) swapped ${nameOf(s, a)}'s and ${nameOf(s, b)}'s cards.`);
+      logAction(s, id, pid, `${me} (${roleName(id === "imp" ? "imp" : "meddler")}) swapped ${swapped}.`);
       return { result: { text } };
     }
   }
@@ -818,7 +822,7 @@ export function viewFor(s, pid, now) {
     };
   }
   if (s.phase === "results") {
-    v.game.result = { ...g.result, dealt: g.dealt, cards: g.cards, center: g.center, spare: g.spare, log: g.log, copied: g.copied, revealed: g.revealed };
+    v.game.result = { ...g.result, dealt: g.dealt, dealtCenter: g.dealtCenter, dealtSpare: g.dealtSpare, cards: g.cards, center: g.center, spare: g.spare, log: g.log, copied: g.copied, revealed: g.revealed };
   }
   return v;
 }
