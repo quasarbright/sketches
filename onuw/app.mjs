@@ -548,7 +548,6 @@ function homeScreen() {
              <button class="ms-btn" type="button" data-act="join-code">Join</button>
            </div>`}
     </form>
-    <button class="ms-link" data-act="howto">How to play</button>
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -1139,7 +1138,6 @@ function refreshPanel(force = false) {
   else if (panel.kind === "host") html = hostPanel();
   else if (panel.kind === "cheatsheet") html = cheatsheetPanel();
   else if (panel.kind.startsWith("info:")) html = infoPanel(panel.kind.slice(5));
-  else if (panel.kind === "howto") html = howtoPanel();
   if (!force && html === panel.html) return;
   const focused = document.activeElement?.id;
   panel.el.innerHTML = html;
@@ -1200,8 +1198,7 @@ function cheatsheetPanel() {
     <p class="ms-hint">In the order they wake up.</p>
     <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
     <h2 class="ms-h2">Who Wins</h2>
-    <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
-    <button class="ms-link" data-act="howto">How to play</button>`;
+    <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>`;
 }
 
 function infoPanel(r) {
@@ -1234,20 +1231,6 @@ function infoPanel(r) {
   </div>`;
 }
 const ordinal = (n) => `${n}${["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || "th"}`;
-
-function howtoPanel() {
-  return `<h2 class="ms-h2">How to Play</h2>
-    <p>Get everyone in the same room, each on their own phone. One person creates a room and the others join with the code.</p>
-    <h3 class="ms-h3">The Deal</h3>
-    <p>Everyone gets one secret card, and 3 more go face down in the center. Your card says which team you're on: the village or the wolves.</p>
-    <h3 class="ms-h3">The Night</h3>
-    <p>Cards wake up one at a time, and each can look at or swap cards. You act as the card you were dealt, but swaps mean you might end the night holding a different card without knowing it. Whatever card you hold in the morning is who you are.</p>
-    <h3 class="ms-h3">The Day</h3>
-    <p>Talk. Claim a card, or lie about it. Then everyone votes for someone to die. Whoever gets the most votes dies, and ties all die. If nobody gets two votes, nobody dies.</p>
-    <h3 class="ms-h3">Winning</h3>
-    <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
-    <p class="ms-hint">The game runs between your browsers with no server in the middle and no ads. If the host leaves, someone else takes over.</p>`;
-}
 
 // ---------------------------------------------------------------- input
 
@@ -1326,7 +1309,6 @@ function onClick(e) {
   switch (d.act) {
     case "home": leaveRoom(); return;
     case "retry": lostSince = null; joinAsGuest(roomCode); return;
-    case "howto": openPanel("howto"); return;
     case "join-code": {
       const code = (document.getElementById("code-input").value || "").toUpperCase().replace(/[^A-Z]/g, "");
       if (code.length !== 4) { toast("Room codes are 4 letters"); return; }
