@@ -19,7 +19,7 @@ const NET = makeNet(LOCAL ? "local" : "peer");
 const HEARTBEAT = 2000;
 const DEAD_AFTER = 8000;
 // ?fast: short night steps, for tests and trying it out alone
-const ROOM_OPTS = params.has("fast") ? { timing: { stepMin: 700, stepJitter: 300, stepMax: 10000 } } : {};
+const ROOM_OPTS = params.has("fast") ? { timing: { stepMin: 700, stepJitter: 300 } } : {};
 
 const safe = (store) => ({
   get(k) { try { return store.getItem(k); } catch { return null; } },
@@ -707,7 +707,7 @@ function spectatorScreen() {
     head = `<div class="ms-label">Dealing</div><h1 class="ms-h1">Players are looking at their cards</h1>
       <p class="ms-hint">${waiting.length ? `Waiting for ${esc(waitNames(waiting))}.` : "Night falls in a moment."}</p>`;
   } else if (v.phase === "night") {
-    head = `${moonArc(g)}<div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length} · ${countdown(g.stepEndsAt)} left</div>
+    head = `${moonArc(g)}<div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}</div>
       <h1 class="ms-h1">The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake</h1>
       <p class="ms-hint">${o.actors.length ? `Acting now: ${esc(o.actors.map(playerName).join(", "))}.` : "Nobody holds this card, so the turn passes on its own."}</p>`;
   } else if (v.phase === "day") {
@@ -825,7 +825,7 @@ function nightScreen() {
     <button class="ms-btn ms-wack-btn" data-act="wack">${icon("hammer")}<span>Play Whack-a-Wolf</span></button>`;
   return `<main class="ms-center ms-night ${p && !p.done ? "is-acting" : ""}">
     ${moonArc(g)}
-    <div class="ms-label">Night${p && !p.done ? ` · ${countdown(g.stepEndsAt)} left` : ""}</div>
+    <div class="ms-label">Night</div>
     <h1 class="ms-h1">${p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : "Everyone is asleep"}</h1>
     ${panel}
     ${secretPanel(g)}
@@ -901,7 +901,6 @@ function promptPanel(p, g) {
       ${p.optional ? `<button class="ms-btn" data-act="skip">Skip</button>` : ""}
       <button class="ms-btn ms-primary" data-act="confirm" ${ready ? "" : "disabled"}>${esc(confirm)}</button>
     </div>
-    ${p.required ? `<div class="ms-hint ms-timer-line">If time runs out, one is chosen at random.</div>` : ""}
   </div>`;
 }
 

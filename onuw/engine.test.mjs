@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRoom, handle, tick, viewFor, resolveVotes, startProblem, transferHost } from "./engine.mjs";
 import { ROLES } from "./roles.mjs";
 
-const FAST = { timing: { stepMin: 100, stepJitter: 0, stepMax: 1000 } };
+const FAST = { timing: { stepMin: 100, stepJitter: 0 } };
 
 // deterministic rng
 function seeded(seed = 1) {
@@ -139,13 +139,17 @@ test("a step lasts the minimum time even when its actors are quick, and nobody a
   assert.equal(s.g.step.id, "seer");
 });
 
-test("a player who never acts gets the default when the step times out", () => {
+test("night actions have no time limit; a player who leaves mid-turn gets the default", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "sleepwalker", b: "villager", c: "villager" }, ["werewolf", "werewolf", "seer"]);
-  for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0);
-  let now = 0;
+  let now = nightTo(s, "sleepwalker");
+  for (let i = 0; i < 2000; i++) { now += 500; tick(s, now, seeded(5)); }   // over 16 minutes
+  assert.equal(s.g.step.id, "sleepwalker", "still waiting on the Alcoholic");
+  assert.equal(s.g.cards.a, "sleepwalker");
+  assert.equal("stepEndsAt" in viewFor(s, "a").game, false, "no countdown is sent");
+  handle(s, "a", { t: "disconnect" }, now);
   while (s.phase === "night") { now += 500; tick(s, now, seeded(5)); }
-  assert.notEqual(s.g.cards.a, "sleepwalker"); // required swap happened anyway
+  assert.notEqual(s.g.cards.a, "sleepwalker"); // the required swap still happened
 });
 
 test("Meddler and Sleepwalker swap", () => {
@@ -316,13 +320,11 @@ test("views never leak other players' cards before the results", () => {
   assert.ok(!json.includes("werewolf") && !json.includes("seer") && !json.includes("thief"), json);
 });
 
-test("a player who lets their turn pass is told they didn't use their power", () => {
+test("a player who skips their turn is told they didn't use their power", () => {
   const s = room(["a", "b", "c"]);
   rig(s, { a: "seer", b: "thief", c: "werewolf" }, ["villager", "villager", "meddler"]);
-  for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0);
-  let now = 0;
-  while (s.phase === "night") { now += 500; tick(s, now); }
-  assert.match(s.g.info.a.at(-1).text, /Time ran out. You didn't use your Seer power/);
+  finishNight(s, nightTo(s, "seer"));
+  assert.match(s.g.info.a.at(-1).text, /^You didn't use your Seer power/);
   assert.match(s.g.info.b.at(-1).text, /didn't use your Thief power/);
 });
 
@@ -423,6 +425,17 @@ test("spectators can't act, ready up or vote", () => {
 
 // ---- batch 1 of the missing roles: Witch, Bodyguard, Prince, Cursed
 
+// Skip every remaining turn until the night ends (night actions have no time limit).
+function finishNight(s, now = 0) {
+  let guard = 0;
+  while (s.phase === "night") {
+    assert.ok(guard++ < 500, "the night never ended");
+    for (const a of s.g.step.actors) if (!s.g.step.done[a]) handle(s, a, { t: "act", step: s.g.step.id, skip: true }, now);
+    now += 150; tick(s, now);
+  }
+  return now;
+}
+
 function nightTo(s, stepId, now = 0) {
   for (const id of s.g.seats) handle(s, id, { t: "peeked" }, now);
   while (s.phase === "night" && s.g.step.id !== stepId) {
@@ -452,7 +465,7 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.match(s.g.log.at(-1).text, /Witch.*hunter|Hunter/);
 });
 
-test("the Witch can take the card herself, can skip, and a timed-out Witch who looked still swaps", () => {
+test("the Witch can take the card herself, can skip, and a Witch who leaves after looking still swaps", () => {
   let s = room(["a", "b", "c"]);
   rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
   nightTo(s, "witch");
@@ -472,6 +485,7 @@ test("the Witch can take the card herself, can skip, and a timed-out Witch who l
   rig(s, { a: "witch", b: "villager", c: "werewolf" }, ["seer", "werewolf", "hunter"]);
   let now = nightTo(s, "witch");
   handle(s, "a", { t: "act", step: "witch", center: 1 }, now);
+  handle(s, "a", { t: "disconnect" }, now);
   while (s.phase === "night") { now += 500; tick(s, now, seeded(3)); }
   assert.equal(s.g.center[1] === "werewolf", false, "the card she looked at went to a player");
 });
@@ -570,7 +584,7 @@ test("the Copycat becomes a center card and acts on that role's turn", () => {
   assert.equal(s.g.cards.a, "werewolf");
   assert.equal(s.g.cards.b, "copycat");
   // b now holds the Copycat card, which became the Thief: village team
-  while (s.phase === "night") { now += 500; tick(s, now); }
+  now = finishNight(s, now);
   s.g.votes = { a: "c", b: "c", c: "a" };
   handle(s, s.hostId, { t: "hostEndVote" }, now);
 });
@@ -597,7 +611,7 @@ test("the Lookalike copies a player; whoever holds the Lookalike card at the end
   assert.deepEqual(s.g.step.actors.sort(), ["a", "b"]);
   now = nightTo(s, "meddler", now);
   act(s, "c", { targets: ["a", "d"] }, now);
-  while (s.phase === "night") { now += 500; tick(s, now); }
+  now = finishNight(s, now);
   // d now holds the Lookalike card, which became a Werewolf; a holds the Villager
   for (const p of s.g.seats) handle(s, p, { t: "dayReady", ready: true }, now);
   for (const [p, t] of [["a", "d"], ["b", "d"], ["c", "a"], ["d", "a"]]) handle(s, p, { t: "vote", target: t }, now);
@@ -681,14 +695,14 @@ test("the Unveiler leaves a village card face up for the day, but turns a wolf b
   let now = nightTo(s, "unveiler");
   act(s, "a", { target: "b" }, now);
   assert.equal(viewFor(s, "c", now).game.revealed, null, "nobody sees it during the night");
-  while (s.phase === "night") { now += 500; tick(s, now); }
+  now = finishNight(s, now);
   assert.deepEqual(viewFor(s, "c", now).game.revealed, { pid: "b", role: "seer" });
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   now = nightTo(s, "unveiler");
   act(s, "a", { target: "c" }, now);
-  while (s.phase === "night") { now += 500; tick(s, now); }
+  now = finishNight(s, now);
   assert.equal(viewFor(s, "b", now).game.revealed, null);
   assert.match(info(s, "a"), /turned it back face down/);
 });

@@ -6,8 +6,8 @@ import { NAMES as N } from "./skin.mjs";
 
 export const TIMING = {
   stepMin: 6000,      // every night step lasts at least this long, actors or not,
-  stepJitter: 3000,   // plus up to this much, so a step's length never reveals a center card
-  stepMax: 45000,     // then anyone who hasn't acted gets the default (skip, or a random pick)
+  stepJitter: 3000,   // plus up to this much, so a step's length never reveals a center card.
+                      // There's no upper limit: a step waits for every actor who is still connected.
   lobbyGrace: 15000,  // a player who drops out of the lobby is removed after this long
 };
 
@@ -323,7 +323,6 @@ function nextStep(s, now, rng) {
     id, actors, done: {}, prompts: {},
     startedAt: now,
     minEnd: now + T.stepMin + Math.floor(rng() * T.stepJitter),
-    maxEnd: now + T.stepMax,
   };
   for (const pid of actors) g.step.prompts[pid] = startStep(s, id, pid, actors);
 }
@@ -465,7 +464,7 @@ function applyAction1(s, pid, id, prompt, msg) {
     if (prompt.kind === "ack") return { result: null };
     logAction(s, id, pid, `${me} (${roleName(g.dealt[pid])}) did nothing.`);
     const text = id === "wolves" ? "You didn't look at a center card." : prompt.stage === 2 ? "You stopped there." : `You didn't use your ${roleName(id === "masons" ? "mason" : (ROLES[id] ? id : g.dealt[pid]))} power.`;
-    addInfo(s, pid, id, msg.timedOut ? `Time ran out. ${text}` : text);
+    addInfo(s, pid, id, text);
     return { result: { text } };
   }
   switch (prompt.kind) {
@@ -614,7 +613,8 @@ function applyAction1(s, pid, id, prompt, msg) {
   return { error: "Bad action" };
 }
 
-// What an actor who never answered gets: optional actions are skipped, required ones picked at random.
+// What an actor who dropped out before answering gets: optional actions are skipped, required ones
+// picked at random. Night actions have no time limit, so this only happens to players who left.
 function defaultAction(s, pid, prompt, rng) {
   if (!prompt.required) return { skip: true, timedOut: true };
   if (prompt.kind === "center1") return { center: Math.floor(rng() * 3) };
@@ -625,7 +625,7 @@ function defaultAction(s, pid, prompt, rng) {
 function advanceIfDone(s, now, rng) {
   const st = s.g.step;
   const allDone = st.actors.every((a) => st.done[a] || !player(s, a)?.connected);
-  if (now >= st.maxEnd || (allDone && now >= st.minEnd)) {
+  if (allDone && now >= st.minEnd) {
     for (const a of st.actors) {
       if (st.done[a]) continue;
       const prompt = st.prompts[a];
@@ -772,7 +772,6 @@ export function viewFor(s, pid, now) {
     steps: knowsStep ? g.steps : null,
     stepIdx: knowsStep ? g.stepIdx : null,
     stepId: knowsStep ? st?.id ?? null : null,
-    stepEndsAt: knowsStep && st ? st.maxEnd : null,
     prompt: st && st.prompts[pid] ? { ...st.prompts[pid], step: st.id, done: !!st.done[pid] } : null,
     info: g.info[pid] || [],
     dayEndsAt: g.dayEndsAt,
