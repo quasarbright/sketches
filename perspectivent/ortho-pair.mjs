@@ -132,11 +132,13 @@ export function drawOrthoPair(ctx, W, H, dpr, t, store) {
     ctx.fillText(p.lens.name, B.x + B.w / 2, B.y + B.h + 15);
     ctx.textAlign = "start";
   });
-  // how far the red ball is, on a plate in the corner of the perspective picture (a fixed-width
-  // label, so nothing around it moves)
-  const B = boxes[0], txt = `red ball ${z.toFixed(1).padStart(4, "\u2007")} m ahead`;
+  // how far the red ball is, on a plate in the corner of each picture (a fixed-width label, so
+  // nothing around it moves)
+  const txt = `red ball ${z.toFixed(1).padStart(4, "\u2007")} m ahead`;
   ctx.font = "11px 'JetBrains Mono', monospace";
   const w = ctx.measureText(txt).width;
-  ctx.fillStyle = "rgba(17,19,23,0.8)"; ctx.fillRect(B.x + 6, B.y + 6, w + 10, 17);
-  ctx.fillStyle = "#e9e4d8"; ctx.fillText(txt, B.x + 11, B.y + 18);
+  for (const B of boxes) {
+    ctx.fillStyle = "rgba(17,19,23,0.8)"; ctx.fillRect(B.x + 6, B.y + 6, w + 10, 17);
+    ctx.fillStyle = "#e9e4d8"; ctx.fillText(txt, B.x + 11, B.y + 18);
+  }
 }

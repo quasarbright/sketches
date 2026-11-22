@@ -49,8 +49,10 @@ function frame(ctx, W, Hpx, lens, { ball = true } = {}) {
   ctx.clearRect(0, 0, W, Hpx);
   const colW = 26, padR = 18 + colW + 22, padL = 16;
   const yLo = -2.1, yHi = 2.1;
-  const X = (z) => padL + (z / zMax) * (W - padL - padR);
-  const Y = (y) => Hpx * (yHi - y) / (yHi - yLo);
+  // the same meters per pixel across and up, so the ball is round and angles are true
+  const m = Math.min((W - padL - padR) / zMax, Hpx / (yHi - yLo));
+  const X = (z) => padL + z * m;
+  const Y = (y) => Hpx / 2 - y * m;
   ctx.fillStyle = "rgba(95,138,67,0.35)"; ctx.fillRect(0, Y(ground), X(zMax) + 4, Hpx - Y(ground));
   for (const [z0, z1, b0, b1, c] of boxes) { ctx.fillStyle = c; ctx.globalAlpha = 0.75; ctx.fillRect(X(z0), Y(b1), X(z1) - X(z0), Y(b0) - Y(b1)); }
   if (ball) for (const [bz, by, r, c] of balls) {

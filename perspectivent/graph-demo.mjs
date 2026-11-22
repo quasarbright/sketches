@@ -5,23 +5,28 @@
 // pass through, and the rays are drawn behind it like any graph.
 import { parseExpr } from "./lens.mjs";
 
-const wob = parseExpr("z + log(z)*sin(z)"), wob2 = wob(2);
+const wob = parseExpr("z + log(z)*sin(z)");
 // each scaled so the view is 2.2 m tall 2 m ahead, like the other demos
 export const GRAPHS = {
   "graph-persp": { label: "f(z) = 0.55 z", f: (z) => 0.55 * z },
   "graph-ortho": { label: "f(z) = 1.1", f: () => 1.1 },
-  "graph-sensor": { label: "f(z) = 0.6 + 0.25 z", f: (z) => 0.6 + 0.25 * z },
-  "graph-wobble": { label: "f(z) = z + log(z)·sin(z), scaled", f: (z) => (z <= 0 ? 0 : 1.1 * wob(z) / wob2) },
+  "graph-wobble": { label: "f(z) = z + log(z)·sin(z)", f: (z) => (z <= 0 ? 0 : wob(z)), yMax: 13 },
 };
-const Z_MAX = 12, Y_MAX = 6.8, US = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
+const Z_MAX = 12, Y_MAX0 = 6.8, US = [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1];
 const SWEEP = 4.2, PERIOD = 6;
 const mono = "11px 'JetBrains Mono', monospace";
 
-export function drawGraphDemo(ctx, W, H, demo, t) {
-  const g = GRAPHS[demo];
+// `g` is { label, f } for a graph that isn't one of GRAPHS (the sliders' one)
+export function drawGraphDemo(ctx, W, H, demo, t, g = GRAPHS[demo]) {
+  const Y_MAX = g.yMax ?? Y_MAX0, yStep = Y_MAX > 8 ? 4 : 2;
   ctx.textBaseline = "alphabetic";
   ctx.clearRect(0, 0, W, H);
-  const padL = 30, padR = 100, padT = 30, padB = 22;
+  // the label on top, in two lines when it doesn't fit in one
+  ctx.font = "12px 'JetBrains Mono', monospace";
+  let lines = [g.label];
+  const cut = g.label.lastIndexOf(" = ");
+  if (ctx.measureText(g.label).width > W - 8 && cut > 0) lines = [g.label.slice(0, cut), "     " + g.label.slice(cut)];
+  const padL = 30, padR = 100, padT = 30 + 14 * (lines.length - 1), padB = 22;
   const X = (z) => padL + (z / Z_MAX) * (W - padL - padR), Y = (y) => padT + (Y_MAX - y) / (2 * Y_MAX) * (H - padT - padB);
   const tc = t % PERIOD, zs = Math.min(Z_MAX, (tc / SWEEP) * Z_MAX), sweeping = tc < SWEEP;
   // axes: z along the line you're looking along, y up
@@ -34,7 +39,7 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
     ctx.fillText(`${z}`, X(z), H - 6);
   }
   ctx.textAlign = "right";
-  for (const y of [-6, -4, -2, 2, 4, 6]) { ctx.fillRect(X(0) - 3, Y(y) - 0.5, 6, 1); ctx.fillText(`${y}`, X(0) - 6, Y(y) + 4); }
+  for (let y = -Math.floor(Y_MAX / yStep) * yStep; y <= Y_MAX; y += yStep) { if (!y) continue; ctx.fillRect(X(0) - 3, Y(y) - 0.5, 6, 1); ctx.fillText(`${y}`, X(0) - 6, Y(y) + 4); }
   ctx.textAlign = "left";
   ctx.textAlign = "right"; ctx.fillText("z (m ahead)", W - 4, H - 6); ctx.textAlign = "left";
   ctx.fillText("y (m up)", X(0) + 6, Y(Y_MAX) + 4);
@@ -100,6 +105,9 @@ export function drawGraphDemo(ctx, W, H, demo, t) {
   }
   // which f this is
   ctx.font = "12px 'JetBrains Mono', monospace";
-  ctx.fillStyle = "#ffd23f"; ctx.textAlign = "left"; ctx.fillText(g.label, 4, 14);
-  ctx.fillStyle = "#9a978e"; ctx.textAlign = "right"; ctx.fillText("ray of row u: y = u·f(z)", W - 4, 14); ctx.textAlign = "left";
+  ctx.fillStyle = "#ffd23f"; ctx.textAlign = "left"; lines.forEach((l, i) => ctx.fillText(l, 4, 14 + 14 * i));
+  const right = "ray of row v: y = v·f(z)";
+  if (lines.length === 1 && ctx.measureText(g.label).width + ctx.measureText(right).width + 24 < W) {
+    ctx.fillStyle = "#9a978e"; ctx.textAlign = "right"; ctx.fillText(right, W - 4, 14); ctx.textAlign = "left";
+  }
 }
