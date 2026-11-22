@@ -78,6 +78,26 @@ export const ROLES = {
     short: "Takes their vote down with them",
     text: "No night action. If you die, the player you voted for dies too.",
   },
+  witch: {
+    name: N.witch, team: "village", wolf: false, max: 1, step: "witch",
+    short: "Swaps a center card with another player's card",
+    text: "You may look at one of the 3 center cards. If you do, you must swap it with any player's card, your own included. That player doesn't see it.",
+  },
+  bodyguard: {
+    name: N.bodyguard, team: "village", wolf: false, max: 1, step: null,
+    short: "Protects whoever they vote for",
+    text: `No night action. The player you vote for can't die. If they get the most votes, the player with the next most votes dies instead, and the ${N.hunter} can't take them down.`,
+  },
+  prince: {
+    name: N.prince, team: "village", wolf: false, max: 1, step: null,
+    short: "Can't be killed",
+    text: `No night action. You can't die: if you get the most votes, the player with the next most votes dies instead, and the ${N.hunter} can't take you down.`,
+  },
+  cursed: {
+    name: N.cursed, team: "village", wolf: false, max: 1, step: null,
+    short: "A wolf's vote turns them wolf",
+    text: `No night action. You're on the village team, but if any wolf votes for you, you become a ${N.werewolf}: you're on the wolf team, and if you die, a wolf died.`,
+  },
   jester: {
     name: N.jester, team: "jester", wolf: false, max: 1, step: null,
     short: "Wins only by dying",
@@ -88,7 +108,8 @@ export const ROLES = {
 // Picker / cheat-sheet order is wake order, then the roles that sleep.
 export const ROLE_ORDER = [
   "werewolf", "packleader", "prowler", "lackey", "scout", "mason", "seer",
-  "thief", "meddler", "sleepwalker", "nightowl", "villager", "hunter", "jester",
+  "thief", "witch", "meddler", "sleepwalker", "nightowl", "villager", "hunter", "bodyguard", "prince",
+  "cursed", "jester",
 ];
 
 // Night steps in wake order. `roles`: a step runs when any of these cards is in the deck
@@ -102,13 +123,14 @@ export const NIGHT_STEPS = [
   { id: "masons", label: `${N.mason}s`, roles: ["mason"] },
   { id: "seer", label: N.seer, roles: ["seer"] },
   { id: "thief", label: N.thief, roles: ["thief"] },
+  { id: "witch", label: N.witch, roles: ["witch"] },
   { id: "meddler", label: N.meddler, roles: ["meddler"] },
   { id: "sleepwalker", label: N.sleepwalker, roles: ["sleepwalker"] },
   { id: "nightowl", label: N.nightowl, roles: ["nightowl"] },
 ];
 
 export const WIN_RULES = [
-  ["village", `The village wins if at least one wolf dies, or if the ${N.scout} dies. If no player is a wolf, the village wins when nobody dies (or the ${N.lackey} or ${N.scout} dies).`],
+  ["village", `The village wins if at least one wolf dies (a ${N.cursed} a wolf voted for counts as a wolf), or if the ${N.scout} dies. If no player is a wolf, the village wins when nobody dies (or the ${N.lackey} or ${N.scout} dies).`],
   ["wolf", `The wolf team wins if no wolf and no ${N.scout} dies, and the ${N.jester} doesn't die. If no player is a wolf, the ${N.lackey} and ${N.scout} win when someone else dies.`],
   ["jester", `The ${N.jester} wins if the ${N.jester} dies.`],
 ];
@@ -158,6 +180,10 @@ export const EMBLEMS = {
   villager: `<path d="M10 31 32 13l22 18"/><path d="M17 26v25h30V26"/><path d="M28 51V38h8v13"/>`,
   hunter: `<circle cx="32" cy="32" r="17"/><path d="M32 7v13"/><path d="M32 44v13"/><path d="M7 32h13"/><path d="M44 32h13"/><circle cx="32" cy="32" r="2.5" fill="currentColor"/>`,
   jester: `<path d="M8 8h48v48H8z"/><path d="M20 16c4 4 8 4 12 0 4 4 8 4 12 0 0 6 4 10 4 16s-4 10-4 16c-4-4-8-4-12 0-4-4-8-4-12 0 0-6-4-10-4-16s4-10 4-16z"/>`,
+  witch: `<path d="M32 6 20 30h24z"/><path d="M12 30h40"/><path d="M22 52c0-8 4-14 10-14s10 6 10 14z"/><path d="M14 56h36"/>`,
+  bodyguard: `<path d="M32 8 12 16v14c0 13 9 22 20 26 11-4 20-13 20-26V16z"/><path d="M24 32l6 6 11-12"/>`,
+  prince: `<path d="M12 46 10 20l12 10 10-16 10 16 12-10-2 26z"/><path d="M12 54h40"/>`,
+  cursed: `<circle cx="32" cy="32" r="22"/><path d="M38 14a18 18 0 1 0 0 36 14 14 0 1 1 0-36z"/>`,
   back: `<path d="M38 14a18 18 0 1 0 12 30 14 14 0 1 1-12-30z"/><path d="M14 16v6M11 19h6"/><path d="M50 50v4M48 52h4"/><path d="M18 48v4M16 50h4"/>`,
 };
 
