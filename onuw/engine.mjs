@@ -265,7 +265,7 @@ function deal(s, now, rng) {
     dealt,
     cards: { ...dealt },
     center: deck.slice(seats.length, seats.length + 3),
-    spare: s.roles.packleader ? "werewolf" : null, // the Pack Leader's extra Werewolf card
+    spare: s.roles.packleader ? "werewolf" : null, // the Alpha Wolf's extra Werewolf card
     roles: { ...s.roles },
     steps: NIGHT_STEPS.filter((st) => st.roles.some((r) => inDeck.has(r))).map((st) => st.id),
     step: null,
@@ -715,7 +715,7 @@ export function resolveVotes(seats, votes, cards) {
   const isWolf = (p) => born(p) || turned.includes(p);
   const died = (pred) => dead.some(pred);
   const deadWolf = died(isWolf);
-  // With no Skinner among the players, the Apprentice is one: they win, and stop the wolves, by dying.
+  // With no Tanner among the players, the Apprentice is one: they win, and stop the wolves, by dying.
   const skinners = seats.some((p) => cards[p] === "jester") ? ["jester"] : ["jester", "apprentice"];
   const deadJester = died((p) => skinners.includes(cards[p]));
   // The official rules: with a wolf among the players, the village wins if a wolf dies and the wolf

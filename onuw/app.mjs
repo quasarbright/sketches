@@ -629,7 +629,7 @@ function lobby() {
       </div>
       <div class="ms-card-label">Added for the ${N.packleader}</div>
     </div>` : "";
-  const cards = ROLE_ORDER.filter((r) => host || v.roles[r]).map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
+  const cards = ROLE_ORDER.map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
   const problem = v.startProblem;
   const namePrompt = needName ? `<form class="ms-panel ms-name-first" data-form="firstname">
       <label class="ms-h2" for="name-input">Enter your name</label>
@@ -646,7 +646,10 @@ function lobby() {
         <div class="ms-code">${esc(v.code)}</div>
         <div class="ms-code-words">${esc(codeWords(v.code))}</div>
       </div>
-      <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy Invite Link</span></button>
+      <div class="ms-invite-btns">
+        <button class="ms-btn" data-act="invite">${icon("link")}<span>Copy Invite Link</span></button>
+        ${navigator.share ? `<button class="ms-btn" data-act="share">${icon("share")}<span>Share</span></button>` : ""}
+      </div>
     </section>
 
     <section>
@@ -664,7 +667,7 @@ function lobby() {
         <h2 class="ms-h2">Cards <span class="ms-sub ${v.players.length < 3 ? "" : okCount ? "ms-ok" : "ms-warn"}">${have} of ${need}</span></h2>
         ${host && v.rolesCustom ? `<button class="ms-link" data-act="suggest">Use Suggested Cards</button>` : ""}
       </div>
-      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""}${host ? " Tap a card to add or remove it." : ""}</p>
+      <p class="ms-hint">One card for each player plus 3 in the center.${v.roles.packleader ? ` The ${N.packleader} also adds a spare ${N.werewolf} card, placed next to it with a lock, on top of these.` : ""}${host ? " Tap a card to add or remove it." : " The host picks the cards."}</p>
       <div class="ms-grid">${cards}</div>
     </section>
 
@@ -684,18 +687,17 @@ function lobby() {
 function pickerCard(r, count, host) {
   const R = ROLES[r];
   const on = count > 0;
-  // Every card that can have more than one copy shows the same count pill, for the host and
-  // the guests alike; buttons that can't be used (guests, the Masons' fixed pair, the limits)
-  // are disabled rather than left out, so all the cards look and behave the same.
+  // Every card that can have more than one copy shows the same count pill. The host gets − and +
+  // (disabled where they can't be used: the Masons' fixed pair, the limits). Guests see the same
+  // full list with live counts, but only the number, since they can't change anything.
   const counted = on && (R.max > 1 || R.pair);
-  const fixed = !host || R.pair;
-  const stepper = counted
-    ? `<div class="ms-count">
-        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" ${fixed ? "disabled" : ""}>${icon("minus")}</button>
+  const stepper = !counted ? ""
+    : !host ? `<div class="ms-count is-view"><span>×${count}</span></div>`
+    : `<div class="ms-count">
+        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" ${R.pair ? "disabled" : ""}>${icon("minus")}</button>
         <span>×${count}</span>
-        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${fixed || count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
-      </div>`
-    : "";
+        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${R.pair || count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
+      </div>`;
   const label = "";
   return `<div class="ms-cardwrap ${on ? "is-on" : "is-off"}">
     ${card(r, {
@@ -974,7 +976,7 @@ function secretPanel(g) {
   </section>`;
 }
 
-// The Pack Leader's spare Werewolf card, drawn apart from the role cards.
+// The Alpha Wolf's spare Werewolf card, drawn apart from the role cards.
 function spareCard(label) {
   return `<div class="ms-cardwrap"><div class="ms-card ms-sm" style="${cardStyle("werewolf")}"><div class="ms-card-name">${N.werewolf}</div>${teamMark("werewolf")}<div class="ms-card-art">${artSvg("werewolf")}</div><button class="ms-info" data-info="spare" aria-label="About the spare ${N.werewolf} card">${icon("info")}</button></div><div class="ms-card-label">${label}</div></div>`;
 }
@@ -1399,13 +1401,11 @@ function onClick(e) {
     case "spec-off": ss.set(joinedKey(roomCode), "player"); send({ t: "setSpectator", on: false }); return;
     case "invite": {
       const link = inviteLink();
-      if (navigator.share && matchMedia("(pointer: coarse)").matches) {
-        navigator.share({ title: TITLE, text: `Join my ${TITLE} room ${roomCode}`, url: link }).catch(() => {});
-      } else {
-        navigator.clipboard?.writeText(link).then(() => toast("Invite link copied"), () => toast(link));
-      }
+      navigator.clipboard?.writeText(link).then(() => toast("Invite link copied"), () => toast(link));
       return;
     }
+    // the system share sheet (on an iPhone it can also show the link as a QR code)
+    case "share": navigator.share?.({ title: TITLE, text: `Join my ${TITLE} room ${roomCode}`, url: inviteLink() }).catch(() => {}); return;
     case "wack": openWack({ card: (r) => card(r, { size: "sm", info: false }), names: { werewolf: N.werewolf, villager: N.villager } }); return;
     case "suggest": send({ t: "suggestRoles" }); return;
     case "start": send({ t: "start" }); return;

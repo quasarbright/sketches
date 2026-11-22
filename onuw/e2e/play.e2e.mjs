@@ -609,3 +609,40 @@ test("with the setting off, a second tab joining your own room is told why and p
   await a.waitForFunction(() => window.__onuw.view.players.length === 2);
   await ctx.close();
 });
+
+test("guests see the host's full card list with live counts, and no − or + buttons", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben"]);
+  const guest = t.pages[1];
+  const total = await t.host.locator(".ms-grid .ms-cardwrap").count();
+  assert.equal(await guest.locator(".ms-grid .ms-cardwrap").count(), total, "the same list as the host");
+  assert.ok(await guest.locator(".ms-grid .ms-off").count() > 0, "unpicked cards show too, dimmed");
+  assert.equal(await guest.locator(".ms-grid .ms-count button").count(), 0);
+  assert.ok(await guest.locator(".ms-grid .ms-count.is-view").count() > 0);
+  // a change by the host shows up for the guest
+  const before = await guest.locator(".ms-grid .ms-cardwrap.is-on").count();
+  await t.host.click(".ms-grid .ms-cardwrap.is-off .ms-pickable >> nth=0");
+  await guest.waitForFunction((n) => document.querySelectorAll(".ms-grid .ms-cardwrap.is-on").length === n + 1, before);
+  // the guest's pill is the same height as the host's
+  const h = (p) => p.evaluate(() => Math.round(document.querySelector(".ms-grid .ms-count").getBoundingClientRect().height));
+  assert.equal(await h(guest), await h(t.host));
+  assert.deepEqual(t.errors, []);
+  await t.ctx.close();
+});
+
+test("the lobby has a Share button that opens the system share sheet with the invite link, where there is one", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await tabsArePlayers(ctx);
+  await ctx.addInitScript(() => { navigator.share = (d) => { window.__shared = d; return Promise.resolve(); }; });
+  const p = await ctx.newPage();
+  await createAs(p, "Mike");
+  await p.click("button[data-act=share]");
+  const d = await p.evaluate(() => window.__shared);
+  assert.match(d.url, /room=[A-Z]{4}/);
+  // without the share API there's no Share button, only Copy Invite Link
+  const q = await (await browser.newContext()).newPage();
+  await q.addInitScript(() => { delete Navigator.prototype.share; });
+  await createAs(q, "Ana");
+  assert.equal(await q.locator("button[data-act=share]").count(), 0);
+  assert.equal(await q.locator("button[data-act=invite]").count(), 1);
+  await ctx.close(); await q.context().close();
+});
