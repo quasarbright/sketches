@@ -690,3 +690,15 @@ test("the Unveiler leaves a village card face up for the day, but turns a wolf b
   assert.equal(viewFor(s, "b", now).game.revealed, null);
   assert.match(info(s, "a"), /turned it back face down/);
 });
+
+test("win rules mention only the cards in the deck", async () => {
+  const { winRules } = await import("./roles.mjs");
+  const text = (roles) => winRules(roles).map(([, t]) => t).join(" ");
+  const plain = text({ werewolf: 2, seer: 1, villager: 3 });
+  for (const n of ["Skinner", "Apprentice", "Ward", "Lackey", "Cursed"]) assert.ok(!plain.includes(n), `${n} in ${plain}`);
+  assert.equal(winRules({ werewolf: 2, seer: 1, villager: 3 }).length, 2);
+  assert.match(text({ werewolf: 2, jester: 1 }), /Skinner wins if the Skinner dies/);
+  assert.ok(!text({ werewolf: 2, jester: 1 }).includes("Apprentice"));
+  assert.match(text({ werewolf: 2, scout: 1 }), /Ward dies/);
+  assert.match(text({}), /Skinner.*Apprentice/s, "with no deck yet (how to play), every rule shows");
+});

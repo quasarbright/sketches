@@ -39,10 +39,7 @@ async function newTable(names, { watchers = [] } = {}) {
     return p;
   };
   const host = await open();
-  await host.goto(`${base}?net=local&fast`);
-  await host.fill("#name-input", names[0]);
-  await host.click("button[type=submit]");
-  await host.waitForFunction(() => window.__onuw.view?.code);
+  await createAs(host, names[0]);
   const code = await host.evaluate(() => window.__onuw.view.code);
   const pages = [host];
   const join = async (name, as = "player") => {
@@ -57,6 +54,16 @@ async function newTable(names, { watchers = [] } = {}) {
   const specs = [];
   for (const n of watchers) specs.push(await join(n, "spectator"));
   return { ctx, host, pages, specs, code, errors, join };
+}
+
+// Create a room from the home page, then type your name in the lobby, the way a host does.
+async function createAs(p, name) {
+  await p.goto(`${base}?net=local&fast`);
+  await p.click("button[type=submit]");
+  await p.waitForFunction(() => window.__onuw.view?.code);
+  await p.fill("[data-form=firstname] #name-input", name);
+  await p.click("[data-form=firstname] button[type=submit]");
+  await p.waitForFunction((n) => window.__onuw.view.players[0]?.name === n, name);
 }
 
 const view = (p) => p.evaluate(() => window.__onuw.view);
@@ -242,9 +249,7 @@ test("card names fit their band, clear of the team letter and the card edge, at 
   for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const ctx = await browser.newContext({ viewport });
     const p = await ctx.newPage();
-    await p.goto(`${base}?net=local&fast`);
-    await p.fill("#name-input", "Mike");
-    await p.click("button[type=submit]");
+    await createAs(p, "Mike");
     await p.waitForSelector(".ms-grid .ms-card-name");
     const bad = await p.evaluate((w) => [...document.querySelectorAll(".ms-card")].flatMap((c) => {
       const name = c.querySelector(".ms-card-name"), mark = c.querySelector(".ms-team-mark");
@@ -472,4 +477,42 @@ test("new roles: the Witch looks, then swaps the card onto a player; a Prince wi
   assert.match(lede, /Nobody else got more than one vote/);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+});
+
+test("lobby: the host names themselves after making the room; card counts change in place; unpicked cards are dimmed; info only where the card can't say it all", async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on("pageerror", (e) => errors.push(e.message));
+  await p.goto(`${base}?net=local&fast`);
+  assert.equal(await p.locator("#name-input").count(), 0, "no name field before the room exists");
+  await p.click("button[type=submit]");
+  await p.waitForFunction(() => window.__onuw.view?.code);
+  assert.equal(await p.locator("[data-form=firstname] label").innerText(), "Enter your name");
+  assert.equal(await p.locator("#name-input").getAttribute("placeholder"), "Enter your name");
+  await p.fill("#name-input", "Mike");
+  await p.click("[data-form=firstname] button[type=submit]");
+  await p.waitForFunction(() => window.__onuw.view.players[0].name === "Mike" && !document.querySelector("[data-form=firstname]"));
+  // the count reads against at least 3 players, since the deck is never smaller
+  assert.match(await p.locator(".ms-h2 .ms-sub").last().innerText(), /^6 of 6$/);
+  // adding a second Werewolf, then removing it, moves nothing on the page
+  const boxes = () => p.evaluate(() => [...document.querySelectorAll(".ms-grid .ms-cardwrap")].map((w) => { const r = w.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y + scrollY), Math.round(r.width), Math.round(r.height)].join(","); }).join(" "));
+  await p.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { werewolf: 1, seer: 1, thief: 1, meddler: 1, villager: 2 } }));
+  await p.waitForFunction(() => window.__onuw.view.roles.werewolf === 1);
+  const before = await boxes();
+  await p.click('[data-step="werewolf"][data-d="1"]');
+  await p.waitForFunction(() => window.__onuw.view.roles.werewolf === 2);
+  assert.equal(await boxes(), before, "a count change shifted the grid");
+  await p.click('[data-toggle="lackey"]');
+  await p.waitForFunction(() => window.__onuw.view.roles.lackey === 1);
+  assert.equal(await boxes(), before, "picking a card shifted the grid");
+  // unpicked cards keep their own colors, dimmed
+  const off = await p.locator('[data-toggle="hunter"]').evaluate((c) => ({ f: getComputedStyle(c).filter, band: getComputedStyle(c.querySelector(".ms-card-name")).backgroundColor }));
+  assert.match(off.f, /brightness/);
+  assert.notEqual(off.band, "rgba(0, 0, 0, 0)");
+  // info buttons: on the confusing cards only
+  assert.equal(await p.locator('[data-toggle="seer"] .ms-info').count(), 0);
+  assert.equal(await p.locator('[data-toggle="copycat"] .ms-info').count(), 1);
+  assert.deepEqual(errors, []);
+  await ctx.close();
 });

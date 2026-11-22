@@ -1,7 +1,7 @@
 // The page: connection handling (host or guest), rendering every screen, and input.
 // The host runs engine.mjs and sends each player their own view; guests only render views.
 import { openModal } from "../shared/cohesion.js";
-import { ROLES, ROLE_ORDER, TEAMS, WIN_RULES, NIGHT_STEPS, emblemSvg, deckSize } from "./roles.mjs";
+import { ROLES, ROLE_ORDER, TEAMS, winRules, NIGHT_STEPS, emblemSvg, deckSize } from "./roles.mjs";
 import * as E from "./engine.mjs";
 import { makeNet } from "./net.mjs";
 import { NAMES as N, TITLE } from "./skin.mjs";
@@ -287,7 +287,7 @@ function hostLost(reason) {
 
 // Nobody handed us the game, so start the room over from what we last saw: same players and cards.
 async function takeOverRoom() {
-  const s = E.createRoom(roomCode, { id: myId, name: myName }, now(), ROOM_OPTS);
+  const s = E.createRoom(roomCode, { id: myId, name: myName || "Player 1" }, now(), ROOM_OPTS);
   const old = view;
   for (const p of old.players) {
     if (p.id === myId || p.id === old.hostId || p.left) continue;
@@ -342,7 +342,7 @@ async function createRoom() {
     const code = Array.from({ length: 4 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
     screen = "connecting"; roomCode = code; render();
     try {
-      await becomeHost(code, E.createRoom(code, { id: myId, name: myName }, now(), ROOM_OPTS));
+      await becomeHost(code, E.createRoom(code, { id: myId, name: myName || "Player 1" }, now(), ROOM_OPTS));
       return;
     } catch (e) {
       if (e.message !== "taken") { screen = "home"; roomCode = null; render(); toast("Couldn't reach the matchmaking server. Check your connection and try again."); return; }
@@ -353,6 +353,8 @@ async function createRoom() {
 // ---------------------------------------------------------------- views & local UI state
 
 let ui = freshUi();
+// The room's creator names themselves in the lobby, right after the room is made.
+let needName = false;
 function freshUi() {
   return { key: null, sel: [], center: [], up: {}, peeked: false };
 }
@@ -433,7 +435,7 @@ function card(role, { size = "md", label = "", info = true, cls = "", attrs = ""
     <div class="ms-card-name${R.name.length > 8 ? " is-long" : ""}${R.name.length > 11 ? " is-xlong" : ""}" style="--len:${R.name.length}">${esc(R.name)}${times > 1 ? ` <span class="ms-mono ms-muted">×${times}</span>` : ""}</div>${size === "xs" ? "" : teamMark(role)}
     <div class="ms-card-art">${size === "xs" ? emblemSvg(role) : artSvg(role)}</div>
     ${size === "md" || size === "lg" ? `<div class="ms-card-short">${esc(R.short)}</div>` : ""}
-    ${info ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="${esc(R.name)}: ${esc(R.short)}">${icon("info")}</button>` : ""}
+    ${info && (R.more || size === "sm" || size === "xs") ? `<button class="ms-info" data-info="${role}" aria-label="What the ${esc(R.name)} does" data-tooltip="What the ${esc(R.name)} does">${icon("info")}</button>` : ""}
   </div>${label ? `<div class="ms-card-label">${esc(label)}</div>` : ""}`;
 }
 
@@ -532,14 +534,14 @@ function homeScreen() {
     <h1 class="ms-title">${esc(TITLE)}</h1>
     <p class="ms-lede">A one-night werewolf game for 3 to 10 people in the same room, each on their own phone. Cards move in the dark, so you might not be who you think you are by morning.</p>
     <form class="ms-form" data-form="${joining ? "join" : "create"}">
-      <label class="ms-label" for="name-input">Your name</label>
-      <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="What should people call you?" value="${esc(myName)}" />
+      ${joining ? `<label class="ms-label" for="name-input">Your name</label>
+      <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="Enter your name" value="${esc(myName)}" />` : ""}
       ${joining
         ? `<button class="ms-btn ms-primary ms-wide" type="submit" data-as="player" ${myName ? "" : "disabled"}>Join room <span class="ms-mono">${esc(roomCode)}</span> as a player</button>
            <button class="ms-btn ms-wide" type="submit" data-as="spectator" ${myName ? "" : "disabled"}>${icon("eye")}<span>Watch as a spectator</span></button>
            <p class="ms-hint">Spectators see every card and everything that happens at night. If a game is already going, you'll watch until the next round.</p>
            <button class="ms-link" type="button" data-act="home">Start a different room instead</button>`
-        : `<button class="ms-btn ms-primary ms-wide" type="submit" ${myName ? "" : "disabled"}>Create a room</button>
+        : `<button class="ms-btn ms-primary ms-wide" type="submit">Create a room</button>
            <div class="ms-or"><span>or join one</span></div>
            <div class="ms-join-row">
              <input id="code-input" class="ms-input ms-code-input" maxlength="4" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="CODE" aria-label="Room code" />
@@ -577,7 +579,7 @@ function lobby() {
   const watching = v.players.filter((p) => p.spectator);
   const host = v.isHost;
   const have = deckSize(v.roles);
-  const need = v.players.length + 3;
+  const need = Math.max(3, v.players.length) + 3;   // the deck is sized for at least 3 players
   const okCount = have === need;
   const spare = v.roles.packleader ? `<div class="ms-cardwrap ms-spare-wrap">
       <div class="ms-card ms-md ms-locked" style="${cardStyle("werewolf")}">
@@ -591,7 +593,16 @@ function lobby() {
     </div>` : "";
   const cards = ROLE_ORDER.filter((r) => host || v.roles[r]).map((r) => pickerCard(r, v.roles[r] || 0, host) + (r === "packleader" ? spare : "")).join("");
   const problem = v.startProblem;
+  const namePrompt = needName ? `<form class="ms-panel ms-name-first" data-form="firstname">
+      <label class="ms-h2" for="name-input">Enter your name</label>
+      <div class="ms-rename-row">
+        <input id="name-input" class="ms-input" maxlength="20" autocomplete="nickname" placeholder="Enter your name" />
+        <button class="ms-btn ms-primary" type="submit" disabled>Done</button>
+      </div>
+      <p class="ms-hint">It's how the others see you in the game.</p>
+    </form>` : "";
   return `<main class="ms-page">
+    ${namePrompt}
     <section class="ms-room">
       <div>
         <div class="ms-label">Room code</div>
@@ -636,11 +647,12 @@ function lobby() {
 function pickerCard(r, count, host) {
   const R = ROLES[r];
   const on = count > 0;
+  // copies of a card are counted on the card itself, so nothing below it appears or moves
   const stepper = host && on && R.max > 1 && !R.pair
-    ? `<div class="ms-stepper">
-        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}" data-tooltip="One fewer ${esc(R.name)}">${icon("minus")}</button>
-        <span class="ms-mono">${count}</span>
-        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" data-tooltip="One more ${esc(R.name)}" ${count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
+    ? `<div class="ms-count">
+        <button data-step="${r}" data-d="-1" aria-label="One fewer ${esc(R.name)}">${icon("minus")}</button>
+        <span>×${count}</span>
+        <button data-step="${r}" data-d="1" aria-label="One more ${esc(R.name)}" ${count >= R.max ? "disabled" : ""}>${icon("plus")}</button>
       </div>`
     : "";
   const badge = on && !stepper && (count > 1 || R.pair) ? `<span class="ms-badge">×${count}</span>` : "";
@@ -649,8 +661,8 @@ function pickerCard(r, count, host) {
     ${card(r, {
       cls: `${on ? "" : "ms-off"} ${host ? "ms-pickable" : ""}`,
       attrs: host ? `data-toggle="${r}" role="button" tabindex="0" aria-pressed="${on}" aria-label="${on ? "Remove" : "Add"} the ${esc(R.name)}"` : "",
-    }).replace("</div>", `</div>${badge}`)}
-    ${stepper}${label ? `<div class="ms-card-label">${label}</div>` : ""}
+    }).replace("</div>", `</div>${badge}${stepper}`)}
+    ${label ? `<div class="ms-card-label">${label}</div>` : ""}
   </div>`;
 }
 
@@ -1188,7 +1200,7 @@ function cheatsheetPanel() {
     <p class="ms-hint">In the order they wake up.</p>
     <ul class="ms-sheet">${list.map((r) => `<li><span class="ms-sheet-card">${card(r, { size: "sm", info: false })}</span><div><b style="color:${TEAMS[ROLES[r].team].color}">${esc(ROLES[r].name)}</b>${roles[r] > 1 ? ` <span class="ms-mono ms-muted">×${roles[r]}</span>` : ""}<p>${esc(ROLES[r].text)}</p>${ROLES[r].note ? `<p class="ms-hint">${esc(ROLES[r].note)}</p>` : ""}</div></li>`).join("")}</ul>
     <h2 class="ms-h2">Who Wins</h2>
-    <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
+    <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
     <button class="ms-link" data-act="howto">How to play</button>`;
 }
 
@@ -1233,7 +1245,7 @@ function howtoPanel() {
     <h3 class="ms-h3">The Day</h3>
     <p>Talk. Claim a card, or lie about it. Then everyone votes for someone to die. Whoever gets the most votes dies, and ties all die. If nobody gets two votes, nobody dies.</p>
     <h3 class="ms-h3">Winning</h3>
-    <ul class="ms-wins">${WIN_RULES.map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
+    <ul class="ms-wins">${winRules(view?.roles).map(([t, txt]) => `<li><b style="color:${TEAMS[t].color}">${TEAMS[t].name}</b> ${esc(txt.replace(/^The .*? (?=wins )/, ""))}</li>`).join("")}</ul>
     <p class="ms-hint">The game runs between your browsers with no server in the middle and no ads. If the host leaves, someone else takes over.</p>`;
 }
 
@@ -1245,11 +1257,20 @@ function onSubmit(e) {
   e.preventDefault();
   const kind = form.dataset.form;
   if (kind === "create" || kind === "join") {
+    if (kind === "create") { needName = !myName; createRoom(); return; }
     const n = E.cleanName(document.getElementById("name-input").value);
     if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
     myName = n; ls.set("onuw:name", n);
-    if (kind === "create") createRoom();
-    else joinAsGuest(roomCode, e.submitter?.dataset.as === "spectator" ? "spectator" : "player");
+    joinAsGuest(roomCode, e.submitter?.dataset.as === "spectator" ? "spectator" : "player");
+  }
+  if (kind === "firstname") {
+    const n = E.cleanName(document.getElementById("name-input").value);
+    if (!n) { toast("Type your name first"); return; }
+    myName = n; ls.set("onuw:name", n);
+    send({ t: "rename", name: n });
+    needName = false;
+    render();
+    return;
   }
   if (kind === "rename") {
     const n = E.cleanName(document.getElementById("rename-input").value);
@@ -1309,9 +1330,6 @@ function onClick(e) {
     case "join-code": {
       const code = (document.getElementById("code-input").value || "").toUpperCase().replace(/[^A-Z]/g, "");
       if (code.length !== 4) { toast("Room codes are 4 letters"); return; }
-      const n = E.cleanName(document.getElementById("name-input").value);
-      if (!n) { toast("Type your name first"); document.getElementById("name-input").focus(); return; }
-      myName = n; ls.set("onuw:name", n);
       roomCode = code; setRoomInUrl(code); render();
       return;
     }
@@ -1377,7 +1395,7 @@ app.addEventListener("keydown", (e) => {
 app.addEventListener("input", (e) => {
   if (e.target.id === "code-input") e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
   if (e.target.id === "name-input") {
-    const btn = app.querySelector('.ms-form button[type="submit"]');
+    const btn = e.target.closest("form")?.querySelector('button[type="submit"]');
     if (btn) btn.disabled = !E.cleanName(e.target.value);
   }
 });
