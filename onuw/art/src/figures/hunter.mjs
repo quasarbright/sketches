@@ -3,18 +3,18 @@ import { blob, brush, boot, card } from "../brush.mjs";
 // The hunter: a hooded archer standing at ease in a long cloak, bow held out in front by the grip, quiver over the shoulder.
 const { card: bg, ink } = ROLE_COLORS.hunter;
 const legs = [brush([[238, 450], [232, 520], [228, 580]], [34, 28, 24]), boot(232, 596, { s: 24 }), brush([[272, 450], [280, 520], [286, 580]], [34, 28, 24]), boot(290, 596, { s: 24 })];
-// quiver on the back; each arrow's tail sticks up: nock, swept feather vanes, wrap band
-const shafts = [[218, 248, 206, 194], [228, 250, 222, 190], [236, 252, 240, 194]];
+// quiver on the back; each arrow's tail sticks up with outlined feather vanes
+const shafts = [[214, 250, 190, 198], [226, 250, 220, 188], [236, 252, 248, 196]];
 const fletch = ([a, b, c, d]) => {
   const L = Math.hypot(c - a, d - b), ux = (c - a) / L, uy = (d - b) / L, nx = -uy, ny = ux;
   const at = (t, k) => [c - ux * t + nx * k, d - uy * t + ny * k];
-  // per the fletching reference: a thick nock at the tip, then a long low vane seen side-on (the far one
-  // barely showing) starting just below the nock and cut back to the shaft at the rear, and a wrap band under it
-  const vane = (k) => blob([[...at(6, 0), "c"], at(17, k * .75), [...at(34, k), "c"], [...at(29, 0), "c"]]);
-  const nock = brush([at(-1, 0), at(5, 0)], [5, 4.5]), band = brush([at(32, 0), at(35, 0)], [5.5, 5.5], { cap: "butt" });
-  return [nock, vane(-8), vane(3.5), band];
+  // per Mike's sketch: two slim vanes drawn as outlines, one each side of the shaft, swept so their top
+  // corners rise past the shaft's end and leave a notch between them
+  const seg = (p, q) => brush([p, q], [2.5, 2.5]);
+  const vane = (k) => { const p = [at(26, 0), at(20, k), at(-4, k), at(2, 0)]; return [seg(p[0], p[1]), seg(p[1], p[2]), seg(p[2], p[3])]; };
+  return [...vane(-6), ...vane(6)];
 };
-const quiver = [brush([[206, 400], [228, 250]], [28, 26]), ...shafts.map(([a, b, c, d]) => brush([[a, b], [c, d]], [4, 4])), ...shafts.flatMap(fletch)];
+const quiver = [brush([[206, 400], [228, 250]], [28, 26]), ...shafts.map(([a, b, c, d]) => brush([[a, b], [c, d]], [3.5, 3])), ...shafts.flatMap(fletch)];
 const cloak = blob([[226, 252], [262, 236], [298, 254], [312, 320], [318, 420], [326, 486, "c"], [290, 476], [256, 486], [222, 478], [190, 488, "c"], [200, 420], [206, 320]]);
 const hood = blob([[232, 210], [246, 184], [276, 176], [300, 190], [312, 218], [318, 232, "c"], [306, 236], [306, 254], [286, 268], [256, 266], [236, 248]]);
 const face = blob([[290, 206], [306, 210], [312, 226], [318, 234, "c"], [308, 238], [308, 250], [292, 258]]);
