@@ -516,7 +516,7 @@ function messageScreen(title, body, spinner = false, back = false, retry = false
     <h1 class="ms-h1">${title}</h1>
     <p class="ms-lede">${body}</p>
     ${spinner ? `<div class="ms-dots"><span></span><span></span><span></span></div>` : ""}
-    ${retry || back ? `<div class="ms-msg-actions">${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry ? "" : "ms-primary"}" data-act="home">Back to the start</button>` : ""}</div>` : ""}
+    ${retry || back ? `<div class="ms-msg-actions">${retry ? `<button class="ms-btn ms-primary" data-act="retry">Try again</button>` : ""}${back ? `<button class="ms-btn ${retry ? "" : "ms-primary"}" data-act="home">Main Menu</button>` : ""}</div>` : ""}
     <mike-footer></mike-footer>
   </main>`;
 }
