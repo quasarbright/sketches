@@ -20,6 +20,12 @@ const FAR_Z = 8.4; // past the far side of the farthest box
 const SUN = (() => { const v = [-0.5, 0.8, -0.35], l = Math.hypot(...v); return v.map((c) => c / l); })();
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 const BOX_RGB = SCENE3.boxes.map((b) => rgb(b.color)), BALL_RGB = SCENE3.balls.map((b) => rgb(b[4]));
+// the yellow ball can be left out of the scene (the corner demo only has boxes)
+let ballsOn = true;
+export function withoutBalls(fn) { return (...a) => { ballsOn = false; try { return fn(...a); } finally { ballsOn = true; } }; }
+// a lens's sideways and up-down halves: { Ax, tx, Ay, ty }. { A, t } is the same for both; the
+// two-lens mode gives each its own.
+export const axes = (l) => (l.Ax !== undefined ? l : { Ax: l.A, tx: l.t, Ay: l.A, ty: l.t });
 
 // into and out of a box's own frame (centered, unturned)
 const toLocal = (b, x, y, z, dir = false) => {
@@ -46,7 +52,7 @@ function hit(ox, oy, oz, dx, dy, dz, tMin = 1e-6, any = false) {
     }
     if (t0 <= t1) { const n = [0, 0, 0]; n[axis] = sign; take(t0, toWorld(b, n), BOX_RGB[k]); }
   });
-  SCENE3.balls.forEach(([bx, by, bz, r], k) => {
+  if (ballsOn) SCENE3.balls.forEach(([bx, by, bz, r], k) => {
     const px = ox - bx, py = oy - by, pz = oz - bz;
     const a = dx * dx + dy * dy + dz * dz, b = 2 * (px * dx + py * dy + pz * dz), c = px * px + py * py + pz * pz - r * r;
     const disc = b * b - 4 * a * c;
@@ -77,11 +83,13 @@ function shade(x, y, z, n, c) {
 const skyAt = (v) => SCENE3.sky.map((c, i) => c * (0.88 + 0.12 * v) + [24, 20, 10][i] * (1 - v) * 0.3);
 
 // One pixel's color. `lens` is { A, t } for straight rays from a sensor of half-height A whose
-// rays leave at half-angle atan(t), or { h } for curved rays: the view's half-height at depth z.
+// rays leave at half-angle atan(t), { Ax, tx, Ay, ty } for a different lens across and up, or
+// { h } for curved rays: the view's half-height at depth z.
 // u and v run from -1 to 1 across and up; `aspect` is width / height.
 export function pixel(lens, u, v, aspect) {
   if (lens.h) return curvedPixel(lens.h, u, v, aspect);
-  const ox = u * lens.A * aspect, oy = v * lens.A, dx = u * lens.t * aspect, dy = v * lens.t;
+  const { Ax, tx, Ay, ty } = axes(lens);
+  const ox = u * Ax * aspect, oy = v * Ay, dx = u * tx * aspect, dy = v * ty;
   const h = hit(ox, oy, 0, dx, dy, 1);
   if (!h) return skyAt(v);
   const x = ox + dx * h.t, y = oy + dy * h.t, z = h.t;
@@ -94,7 +102,7 @@ function inBox(x, y, z, b) { // no arrays: this runs for every step of every cur
 function inside(x, y, z) {
   if (y < SCENE3.ground) return -1;
   for (let k = 0; k < SCENE3.boxes.length; k++) if (inBox(x, y, z, SCENE3.boxes[k])) return k;
-  for (let k = 0; k < SCENE3.balls.length; k++) {
+  if (ballsOn) for (let k = 0; k < SCENE3.balls.length; k++) {
     const [bx, by, bz, r] = SCENE3.balls[k];
     if ((x - bx) ** 2 + (y - by) ** 2 + (z - bz) ** 2 < r * r) return 100 + k;
   }
@@ -149,7 +157,7 @@ function curvedHit(h, u, v, aspect) {
 export class Scan {
   constructor() { this.key = null; this.w = 0; this.h = 0; this.done = 0; }
   reset(key, w, h, lens) {
-    this.key = key; this.lens = lens; this.done = 0;
+    this.key = key; this.lens = lens; this.done = 0; this.drawn = -1;
     if (w !== this.w || h !== this.h || !this.img) {
       this.w = w; this.h = h;
       this.img = new ImageData(w, h);
@@ -174,8 +182,23 @@ export class Scan {
     const px = i % this.w, py = (i / this.w) | 0;
     return [-1 + (2 * px + 1) / this.w, 1 - (2 * py + 1) / this.h];
   }
+  // the first n pixels (as far as they're worked out), on the dark background, and a yellow mark
+  // on pixel n: the picture as if it were being traced right now
+  drawReveal(ctx, W, H, n, { x = 0, y = 0 } = {}) {
+    n = Math.max(0, Math.min(this.done, Math.floor(n)));
+    if (this.drawn !== this.done) { this.cv.getContext("2d").putImageData(this.img, 0, 0); this.drawn = this.done; }
+    ctx.fillStyle = "#111317"; ctx.fillRect(x, y, W, H);
+    const row = Math.floor(n / this.w), col = n % this.w, sx = W / this.w, sy = H / this.h;
+    ctx.imageSmoothingEnabled = true;
+    if (row > 0) ctx.drawImage(this.cv, 0, 0, this.w, row, x, y, W, row * sy);
+    if (col > 0 && row < this.h) ctx.drawImage(this.cv, 0, row, col, 1, x, y + row * sy, col * sx, sy);
+    if (n < this.total) {
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(x + col * sx - 2, y + row * sy - 2, Math.max(4, sx + 4), Math.max(4, sy + 4));
+    }
+  }
   draw(ctx, W, H, { head = true, x = 0, y = 0 } = {}) {
-    this.cv.getContext("2d").putImageData(this.img, 0, 0);
+    this.cv.getContext("2d").putImageData(this.img, 0, 0); this.drawn = this.done;
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.cv, x, y, W, H);
     if (head && this.done < this.total) { // where the scan is: a yellow mark on the current pixel
@@ -186,74 +209,74 @@ export class Scan {
   }
 }
 
+// Every box corner in the world, in the order the corner demo places them: first one corner of
+// the near red cube, then one of the far blue box (the two it slows down on), then the rest.
+// Each is { p: [x, y, z], box, i } with i its index in its box (x fastest, then y, then z).
+export const CORNERS = (() => {
+  const all = [];
+  SCENE3.boxes.forEach((b, box) => {
+    let i = 0;
+    for (const sz of [-1, 1]) for (const sy of [-1, 1]) for (const sx of [-1, 1]) {
+      const v = toWorld(b, [sx * b.half[0], sy * b.half[1], sz * b.half[2]]);
+      all.push({ p: [v[0] + b.c[0], v[1] + b.c[1], v[2] + b.c[2]], box, i: i++ });
+    }
+  });
+  // a top corner of the red cube, and the blue box's top front right corner
+  const first = [all.find((c) => c.box === 0 && c.i === 2), all.find((c) => c.box === 1 && c.i === 3)];
+  return [...first, ...all.filter((c) => !first.includes(c))];
+})();
+
 // The graphics card's way, for straight rays: each corner of each box goes to the place in the
-// picture where its offset from the line of sight, divided by f(z) = A + z·t, puts it. `k` says
-// how far along the animation is: 0..1 placing corners one at a time, 1..2 joining them with
-// edges, 2..3 filling the faces.
-export function projectBoxes(ctx, W, H, lens, k) {
+// picture where its offset from the line of sight, divided by f(z) = A + z·t, puts it. `placed`
+// corners (of CORNERS) are shown; `join` (0..1) grows the edges and triangle diagonals between
+// them; `fill` (0..1) fades the faces in and the wireframe and corners out.
+export function projectBoxes(ctx, W, H, lens, { placed = CORNERS.length, join = 0, fill = 0 } = {}) {
   const aspect = W / H, f = (z) => lens.A + z * lens.t;
   const P = (x, y, z) => [W / 2 + (x / (f(z) * aspect)) * W / 2, H / 2 - (y / f(z)) * H / 2];
   // sky, and the ground below the horizon (where the ground plane meets the line of sight)
   ctx.fillStyle = `rgb(${SCENE3.sky})`; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = `rgb(${SCENE3.grass.map((c) => c * 0.95)})`; ctx.fillRect(0, H / 2, W, H / 2);
-  const corners = [], faces = [];
-  SCENE3.boxes.forEach((b, bi) => {
-    const pts = [];
-    for (const sz of [-1, 1]) for (const sy of [-1, 1]) for (const sx of [-1, 1]) {
-      const v = toWorld(b, [sx * b.half[0], sy * b.half[1], sz * b.half[2]]);
-      pts.push([v[0] + b.c[0], v[1] + b.c[1], v[2] + b.c[2]]);
-    }
-    pts.forEach((p) => corners.push({ p, q: P(...p), color: b.color }));
-    // faces as corner indices (x fastest, then y, then z), with their outward normals
-    const F = [[[0, 1, 3, 2], [0, 0, -1]], [[4, 5, 7, 6], [0, 0, 1]], [[0, 2, 6, 4], [-1, 0, 0]],
-      [[1, 3, 7, 5], [1, 0, 0]], [[2, 3, 7, 6], [0, 1, 0]], [[0, 1, 5, 4], [0, -1, 0]]];
-    for (const [idx, n0] of F) {
-      const n = toWorld(b, n0);
-      const c = idx.map((i) => pts[i]);
-      const mid = [0, 1, 2].map((a) => c.reduce((s, p) => s + p[a], 0) / 4);
-      // a face shows when the ray that reaches its middle is heading into it: that ray goes
-      // (x, y)·t/f(z) sideways and up for every meter forward
-      const fz = f(mid[2]);
-      const toward = n[0] * mid[0] * lens.t / fz + n[1] * mid[1] * lens.t / fz + n[2] < 0;
-      if (!toward) continue;
-      faces.push({ q: c.map((p) => P(...p)), z: mid[2], color: shade(...mid, n, rgb(b.color)), box: bi });
-    }
-  });
-  const nC = corners.length;
-  if (k >= 2) { // fill the faces, far ones first
-    const e = Math.min(1, k - 2);
+  const q = (box, i) => { const c = CORNERS.find((c) => c.box === box && c.i === i); return P(...c.p); };
+  if (fill > 0) { // the faces, far ones first
+    const faces = [];
+    SCENE3.boxes.forEach((b, bi) => {
+      const F = [[[0, 1, 3, 2], [0, 0, -1]], [[4, 5, 7, 6], [0, 0, 1]], [[0, 2, 6, 4], [-1, 0, 0]],
+        [[1, 3, 7, 5], [1, 0, 0]], [[2, 3, 7, 6], [0, 1, 0]], [[0, 1, 5, 4], [0, -1, 0]]];
+      for (const [idx, n0] of F) {
+        const n = toWorld(b, n0);
+        const c = idx.map((i) => CORNERS.find((k) => k.box === bi && k.i === i).p);
+        const mid = [0, 1, 2].map((a) => c.reduce((s, p) => s + p[a], 0) / 4);
+        // a face shows when the ray that reaches its middle is heading into it: that ray goes
+        // (x, y)·t/f(z) sideways and up for every meter forward
+        const fz = f(mid[2]);
+        if (!(n[0] * mid[0] * lens.t / fz + n[1] * mid[1] * lens.t / fz + n[2] < 0)) continue;
+        faces.push({ q: c.map((p) => P(...p)), z: mid[2], color: shade(...mid, n, rgb(b.color)) });
+      }
+    });
     faces.sort((a, b) => b.z - a.z);
-    ctx.globalAlpha = e;
+    ctx.globalAlpha = fill;
     for (const fc of faces) {
       ctx.fillStyle = `rgb(${fc.color.map(Math.round)})`; ctx.beginPath();
       fc.q.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
-  if (k >= 1 && k < 3) { // join each box's corners
-    const e = Math.min(1, k - 1);
-    ctx.strokeStyle = "rgba(20,22,26,0.85)"; ctx.lineWidth = 1.5;
-    // the box's edges, and one diagonal across each face: the graphics card fills triangles
+  const wire = 1 - fill;
+  if (join > 0 && wire > 0) { // each box's edges, and one diagonal across each face: the triangles
+    ctx.strokeStyle = `rgba(20,22,26,${0.85 * wire})`; ctx.lineWidth = 1.5;
     const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7],
       [0, 3], [4, 7], [0, 6], [1, 7], [2, 7], [0, 5]];
-    for (let bi = 0; bi < SCENE3.boxes.length; bi++) {
-      const c = corners.slice(8 * bi, 8 * bi + 8);
-      for (const [a, b] of edges) {
-        const [x0, y0] = c[a].q, [x1, y1] = c[b].q;
-        ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e); ctx.stroke();
-      }
+    for (let bi = 0; bi < SCENE3.boxes.length; bi++) for (const [a, b] of edges) {
+      const [x0, y0] = q(bi, a), [x1, y1] = q(bi, b);
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + (x1 - x0) * join, y0 + (y1 - y0) * join); ctx.stroke();
     }
   }
-  if (k < 3) { // the corners, appearing one at a time; the newest is yellow
-    const shown = k >= 1 ? nC : Math.floor(k * nC) + 1;
-    for (let i = 0; i < Math.min(nC, shown); i++) {
-      const [x, y] = corners[i].q;
-      ctx.fillStyle = i === shown - 1 && k < 1 ? "#ffd23f" : "#14161a";
-      ctx.beginPath(); ctx.arc(x, y, i === shown - 1 && k < 1 ? 4.5 : 3, 0, 7); ctx.fill();
-    }
-    return k < 1 ? corners[Math.min(nC - 1, Math.floor(k * nC))].p : null;
+  if (wire > 0) for (let i = 0; i < Math.min(placed, CORNERS.length); i++) { // the corners placed so far
+    const [x, y] = P(...CORNERS[i].p);
+    ctx.fillStyle = `rgba(20,22,26,${wire})`;
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
   }
-  return null;
+  return P;
 }
 
 /* ---------------- the rays, seen from outside ---------------- */
@@ -269,19 +292,23 @@ export function rayPath(lens, u, v, aspect) {
     }
     return { pts, color: r ? shade(r.x, r.y, r.z, r.n, r.c) : skyAt(v), hit: !!r };
   }
-  const ox = u * lens.A * aspect, oy = v * lens.A, dx = u * lens.t * aspect, dy = v * lens.t;
+  const { Ax, tx, Ay, ty } = axes(lens);
+  const ox = u * Ax * aspect, oy = v * Ay, dx = u * tx * aspect, dy = v * ty;
   const h = hit(ox, oy, 0, dx, dy, 1), t = h ? h.t : 12;
   const end = [ox + dx * t, oy + dy * t, t];
   return { pts: [[ox, oy, 0], end], color: h ? shade(...end, h.n, h.c) : skyAt(v), hit: !!h };
 }
 
-// a camera off to your left and above, looking across the scene, so you are on the left and the
-// scene runs off to the right, as in the side views
+// a camera off to your right and above, looking back across the scene, so you are on the left
+// and the scene runs off to the right, as in the side views. The pictures put +x on the right
+// (x right, y up, z ahead), and this camera uses the same handedness, so left in your picture is
+// left here too, and a row scanned left to right sweeps left to right in this view.
 const OUT = (() => {
-  const pos = [-6.5, 2.6, -1.0], target = [0.5, -0.5, 4.5];
-  const f = target.map((c, i) => c - pos[i]), lf = Math.hypot(...f); f.forEach((c, i) => (f[i] = c / lf));
-  const r = [f[2], 0, -f[0]], lr = Math.hypot(...r); r.forEach((c, i) => (r[i] = -c / lr)); // right = f × up
-  const up = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  const pos = [6.5, 2.6, -1.0], target = [-0.5, -0.5, 4.5];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = (v) => { const l = Math.hypot(...v); return v.map((c) => c / l); };
+  const f = unit(target.map((c, i) => c - pos[i]));
+  const r = unit(cross([0, 1, 0], f)), up = cross(f, r);
   return { pos, f, r, up, tan: Math.tan(30 * Math.PI / 180) };
 })();
 // the outside camera's own picture of the scene (a plain camera, for the backdrop)

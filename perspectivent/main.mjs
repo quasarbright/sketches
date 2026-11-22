@@ -11,8 +11,8 @@ import {
 } from "./lens.mjs";
 import { drawDiagram, lutFn } from "./diagram.mjs";
 import { drawRenderDemo, EYE_LENS, SENSOR_LENS, RENDER_PIXELS } from "./render-demo.mjs";
-import { Scan } from "./render3d.mjs";
-import { drawTraceDemo, drawLiveDemo, drawCornerDemo } from "./about3d.mjs";
+import { drawAbout3D, FUNCTIONS, FUNCTION_PERIOD, sensorSweep } from "./about3d.mjs";
+import { drawGraphDemo, GRAPHS } from "./graph-demo.mjs";
 import { PHYS, COURSE, TOWER } from "./course.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -1288,9 +1288,7 @@ const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;
  * about-modal diagrams (the same drawing code, with lenses that animate on their own)
  * ===================================================================== */
 let aboutRAF = 0, aboutOpen = false;
-// the 3D demos' pictures, one per canvas
-const scans = new WeakMap(), planeState = new WeakMap(), lensCache = new Map();
-function scanOf(cv) { let sc = scans.get(cv); if (!sc) { sc = new Scan(); scans.set(cv, sc); } return sc; }
+const stores = new WeakMap(); // per canvas, for the 3D demos that keep state
 document.addEventListener("cohesion-modal-open", (e) => {
   if (!e.detail.className?.includes("cohesion-about")) return;
   aboutOpen = true; // the world stays still behind the About, and its demos get the time
@@ -1298,10 +1296,6 @@ document.addEventListener("cohesion-modal-open", (e) => {
   const canvases = [...el.querySelectorAll(".pv-about-diagram")];
   const t0 = performance.now();
   const D = 10;
-  const fns = [
-    { name: "√z", f: parseExpr("sqrt(z)") }, { name: "z²", f: parseExpr("z^2") },
-    { name: "1/z", f: parseExpr("1/z") }, { name: "log(1 + z)", f: parseExpr("log(1+z)") },
-  ];
   const tick = (now) => {
     const t = Math.max(0, now - t0) / 1000; // the first frame can be stamped before t0
     for (const cv of canvases) {
@@ -1312,63 +1306,29 @@ document.addEventListener("cohesion-modal-open", (e) => {
       const ctx = cv.getContext("2d");
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const demo = cv.dataset.demo;
-      const cap = (txt) => { const c = el.querySelector(`[data-caption="${demo}"]`); if (c && c.textContent !== txt) c.textContent = txt; };
+      const cap = (txt) => { const c = el.querySelector(`[data-caption="${demo}"]`); if (c && txt !== undefined && c.textContent !== txt) c.textContent = txt; };
       if (demo === "render") drawRenderDemo(ctx, r.width, r.height, t, { lens: EYE_LENS });
       else if (demo === "render-ortho") drawRenderDemo(ctx, r.width, r.height, t, { lens: SENSOR_LENS });
-      else if (demo === "render3d" || demo === "render3d-ortho") {
-        // the same clock as the side view's column above: the picture's rows keep pace with its
-        // pixels, then both hold, then again
-        const lens = demo === "render3d" ? EYE_LENS : SENSOR_LENS, run = RENDER_PIXELS * 0.22, cycle = run + 2.2;
-        drawTraceDemo(ctx, r.width, r.height, dpr, { sc: scanOf(cv), key: `${Math.floor(t / cycle)}`, lens, frac: Math.min(1, (t % cycle) / run) });
-      } else if (demo === "divide3d") {
-        // place the 16 corners one at a time, join them into triangles, fill them, hold
-        const tc = t % 10.5, k = tc < 5.6 ? tc / 5.6 : Math.min(3, 1 + (tc - 5.6) / 1.3);
-        const p = drawCornerDemo(ctx, r.width, r.height, dpr, EYE_LENS, k);
-        const n = (v) => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2), f = 0.55 * (p ? p[2] : 1);
-        cap(p ? `This corner is x = ${n(p[0])} m across, y = ${n(p[1])} m up and z = ${n(p[2])} m ahead. Divided by 0.55 z: (${n(p[0] / f)}, ${n(p[1] / f)}) in the picture.`
-          : k < 2 ? "Every corner is placed. Neighboring corners are joined into triangles." : "The triangles are filled in, nearest in front.");
-      } else if (demo === "plane" || demo === "plane3d") {
-        // sweep the sensor from a point (an eye) to as tall as the picture with no spread, and on
-        // to bigger with the rays coming together, holding at each
-        const period = 12, u = (t % period) / period;
-        const keysS = [0, 0, 1, 1, 1.45, 1.45, 0];
-        const seg = u * (keysS.length - 1), i = Math.floor(seg), f = seg - i;
-        const ease = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
-        const s = keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
-        // the same lens as a sensor and a spread, in the 3D scene's meters (its picture is 2.2 m
-        // tall 2 m ahead, like the side view's)
-        const lens = { A: s * 1.1, t: (1 - s) * 0.55 };
-        if (demo === "plane") {
-          drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
-          const spread = Math.round(2 * Math.atan(lens.t) * 180 / Math.PI);
-          cap(s < 0.02 ? `An eye, spreading ${spread}°: a normal camera.`
-            : Math.abs(s - 1) < 0.02 ? `A ${fmtD(2 * lens.A)} sensor, spread 0°: parallel rays, orthographic.`
-            : s > 1.43 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(lens.A / -lens.t)} ahead, reverse perspective.`
-            : `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°.`);
-        } else {
-          // while it moves, a coarse picture each frame; when it holds, the full one
-          const st = planeState.get(cv) ?? { low: new Scan(), full: new Scan(), s: -1 };
-          planeState.set(cv, st);
-          const holding = Math.abs(s - st.s) < 1e-9;
-          st.s = s;
-          drawLiveDemo(ctx, r.width, r.height, dpr, st, lens, holding);
-        }
-      } else if (demo === "functions" || demo === "functions3d") {
+      else if (GRAPHS[demo]) drawGraphDemo(ctx, r.width, r.height, demo, t);
+      else if (demo === "plane") {
+        const s = sensorSweep(t), lens = { A: s * 1.1, t: (1 - s) * 0.55 }; // the 3D sweep's lens, in its meters
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
+        const spread = Math.round(2 * Math.atan(lens.t) * 180 / Math.PI);
+        cap(s < 0.02 ? `An eye, spreading ${spread}°: a normal camera.`
+          : Math.abs(s - 1) < 0.02 ? `A ${fmtD(2 * lens.A)} sensor, spread 0°: parallel rays, orthographic.`
+          : s > 1.43 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(lens.A / -lens.t)} ahead, reverse perspective.`
+          : `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°.`);
+      } else if (demo === "functions") {
         // hold each function, then morph to the next the way the lens does
-        const period = 5.5, k = Math.floor(t / period) % fns.length, into = (t % period) / 0.9;
-        const cur = fns[k], prev = fns[(k + fns.length - 1) % fns.length];
-        if (demo === "functions") {
-          const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
-          const u = Math.min(1, into), e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-          drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => ga(z) + (gb(z) - ga(z)) * e, s: null });
-          cap(`Divide the offset by ${cur.name}.`);
-        } else {
-          // the curved rays traced pixel by pixel: the view is 2.2 m tall 2 m ahead, like the others
-          const g = normalizedLens(cur.f, 2), round = Math.floor(t / period);
-          const lens = lensCache.get(round) ?? { h: (z) => 1.1 * g(z) };
-          lensCache.clear(); lensCache.set(round, lens);
-          drawTraceDemo(ctx, r.width, r.height, dpr, { sc: scanOf(cv), key: `${round}`, lens, frac: Math.min(1, (t % period) / 4.5) });
-        }
+        const k = Math.floor(t / FUNCTION_PERIOD) % FUNCTIONS.length, into = (t % FUNCTION_PERIOD) / 0.9;
+        const cur = FUNCTIONS[k], prev = FUNCTIONS[(k + FUNCTIONS.length - 1) % FUNCTIONS.length];
+        const ga = normalizedLens(prev.f, D), gb = normalizedLens(cur.f, D);
+        const u = Math.min(1, into), ease = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => ga(z) + (gb(z) - ga(z)) * ease, s: null });
+        cap(`Divide the offset by ${cur.name}.`);
+      } else {
+        let st = stores.get(cv); if (!st) { st = {}; stores.set(cv, st); }
+        cap(drawAbout3D(demo, ctx, r.width, r.height, dpr, t, st));
       }
     }
     aboutRAF = requestAnimationFrame(tick);
