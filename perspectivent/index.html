@@ -177,7 +177,8 @@
       color: var(--text); z-index: 10;
     }
 
-    .pv-down { bottom: 196px !important; }
+    /* flying, up sits above down (Mike: down above up was backwards) */
+    .pv-raised { bottom: 196px !important; }
     .pv-down[hidden] { display: none; }
     @media (max-width: 700px) {
       /* open, the panel reaches down to the button bar (a tap outside closes it), and a shadow at
@@ -193,7 +194,7 @@
       .pv-hint { top: 48px; left: 16px; }
       /* clear of the bottom strip of the view, where orthographic shows the track bed moving */
       .pv-stick, .pv-jump { bottom: 190px; }
-      .pv-down { bottom: 274px !important; }
+      .pv-raised { bottom: 274px !important; }
       control-panel.floating { width: min(300px, calc(100vw - 32px)); }
     }
   </style>

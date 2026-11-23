@@ -842,6 +842,7 @@ function setMode(m) {
   player.mode = m;
   $("jump").textContent = m === "walk" ? "jump" : "up";
   $("down").hidden = m === "walk";
+  $("jump").classList.toggle("pv-raised", m !== "walk"); // up above down
   updateModeButton();
   updateHint();
 }
