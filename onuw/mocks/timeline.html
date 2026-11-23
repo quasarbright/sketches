@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="../shared/cohesion.css" />
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Lato:wght@400;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style id="mock">
-  .mk-tag { position: fixed; top: 8px; left: 8px; z-index: 99; font: 600 .75rem var(--font-ui); background: #f2a541; color: #1b1200; padding: 3px 8px; border-radius: 6px; }
+  .mk-tag { position: absolute; top: 8px; left: 8px; z-index: 99; font: 600 .75rem var(--font-ui); background: #f2a541; color: #1b1200; padding: 3px 8px; border-radius: 6px; }
   .mk-step-text { margin: 0; line-height: 1.45; }
   .mk-step-text .ms-label { display: inline; margin-right: 4px; }
 
@@ -55,7 +55,8 @@
   .mk-legend b { font: 600 .75rem var(--font-ui); color: var(--muted); min-width: 22px; }
 
   /* C: step through */
-  .mk-scrub { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .mk-scrub { display: flex; gap: 6px; flex-wrap: wrap; }
+  @media (max-width: 600px) { .mk-scrub .mk-role { display: none; } .mk-scrub button { min-width: 38px; } }
   .mk-scrub button { flex: none; font: 600 .8rem var(--font-ui); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); cursor: pointer; }
   .mk-scrub button.is-on { background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); color: var(--text); border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
   .mk-stage { position: relative; }
@@ -139,7 +140,7 @@ const page = (title, sub, body) => `<div class="mk-tag">Mock ${opt}</div>
 function table(st, { changedFrom, hot = {} } = {}) {
   const one = (k) => {
     const ch = changedFrom && changedFrom[k] !== st[k];
-    return wrap(card(st[k]) + `<div class="ms-card-label">${esc(posName(k))}</div>${ch ? `<span class="ms-tag ms-changed">changed</span>` : ""}`, hot[k] || "", `data-pos="${k}"`);
+    return wrap(card(st[k]) + `<div class="ms-card-label">${esc(posName(k))}</div>${ch ? `<span class="ms-tag ms-changed">moved</span>` : ""}`, hot[k] || "", `data-pos="${k}"`);
   };
   return `<div class="ms-table"><div class="ms-table-grid">${POS.filter((k) => k.startsWith("p:")).map(one).join("")}</div>
     <div class="ms-table-grid ms-table-center">${POS.filter((k) => k.startsWith("c:")).map(one).join("")}</div></div>`;
@@ -238,9 +239,9 @@ function mockC() {
     for (const k of s.swap || []) hot[k] = "is-swap";
     hot["p:" + s.actor] = (hot["p:" + s.actor] || "") + " is-actor";
   }
-  const caption = at === 0 ? "How the cards were dealt." : at > steps.length ? "Everyone's card when the night ended. Gold tags mark the ones that moved." : s.text;
+  const caption = at === 0 ? "How the cards were dealt." : at > steps.length ? "Everyone's card when the night ended. Cards tagged moved are not where they were dealt." : s.text;
   return page("The Night", "Step through the night from the deal to the end.",
-    `<div class="mk-scrub">${labels.map((l, i) => `<button class="${i === at ? "is-on" : ""}" data-at="${i}">${i >= 1 && i <= steps.length ? i + " " : ""}${esc(l)}</button>`).join("")}</div>
+    `<div class="mk-scrub">${labels.map((l, i) => `<button class="${i === at ? "is-on" : ""}" data-at="${i}">${i >= 1 && i <= steps.length ? `${i}<span class="mk-role"> ${esc(l)}</span>` : esc(l)}</button>`).join("")}</div>
      <p class="mk-step-text mk-caption">${s ? `<span class="ms-label">${esc(s.label)}</span> ` : ""}${esc(caption)}</p>
      <div class="mk-stage" id="stage">${table(st, { hot, changedFrom: at > steps.length ? deal : null })}<svg class="mk-overlay" id="ov"></svg></div>
      <div class="mk-nav"><button class="ms-btn" data-at="${Math.max(0, at - 1)}" ${at === 0 ? "disabled" : ""}>Back</button><button class="ms-btn ms-primary" data-at="${Math.min(n, at + 1)}" ${at === n ? "disabled" : ""}>Next</button></div>`);
@@ -271,7 +272,27 @@ function render() {
   document.getElementById("root").innerHTML = opt === "A" ? mockA() : opt === "B" ? mockB() : mockC();
   requestAnimationFrame(() => { drawB(); drawC(); });
 }
-document.addEventListener("click", (e) => { const b = e.target.closest("[data-at]"); if (b) { at = +b.dataset.at; render(); } });
+// A swap slides the two cards past each other along an arc; Back plays it in reverse.
+function animateSwap(step, reverse) {
+  const stage = document.getElementById("stage"); if (!stage || !step?.swap) return;
+  const [ea, eb] = step.swap.map((k) => stage.querySelector(`[data-pos="${k}"] .ms-card`));
+  const ra = ea.getBoundingClientRect(), rb = eb.getBoundingClientRect();
+  const go = (el, from, to) => {
+    const dx = from.left - to.left, dy = from.top - to.top;
+    el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: `translate(${dx / 2}px, ${dy / 2 - 34}px)`, offset: .5 }, { transform: "none" }],
+      { duration: 340, easing: "ease-in-out" });
+    el.style.zIndex = 4;
+  };
+  go(ea, rb, ra); go(eb, ra, rb);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-at]"); if (!b) return;
+  const from = at; at = +b.dataset.at; render();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (at === from + 1) animateSwap(steps[at - 1], false);
+    else if (at === from - 1) { /* back: the turn we left un-swaps */ animateSwap(steps[from - 1], true); }
+  }));
+});
 addEventListener("resize", () => { drawB(); drawC(); });
 render();
 window.__ready = true;
