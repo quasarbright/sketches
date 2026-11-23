@@ -151,7 +151,6 @@ function prewarm(key, W, H, dpr, lens) {
 // and returns the canvas it drew on.
 let engine = null;
 export const setEngine = (fn) => { engine = fn; };
-export const sweepLens = (s) => ({ A: s * 1.1, t: (1 - s) * 0.55 });
 export function drawEngineDemo(ctx, W, H, dpr, lens) {
   const L = layout(W, H), pw = Math.round(L.pic.w * dpr);
   ctx.clearRect(0, 0, W, H);
@@ -173,7 +172,7 @@ export function drawAbout3D(demo, ctx, W, H, dpr, t, store) {
   if (demo === "twolens3d") return drawTraceDemo(ctx, W, H, dpr, { key: "twolens", lens: TWO_LENS, frac });
   if (demo === "orthopair") return drawOrthoPair(ctx, W, H, dpr, t, store);
   if (demo === "vertex") return drawVertexDemo(ctx, W, H, dpr, t);
-  if (demo === "plane3d") return drawEngineDemo(ctx, W, H, dpr, sweepLens(sensorSweep(t)));
+  if (demo === "plane3d") return drawEngineDemo(ctx, W, H, dpr, sensorSweep(t));
   if (demo === "sliders3d") return drawEngineDemo(ctx, W, H, dpr, store.lens ?? EYE_LENS);
   if (demo === "functions3d") {
     const i = Math.floor(t / FUNCTION_PERIOD) % FUNCTIONS.length, j = (i + 1) % FUNCTIONS.length;
@@ -187,13 +186,17 @@ export function drawAbout3D(demo, ctx, W, H, dpr, t, store) {
         : "f(0) is 0, so the rays start at your eye.");
   }
 }
-// the sensor sweep's size: 0 (an eye), 1 (as tall as the picture, no spread), 1.6 (rays meeting 5.3 m ahead, in front of the blue box)
+// The sensor sweep's lens at time t: an eye, then a sensor as tall as the picture with parallel rays
+// (orthographic), then the same sensor pinched until its rays cross 2.2 m ahead, in front of
+// everything, so past the crossing the whole scene is upside down. Then back to the eye.
+export const SWEEP_PINCH = { A: 1.1, t: -0.5 };
 export function sensorSweep(t) {
   const period = 12, u = (t % period) / period;
-  const keysS = [0, 0, 1, 1, 1.6, 1.6, 0];
-  const seg = u * (keysS.length - 1), i = Math.floor(seg), f = seg - i;
+  const keys = [EYE_LENS, EYE_LENS, SENSOR_LENS, SENSOR_LENS, SWEEP_PINCH, SWEEP_PINCH, EYE_LENS];
+  const seg = u * (keys.length - 1), i = Math.floor(seg), f = seg - i;
   const ease = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
-  return keysS[i] + (keysS[Math.min(i + 1, keysS.length - 1)] - keysS[i]) * ease;
+  const a = keys[i], b = keys[Math.min(i + 1, keys.length - 1)];
+  return { A: a.A + (b.A - a.A) * ease, t: a.t + (b.t - a.t) * ease };
 }
 
 /* ---------------- how the game cheats: triangle by triangle ---------------- */

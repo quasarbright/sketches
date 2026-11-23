@@ -19,7 +19,7 @@ export function lutFn(arr, comp) {
   };
 }
 
-export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground = null }) {
+export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground = null, meet = null }) {
   ctx.clearRect(0, 0, W, H);
   const padL = 18, padR = 10;
   // a fixed scale for screens up to 10 m away, so moving the screen visibly moves it; past that
@@ -54,7 +54,7 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground =
       for (let i = 0; i <= steps; i++) {
         const z = (zMax * i) / steps;
         const gz = g(Math.max(z, 1e-3));
-        if (!(gz > 0)) { if (started) break; else continue; }
+        if (!Number.isFinite(gz)) { if (started) break; else continue; } // negative: crossed rays carry on, flipped
         const y = u * h * gz;
         if (Math.abs(y) > 1.2 * yMax) { // off the top: finish the line at the edge and move on
           if (started) { ctx.lineTo(X(z), Y(Math.sign(y) * 1.2 * yMax)); break; }
@@ -80,8 +80,8 @@ export function drawDiagram(ctx, W, H, { D, h, gy, gx = null, s = null, ground =
     ctx.beginPath(); ctx.arc(X(0), Y(0), 3, 0, 7); ctx.fill();
   }
   // where converging rays meet
-  if (s != null && s > 1) {
-    const zc = convergenceDepth(s, D);
+  if (meet != null || (s != null && s > 1)) {
+    const zc = meet ?? convergenceDepth(s, D);
     if (zc < zMax) {
       ctx.fillStyle = COL.meet;
       ctx.beginPath(); ctx.arc(X(zc), Y(0), 3.5, 0, 7); ctx.fill();

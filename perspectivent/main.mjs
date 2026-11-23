@@ -1393,12 +1393,14 @@ document.addEventListener("cohesion-modal-open", (e) => {
       else if (GRAPHS[demo]) drawGraphDemo(ctx, r.width, r.height, demo, t);
       else if (demo === "graph-sliders") drawGraphDemo(ctx, r.width, r.height, demo, t, play.graph);
       else if (demo === "plane") {
-        const s = sensorSweep(t), lens = { A: s * 1.1, t: (1 - s) * 0.55 }; // the 3D sweep's lens, in its meters
-        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: normalizedLens(backPlaneF(s, D), D), s });
+        // the 3D sweep's lens, in its meters (its picture is 2 m ahead), drawn here with that 2 m at D
+        const lens = sensorSweep(t), k = 2 / D, f3 = (z) => lens.A + lens.t * z;
+        const meet = lens.t < -1e-3 ? lens.A / -lens.t : Infinity;
+        drawDiagram(ctx, r.width, r.height, { D, h: D * Math.tan(FOV / 2), gy: (z) => f3(z * k) / 1.1, s: lens.A / 1.1, meet: meet / k });
         const spread = Math.round(2 * Math.atan(lens.t) * 180 / Math.PI);
-        cap(s < 0.02 ? `An eye, spreading ${spread}°: a normal camera.`
-          : Math.abs(s - 1) < 0.02 ? `A ${fmtD(2 * lens.A)} sensor, spread 0°: parallel rays, orthographic.`
-          : s > 1.58 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(lens.A / -lens.t)} ahead, reverse perspective.`
+        cap(lens.A < 0.02 ? `An eye, spreading ${spread}°: a normal camera.`
+          : Math.abs(lens.t) < 0.003 ? `A ${fmtD(2 * lens.A)} sensor, spread 0°: parallel rays, orthographic.`
+          : lens.t < -0.49 ? `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°: the rays cross ${fmtD(meet)} ahead, so past that the world is upside down.`
           : `A ${fmtD(2 * lens.A)} sensor, spread ${spread}°.`);
       } else if (demo === "functions") {
         // hold each function, then morph to the next the way the lens does
