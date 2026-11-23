@@ -1105,13 +1105,16 @@ function resultsScreen() {
   const color = r.village ? TEAMS.village.color : r.wolfTeam ? TEAMS.wolf.color : r.jester ? TEAMS.jester.color : "var(--muted)";
   // Votes: only the players who got any, most first, each with who voted for them.
   const voted = seats.filter((id) => r.counts[id]).sort((a, b) => r.counts[b] - r.counts[a] || seats.indexOf(a) - seats.indexOf(b));
+  // The card a player started with and the one they ended with, as chips.
+  const startEnd = (id) => `<div class="ms-ev-cards" aria-label="Started as the ${esc(ROLES[r.dealt[id]].name)}, ended as the ${esc(ROLES[r.cards[id]].name)}">${card(r.dealt[id], { size: "xs", info: false })}${icon("arrow", "ms-ico-sm ms-res-arrow")}${card(r.cards[id], { size: "xs", info: false })}</div>`;
   const voteRows = voted.map((id) => {
     const from = seats.filter((x) => r.votes[x] === id);
-    return `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""}</div>
-      <div class="ms-hint">${r.counts[id]} vote${r.counts[id] === 1 ? "" : "s"}, from ${esc(listNames(from.map(playerName)))}</div></div>
-      ${r.dead.includes(id) ? `<span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span>` : ""}</li>`;
+    return `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""}${r.dead.includes(id) ? ` <span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span>` : ""}</div>
+      <div class="ms-hint">${r.counts[id]} vote${r.counts[id] === 1 ? "" : "s"}, from ${esc(listNames(from.map(playerName)))}</div>${startEnd(id)}</div></li>`;
   }).join("");
   const noVote = seats.filter((id) => !r.votes[id]);
+  const votesBody = (voted.length ? `<ul class="ms-ev-votes">${voteRows}</ul>` : `<p class="ms-hint">Nobody got a vote.</p>`)
+    + (noVote.length ? `<p class="ms-hint">${esc(listNames(noVote.map(playerName)))} didn't vote.</p>` : "");
   const copied = Object.entries(r.copied || {}).filter(([c]) => seats.some((id) => r.cards[id] === c) || r.center.includes(c));
   const winners = seats.filter((id) => r.winners.includes(id));
   const step = (n, title, body) => `<li class="ms-ev"><h2 class="ms-h2"><span class="ms-ev-n">${n}</span>${title}</h2>${body}</li>`;
@@ -1121,14 +1124,14 @@ function resultsScreen() {
       <h1 class="ms-h1 ms-headline" style="color:${color}">${esc(headline)}</h1>
       ${g.seated ? `<div class="ms-verdict ${won ? "is-won" : "is-lost"}">${won ? "You won" : "You lost"}</div>` : ""}
     </section>
+    <section class="ms-ev ms-ev-top"><h2 class="ms-h2">The Votes</h2>${votesBody}</section>
     <ol class="ms-events">
       ${step(1, "The Deal", tableCards(r.dealt, r.dealtCenter || r.center, r.dealtSpare, { seats: seats }))}
       ${step(2, "The Night", `<p class="ms-hint">In wake-up order.</p>${nightLog(r.log, "Nobody moved or looked at a card.")}`)}
       ${step(3, "When the Night Ended", tableCards(r.cards, r.center, r.spare, { seats: seats, before: r.dealt, beforeCenter: r.dealtCenter, beforeSpare: r.dealtSpare })
         + copied.map(([c, to]) => `<p class="ms-hint">The ${esc(ROLES[c].name)} card became the ${esc(ROLES[to].name)}.</p>`).join(""))}
-      ${step(4, "The Votes", (voted.length ? `<ul class="ms-ev-votes">${voteRows}</ul>` : `<p class="ms-hint">Nobody got a vote.</p>`)
-        + (noVote.length ? `<p class="ms-hint">${esc(listNames(noVote.map(playerName)))} didn't vote.</p>` : ""))}
-      ${step(5, "Who Died", `${r.dead.length ? `<ul class="ms-ev-votes">${r.dead.map((id) => `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""}</div><div class="ms-hint">The ${esc(ROLES[(r.effective || r.cards)[id]].name)}</div></div><span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span></li>`).join("")}</ul>` : ""}
+      ${step(4, "The Votes", votesBody)}
+      ${step(5, "Who Died", `${r.dead.length ? `<ul class="ms-ev-votes">${r.dead.map((id) => `<li class="ms-ev-vote">${avatar(playerName(id), id)}<div><div class="ms-pname">${esc(playerName(id))}${id === myId ? ` <span class="ms-tag">you</span>` : ""} <span class="ms-flag ms-flag-dead">${icon("skull", "ms-ico-sm")}died</span></div>${startEnd(id)}</div></li>`).join("")}</ul>` : ""}
         <p class="ms-ev-why">${esc(whyLine(r, seats))}</p>
         <p class="ms-hint">${winners.length ? `Won: ${esc(listNames(winners.map(playerName)))}.` : "Nobody won."}</p>`)}
     </ol>

@@ -228,6 +228,7 @@
     .ms-xs .ms-card-art { order: 0; width: 30px; height: 30px; flex: none; }
     .ms-xs .ms-card-name { order: 1; background: none; color: var(--text); font-size: .9rem; padding: 0 6px 0 2px; overflow: visible; }
     .ms-xs .ms-emblem { width: 24px; }
+    .ms-xs .ms-card-name.is-long, .ms-xs .ms-card-name.is-xlong, .ms-xs .ms-card-name.is-wrap { font-size: .9rem; line-height: normal; padding: 0 6px 0 2px; white-space: nowrap; letter-spacing: normal; }
     .ms-xs .ms-info { order: 2; position: static; width: 26px; height: 26px; background: none; color: var(--muted); }
     .ms-xs .ms-info::after { inset: -9px -4px; }
     .ms-chiprow { display: flex; flex-wrap: wrap; gap: 8px 6px; align-items: center; }
@@ -364,6 +365,13 @@
     .ms-ev-vote { display: flex; align-items: center; gap: 10px; }
     .ms-ev-vote > div { flex: 1; min-width: 0; }
     .ms-ev-vote .ms-hint { margin: 0; }
+    .ms-ev-cards { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+    .ms-ev-cards .ms-xs .ms-card-name { font-size: .82rem; padding: 0 5px 0 1px; }
+    .ms-ev-cards .ms-xs .ms-card-art { width: 24px; height: 24px; }
+    .ms-ev-cards .ms-xs .ms-emblem { width: 20px; }
+    .ms-ev-cards .ms-res-arrow { color: var(--muted); }
+    .ms-ev-top { margin-bottom: 14px; }
+    .ms-ev-vote { align-items: flex-start; }
     .ms-ev-why { line-height: 1.5; }
     .ms-flag { display: inline-flex; align-items: center; gap: 4px; font-size: .8rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
     .ms-flag-dead { color: #ffc2ca; border-color: #7a2c39; background: #3a1520; }
