@@ -316,3 +316,12 @@ test("the panel has sensor size and spread, and no screen", () => {
   const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(main, /screenFill|screenEdge|tag\("screen"/);
 });
+
+// Mike, 2026-11-23: on phones, flying, the down button sat above up
+test("flying on a phone, up sits above down", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.match(main, /\$\("jump"\)\.classList\.toggle\("pv-raised", m !== "walk"\)/);
+  assert.match(html, /\.pv-raised \{ bottom: 196px !important; \}/);
+  assert.doesNotMatch(html, /\.pv-down \{ bottom:/);
+});
