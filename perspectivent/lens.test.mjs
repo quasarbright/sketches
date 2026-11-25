@@ -325,3 +325,12 @@ test("flying on a phone, up sits above down", () => {
   assert.match(html, /\.pv-raised \{ bottom: 196px !important; \}/);
   assert.doesNotMatch(html, /\.pv-down \{ bottom:/);
 });
+
+// ?background: the shared lib removes the panel, and the page must still run (it crashed on the
+// missing chips row, found 2026-11-25)
+test("?background runs without the panel and hides the button bar", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("./main.mjs", import.meta.url), "utf8");
+  assert.match(main, /const \$ = \(id\) => document\.getElementById\(id\) \?\? standIns/);
+  assert.match(html, /body\.pv-background \.pv-bar \{ display: none !important; \}/);
+});

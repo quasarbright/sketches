@@ -16,7 +16,11 @@ import { SCENE3, axes } from "./render3d.mjs";
 import { drawGraphDemo, GRAPHS } from "./graph-demo.mjs";
 import { PHYS, COURSE, TOWER } from "./course.mjs";
 
-const $ = (id) => document.getElementById(id);
+// Under ?background the shared lib removes the panel, so its controls aren't in the page. The
+// code that drives them still runs, on stand-ins that nobody sees.
+const standIns = new Map();
+const $ = (id) => document.getElementById(id) ?? standIns.get(id) ??
+  standIns.set(id, document.createElement(id === "diagram" ? "canvas" : "input")).get(id);
 const isBg = new URLSearchParams(location.search).has("background");
 
 /* =====================================================================
