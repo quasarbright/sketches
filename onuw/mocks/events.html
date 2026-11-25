@@ -87,7 +87,9 @@ const seat = (role, label, { hot, badge, dim, actor } = {}) =>
   `<div class="ms-cardwrap ${hot ? "is-hot" : ""} ${dim ? "is-dim" : ""} ${actor ? "is-actor" : ""}">${badge ? `<span class="mk-badge ${badge === "eyeoff" ? "is-off" : ""}">${icon(badge)}</span>` : ""}${face(role)}<div class="ms-card-label" data-l="${esc(label.replace("Center ", "C"))}">${esc(label)}</div></div>`;
 const op = (ic, word) => `<div class="mk-op">${icon(ic)}<span>${word}</span></div>`;
 // All three center cards; `up` maps index -> what happened to it (look or swap), the rest stay face down.
-const center = (roles, up = {}) => `<div class="mk-center" title="Center cards">${roles.map((r, i) => up[i] ? seat(r, `Center ${i + 1}`, { hot: true, badge: up[i] }) : seat(null, `Center ${i + 1}`)).join("")}</div>`;
+// ?drunk=down: a card the actor didn't see stays face down (the open question for the Drunk).
+const unseenDown = new URLSearchParams(location.search).get("drunk") === "down";
+const center = (roles, up = {}) => `<div class="mk-center" title="Center cards">${roles.map((r, i) => up[i] ? seat(up[i] === "eyeoff" && unseenDown ? null : r, `Center ${i + 1}`, { hot: true, badge: up[i] }) : seat(null, `Center ${i + 1}`)).join("")}</div>`;
 const pic = (...parts) => {
   const h = parts.join("");
   const n = (h.match(/class="ms-cardwrap/g) || []).length, m = (h.match(/class="mk-op"/g) || []).length, c = (h.match(/class="mk-center"/g) || []).length;
