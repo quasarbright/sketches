@@ -248,6 +248,16 @@
       </div>
     </div>
 
+    <div class="control" id="fishRow" hidden>
+      <div class="control-head">
+        <span class="name" title="How far around the fisheye sees, measured across the picture. Past 180° it sees behind you; at 360° both side edges are straight behind you.">spread</span>
+        <span class="value" id="fwVal">240°</span>
+      </div>
+      <datalist id="fwTicks"><option value="180"></option><option value="360"></option></datalist>
+      <input type="range" id="fw" min="10" max="360" step="1" value="240" list="fwTicks"
+        title="How far around the fisheye sees, measured across the picture. Past 180° it sees behind you; at 360° both side edges are straight behind you." />
+    </div>
+
     <div class="control" id="sRow">
       <div class="control-head">
         <span class="name" title="How tall the sensor at your eye is, the strip the rays start from. A point is your eye: a normal camera.">sensor size</span>

@@ -65,7 +65,8 @@ const lensUniforms = {
   lensRange: { value: new THREE.Vector4(NEAR, FAR, LUT.a0, LUT.a1) },
   lensC: { value: LUT.C },
   lensOn: { value: 1 },   // 0 while drawing the side view: an ordinary perspective camera
-  // the lat-long sphere lens: x = on, y and z = half its angular width and height (radians)
+  // the angle lenses: x = 0 off, 1 lat-long, 2 fisheye; y and z = half the view's angular width
+  // and height (radians)
   lensSphere: { value: new THREE.Vector3(0, 1, 1) },
 };
 
@@ -79,6 +80,14 @@ uniform vec3 lensSphere;
 varying float vLensDepth;
 varying vec2 vLensSign;
 varying vec4 vLensDir;
+varying vec2 vLensP;
+// the fisheye: a direction's angle from straight ahead is its distance from the middle of the
+// picture, the same number of degrees per pixel everywhere, in the direction it leans
+vec2 fishAngles(vec3 d) {
+  float r = length(d), s = length(d.xy);
+  float a = acos(clamp(-d.z / r, -1.0, 1.0));
+  return s < 1e-7 * r ? vec2(0.0) : d.xy * (a / s);
+}
 vec2 lensG(float z) {
   float t = (asinh(z / lensC) - lensRange.z) / (lensRange.w - lensRange.z);
   float fi = clamp(t, 0.0, 1.0) * ${(LUT.N - 1).toFixed(1)};
@@ -89,8 +98,17 @@ vec2 lensG(float z) {
   return mix(a, b, fract(fi));
 }
 vec4 lensProject(vec4 mv) {
-  vLensDir = vec4(0.0);
+  vLensDir = vec4(0.0); vLensP = vec2(0.0);
   if (lensOn < 0.5) { vLensDepth = -1.0; vLensSign = vec2(1.0); return projectionMatrix * mv; }
+  if (lensSphere.x > 1.5) {
+    float r = length(mv.xyz);
+    vLensSign = vec2(1.0);
+    if (r < lensRange.x) return vec4(0.0, 0.0, 2.0, 1.0);
+    vec2 p = fishAngles(mv.xyz);
+    vLensDir = vec4(mv.xyz, 0.0); vLensP = p;
+    vLensDepth = (r - lensRange.x) / (lensRange.y - lensRange.x);
+    return vec4(p.x / lensSphere.y, p.y / lensSphere.z, 2.0 * vLensDepth - 1.0, 1.0);
+  }
   if (lensSphere.x > 0.5) {
     // The screen is a latitude-longitude rectangle on a sphere around the eye: across the picture
     // is the direction's longitude (left-right angle), up the picture its latitude (elevation).
@@ -159,14 +177,20 @@ function lensify(mat, extra, uniforms = lensUniforms) {
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nuniform vec3 lensSphere;\nvarying vec3 vHazeW;\n" + HAZE)
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nvarying vec2 vLensP;\nuniform vec3 lensSphere;\nvarying vec3 vHazeW;\n" + HAZE)
       .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;\n"
         // On the sphere a triangle is drawn straight between its corners, which is only right when
         // it covers a small patch of longitude. One straddling the seam straight behind you (its
         // longitudes jump from +180° to -180°) would be drawn across the whole picture, and ones
         // right below or above you wrap around the pole. Where the drawn direction is off from the
         // true one by more than about 3°, drop it: the flat ground painted behind shows instead.
-        + "if (lensSphere.x > 0.5 && vLensDepth > -0.5) { vec3 dd = normalize(vLensDir.xyz);"
+        // The fisheye has one such spot, straight behind you, where every direction around the
+        // edge of a 360° picture meets; the same test drops the triangles there.
+        + "if (lensSphere.x > 1.5 && vLensDepth > -0.5) { vec3 dd = vLensDir.xyz; float sd = length(dd.xy);"
+        + " float ad = acos(clamp(-dd.z / length(dd), -1.0, 1.0));"
+        + " vec2 pd = sd < 1e-7 ? vec2(0.0) : dd.xy * (ad / sd);"
+        + " if (length(pd - vLensP) > 0.06) discard; }"
+        + "else if (lensSphere.x > 0.5 && vLensDepth > -0.5) { vec3 dd = normalize(vLensDir.xyz);"
         + " if (abs(atan(dd.x, -dd.z) - vLensDir.w) * max(length(dd.xz), 0.05) > 0.06) discard; }")
       .replace("#include <dithering_fragment>",
         "#include <dithering_fragment>\n"
@@ -201,6 +225,9 @@ const state = {
   // ahFit: the height follows the width so a degree is as tall as it is wide on screen (nothing
   // looks stretched), until you drag the height off that snap
   sphere: false, aw: 160, ah: 90, ahFit: true,
+  // fish: with sphere on, the angle lens is a fisheye instead (see fishAngles): fw° across the
+  // width, and the height follows at the same degrees per pixel
+  fish: false, fw: 240,
 };
 // what's currently on the GPU, possibly mid-morph between two lenses
 const shown = new Float32Array(LUT.N * 2);
@@ -655,6 +682,12 @@ const skyUniforms = {
 // a pixel's direction in the world for the sphere lens (sky and ground backdrop)
 const SPHERE_PIX = /* glsl */`
 vec3 spherePix(vec2 ndc, vec3 sph, mat3 rot) {
+  if (sph.x > 1.5) { // the fisheye
+    vec2 p = ndc * sph.yz;
+    float a = length(p);
+    vec2 sxy = a < 1e-7 ? vec2(0.0) : p * (sin(a) / a);
+    return rot * vec3(sxy, -cos(a));
+  }
   float lon = ndc.x * sph.y, lat = ndc.y * sph.z;
   return rot * vec3(cos(lat) * sin(lon), sin(lat), -cos(lat) * cos(lon));
 }`;
@@ -1082,9 +1115,17 @@ for (const p of PRESETS) {
 {
   const b = document.createElement("button");
   b.className = "pv-chip"; b.dataset.id = "sphere";
-  b.title = "The view is a latitude-longitude rectangle on a sphere around your eye: across is the angle left and right, up is the angle up and down. Make it 360° wide to see all the way around.";
-  b.textContent = "sphere";
-  b.addEventListener("click", () => { state.sphere = true; syncPanel(); });
+  b.title = "Latitude-longitude: across the picture is the angle left and right, up is the angle up and down, like a world map. Make it 360° wide to see all the way around.";
+  b.textContent = "lat-long";
+  b.addEventListener("click", () => { state.sphere = true; state.fish = false; syncPanel(); });
+  chipsEl.appendChild(b);
+}
+{
+  const b = document.createElement("button");
+  b.className = "pv-chip"; b.dataset.id = "fisheye";
+  b.title = "Fisheye: how far something is from the middle of the picture is how many degrees it is from straight ahead. It can see past 180°, all the way around to straight behind you.";
+  b.textContent = "fisheye";
+  b.addEventListener("click", () => { state.sphere = true; state.fish = true; syncPanel(); });
   chipsEl.appendChild(b);
 }
 
@@ -1141,7 +1182,9 @@ function syncPanel() {
   for (const id of ["fRow", "pRow"]) $(id).hidden = state.sphere;
   // with two lenses the rays' start is different horizontally and vertically: the caption says how
   $("sRow").hidden = state.sphere || state.split;
-  $("sphereRows").hidden = !state.sphere;
+  $("sphereRows").hidden = !state.sphere || state.fish;
+  $("fishRow").hidden = !state.sphere || !state.fish;
+  $("fw").value = state.fw; $("fwVal").textContent = state.fw + "°";
   if (state.ahFit) state.ah = undistortedAh();
   $("aw").value = state.aw; $("awVal").textContent = state.aw + "°";
   $("ah").value = state.ah;
@@ -1151,7 +1194,8 @@ function syncPanel() {
   const mixedOn = state.split && sameLens("x", { src: "1", s: 1 }) && sameLens("y", { src: "z", s: 0 });
   for (const b of chipsEl.children) {
     const id = b.dataset.id;
-    if (id === "sphere") { b.classList.toggle("is-on", state.sphere); continue; }
+    if (id === "sphere") { b.classList.toggle("is-on", state.sphere && !state.fish); continue; }
+    if (id === "fisheye") { b.classList.toggle("is-on", state.sphere && state.fish); continue; }
     if (state.sphere) { b.classList.remove("is-on"); continue; }
     if (id === "mixed") { b.classList.toggle("is-on", mixedOn); continue; }
     const p = PRESETS.find((q) => q.id === id);
@@ -1245,10 +1289,16 @@ $("p").addEventListener("input", (e) => {
 // the sphere lens: its angular size, and how far out the curved screen is
 // the height at which a degree is as tall as it is wide on screen
 const undistortedAh = () => Math.min(180, Math.max(10, state.aw / camera.aspect));
+// the fisheye's half width and height in radians: the same degrees per pixel both ways
+const fishHalf = () => { const h = THREE.MathUtils.degToRad(state.fw / 2); return [h, h / camera.aspect]; };
 const snapTo = (v, pts, r) => { for (const p of pts) if (Math.abs(v - p) <= r) return p; return v; };
 $("aw").addEventListener("input", (e) => {
   state.aw = snapTo(+e.target.value, [180, 360], 6);
   if (state.ahFit) state.ah = undistortedAh();
+  syncPanel();
+});
+$("fw").addEventListener("input", (e) => {
+  state.fw = snapTo(+e.target.value, [180, 360], 6);
   syncPanel();
 });
 $("ah").addEventListener("input", (e) => {
@@ -1284,7 +1334,8 @@ function updateCaption() {
     };
     c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
-  if (state.sphere) c = `The view is a <b>${state.aw}° × ${Math.round(state.ah)}°</b> patch of a sphere around your eye. Across is the angle left and right, up is the angle up and down.`;
+  if (state.sphere && state.fish) c = `A <b>${state.fw}°</b> fisheye: how far something is from the middle of the picture is how far it is from straight ahead, in degrees.${state.fw > 180 ? " Past the sides it sees behind you." : ""}`;
+  else if (state.sphere) c = `A <b>${state.aw}° × ${Math.round(state.ah)}°</b> latitude-longitude view, like a world map of everything around you: across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -1492,12 +1543,17 @@ const sphereDir = (lon, lat, out = []) => {
 const SIDE_R = 3; // how far out the side view draws the sphere's screen (the picture doesn't depend on it)
 // a direction on the patch in the view's frame, u and v from -1 to 1 across and up
 function patchDir(u, v, d = []) {
+  if (state.fish) { // the fisheye: (u, v) scaled to angles, leaning that way from straight ahead
+    const [hw, hh] = fishHalf(), x = u * hw, y = v * hh, a = Math.hypot(x, y), k = a < 1e-9 ? 1 : Math.sin(a) / a;
+    d[0] = x * k; d[1] = y * k; d[2] = -Math.cos(a);
+    return d;
+  }
   const hl = THREE.MathUtils.degToRad(state.aw / 2), hv = THREE.MathUtils.degToRad(state.ah / 2);
   return sphereDir(u * hl, v * hv, d);
 }
 let sphereKey = "";
 function updateSpherePatch() {
-  const key = `${state.aw},${state.ah}`;
+  const key = state.fish ? `fish,${state.fw},${camera.aspect}` : `${state.aw},${state.ah}`;
   if (key === sphereKey) return;
   sphereKey = key;
   const d = [];
@@ -1679,7 +1735,8 @@ function frame(now) {
   placeNearTrack(player.pos.z);
   // the window's shape changed: keep an undistorted sphere undistorted
   if (state.sphere && state.ahFit && Math.abs(undistortedAh() - state.ah) > 0.01) syncPanel();
-  lensUniforms.lensSphere.value.set(state.sphere ? 1 : 0, THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
+  if (state.sphere && state.fish) lensUniforms.lensSphere.value.set(2, ...fishHalf());
+  else lensUniforms.lensSphere.value.set(state.sphere ? 1 : 0, THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
   skyUniforms.skySphere.value.copy(lensUniforms.lensSphere.value);
   camera.updateMatrixWorld();
   updateSky();

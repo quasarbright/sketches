@@ -334,3 +334,21 @@ test("?background runs without the panel and hides the button bar", () => {
   assert.match(main, /const \$ = \(id\) => document\.getElementById\(id\) \?\? standIns/);
   assert.match(html, /body\.pv-background \.pv-bar \{ display: none !important; \}/);
 });
+
+// Mike, 2026-11-25: "let's do rectangular fisheye and rename spherical to latitude-longitude".
+// The fisheye places a direction by its angle from straight ahead (the same degrees per pixel
+// everywhere), fills the whole rectangle, and its spread is measured across the width, up to 360°.
+test("the fisheye places a direction by its angle from straight ahead, and lat-long is named so", () => {
+  assert.match(MAIN, /float a = acos\(clamp\(-d\.z \/ r, -1\.0, 1\.0\)\);\s*return s < 1e-7 \* r \? vec2\(0\.0\) : d\.xy \* \(a \/ s\);/);
+  assert.match(MAIN, /return vec4\(p\.x \/ lensSphere\.y, p\.y \/ lensSphere\.z,/);
+  // the sky and the ground behind invert the same mapping
+  assert.match(MAIN, /if \(sph\.x > 1\.5\) \{ \/\/ the fisheye/);
+  // same degrees per pixel across and up: the height follows the window's shape
+  assert.match(MAIN, /const fishHalf = \(\) => \{ const h = THREE\.MathUtils\.degToRad\(state\.fw \/ 2\); return \[h, h \/ camera\.aspect\]; \};/);
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.match(html, /id="fw" min="10" max="360"/);
+  assert.match(MAIN, /b\.textContent = "lat-long";/);
+  assert.match(MAIN, /b\.textContent = "fisheye";/);
+  assert.doesNotMatch(MAIN, /b\.textContent = "sphere";/);
+  assert.doesNotMatch(MAIN, /patch of a sphere around your eye/);
+});
