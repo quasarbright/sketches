@@ -360,8 +360,9 @@ test("the fisheye leaves pixels past 180° dark and its caption never rewraps mi
   assert.match(MAIN, /bool fishOut\(vec2 ndc, vec3 sph\) \{ return sph\.x > 1\.5 && length\(ndc \* sph\.yz\) > /);
   assert.match(MAIN, /if \(fishOut\(vNdc, skySphere\)\) c = /);
   assert.match(MAIN, /if \(sd\.y > -1e-4 \|\| fishOut\(vNdc, earthSphere\)\) discard;/);
-  assert.match(MAIN, /<b class="pv-fixnum">\$\{state\.fw\}° × .*Wider than 180°, it sees behind you\.`;/);
+  assert.match(MAIN, /<b>\$\{state\.fw\}° × .*More than 180° across or up and down, it sees behind you\.`;/);
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
-  assert.match(html, /\.pv-caption \.pv-fixnum \{ display: inline-block; min-width: 10\.5ch;/);
+  assert.match(html, /\.pv-caption\.pv-fish \{ min-height: calc\(5 \* 1\.35em\); \}/);
+  assert.doesNotMatch(html, /pv-fixnum/, "Pam: fixed-width numbers left a hole in the sentence");
   assert.match(html, /angular width<\/span>\s*<span class="value" id="fwVal">/);
 });

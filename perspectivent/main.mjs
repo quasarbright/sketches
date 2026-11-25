@@ -1338,9 +1338,11 @@ function updateCaption() {
     };
     c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
-  if (state.sphere && state.fish) c = `A <b class="pv-fixnum">${state.fw}° × ${Math.round(Math.min(360, state.fw / camera.aspect))}°</b> fisheye: a thing's distance from the middle of the picture is its angle from straight ahead. Wider than 180°, it sees behind you.`;
+  if (state.sphere && state.fish) c = `A <b>${state.fw}° × ${Math.round(Math.min(360, state.fw / camera.aspect))}°</b> fisheye: a thing's distance from the middle of the picture is its angle from straight ahead. More than 180° across or up and down, it sees behind you.`;
   else if (state.sphere) c = `A <b>${state.aw}° × ${Math.round(state.ah)}°</b> latitude-longitude view, like a world map of everything around you: across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
+  // only the numbers change while the fisheye's slider moves: its box keeps the tallest height
+  $("caption").classList.toggle("pv-fish", state.sphere && state.fish);
 }
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
