@@ -223,6 +223,9 @@ const TRIS = (() => {
       [[P(-1, -1, 1), P(-1, 1, 1), P(-1, 1, -1), P(-1, -1, -1)], [-1, 0, 0]],
       [[P(1, -1, 1), P(1, 1, 1), P(-1, 1, 1), P(-1, -1, 1)], [0, 0, 1]],
     ];
+    // the red cube starts with its right side, the face that looks most toward the side view's
+    // camera, so the slow first triangle is seen nearly head on
+    if (b === SCENE3.boxes[0]) faces.unshift(faces.splice(2, 1)[0]);
     for (const [q, n0] of faces) {
       const n = N(n0), mid = [0, 1, 2].map((a) => q.reduce((s2, p) => s2 + p[a], 0) / 4);
       if (n[0] * mid[0] + n[1] * mid[1] + n[2] * mid[2] >= 0) continue; // facing away
