@@ -92,6 +92,8 @@
     .pv-diagram { display: block; width: 100%; height: 118px; border-radius: var(--radius-sm); background: #111317; }
     .pv-caption { margin: 6px 0 12px; font-size: .8rem; line-height: 1.35; color: var(--muted); min-height: calc(2 * 1.35em); }
     .pv-caption b { color: var(--text); font-weight: 500; }
+    /* numbers that change as a slider moves keep one width, so the text after them never rewraps mid-drag */
+    .pv-caption .pv-fixnum { display: inline-block; min-width: 10.5ch; font-variant-numeric: tabular-nums; }
 
     .pv-field {
       display: flex; align-items: center; gap: 6px; margin-top: 4px;
@@ -250,7 +252,7 @@
 
     <div class="control" id="fishRow" hidden>
       <div class="control-head">
-        <span class="name" title="How far around the fisheye sees, measured across the picture. Past 180° it sees behind you; at 360° both side edges are straight behind you.">spread</span>
+        <span class="name" title="How far around the fisheye sees, measured across the picture. Past 180° it sees behind you; at 360° both side edges are straight behind you.">angular width</span>
         <span class="value" id="fwVal">240°</span>
       </div>
       <datalist id="fwTicks"><option value="180"></option><option value="360"></option></datalist>

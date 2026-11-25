@@ -681,6 +681,7 @@ const skyUniforms = {
 };
 // a pixel's direction in the world for the sphere lens (sky and ground backdrop)
 const SPHERE_PIX = /* glsl */`
+bool fishOut(vec2 ndc, vec3 sph) { return sph.x > 1.5 && length(ndc * sph.yz) > ${Math.PI.toFixed(6)}; }
 vec3 spherePix(vec2 ndc, vec3 sph, mat3 rot) {
   if (sph.x > 1.5) { // the fisheye
     vec2 p = ndc * sph.yz;
@@ -712,6 +713,9 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
           : skyRot * vec3(vNdc.x * skyHalf.x * skyG.x, vNdc.y * skyHalf.y * skyG.y, -${SKY_R.toFixed(1)});
         float e = normalize(d).y; // sine of the elevation
         c = e < 0.0 ? pvHaze(e) : e < 0.25 ? mix(horizon, mid, e / 0.25) : mix(mid, zenith, min(1.0, (e - 0.25) / 0.6));
+        // a fisheye pixel more than 180° from straight ahead has no direction of its own (it would
+        // show the world a second time), so it's the page's dark instead
+        if (fishOut(vNdc, skySphere)) c = ${linHex(0x14161a)};
       }
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
@@ -764,7 +768,7 @@ const earth = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMate
       bool sphere = earthSphere.x > 0.5;
       if (sphere) {
         vec3 sd = spherePix(vNdc, earthSphere, mat3(earthWorld));
-        if (sd.y > -1e-4) discard;
+        if (sd.y > -1e-4 || fishOut(vNdc, earthSphere)) discard;
         vec4 eye = earthWorld * vec4(0.0, 0.0, 0.0, 1.0);
         // at the heights of the tie tops, then the bed, then the grass, so where it meets the real
         // track the two line up
@@ -1334,7 +1338,7 @@ function updateCaption() {
     };
     c = `<b>Horizontal:</b> ${short("x")}. <b>Vertical:</b> ${short("y")}.`;
   }
-  if (state.sphere && state.fish) c = `A <b>${state.fw}°</b> fisheye: how far something is from the middle of the picture is how far it is from straight ahead, in degrees.${state.fw > 180 ? " Past the sides it sees behind you." : ""}`;
+  if (state.sphere && state.fish) c = `A <b class="pv-fixnum">${state.fw}° × ${Math.round(Math.min(360, state.fw / camera.aspect))}°</b> fisheye: a thing's distance from the middle of the picture is its angle from straight ahead. Wider than 180°, it sees behind you.`;
   else if (state.sphere) c = `A <b>${state.aw}° × ${Math.round(state.ah)}°</b> latitude-longitude view, like a world map of everything around you: across is the angle left and right, up is the angle up and down.`;
   $("caption").innerHTML = c;
 }

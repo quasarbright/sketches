@@ -352,3 +352,16 @@ test("the fisheye places a direction by its angle from straight ahead, and lat-l
   assert.doesNotMatch(MAIN, /b\.textContent = "sphere";/);
   assert.doesNotMatch(MAIN, /patch of a sphere around your eye/);
 });
+
+// Pam, 2026-11-25: past 180° from straight ahead a fisheye pixel has no direction of its own, so
+// it's dark rather than a second copy of the world; and the caption keeps its line count while the
+// slider moves (the numbers keep one width, and the "behind you" sentence is always there).
+test("the fisheye leaves pixels past 180° dark and its caption never rewraps mid-drag", () => {
+  assert.match(MAIN, /bool fishOut\(vec2 ndc, vec3 sph\) \{ return sph\.x > 1\.5 && length\(ndc \* sph\.yz\) > /);
+  assert.match(MAIN, /if \(fishOut\(vNdc, skySphere\)\) c = /);
+  assert.match(MAIN, /if \(sd\.y > -1e-4 \|\| fishOut\(vNdc, earthSphere\)\) discard;/);
+  assert.match(MAIN, /<b class="pv-fixnum">\$\{state\.fw\}° × .*Wider than 180°, it sees behind you\.`;/);
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.match(html, /\.pv-caption \.pv-fixnum \{ display: inline-block; min-width: 10\.5ch;/);
+  assert.match(html, /angular width<\/span>\s*<span class="value" id="fwVal">/);
+});
