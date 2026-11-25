@@ -1713,4 +1713,4 @@ updateHint();
 requestAnimationFrame(frame);
 
 // for testing from the console / automation
-window.pv = { state, player, setMode, applyLens, syncPanel, renderer, scene, camera };
+window.pv = { state, player, setMode, applyLens, syncPanel, setSensorSpread, renderer, scene, camera };
