@@ -485,7 +485,9 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.equal(s.g.cards.b, "hunter");
   assert.equal(s.g.center[2], "villager");
   assert.ok(s.g.step.done.a);
-  assert.match(s.g.log.at(-1).text, /Witch.*hunter|Hunter/);
+  assert.match(s.g.log.at(-2).text, /\(Witch\) looked at center card 3: the Hunter/);
+  assert.match(s.g.log.at(-1).text, /^Then .* gave it to .*Villager into the center/);
+  assert.equal(s.g.log.at(-1).sub, true, "the give is drawn under the look");
 });
 
 test("the Witch can take the card herself, can skip, and a Witch who leaves after looking still swaps", () => {

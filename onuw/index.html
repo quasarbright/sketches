@@ -390,8 +390,42 @@
     .ms-spec-center { justify-content: flex-start; }
     .ms-watch-h { font: 600 .9rem var(--font-ui); color: var(--muted); margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
     .ms-spec-toggle { margin-top: 10px; }
-    .ms-log { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.45; }
-    .ms-log .ms-label { display: inline; margin-right: 4px; }
+    /* night event pictures (nightLog, eventPic): one card size for every row on a screen, 60px or
+       smaller when the widest part (a card, an action, all three center cards, inside an indent) doesn't fit */
+    @property --cw { syntax: "<length>"; inherits: true; initial-value: 60px; }
+    .ms-eps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container-type: inline-size; }
+    .ms-notes.ms-eps { gap: 0; }
+    .ms-ep { --cw: min(60px, calc((100cqw - 110px) / 4)); display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
+    .ms-ep:first-child { border-top: 0; padding-top: 4px; }
+    .ms-ep-one { display: flex; flex-direction: column; gap: 10px; }
+    .ms-ep p { margin: 0; line-height: 1.45; }
+    .ms-ep-sub { margin-left: 4px; padding-left: 12px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+    /* a picture is one or two parts; a part never breaks, and the second ("became" and the new card) wraps under the first */
+    .ms-ep-pic { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 8px; }
+    .ms-ep-seg { display: flex; align-items: center; gap: 8px; }
+    .ms-ep-seg.is-many { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
+    .ms-ep-card { position: relative; width: var(--cw); flex: none; }
+    .ms-ep-card .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
+    /* no team letter at this size, so names use the whole band and shrink to fit */
+    .ms-ep-card .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc(94cqw / (var(--len) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+    .ms-ep-card .ms-team-mark { display: none; }
+    .ms-ep-card .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .ms-ep-card.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
+    .ms-ep-card.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
+    .ms-ep-card.is-actor .ms-card-label { color: #ffd88a; font-weight: 600; }
+    .ms-ep-badge { position: absolute; z-index: 3; top: calc(var(--cw) * 202 / 125 - 20px); right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ffd88a; color: #231a00; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel); }
+    .ms-ep-badge.is-off { background: var(--panel-2); color: #ffd88a; border: 1px solid #ffd88a; }
+    .ms-ep-badge svg { width: 15px; height: 15px; }
+    .ms-ep-all { font: 600 .62rem var(--font-ui); color: #ffd88a; text-align: center; line-height: 1.15; margin-top: 2px; }
+    .ms-ep .ms-ep-note { font-size: .8rem; color: var(--muted); text-align: center; }
+    .ms-ep-op { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #ffd88a; margin-bottom: 18px; }
+    .ms-ep-op svg { width: 24px; height: 24px; }
+    .ms-ep-op span { font: 600 .6rem var(--font-ui); color: var(--muted); white-space: nowrap; }
+    .ms-ep-group { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px dashed var(--border); }
+    .ms-ep-each { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .ms-ep-each .ms-ep-group { border: 1px solid #ffd88a55; gap: 12px; padding: 4px 12px 4px 4px; }
+    .ms-ep-each-l { display: flex; align-items: center; gap: 4px; font: 600 .62rem var(--font-ui); color: var(--muted); }
+    .ms-ep-each-l svg { width: 14px; height: 14px; color: #ffd88a; }
 
     /* ---- modals */
     .ms-modal { max-width: 560px; }

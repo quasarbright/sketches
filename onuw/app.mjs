@@ -93,6 +93,9 @@ const ICONS = {
   swap: `<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>`,
   eyeOff: `<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>`,
   hammer: `<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>`,
+  copy: `<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>`,
+  hand: `<path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>`,
+  flipCard: `<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>`,
   eye: `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>`,
   userX: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>`,
   sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
@@ -981,8 +984,9 @@ function promptPanel(p, g) {
 // you tap it again. Shown at night, in the day and at the vote.
 function secretPanel(g) {
   const up = !!ui.up.secret;
+  // Your night, drawn with the same pictures as the end screen (only what you saw is face up).
   const items = g.info.length
-    ? g.info.map((i) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((s) => s.id === i.step)?.label ?? "")}</span><p>${esc(i.text)}</p>${resultCards(i.cards)}</li>`).join("")
+    ? g.info.map((i) => `<li class="ms-ep">${i.pic ? eventEntry(i.text, i.pic, { me: myId }) : `<p>${esc(i.text)}</p>${resultCards(i.cards)}`}</li>`).join("")
     : `<li><p>${view.phase === "night" ? "Nothing yet." : "No night actions."}</p></li>`;
   return `<section class="ms-panel ms-secret ms-flipscope ${up ? "is-up" : ""}" data-flip="secret">
     <div class="ms-secret-head">
@@ -1002,7 +1006,7 @@ function secretPanel(g) {
         </div>
       </div>
     </div>
-    <ul class="ms-notes is-front">${items}</ul>
+    <ul class="ms-notes ms-eps is-front">${items}</ul>
   </section>`;
 }
 
@@ -1155,11 +1159,42 @@ function tableCards(cards, center, spare, { seats, before, beforeCenter, beforeS
   </div>`;
 }
 
-// The one renderer for the night's events, in the order they happened.
+// The one renderer for the night's events, in the order they happened: each line, then its picture.
+// A Doppelganger acting right away, or the Witch's give, is drawn indented under the line before it.
 function nightLog(log, empty) {
-  return log.length
-    ? `<ol class="ms-log">${log.map((l) => `<li><span class="ms-label">${esc(NIGHT_STEPS.find((x) => x.id === l.step)?.label ?? "")}</span> ${esc(l.text)}</li>`).join("")}</ol>`
-    : `<p class="ms-hint">${esc(empty)}</p>`;
+  if (!log.length) return `<p class="ms-hint">${esc(empty)}</p>`;
+  const groups = [];
+  for (const l of log) (l.sub && groups.length ? groups.at(-1).subs : (groups.push({ l, subs: [] }), [])).push(l);
+  return `<ol class="ms-log ms-eps">${groups.map(({ l, subs }) => `<li class="ms-ep">${eventEntry(l.text, l.pic, {}, l.note)}${subs.length ? `<div class="ms-ep-sub">${subs.map((x) => eventEntry(x.text, x.pic, {}, x.note)).join("")}</div>` : ""}</li>`).join("")}</ol>`;
+}
+const eventEntry = (text, pic, opts, note) => `<div class="ms-ep-one"><p>${esc(text)}</p>${pic ? eventPic(pic, opts) : ""}${note ? `<p class="ms-ep-note">${esc(note)}</p>` : ""}</div>`;
+
+// The one renderer for a night event's picture (the end screen, the spectators' log and your own
+// night notes): the actor's card, what they did, and the cards it touched. A gold ring marks a card
+// the event touched; the eye means the actor saw it, the crossed-out eye that it moved or was
+// touched unseen. A card with no role is face down. With `me`, your own cards are labeled "You".
+const EP_OPS = { saw: ["eye", "saw"], "saw own": ["eye", "saw own"], swapped: ["swap", "swapped"], moved: ["hand", "moved"], became: ["copy", "became"], flipped: ["flipCard", "flipped"] };
+function eventPic(pic, { me } = {}) {
+  const label = (c) => {
+    if (/^c\d$/.test(c.who)) return `C${+c.who[1] + 1}`;
+    if (c.who === "spare") return "Spare";
+    const n = c.who === me ? "You" : playerName(c.who);
+    return c.now ? `${n} now` : n;
+  };
+  const badge = (b) => (b ? `<span class="ms-ep-badge ${b === "eyeoff" ? "is-off" : ""}" aria-label="${b === "eyeoff" ? "not seen" : b === "all" ? "face up for everyone" : "seen"}">${icon(b === "eyeoff" ? "eyeOff" : "eye")}</span>` : "");
+  const one = (c) => `<div class="ms-cardwrap ms-ep-card ${c.hot ? "is-hot" : ""} ${c.dim ? "is-dim" : ""} ${c.actor ? "is-actor" : ""}">${badge(c.role ? c.badge : c.badge === "eyeoff" ? "eyeoff" : null)}${!c.role ? cardBack({ size: "sm" }) : card(c.role, { size: "sm", info: false })}<div class="ms-card-label">${esc(label(c))}</div>${c.badge === "all" ? `<div class="ms-ep-all">Seen by everyone</div>` : ""}</div>`;
+  const part = (it) => {
+    if (it.t === "card") return one(it);
+    if (it.t === "op") { const [ic, w] = EP_OPS[it.op] || ["arrow", it.op]; return `<div class="ms-ep-op">${icon(ic)}<span>${esc(w)}</span></div>`; }
+    if (it.t === "center") return `<div class="ms-ep-group" title="Center cards">${it.cards.map(one).join("")}</div>`;
+    if (it.t === "each") return `<div class="ms-ep-each"><div class="ms-ep-group">${it.cards.map(one).join("")}</div><div class="ms-ep-each-l">${icon("eye")}saw each other</div></div>`;
+    return "";
+  };
+  const segs = [[]];
+  for (const it of pic) it.t === "br" ? segs.push([]) : segs.at(-1).push(it);
+  // more cards than fit in one line (the Aura Seer seeing four players): that part may wrap too
+  const many = (sg) => sg.reduce((n, it) => n + (it.t === "card" ? 1 : it.cards ? it.cards.length : 0), 0) > 4;
+  return `<div class="ms-ep-pic">${segs.map((sg) => `<div class="ms-ep-seg ${many(sg) ? "is-many" : ""}">${sg.map(part).join("")}</div>`).join("")}</div>`;
 }
 
 const cap = (s) => s[0].toUpperCase() + s.slice(1);

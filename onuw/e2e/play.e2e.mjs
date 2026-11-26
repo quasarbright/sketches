@@ -168,7 +168,7 @@ test("a spectator who joins in the lobby watches: not dealt in, sees every card 
   await playNight(t.host, t.pages);
   const omni = (await view(w)).game.omni;
   assert.ok(omni.log.length > 0);
-  assert.equal(await w.locator(".ms-log li").count(), omni.log.length);
+  assert.equal(await w.locator(".ms-log .ms-ep-one").count(), omni.log.length, "one line and picture per log entry");
   // players never get the spectator's view
   for (const p of t.pages) {
     const v = await view(p);
