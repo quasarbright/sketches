@@ -229,6 +229,7 @@
     .ms-xs .ms-card-name { order: 1; background: none; color: var(--text); font-size: .9rem; padding: 0 6px 0 2px; overflow: visible; }
     .ms-xs .ms-emblem { width: 24px; }
     .ms-xs .ms-card-name.is-long, .ms-xs .ms-card-name.is-xlong, .ms-xs .ms-card-name.is-wrap { font-size: .9rem; line-height: normal; padding: 0 6px 0 2px; white-space: nowrap; letter-spacing: normal; }
+    .ms-xs .ms-team-mark { position: static; order: 1; width: auto; height: auto; font-size: .72rem; color: var(--muted); padding: 0 4px 0 0; }
     .ms-xs .ms-info { order: 2; position: static; width: 26px; height: 26px; background: none; color: var(--muted); }
     .ms-xs .ms-info::after { inset: -9px -4px; }
     .ms-chiprow { display: flex; flex-wrap: wrap; gap: 8px 6px; align-items: center; }
@@ -406,11 +407,15 @@
     .ms-ep-seg.is-many { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
     .ms-ep-card { position: relative; width: var(--cw); flex: none; }
     .ms-ep-card .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
-    /* no team letter at this size, so names use the whole band and shrink to fit */
-    .ms-ep-card .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc(94cqw / (var(--len) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
-    /* two-word names wrap, and shrink so the longest word fits the card */
-    .ms-ep-card .ms-card-name.is-wrap { font-size: min(max(8.6cqw, 8px), calc(94cqw / (var(--word) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
-    .ms-ep-card .ms-team-mark { display: none; }
+    /* Every face-up card shows its team letter (Mike, more than once), at every size. On small cards
+       (event pictures, the day's table, the spectator's table) the letter shrinks with the card and the
+       name shrinks to fit the band left of it. */
+    @container (width < 80px) {
+      .ms-team-mark { font-size: max(14cqw, 7px); width: auto; right: max(4cqw, 3px); }
+      .ms-card-name { --mark: calc(max(4cqw, 3px) + max(14cqw, 7px) + 3px); }
+      .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc((97cqw - var(--mark)) / (var(--len) * .56))); padding: 1.8cqw var(--mark) 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+      .ms-card-name.is-wrap { font-size: min(max(8.6cqw, 8px), calc((97cqw - var(--mark)) / (var(--word) * .56))); padding: 1.8cqw var(--mark) 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+    }
     .ms-ep-card .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
     .ms-ep-card.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
     .ms-ep-card.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
@@ -452,8 +457,6 @@
     .ms-host-item.is-danger b { color: #ffc2ca; }
     .ms-host-item.is-confirming { cursor: default; }
     .ms-host-item .ms-confirm-row { margin-top: 8px; }
-    /* the tiniest cards have no room for the team letter beside the name */
-    .ms-spec-cards .ms-team-mark, .ms-spec-center .ms-team-mark { display: none; }
     .ms-wins { padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); line-height: 1.45; }
     .ms-info-modal { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .ms-info-modal .ms-lg { --w: 170px; }

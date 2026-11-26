@@ -251,27 +251,60 @@ test("the host can end the vote when a player has dropped", async () => {
   await t.ctx.close();
 });
 
+// Every face-up card on the page shows its team letter, and its name fits the band left of the letter.
+// Mike has asked for the letter on every card more than once: a hidden or missing letter fails here.
+const cardProblems = (p, w) => p.evaluate((w) => [...document.querySelectorAll(".ms-card:not(.ms-back)")].flatMap((c) => {
+  const k = c.getBoundingClientRect();
+  if (!k.width) return [];  // not on screen (a hidden flip face or a closed panel)
+  const name = c.querySelector(".ms-card-name"), mark = c.querySelector(".ms-team-mark");
+  const where = `${name?.textContent.trim() || "?"} in ${c.closest("[class*=ms-ep],[class*=ms-spec],[class*=ms-day],[class*=ms-res],section,main")?.className.split(" ")[0] || "?"} @${w}`;
+  if (!mark || !mark.textContent.trim()) return [`${where}: no team letter`];
+  const ms = getComputedStyle(mark), m = mark.getBoundingClientRect();
+  if (ms.display === "none" || ms.visibility === "hidden" || +ms.opacity === 0 || !m.width) return [`${where}: team letter hidden`];
+  if (c.classList.contains("ms-xs")) return [];
+  const r = document.createRange(); r.selectNodeContents(name);
+  const t = r.getBoundingClientRect();
+  const glyph = document.createRange(); glyph.selectNodeContents(mark); const g = glyph.getBoundingClientRect();
+  const out = [];
+  if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
+  if (t.right > g.left - 2) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
+  if (k.right - g.right < 2) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
+  return out.length ? [`${where}: ${out.join(", ")}`] : [];
+}), w);
+
 test("card names fit their band, clear of the team letter and the card edge, at phone and desktop sizes", async () => {
-  for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
+  for (const viewport of [{ width: 320, height: 700 }, { width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const ctx = await browser.newContext({ viewport });
     await tabsArePlayers(ctx);
     const p = await ctx.newPage();
     await createAs(p, "Mike");
     await p.waitForSelector(".ms-grid .ms-card-name");
-    const bad = await p.evaluate((w) => [...document.querySelectorAll(".ms-card")].flatMap((c) => {
-      const name = c.querySelector(".ms-card-name"), mark = c.querySelector(".ms-team-mark");
-      if (!name || !mark || getComputedStyle(mark).display === "none") return [];
-      const r = document.createRange(); r.selectNodeContents(name);
-      const t = r.getBoundingClientRect(), m = mark.getBoundingClientRect(), k = c.getBoundingClientRect();
-      const glyph = document.createRange(); glyph.selectNodeContents(mark); const g = glyph.getBoundingClientRect();
-      const out = [];
-      if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
-      if (t.right > g.left - 4) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
-      if (k.right - g.right < 3) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
-      return out.length ? [`${name.textContent.trim()} @${w}: ${out.join(", ")}`] : [];
-    }), viewport.width);
-    assert.deepEqual(bad, []);
+    assert.deepEqual(await cardProblems(p, viewport.width), []);
     await ctx.close();
+  }
+});
+
+test("every face-up card shows its team letter in every view: lobby, day, the table, notes, event pictures, end screen, spectator", async () => {
+  for (const width of [320, 390, 1440]) {
+    const t = await newTable(["Mike", "Ana", "Ben", "Cleo", "Dev"], { watchers: ["Wes"] });
+    for (const p of [...t.pages, ...t.specs]) await p.setViewportSize({ width, height: 900 });
+    const all = [...t.pages, ...t.specs];
+    const bad = [];
+    const check = async (stage) => { for (const p of all) bad.push(...(await cardProblems(p, width)).map((x) => `${stage}: ${x}`)); };
+    await check("lobby");
+    await t.host.click("[data-act=start]");
+    await dealAndReady(t.pages);
+    await playNight(t.host, t.pages);
+    // a face-up card on the day's table
+    await t.host.evaluate(() => { const g = window.__onuw.state.g; const id = g.seats[1]; g.revealed = [{ pid: id, role: g.cards[id] }]; window.__onuw.publish(); });
+    for (const p of t.pages) await p.click("[data-flip=secret] [data-flip-tap]").catch(() => {});
+    await t.host.waitForTimeout(600);
+    await check("day");
+    await toResults(t.host, t.pages);
+    await t.host.waitForTimeout(600);
+    await check("results");
+    assert.deepEqual(bad, []);
+    await t.ctx.close();
   }
 });
 
@@ -775,7 +808,7 @@ test("the end screen is an event log: the deal, the night, the cards at the end,
   assert.equal(votes.length, 2, "only players who got votes are listed");
   assert.match(votes[0], /Mike[\s\S]*2 votes, from Ana and Ben/);
   assert.match(votes[1], /Ana[\s\S]*2 votes, from Mike and Cleo/);
-  assert.match(votes[0], new RegExp(`${ROLES[r.dealt[ids[0]]].name}\\s*${ROLES[r.cards[ids[0]]].name}`), "each voted player's start and end card");
+  assert.match(votes[0], new RegExp(`${ROLES[r.dealt[ids[0]]].name}\\s*[A-Z]\\s*${ROLES[r.cards[ids[0]]].name}`), "each voted player's start and end card");
   assert.deepEqual(await t.host.locator(".ms-ev-top .ms-ev-vote").allInnerTexts(), votes, "the votes are also at the top");
   assert.equal(await t.host.locator(".ms-events > .ms-ev").nth(4).locator(".ms-ev-vote").count(), 2);
   assert.doesNotMatch(await t.host.locator("main").innerText(), /· voted for|didn't vote/i, "no old per-player vote lines");
