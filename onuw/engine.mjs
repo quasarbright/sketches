@@ -481,7 +481,7 @@ function startStep(s, id, pid, actors) {
       return { kind: "ack", text: t };
     }
     case "unveiler":
-      return { kind: "player", optional: true, exclude: [pid], text: `You may turn another player's card face up for the day. If it's a wolf or the ${N.jester}, it goes back face down.` };
+      return { kind: "player", optional: true, exclude: [pid], text: `You may turn another player's card face up for the rest of the game. If it's a wolf or the ${N.jester}, it goes back face down.` };
     case "witch":
       return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with any player's card, your own included." };
     case "meddler":
