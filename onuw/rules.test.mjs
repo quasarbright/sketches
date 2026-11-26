@@ -668,7 +668,7 @@ test("the table sentence names no role: the Revealer alone", () => {
   nightTo(s, "unveiler"); act(s, "a", { target: "b" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "B's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  assert.equal(t, "B's Hunter was turned face up in the night. It stays face up for the rest of the game.");
   onlyNames(t);
 });
 
@@ -678,7 +678,7 @@ test("the table sentence names no role: the Revealer and a Doppelganger that cop
   nightTo(s, "unveiler"); act(s, "c", { target: "b" }); act(s, "a", { target: "e" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "These cards were turned face up in the night: B's Hunter and E's Seer. They stay face up for the rest of the game.");
+  assert.equal(t, "B's Hunter and E's Seer were turned face up in the night. They stay face up for the rest of the game.");
   onlyNames(t);
   assert.match(s.g.log.filter((l) => l.step === "unveiler").map((l) => l.text).join(" | "), /^C \(Revealer\) turned B's .* \| A \(Doppelganger, as the Revealer\) turned E's/);
 });
@@ -689,7 +689,7 @@ test("the table sentence names no role: a Copycat that copied a center Revealer 
   nightTo(s, "unveiler"); act(s, "a", { target: "b" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "B's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  assert.equal(t, "B's Hunter was turned face up in the night. It stays face up for the rest of the game.");
   onlyNames(t);
   assert.match(s.g.log.find((l) => l.step === "unveiler").text, /^A \(Copycat, as the Revealer\) turned B's card face up/);
 });
@@ -703,12 +703,12 @@ test("the table sentence names no role: a Doppelganger that copied a Copycat-as-
   act(s, "a", { target: "c" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "C's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  assert.equal(t, "C's Hunter was turned face up in the night. It stays face up for the rest of the game.");
   onlyNames(t);
 });
 
 test("the table sentence names no role: all three roles, and one card turned by two of them", () => {
   const t = tableLine([{ pid: "b", role: "hunter", by: ["unveiler", "lookalike"] }, { pid: "e", role: "seer", by: ["copycat"] }], (id) => id.toUpperCase());
-  assert.equal(t, "These cards were turned face up in the night: B's Hunter and E's Seer. They stay face up for the rest of the game.");
+  assert.equal(t, "B's Hunter and E's Seer were turned face up in the night. They stay face up for the rest of the game.");
   onlyNames(t);
 });
