@@ -229,6 +229,7 @@
     .ms-xs .ms-card-name { order: 1; background: none; color: var(--text); font-size: .9rem; padding: 0 6px 0 2px; overflow: visible; }
     .ms-xs .ms-emblem { width: 24px; }
     .ms-xs .ms-card-name.is-long, .ms-xs .ms-card-name.is-xlong, .ms-xs .ms-card-name.is-wrap { font-size: .9rem; line-height: normal; padding: 0 6px 0 2px; white-space: nowrap; letter-spacing: normal; }
+    .ms-xs .ms-team-mark { position: static; order: 1; width: auto; height: auto; font-size: .72rem; color: var(--muted); padding: 0 4px 0 0; }
     .ms-xs .ms-info { order: 2; position: static; width: 26px; height: 26px; background: none; color: var(--muted); }
     .ms-xs .ms-info::after { inset: -9px -4px; }
     .ms-chiprow { display: flex; flex-wrap: wrap; gap: 8px 6px; align-items: center; }
@@ -390,8 +391,55 @@
     .ms-spec-center { justify-content: flex-start; }
     .ms-watch-h { font: 600 .9rem var(--font-ui); color: var(--muted); margin: 14px 0 8px; display: flex; align-items: center; gap: 6px; }
     .ms-spec-toggle { margin-top: 10px; }
-    .ms-log { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.45; }
-    .ms-log .ms-label { display: inline; margin-right: 4px; }
+    /* night event pictures (nightLog, eventPic): one card size for every row on a screen, 60px or
+       smaller when the widest part (a card, an action, all three center cards, inside an indent) doesn't fit */
+    @property --cw { syntax: "<length>"; inherits: true; initial-value: 60px; }
+    .ms-eps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container-type: inline-size; }
+    .ms-notes.ms-eps { gap: 0; }
+    .ms-ep { --cw: min(60px, calc((100cqw - 110px) / 4)); display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
+    .ms-ep:first-child { border-top: 0; padding-top: 4px; }
+    .ms-ep-one { display: flex; flex-direction: column; gap: 10px; }
+    .ms-ep p { margin: 0; line-height: 1.45; }
+    .ms-ep-sub { margin-left: 4px; padding-left: 12px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+    /* a picture is one or two parts; a part never breaks, and the second ("became" and the new card) wraps under the first */
+    .ms-ep-pic { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 8px; }
+    .ms-ep-seg { display: flex; align-items: center; gap: 8px; }
+    .ms-ep-seg.is-many { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
+    .ms-ep-card { position: relative; width: var(--cw); flex: none; }
+    .ms-ep-card .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
+    /* Every face-up card shows its team letter (Mike, more than once), at every size. On small cards
+       (event pictures, the day's table, the spectator's table) the letter shrinks with the card and the
+       name shrinks to fit the band left of it. */
+    @container (width < 80px) {
+      .ms-team-mark { font-size: max(14cqw, 7px); width: auto; right: max(4cqw, 3px); }
+      .ms-card-name { --mark: calc(max(4cqw, 3px) + max(14cqw, 7px) + 3px); }
+      .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc((97cqw - var(--mark)) / (var(--len) * .56))); padding: 1.8cqw var(--mark) 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+      .ms-card-name.is-wrap { font-size: min(max(8.6cqw, 8px), calc((97cqw - var(--mark)) / (var(--word) * .56))); padding: 1.8cqw var(--mark) 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+    }
+    .ms-ep-card .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+    .ms-ep-card.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
+    .ms-ep-card.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
+    .ms-ep-card.is-actor .ms-card-label { color: #ffd88a; font-weight: 600; }
+    /* the day's table: every seat face down, and any card the Revealer left face up */
+    .ms-daytable { container: daytable / inline-size; margin-top: 14px; }
+    /* even rows, centered: cards shrink to fit the columns but never below 42px; on a narrow phone, 4 columns instead of 5 */
+    .ms-daytable-in { --c: var(--cols); --g: min(16px, max(8px, (100cqw - var(--c) * 42px) / (var(--c) - 1))); --cw: max(42px, min(60px, (100cqw - (var(--c) - 1) * var(--g)) / var(--c)));
+      display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 14px var(--g); max-width: calc(var(--c) * var(--cw) + (var(--c) - 1) * var(--g) + 1px); margin: 0 auto; }
+    /* gaps close down to 8px before the columns drop: 5 columns fit while each card stays 42px or wider */
+    @container daytable (width < 242px) { .ms-daytable-in { --c: var(--cols-n); } }
+    .ms-ep-badge { position: absolute; z-index: 3; top: calc(var(--cw) * 202 / 125 - 20px); right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ffd88a; color: #231a00; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel); }
+    .ms-ep-badge.is-off { background: var(--panel-2); color: #ffd88a; border: 1px solid #ffd88a; }
+    .ms-ep-badge svg { width: 15px; height: 15px; }
+    .ms-ep-all { font: 600 .62rem var(--font-ui); color: #ffd88a; text-align: center; line-height: 1.15; margin-top: 2px; }
+    .ms-ep .ms-ep-note { font-size: .8rem; color: var(--muted); text-align: center; }
+    .ms-ep-op { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #ffd88a; margin-bottom: 18px; }
+    .ms-ep-op svg { width: 24px; height: 24px; }
+    .ms-ep-op span { font: 600 .6rem var(--font-ui); color: var(--muted); white-space: nowrap; }
+    .ms-ep-group { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px dashed var(--border); }
+    .ms-ep-each { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .ms-ep-each .ms-ep-group { border: 1px solid #ffd88a55; gap: 12px; padding: 4px 12px 4px 4px; }
+    .ms-ep-each-l { display: flex; align-items: center; gap: 4px; font: 600 .62rem var(--font-ui); color: var(--muted); }
+    .ms-ep-each-l svg { width: 14px; height: 14px; color: #ffd88a; }
 
     /* ---- modals */
     .ms-modal { max-width: 560px; }
@@ -411,8 +459,6 @@
     .ms-host-item.is-danger b { color: #ffc2ca; }
     .ms-host-item.is-confirming { cursor: default; }
     .ms-host-item .ms-confirm-row { margin-top: 8px; }
-    /* the tiniest cards have no room for the team letter beside the name */
-    .ms-spec-cards .ms-team-mark, .ms-spec-center .ms-team-mark { display: none; }
     .ms-wins { padding-left: 18px; display: flex; flex-direction: column; gap: 8px; color: var(--muted); line-height: 1.45; }
     .ms-info-modal { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
     .ms-info-modal .ms-lg { --w: 170px; }

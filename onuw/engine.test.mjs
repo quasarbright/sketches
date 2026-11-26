@@ -485,7 +485,9 @@ test("the Witch looks at a center card, then must swap it onto a player", () => 
   assert.equal(s.g.cards.b, "hunter");
   assert.equal(s.g.center[2], "villager");
   assert.ok(s.g.step.done.a);
-  assert.match(s.g.log.at(-1).text, /Witch.*hunter|Hunter/);
+  assert.match(s.g.log.at(-2).text, /\(Witch\) looked at center card 3: the Hunter/);
+  assert.match(s.g.log.at(-1).text, /^Then .* gave it to .*Villager into the center/);
+  assert.equal(s.g.log.at(-1).sub, true, "the give is drawn under the look");
 });
 
 test("the Witch can take the card herself, can skip, and a Witch who leaves after looking still swaps", () => {
@@ -717,16 +719,16 @@ test("the Revealer leaves a village card face up for the day, but turns a wolf b
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   let now = nightTo(s, "unveiler");
   act(s, "a", { target: "b" }, now);
-  assert.equal(viewFor(s, "c", now).game.revealed, null, "nobody sees it during the night");
+  assert.deepEqual(viewFor(s, "c", now).game.revealed, [], "nobody sees it during the night");
   now = finishNight(s, now);
-  assert.deepEqual(viewFor(s, "c", now).game.revealed, { pid: "b", role: "seer" });
+  assert.deepEqual(viewFor(s, "c", now).game.revealed, [{ pid: "b", role: "seer", by: ["unveiler"] }]);
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   now = nightTo(s, "unveiler");
   act(s, "a", { target: "c" }, now);
   now = finishNight(s, now);
-  assert.equal(viewFor(s, "b", now).game.revealed, null);
+  assert.deepEqual(viewFor(s, "b", now).game.revealed, []);
   assert.match(info(s, "a"), /turned it back face down/);
 });
 

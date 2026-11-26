@@ -11,36 +11,43 @@
   .mk-tag { position: absolute; top: 8px; left: 8px; z-index: 99; font: 600 .75rem var(--font-ui); background: #f2a541; color: #1b1200; padding: 3px 8px; border-radius: 6px; }
   .mk-intro { margin: 0 0 6px; }
   /* one night event: a line of text, then its picture */
-  .mk-evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-  .mk-ev { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
+  /* One card size for every row on a screen: 60px, or smaller when the widest unbreakable part
+     (a card, an action, then all three center cards, inside an indented line) doesn't fit. */
+  @property --cw { syntax: "<length>"; inherits: true; initial-value: 60px; }
+  .mk-evs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container-type: inline-size; }
+  .mk-ev { --cw: min(60px, calc((100cqw - 90px) / 4)); display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
   .mk-ev:first-child { border-top: 0; padding-top: 4px; }
   .mk-ev-type { font: 600 .72rem var(--font-ui); color: #f2a541; text-transform: uppercase; letter-spacing: .05em; }
   .mk-ev p { margin: 0; line-height: 1.45; }
   .mk-ev p .ms-label { display: inline; margin-right: 4px; }
-  .mk-ev .mk-sub { padding-left: 14px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
-  .mk-pic { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
-  .mk-fit { container-type: inline-size; }
+  .mk-ev .mk-sub { padding-left: 10px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  /* A picture is one or two parts; a part never breaks, and the second part ("became" and the new card) drops to its own line when the row is too narrow. */
+  .mk-pic { display: flex; align-items: center; gap: 10px 4px; flex-wrap: wrap; }
+  .mk-seg { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+  .mk-seg > .ms-cardwrap + .ms-cardwrap { margin-left: 6px; } /* room for two gold rings side by side */
   .mk-pic + .mk-pic { margin-top: 2px; }
-  .mk-pic .ms-card { --w: var(--cw, 60px); outline: 1px solid rgba(255,255,255,.16); outline-offset: -1px; }
-  .mk-pic .ms-card-name { font-size: max(12.2cqw, 9.5px); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
-  .mk-pic .ms-team-mark { display: none; }
-  .mk-pic .ms-cardwrap { position: relative; width: var(--cw, 60px); flex: none; }
-  .mk-pic .ms-card-label { max-width: calc(var(--cw, 60px) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mk-pic .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
+  /* names shrink to fit the band left of the team letter (every card shows its team letter) */
+  .mk-pic .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc(94cqw / (var(--len) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+  .mk-pic .ms-cardwrap { position: relative; width: var(--cw); flex: none; }
+  .mk-pic .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mk-pic .ms-cardwrap.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
-  .mk-pic .ms-cardwrap.is-dim .ms-card { filter: grayscale(.8) brightness(.6); }
+  .mk-pic .ms-cardwrap.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
   .mk-pic .ms-cardwrap.is-actor .ms-card-label { color: #ffd88a; font-weight: 600; }
   .mk-badge { position: absolute; z-index: 3; bottom: 28px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ffd88a; color: #231a00; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel); }
   .mk-badge.is-off { background: var(--panel-2); color: #ffd88a; border: 1px solid #ffd88a; }
   .mk-badge svg { width: 15px; height: 15px; }
   .mk-op { flex: none; width: 46px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #ffd88a; margin-bottom: 18px; }
   .mk-op svg { width: 24px; height: 24px; }
-  .mk-op span { font: 600 .62rem var(--font-ui); color: var(--muted); white-space: nowrap; }
-  .mk-center { display: flex; gap: 5px; padding: 5px; border-radius: 12px; border: 1px dashed var(--border); }
+  .mk-op span { font: 600 .6rem var(--font-ui); color: var(--muted); white-space: nowrap; }
+  .mk-center { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px dashed var(--border); }
   .mk-center .ms-card-label { font-size: 0; }
   .mk-center .ms-card-label::after { content: attr(data-l); font-size: .72rem; }
-  .mk-who { display: flex; flex-wrap: wrap; gap: 6px; }
-  .mk-person { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 3px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); font: 500 .85rem var(--font-ui); }
-  .mk-person .ms-avatar { width: 24px; height: 24px; font-size: .75rem; }
+  /* players who saw each other: their cards side by side, one label under them, no actor */
+  .mk-each { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .mk-each-cards { display: flex; gap: 5px; padding: 5px; border-radius: 12px; border: 1px solid #ffd88a55; }
+  .mk-each-l { display: flex; align-items: center; gap: 4px; font: 600 .62rem var(--font-ui); color: var(--muted); }
+  .mk-each-l svg { width: 14px; height: 14px; color: #ffd88a; }
   .mk-note { font-size: .78rem; color: var(--muted); margin: -4px 0 0; }
   .mk-new { color: #ffd88a; font-weight: 600; }
 </style>
@@ -87,54 +94,59 @@ const seat = (role, label, { hot, badge, dim, actor } = {}) =>
   `<div class="ms-cardwrap ${hot ? "is-hot" : ""} ${dim ? "is-dim" : ""} ${actor ? "is-actor" : ""}">${badge ? `<span class="mk-badge ${badge === "eyeoff" ? "is-off" : ""}">${icon(badge)}</span>` : ""}${face(role)}<div class="ms-card-label" data-l="${esc(label.replace("Center ", "C"))}">${esc(label)}</div></div>`;
 const op = (ic, word) => `<div class="mk-op">${icon(ic)}<span>${word}</span></div>`;
 // All three center cards; `up` maps index -> what happened to it (look or swap), the rest stay face down.
-const center = (roles, up = {}) => `<div class="mk-center" title="Center cards">${roles.map((r, i) => up[i] ? seat(r, `Center ${i + 1}`, { hot: true, badge: up[i] }) : seat(null, `Center ${i + 1}`)).join("")}</div>`;
-const pic = (...parts) => {
-  const h = parts.join("");
-  const n = (h.match(/class="ms-cardwrap/g) || []).length, m = (h.match(/class="mk-op"/g) || []).length, c = (h.match(/class="mk-center"/g) || []).length;
-  const fixed = m * 46 + (n + m) * 4 + c * 22;
-  return `<div class="mk-fit"><div class="mk-pic" style="--cw:min(60px, calc((100cqw - ${fixed}px) / ${n}))">${h}</div></div>`;
-};
-const hues = { Mike: 195, Ana: 45, Ben: 25, Cleo: 170, Dev: 340, Eve: 265 };
-const person = (n) => `<span class="mk-person"><span class="ms-avatar" style="--h:${hues[n]}">${n[0]}</span>${n}</span>`;
-const ev = (type, step, text, body) => `<li class="mk-ev">${type ? `<div class="mk-ev-type">${type}</div>` : ""}<p><span class="ms-label">${esc(step)}</span> ${esc(text)}</p>${body}</li>`;
+// ?drunk=down: a card the actor didn't see stays face down (the open question for the Drunk).
+const unseenDown = new URLSearchParams(location.search).get("drunk") === "down";
+const center = (roles, up = {}) => `<div class="mk-center" title="Center cards">${roles.map((r, i) => up[i] ? seat(up[i] === "eyeoff" && unseenDown ? null : r, `Center ${i + 1}`, { hot: true, badge: up[i] }) : seat(null, `Center ${i + 1}`)).join("")}</div>`;
+// A picture: its parts in order. BREAK marks where the row may wrap ("became" and the new card go to a second line).
+const BREAK = "\u0000";
+const pic = (...parts) => `<div class="mk-pic">${parts.join("").split(BREAK).map((h) => `<div class="mk-seg">${h}</div>`).join("")}</div>`;
+// Players who saw each other (wolves, Masons): one mutual picture, no actor.
+const each = (cards) => `<div class="mk-each"><div class="mk-each-cards">${cards.map(([r, n]) => seat(r, n)).join("")}</div><div class="mk-each-l">${icon("eye")}saw each other</div></div>`;
+const ev = (type, text, body) => `<li class="mk-ev">${type ? `<div class="mk-ev-type">${type}</div>` : ""}<p>${esc(text)}</p>${body}</li>`;
 
 // ---- every kind of event
 const C = ["werewolf", "villager", "sleepwalker"];
 const types = [
-  ev("Looks at a player's card", "Seer", "Ana (Seer) looked at Ben's card: the Werewolf.",
+  ev("Looks at a player's card", "Ana (Seer) looked at Ben's card: the Werewolf.",
     pic(seat("seer", "Ana", { actor: true }), op("eye", "saw"), seat("werewolf", "Ben", { hot: true, badge: "eye" }))),
-  ev("Looks at a center card", "Werewolves", "Ben (lone wolf) looked at center card 2: the Villager.",
+  ev("Looks at a center card", "Ben (lone wolf) looked at center card 2: the Villager.",
     pic(seat("werewolf", "Ben", { actor: true }), op("eye", "saw"), center(C, { 1: "eye" }))),
-  ev("Looks at two center cards", "Seer", "Ana (Seer) looked at center cards 1 and 3: the Werewolf and the Drunk.",
+  ev("Looks at two center cards", "Ana (Seer) looked at center cards 1 and 3: the Werewolf and the Drunk.",
     pic(seat("seer", "Ana", { actor: true }), op("eye", "saw"), center(C, { 0: "eye", 2: "eye" }))),
-  ev("Looks at their own card", "Insomniac", "Dev (Insomniac) looked at their own card: the Robber.",
+  ev("Looks at their own card", "Dev (Insomniac) looked at their own card: the Robber.",
     pic(seat("nightowl", "Dev", { actor: true }), op("eye", "saw own"), seat("thief", "Dev now", { hot: true, badge: "eye" }))),
-  ev("Swaps with a player, then looks", "Robber", "Mike (Robber) swapped with Ben and took the Werewolf.",
-    pic(seat("thief", "Mike", { actor: true }), op("swap", "swapped"), seat("werewolf", "Ben", { hot: true, badge: "eye" })) + `<p class="mk-note">The eye marks the card Mike took and looked at.</p>`),
-  ev("Swaps two other players", "Troublemaker", "Cleo (Troublemaker) swapped Ana's Seer with Mike's Werewolf.",
+  ev("Swaps with a player, then looks", "Mike (Robber) swapped with Ben and took the Werewolf.",
+    pic(seat("thief", "Mike", { actor: true, hot: true }), op("swap", "swapped"), seat("werewolf", "Ben", { hot: true, badge: "eye" })) + `<p class="mk-note">The eye marks the card Mike took and looked at.</p>`),
+  ev("Swaps two other players", "Cleo (Troublemaker) swapped Ana's Seer with Mike's Werewolf.",
     pic(seat("meddler", "Cleo", { actor: true }), op("hand", "moved"), seat("seer", "Ana", { hot: true }), op("swap", "swapped"), seat("werewolf", "Mike", { hot: true }))),
-  ev("Swaps with a center card, without looking", "Drunk", "Eve (Drunk) swapped with center card 3, getting the Werewolf.",
-    pic(seat("sleepwalker", "Eve", { actor: true }), op("swap", "swapped"), center(["villager", "seer", "werewolf"], { 2: "eyeoff" })) + `<p class="mk-note">The crossed-out eye means Eve didn't see the card.</p>`),
-  ev("Looks at a center card, then gives it to a player", "Witch", "Cleo (Witch) looked at center card 1, the Werewolf, and swapped it with Ben's Seer.",
+  ev("Swaps with a center card, without looking", "Eve (Drunk) swapped with center card 3, getting the Werewolf.",
+    pic(seat("sleepwalker", "Eve", { actor: true, hot: true }), op("swap", "swapped"), center(["villager", "seer", "werewolf"], { 2: "eyeoff" })) + `<p class="mk-note">The crossed-out eye means Eve didn't see the card.</p>`),
+  ev("Looks at a center card, then gives it to a player", "Cleo (Witch) looked at center card 1: the Werewolf.",
     pic(seat("witch", "Cleo", { actor: true }), op("eye", "saw"), center(["werewolf", "villager", "sleepwalker"], { 0: "eye" }))
-    + `<div class="mk-sub"><p>Then gave it to Ben, taking Ben's Seer into the center.</p>` + pic(seat("witch", "Cleo", { actor: true }), op("hand", "moved"), seat("werewolf", "Center 1", { hot: true }), op("swap", "swapped"), seat("seer", "Ben", { hot: true })) + `</div>`),
-  ev("Gives away the spare card", "Alpha Wolf", "Ben (Alpha Wolf) gave the spare Werewolf card to Ana, whose Seer went into the spare slot.",
-    pic(seat("packleader", "Ben", { actor: true }), op("hand", "moved"), seat("werewolf", "Spare card", { hot: true }), op("swap", "swapped"), seat("seer", "Ana", { hot: true }))),
-  ev("Copies a card, then acts as it", "Doppelganger", "Mike (Doppelganger) looked at Ana's card and became the Seer.",
-    pic(seat("lookalike", "Mike", { actor: true }), op("eye", "saw"), seat("seer", "Ana", { hot: true, badge: "eye" }), op("copy", "became"), seat("seer", "Mike now", { actor: true }))
-    + `<div class="mk-sub">${`<p><span class="ms-label">Doppelganger · Seer</span> Right away, Mike (as the Seer) looked at Ben's card: the Werewolf.</p>`
+    + `<div class="mk-sub"><p>Then gave it to Ben, taking Ben's Seer into the center.</p>` + pic(seat("witch", "Cleo", { actor: true }), op("hand", "moved"), seat("werewolf", "C1", { hot: true }), op("swap", "swapped"), seat("seer", "Ben", { hot: true })) + `</div>`),
+  ev("Gives away the spare card", "Ben (Alpha Wolf) gave the spare Werewolf card to Ana, whose Seer went into the spare slot.",
+    pic(seat("packleader", "Ben", { actor: true }), op("hand", "moved"), seat("werewolf", "Spare", { hot: true }), op("swap", "swapped"), seat("seer", "Ana", { hot: true }))),
+  ev("Copies a card, then acts as it", "Mike (Doppelganger) looked at Ana's card and became the Seer.",
+    pic(seat("lookalike", "Mike", { actor: true }), op("eye", "saw"), seat("seer", "Ana", { hot: true, badge: "eye" }), BREAK, op("copy", "became"), seat("seer", "Mike now", { actor: true }))
+    + `<div class="mk-sub">${`<p>Right away, Mike (as the Seer) looked at Ben's card: the Werewolf.</p>`
       + pic(seat("seer", "Mike", { actor: true }), op("eye", "saw"), seat("werewolf", "Ben", { hot: true, badge: "eye" }))}</div>`),
-  ev("Copies a center card", "Copycat", "Eve (Copycat) looked at center card 2 and became the Villager.",
-    pic(seat("copycat", "Eve", { actor: true }), op("eye", "saw"), center(["werewolf", "villager", "sleepwalker"], { 1: "eye" }), op("copy", "became"), seat("villager", "Eve now", { actor: true }))),
-  ev("Looks, and may turn", "Paranormal Investigator", "Dev (Paranormal Investigator) looked at Ben's card: the Werewolf, and became a Werewolf.",
-    pic(seat("investigator", "Dev", { actor: true }), op("eye", "saw"), seat("werewolf", "Ben", { hot: true, badge: "eye" }), op("copy", "became"), seat("werewolf", "Dev now", { actor: true }))),
-  ev("Turns a card face up", "Revealer", "Cleo (Revealer) turned over Ben's card: the Werewolf, and turned it back.",
+  ev("Copies a center card", "Eve (Copycat) looked at center card 2 and became the Villager.",
+    pic(seat("copycat", "Eve", { actor: true }), op("eye", "saw"), center(["werewolf", "villager", "sleepwalker"], { 1: "eye" }), BREAK, op("copy", "became"), seat("villager", "Eve now", { actor: true }))),
+  ev("Looks, and may turn", "Dev (Paranormal Investigator) looked at Ben's card: the Werewolf, and became a Werewolf.",
+    pic(seat("investigator", "Dev", { actor: true }), op("eye", "saw"), seat("werewolf", "Ben", { hot: true, badge: "eye" }), BREAK, op("copy", "became"), seat("werewolf", "Dev now", { actor: true }))),
+  ev("Turns a card face up", "Cleo (Revealer) turned over Ben's card: the Werewolf, and turned it back.",
     pic(seat("unveiler", "Cleo", { actor: true }), op("flip", "flipped"), seat("werewolf", "Ben", { hot: true, badge: "flip" })) + `<p class="mk-note">If it wasn't a wolf or Tanner, the label says "left face up".</p>`),
-  ev("Wakes up only to see who's who (not in the log yet)", "Werewolves", "Ana and Ben woke up and saw each other: the wolves.",
-    pic(seat("werewolf", "Ana", { actor: true }), op("eye", "saw"), seat("werewolf", "Ben", { actor: true }))
-    + `<p class="mk-note">The same picture works for Masons, the Minion (sees the wolves), the Squire and Beholder (see cards), and the Aura Seer:</p>`
-    + `<div class="mk-who"><span class="mk-person" style="padding-left:10px">Aura Seer saw who moved or looked:</span>${person("Mike")}${person("Cleo")}</div>`),
-  ev("Did nothing", "Robber", "Mike (Robber) did nothing.",
+  ev("Wolves wake and see each other (not in the log yet)", "Ana and Ben (Werewolves) woke up and saw each other.",
+    pic(each([["werewolf", "Ana"], ["werewolf", "Ben"]]))),
+  ev("Masons wake and see each other (not in the log yet)", "Cleo and Dev (Masons) woke up and saw each other.",
+    pic(each([["mason", "Cleo"], ["mason", "Dev"]]))),
+  ev("Sees the wolves (not in the log yet)", "Eve (Minion) saw who the wolves are: Ana and Ben.",
+    pic(seat("lackey", "Eve", { actor: true }), op("eye", "saw"), seat("werewolf", "Ana", { hot: true, badge: "eye" }), seat("werewolf", "Ben", { hot: true, badge: "eye" }))
+    + `<p class="mk-note">The Squire and the Beholder look the same: the Squire sees the wolves' cards, the Beholder sees who the Seer is.</p>`),
+  ev("Sees who moved or looked (not in the log yet)", "Dev (Aura Seer) saw that Mike and Cleo moved or looked at a card.",
+    pic(seat("aurareader", "Dev", { actor: true }), op("eye", "saw"), seat("thief", "Mike", { hot: true, badge: "eyeoff" }), seat("witch", "Cleo", { hot: true, badge: "eyeoff" }))
+    + `<p class="mk-note">The crossed-out eye means Dev saw who, not which card.</p>`),
+  ev("Did nothing", "Mike (Robber) did nothing.",
     pic(seat("thief", "Mike", { dim: true }))),
 ];
 
@@ -144,19 +156,19 @@ const deal = { Mike: "lookalike", Ana: "werewolf", Ben: "seer", Cleo: "thief", D
 const dealCenter = ["werewolf", "sleepwalker", "lackey"];
 const end = { Mike: "lookalike", Ana: "thief", Ben: "nightowl", Cleo: "werewolf", Dev: "meddler", Eve: "seer" };
 const example = [
-  ev("", "Doppelganger", "Mike (Doppelganger) looked at Ben's card and became the Seer.",
-    pic(seat("lookalike", "Mike", { actor: true }), op("eye", "saw"), seat("seer", "Ben", { hot: true, badge: "eye" }), op("copy", "became"), seat("seer", "Mike now", { actor: true }))
-    + `<div class="mk-sub"><p><span class="ms-label">Doppelganger · Seer</span> Right away, Mike (as the Seer) looked at center cards 1 and 3: the Werewolf and the Minion.</p>`
+  ev("", "Mike (Doppelganger) looked at Ben's card and became the Seer.",
+    pic(seat("lookalike", "Mike", { actor: true }), op("eye", "saw"), seat("seer", "Ben", { hot: true, badge: "eye" }), BREAK, op("copy", "became"), seat("seer", "Mike now", { actor: true }))
+    + `<div class="mk-sub"><p>Right away, Mike (as the Seer) looked at center cards 1 and 3: the Werewolf and the Minion.</p>`
     + pic(seat("seer", "Mike", { actor: true }), op("eye", "saw"), center(dealCenter, { 0: "eye", 2: "eye" })) + `</div>`),
-  ev("", "Werewolves", "Ana (lone wolf) looked at center card 2: the Drunk.",
+  ev("", "Ana (lone wolf) looked at center card 2: the Drunk.",
     pic(seat("werewolf", "Ana", { actor: true }), op("eye", "saw"), center(dealCenter, { 1: "eye" }))),
-  ev("", "Seer", "Ben (Seer) looked at Ana's card: the Werewolf.",
+  ev("", "Ben (Seer) looked at Ana's card: the Werewolf.",
     pic(seat("seer", "Ben", { actor: true }), op("eye", "saw"), seat("werewolf", "Ana", { hot: true, badge: "eye" }))),
-  ev("", "Robber", "Cleo (Robber) swapped with Ana and took the Werewolf.",
-    pic(seat("thief", "Cleo", { actor: true }), op("swap", "swapped"), seat("werewolf", "Ana", { hot: true, badge: "eye" }))),
-  ev("", "Troublemaker", "Dev (Troublemaker) swapped Ben's Seer with Eve's Insomniac.",
+  ev("", "Cleo (Robber) swapped with Ana and took the Werewolf.",
+    pic(seat("thief", "Cleo", { actor: true, hot: true }), op("swap", "swapped"), seat("werewolf", "Ana", { hot: true, badge: "eye" }))),
+  ev("", "Dev (Troublemaker) swapped Ben's Seer with Eve's Insomniac.",
     pic(seat("meddler", "Dev", { actor: true }), op("hand", "moved"), seat("seer", "Ben", { hot: true }), op("swap", "swapped"), seat("nightowl", "Eve", { hot: true }))),
-  ev("", "Insomniac", "Eve (Insomniac) looked at their own card: the Seer.",
+  ev("", "Eve (Insomniac) looked at their own card: the Seer.",
     pic(seat("nightowl", "Eve", { actor: true }), op("eye", "saw own"), seat("seer", "Eve now", { hot: true, badge: "eye" }))),
 ];
 const table = (cards, centerRoles, before) => `<div class="ms-table"><div class="ms-table-grid">${players.map((p) =>
@@ -168,7 +180,7 @@ const view = new URLSearchParams(location.search).get("v") || "types";
 document.getElementById("root").innerHTML = view === "types"
   ? `<div class="mk-tag">Mock: every event</div><main class="ms-page ms-results">
       <section class="ms-dayhead"><div class="ms-label">Mock</div><h1 class="ms-h1">Every Kind of Night Event</h1>
-      <p class="ms-hint mk-intro">One picture per event: the actor's card, what they did (saw, swap, became, flipped), and the cards it touched, ringed in gold. Center cards always show all three, with only the ones involved face up.</p></section>
+      <p class="ms-hint mk-intro">One picture per event: the actor's card, what they did (saw, swapped, moved, became, flipped), and the cards it touched, ringed in gold. Center cards always show all three, with only the ones involved face up.</p></section>
       <section class="ms-ev"><ol class="mk-evs">${types.join("")}</ol></section></main>`
   : `<div class="mk-tag">Mock: example game</div><main class="ms-page ms-results">
       <section class="ms-dayhead"><div class="ms-label">Morning</div><h1 class="ms-h1 ms-headline" style="color:${TEAMS.village.color}">The village wins</h1></section>
