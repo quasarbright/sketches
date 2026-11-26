@@ -713,3 +713,20 @@ test("the table sentence names no role: all three roles, and one card turned by 
   assert.equal(t, "B's Hunter and E's Seer were turned face up in the night. They stay face up for the rest of the game.");
   onlyNames(t);
 });
+
+test("the Revealer and a copy of it can flip the same card: no special behavior, and neither sees the other's flip (Mike)", () => {
+  const s = rig({ a: "lookalike", b: "hunter", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "werewolf", "thief"]);
+  nightTo(s, "lookalike"); act(s, "a", { target: "c" });
+  nightTo(s, "unveiler");
+  assert.ok(s.g.step.actors.includes("a") && s.g.step.actors.includes("c"), "both wake together");
+  act(s, "c", { target: "b" });
+  assert.doesNotMatch(s.g.step.prompts.a.text, /face up:/, "the copy isn't told what the Revealer flipped");
+  assert.ok(!s.g.step.prompts.a.exclude.includes("b"), "the same card can be picked");
+  act(s, "a", { target: "b" });
+  finishNight(s);
+  assert.deepEqual(s.g.revealed, [{ pid: "b", role: "hunter", by: ["unveiler", "lookalike"] }], "face up once");
+  const logs = s.g.log.filter((l) => l.step === "unveiler").map((l) => l.text);
+  assert.equal(logs.length, 2, "the log lists both flips");
+  assert.ok(logs.every((t) => /turned B's card face up: the Hunter/.test(t)));
+  assert.equal(tableText(s), "B's Hunter was turned face up in the night. It stays face up for the rest of the game.");
+});
