@@ -194,7 +194,12 @@ export const NIGHT_STEPS = [
   { id: "scout", label: N.scout, roles: ["scout"] },
   { id: "watcher", label: N.watcher, roles: ["watcher"] },
   { id: "unveiler", label: N.unveiler, roles: ["unveiler"] },
+  // Daybreak #10a: a Doppelganger (or Copycat) that copied the Revealer wakes right after it, and sees any
+  // card the Revealer left face up. The step runs whenever the deck could need it, so it reveals nothing.
+  { id: "unveilercopy", label: N.unveiler, roles: [], copyOf: "unveiler" },
 ];
+// Whether a night step runs for a deck (a Set or object of role ids).
+export const stepInDeck = (st, has) => st.roles.some((r) => has(r)) || (!!st.copyOf && has(st.copyOf) && (has("lookalike") || has("copycat")));
 
 // How each team wins, mentioning only the cards in this deck (all of them when there's no deck yet).
 export function winRules(roles) {

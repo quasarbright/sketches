@@ -1,7 +1,7 @@
 // The game itself, as plain data and pure-ish functions. Only the host runs this: it holds the
 // whole state (including everyone's secret cards) and sends each player a filtered view.
 // No DOM, no networking, so it runs under `node --test`.
-import { ROLES, ROLE_ORDER, NIGHT_STEPS, suggestedRoles, deckSize } from "./roles.mjs";
+import { ROLES, ROLE_ORDER, NIGHT_STEPS, stepInDeck, suggestedRoles, deckSize } from "./roles.mjs";
 import { NAMES as N } from "./skin.mjs";
 
 export const TIMING = {
@@ -271,7 +271,7 @@ function deal(s, now, rng) {
     dealtCenter: deck.slice(seats.length, seats.length + 3),
     dealtSpare: s.roles.packleader ? "werewolf" : null,
     roles: { ...s.roles },
-    steps: NIGHT_STEPS.filter((st) => st.roles.some((r) => inDeck.has(r))).map((st) => st.id),
+    steps: NIGHT_STEPS.filter((st) => stepInDeck(st, (r) => inDeck.has(r))).map((st) => st.id),
     step: null,
     stepIdx: -1,
     ready: {},
@@ -374,7 +374,11 @@ function nextStep(s, now, rng) {
   const T = s.timing;
   const actors = g.seats.filter((pid) => {
     const r = wakeRole(g, pid);
-    return id === "wolves" ? ROLES[r].wolf && r !== "dozingwolf" : ROLES[r].step === id && !g.actedEarly?.[pid];
+    const copier = ["lookalike", "copycat"].includes(g.dealt[pid]);
+    if (id === "wolves") return ROLES[r].wolf && r !== "dozingwolf";
+    if (id === "unveilercopy") return r === "unveiler" && copier && !g.actedEarly?.[pid];
+    if (id === "unveiler" && copier) return false;   // a copy of the Revealer wakes in its own step, after it
+    return ROLES[r].step === id && !g.actedEarly?.[pid];
   });
   g.step = {
     id, actors, done: {}, prompts: {},
@@ -493,7 +497,12 @@ function startStep(s, id, pid, actors) {
       return { kind: "ack", text: t };
     }
     case "unveiler":
-      return { kind: "player", optional: true, exclude: [pid], text: `You may turn another player's card face up for the rest of the game. If it's a wolf or the ${N.jester}, it goes back face down.` };
+    case "unveilercopy": {
+      // a copy wakes after the Revealer and sees any card already face up; it can't pick that one
+      const up = g.revealed.filter((x) => x.pid !== pid);
+      const seen = up.map((x) => `${nameOf(s, x.pid)}'s card is face up: the ${roleName(x.role)}.`).join(" ");
+      return { kind: "player", optional: true, exclude: [pid, ...up.map((x) => x.pid)], text: `${seen ? seen + " " : ""}You may turn another player's card face up for the rest of the game. If it's a wolf or the ${N.jester}, it goes back face down.` };
+    }
     case "witch":
       return { kind: "center1", optional: true, text: "You may look at a center card. If you do, you must then swap it with any player's card, your own included." };
     case "meddler":
@@ -541,6 +550,7 @@ function applyAction(s, pid, id, prompt, msg) {
 }
 
 function applyAction1(s, pid, id, prompt, msg) {
+  if (id === "unveilercopy") id = "unveiler";
   const g = s.g;
   const me = nameOf(s, pid);
   // A Doppelganger acting right away as the role she copied: her line goes under the copy.
