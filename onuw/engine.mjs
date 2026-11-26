@@ -399,9 +399,11 @@ function startStep(s, id, pid, actors) {
       return { kind: "player", optional: true, exclude: [pid], text: "You may look at another player's card." };
     case "lackey": {
       const t = wolves.length ? `The ${wolves.length === 1 ? "wolf is" : "wolves are"} ${names(wolves)}. They don't know you're the ${N.lackey}.` : "No player is a wolf. Both wolf cards are in the center.";
-      const pic = [actorCard(g, pid), ...(wolves.length ? [PIC.op("saw"), ...wolves.map((w) => PIC.card(w, wakeRole(g, w), { hot: true, badge: "eyeoff" }))] : [])];
+      // the Minion learns which players are wolves (eye), but not which kind: its own notes show each as a Werewolf
+      const minionPic = (roleOf) => [actorCard(g, pid), ...(wolves.length ? [PIC.op("saw"), ...wolves.map((w) => PIC.card(w, roleOf(w), { hot: true, badge: "eye" }))] : [])];
+      const pic = minionPic((w) => wakeRole(g, w));
       logAction(s, id, pid, wolves.length ? `${nameOf(s, pid)} (${N.lackey}) saw who the ${wolves.length === 1 ? "wolf is" : "wolves are"}: ${names(wolves)}.` : `${nameOf(s, pid)} (${N.lackey}) woke up and saw that no player is a wolf.`, pic, { wake: true });
-      addInfo(s, pid, id, wolves.length ? `The ${wolves.length === 1 ? "wolf is" : "wolves are"} ${names(wolves)}.` : "No player is a wolf.", [], pic);
+      addInfo(s, pid, id, wolves.length ? `The ${wolves.length === 1 ? "wolf is" : "wolves are"} ${names(wolves)}.` : "No player is a wolf.", [], minionPic(() => "werewolf"));
       return { kind: "ack", text: t };
     }
     case "scout": {

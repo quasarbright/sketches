@@ -165,6 +165,14 @@ test("other wolves show as a plain Werewolf in a wolf's own notes", () => {
   assert.ok(cards.find((c) => c.who === "b").actor);
 });
 
+test("the Minion sees the wolves with an eye, and its notes show each as a plain Werewolf", () => {
+  const s = playAll(rig({ a: "prowler", b: "werewolf", c: "lackey" }, ["seer", "villager", "thief"]));
+  const logged = cardsOf(s.g.log.find((l) => l.step === "lackey").pic).filter((c) => c.who !== "c");
+  assert.deepEqual(logged.map((c) => c.badge), ["eye", "eye"]);
+  const note = cardsOf(s.g.info.c.find((n) => n.step === "lackey").pic).filter((c) => c.who !== "c");
+  assert.deepEqual(note.map((c) => c.role), ["werewolf", "werewolf"], "not the Mystic Wolf");
+});
+
 test("a Doppelganger acting right away, and the Witch's give, are drawn under the line before", () => {
   const s = playAll(rig(ROLE_SETS[3][0], ROLE_SETS[3][1]));
   const i = s.g.log.findIndex((l) => /\(Doppelganger\) looked at/.test(l.text));

@@ -408,6 +408,8 @@
     .ms-ep-card .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
     /* no team letter at this size, so names use the whole band and shrink to fit */
     .ms-ep-card .ms-card-name:not(.is-wrap) { font-size: min(max(12.2cqw, 9.5px), calc(94cqw / (var(--len) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
+    /* two-word names wrap, and shrink so the longest word fits the card */
+    .ms-ep-card .ms-card-name.is-wrap { font-size: min(max(8.6cqw, 8px), calc(94cqw / (var(--word) * .56))); padding: 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
     .ms-ep-card .ms-team-mark { display: none; }
     .ms-ep-card .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
     .ms-ep-card.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
