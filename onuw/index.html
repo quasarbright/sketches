@@ -110,6 +110,9 @@
       border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
     .ms-icon-btn:hover { background: var(--panel-2); }
     .ms-count { font: 700 .85rem var(--font-mono); }
+    /* Words next to the top bar's icons on wide screens (Mike: "On desktop let's add text to the top buttons"); icons alone on phones */
+    .ms-top-label { display: none; font-weight: 600; }
+    @media (min-width: 720px) { .ms-top-label { display: inline; } .ms-icon-btn:has(.ms-top-label) { padding: 0 12px; } }
     .ms-host-btn { display: inline-flex; align-items: center; gap: 6px; height: 42px; padding: 0 12px; border-radius: 12px; cursor: pointer;
       border: 1px solid var(--danger); background: color-mix(in srgb, var(--danger) 18%, var(--panel)); color: #ffd0d6; font-weight: 600; }
     .ms-host-btn:hover { background: color-mix(in srgb, var(--danger) 30%, var(--panel)); }
@@ -292,11 +295,8 @@
     .ms-flip-hint { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; font-weight: 600; color: var(--accent); pointer-events: none; }
     .ms-after-peek { max-width: 40ch; }
     .ms-wack-btn { margin-top: 14px; }
-    .ms-secret-head { display: flex; gap: 14px; align-items: center; }
-    .ms-secret-card { flex: none; }
-    .ms-secret-card .ms-card { --w: 96px; }
-    .ms-secret-text { flex: 1; min-width: 0; margin: 0; }
-    .ms-modal-mynight .ms-notes { margin-top: 16px; }
+    .ms-modal-mynight { width: min(560px, calc(100vw - 40px)); }  /* full width: the pictures size their cards from it, so it can't shrink to fit them */
+    .ms-modal-mynight .cohesion-modal-content { padding-right: 16px; }  /* the close button sits beside the title, which leaves it room */
     .ms-modal-mynight .ms-ep:last-child { padding-bottom: 0; }
     .ms-msg-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 
@@ -401,7 +401,10 @@
     .ms-ep-sub { margin-left: 4px; padding-left: 12px; border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
     /* a picture is one or two parts; a part never breaks, and the second ("became" and the new card) wraps under the first */
     .ms-ep-pic { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 8px; }
-    .ms-ep-seg { display: flex; align-items: center; gap: 8px; }
+    /* Every card in a picture lines up by its top edge (Mike: "Different card sizes and bad alignment"):
+       one size, one top line, so the labels share a line too; a verb sits centered on the card height,
+       and a group's border reaches out around its cards instead of pushing them down. */
+    .ms-ep-seg { display: flex; align-items: flex-start; gap: 8px; }
     .ms-ep-seg.is-many { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
     .ms-ep-card { position: relative; width: var(--cw); flex: none; }
     .ms-ep-card .ms-card { --w: var(--cw); outline: 1px solid rgba(255,255,255,.22); outline-offset: -1px; }
@@ -415,7 +418,7 @@
       .ms-card-name.is-wrap { font-size: min(max(8.6cqw, 8px), calc((97cqw - var(--mark)) / (var(--word) * .56))); padding: 1.8cqw var(--mark) 1.8cqw 3cqw; text-overflow: clip; letter-spacing: -.01em; }
     }
     .ms-ep-card .ms-card-label { max-width: calc(var(--cw) + 14px); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
-    .ms-ep-card.is-hot .ms-card { box-shadow: 0 0 0 3px #ffd88a, 0 4px 16px rgba(0,0,0,.4); }
+    .ms-ep-card.is-hot .ms-card { outline: 3px solid #ffd88a; outline-offset: -3px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }  /* the ring sits inside the card, so it stays the same size */
     .ms-ep-card.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
     .ms-ep-card.is-actor .ms-card-label { color: #ffd88a; font-weight: 600; }
     /* the day's table: every seat face down, and any card the Revealer left face up */
@@ -430,10 +433,10 @@
     .ms-ep-badge svg { width: 15px; height: 15px; }
     .ms-ep-all { font: 600 .62rem var(--font-ui); color: #ffd88a; text-align: center; line-height: 1.15; margin-top: 2px; }
     .ms-ep .ms-ep-note { font-size: .8rem; color: var(--muted); text-align: center; }
-    .ms-ep-op { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #ffd88a; margin-bottom: 18px; }
+    .ms-ep-op { flex: none; width: 48px; height: calc(var(--cw) * 202 / 125); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: #ffd88a; }
     .ms-ep-op svg { width: 24px; height: 24px; }
     .ms-ep-op span { font: 600 .6rem var(--font-ui); color: var(--muted); white-space: nowrap; }
-    .ms-ep-group { display: flex; gap: 4px; padding: 4px; border-radius: 12px; border: 1px dashed var(--border); }
+    .ms-ep-group { display: flex; align-items: flex-start; gap: 4px; padding: 4px; margin: -5px 0; border-radius: 12px; border: 1px dashed var(--border); }
     .ms-ep-each { display: flex; flex-direction: column; align-items: center; gap: 4px; }
     .ms-ep-each .ms-ep-group { border: 1px solid #ffd88a55; gap: 12px; padding: 4px 12px 4px 4px; }
     .ms-ep-each-l { display: flex; align-items: center; gap: 4px; font: 600 .62rem var(--font-ui); color: var(--muted); }

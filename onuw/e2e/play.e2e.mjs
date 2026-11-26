@@ -91,11 +91,13 @@ async function playNight(host, pages) {
     for (const p of pages) {
       const pr = await p.evaluate(() => { const g = window.__onuw.view?.game; return g?.prompt && !g.prompt.done ? g.prompt : null; });
       if (!pr) continue;
+      // a result still open (the Doppelganger's copy, before its second turn) hides the next prompt
+      if (await p.locator("[data-act=result-ok]").count()) { await p.click("[data-act=result-ok]").catch(() => {}); continue; }
       if (pr.kind === "center1") await p.click('[data-center="0"]');
       if (pr.kind === "player" || pr.kind === "spare") await p.locator("[data-target]").first().click();
       if (pr.kind === "two") { await p.locator("[data-target]").nth(0).click(); await p.locator("[data-target]").nth(1).click(); }
       if (pr.kind === "seer") { await p.click('[data-center="0"]'); await p.click('[data-center="1"]'); }
-      await p.click("[data-act=confirm]").catch(() => {});
+      await p.click("[data-act=confirm]", { timeout: 3000 }).catch(() => p.click("[data-act=skip]", { timeout: 1000 }).catch(() => {}));
     }
     await host.waitForTimeout(100);
   }
@@ -326,7 +328,7 @@ test("your card and night are behind the ? button, only in the day and the vote"
     await p.click("[data-act=mynight]");
     const modal = p.locator(".ms-modal-mynight");
     await modal.waitFor();
-    const name = (await modal.locator(".ms-secret-card .ms-card-name").textContent()).trim();
+    const name = (await modal.locator(".ms-ep").first().locator(".ms-card-name").textContent()).trim();
     assert.match(await modal.innerText(), new RegExp(`You started as the ${name}`));
     assert.ok(await modal.locator(".ms-notes li").count() >= 1);
     await p.keyboard.press("Escape");
@@ -345,6 +347,88 @@ test("your card and night are behind the ? button, only in the day and the vote"
   for (const p of t.pages) assert.equal(await p.locator("[data-act=mynight]").count(), 0);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
+});
+
+test("the top bar's buttons say what they are on desktop and are icons alone on phones, all one height, never overflowing", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  await playNight(t.host, t.pages);
+  const bar = (p) => p.evaluate(() => {
+    const top = document.querySelector(".ms-top"), btns = [...top.querySelectorAll(".ms-top-actions > button")];
+    return { labels: btns.map((b) => b.innerText.replace(/\s+/g, " ").trim()), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))],
+      overflow: top.scrollWidth > top.clientWidth || btns.some((b) => b.getBoundingClientRect().right > innerWidth) };
+  });
+  for (const [width, want] of [[1440, ["Your Night", "Rules", "Players 4", "Host"]], [720, ["Your Night", "Rules", "Players 4", "Host"]], [719, ["", "", "4", "Host"]], [320, ["", "", "4", "Host"]]]) {
+    await t.host.setViewportSize({ width, height: 800 });
+    await t.host.waitForTimeout(200);
+    const b = await bar(t.host);
+    assert.deepEqual(b.labels, want, `labels at ${width}`);
+    assert.equal(b.heights.length, 1, `one height at ${width}`);
+    assert.equal(b.overflow, false, `no overflow at ${width}`);
+  }
+  await t.ctx.close();
+});
+
+// Every card in an event picture is one size, the tops and labels share a line, and a verb sits
+// centered on the cards (Mike: "Different card sizes and bad alignment").
+async function picProblems(p, root) {
+  return p.evaluate((root) => {
+    const bad = [];
+    const box = (e) => e.getBoundingClientRect();
+    for (const list of document.querySelectorAll(`${root} .ms-eps`)) {
+      const sizes = new Set();
+      for (const seg of list.querySelectorAll(".ms-ep-seg")) {
+        const cards = [...seg.querySelectorAll(".ms-ep-card > .ms-card")];
+        if (!cards.length) continue;
+        const text = seg.closest(".ms-ep-one, .ms-ep")?.querySelector("p")?.textContent.slice(0, 40);
+        for (const c of cards) sizes.add(`${Math.round(box(c).width)}x${Math.round(box(c).height)}`);
+        // rows: cards whose tops are within half a card of each other
+        const rows = [];
+        for (const c of cards) { const r = rows.find((r) => Math.abs(box(r[0]).top - box(c).top) < box(c).height / 2); r ? r.push(c) : rows.push([c]); }
+        for (const r of rows) {
+          const bots = r.map((c) => box(c).bottom);
+          if (Math.max(...bots) - Math.min(...bots) > 1) bad.push(`${text}: card bottoms ${bots.map(Math.round)}`);
+          const tops = r.map((c) => box(c).top), labels = r.map((c) => box(c.parentElement.querySelector(".ms-card-label")).top);
+          if (Math.max(...tops) - Math.min(...tops) > 1) bad.push(`${text}: card tops ${tops.map(Math.round)}`);
+          if (Math.max(...labels) - Math.min(...labels) > 1) bad.push(`${text}: label tops ${labels.map(Math.round)}`);
+          const mid = box(r[0]).top + box(r[0]).height / 2;
+          for (const op of seg.querySelectorAll(".ms-ep-op")) {
+            const o = box(op); if (Math.abs(o.top - box(r[0]).top) > box(r[0]).height / 2) continue;
+            if (Math.abs(o.top + o.height / 2 - mid) > 2) bad.push(`${text}: verb ${Math.round(o.top + o.height / 2)} vs card middle ${Math.round(mid)}`);
+          }
+        }
+      }
+      if (sizes.size > 1) bad.push(`card sizes ${[...sizes]}`);
+    }
+    return bad;
+  }, root);
+}
+
+test("event pictures: one card size, tops, labels and verbs lined up, in Your Night and the night log", async () => {
+  for (const width of [320, 375, 1440]) {
+    const t = await newTable(["Mike", "Ana", "Ben", "Cleo", "Dev"]);
+    for (const p of t.pages) await p.setViewportSize({ width, height: 900 });
+    await t.host.evaluate(() => window.__onuw.send({ t: "setRoles", roles: { lookalike: 1, unveiler: 1, seer: 1, thief: 1, meddler: 1, werewolf: 2, villager: 1 } }));
+    await t.host.waitForTimeout(300);
+    await t.host.click("[data-act=start]");
+    await dealAndReady(t.pages);
+    await playNight(t.host, t.pages);
+    const bad = [];
+    for (const p of t.pages) {
+      await p.waitForSelector(".ms-day");
+      await p.click("[data-act=mynight]");
+      await p.locator(".ms-modal-mynight").waitFor();
+      await p.waitForTimeout(300);
+      bad.push(...(await picProblems(p, ".ms-modal-mynight")).map((x) => `${width} your night: ${x}`));
+      await p.keyboard.press("Escape");
+    }
+    await toResults(t.host, t.pages);
+    await t.host.waitForTimeout(600);
+    bad.push(...(await picProblems(t.host, ".ms-results")).map((x) => `${width} night log: ${x}`));
+    assert.deepEqual(bad, []);
+    await t.ctx.close();
+  }
 });
 
 test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score, villagers cost, and it closes when your turn comes", async () => {

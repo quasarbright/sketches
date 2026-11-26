@@ -504,9 +504,9 @@ function topBar() {
   return `<header class="ms-top">
     <div class="ms-brand">${moonMark()}<span>${esc(TITLE)}</span></div>
     <div class="ms-top-actions">
-      ${myNightShown() ? `<button class="ms-icon-btn" data-act="mynight" aria-label="Your card and your night" data-tooltip="Your night: the card you started with and what you did">${icon("help")}</button>` : ""}
-      <button class="ms-icon-btn" data-act="cheatsheet" aria-label="Cards in this game" data-tooltip="Cards in this game: what each one does, and how each team wins">${icon("book")}</button>
-      <button class="ms-icon-btn" data-act="players" aria-label="Players" data-tooltip="Players: see who's here and change your name">${icon("users")}<span class="ms-count">${n}</span></button>
+      ${myNightShown() ? `<button class="ms-icon-btn" data-act="mynight" aria-label="Your card and your night" data-tooltip="Your night: the card you started with and what you did">${icon("help")}<span class="ms-top-label">Your Night</span></button>` : ""}
+      <button class="ms-icon-btn" data-act="cheatsheet" aria-label="Cards in this game" data-tooltip="Cards in this game: what each one does, and how each team wins">${icon("book")}<span class="ms-top-label">Rules</span></button>
+      <button class="ms-icon-btn" data-act="players" aria-label="Players" data-tooltip="Players: see who's here and change your name">${icon("users")}<span class="ms-top-label">Players</span><span class="ms-count">${n}</span></button>
       ${v.isHost ? `<button class="ms-host-btn" data-act="host" aria-label="Host controls" data-tooltip="Host controls: skip ahead, end the vote, kick a player, start over">${icon("shield")}<span>Host</span></button>` : ""}
     </div>
   </header>${lostSince ? `<div class="ms-banner">${icon("wifiOff")} Lost the host. Reconnecting…</div>` : ""}`;
@@ -994,12 +994,10 @@ function myNightPanel() {
   const items = g.info.length
     ? g.info.map((i) => { const text = i.day ?? i.text; return `<li class="ms-ep">${i.pic ? eventEntry(text, i.pic, { me: myId }) : `<p>${esc(text)}</p>${resultCards(i.cards)}`}</li>`; }).join("")
     : `<li><p>No night actions.</p></li>`;
+  // Your starting card is the first picture, the same size as the rest.
+  const start = `<li class="ms-ep">${eventEntry(`You started as the ${ROLES[g.myCard].name}.`, [{ t: "card", who: myId, role: g.myCard, actor: true }], { me: myId })}</li>`;
   return `<h2 class="ms-h2">Your Night</h2>
-    <div class="ms-secret-head">
-      <div class="ms-secret-card">${card(g.myCard, { size: "sm" })}</div>
-      <p class="ms-secret-text">You started as the <b>${esc(ROLES[g.myCard].name)}</b>.</p>
-    </div>
-    <ul class="ms-notes ms-eps">${items}</ul>`;
+    <ul class="ms-notes ms-eps">${start}${items}</ul>`;
 }
 
 // The Alpha Wolf's spare Werewolf card, drawn apart from the role cards. The one renderer for it:
