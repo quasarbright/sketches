@@ -300,9 +300,12 @@ function startNight(s, now, rng) {
   nextStep(s, now, rng);
 }
 
-function addInfo(s, pid, step, text, cards = [], pic = null) {
-  (s.g.info[pid] ||= []).push({ step, text, cards, ...(pic ? { pic: forActor(pic, pid) } : {}) });
+// `day` is the same note told after the night, for the Your Night modal: no "You'll wake again", no
+// "when the night ends" (Pam, 2026-11-26). Most notes read the same either way and leave it out.
+function addInfo(s, pid, step, text, cards = [], pic = null, day = null) {
+  (s.g.info[pid] ||= []).push({ step, text, cards, ...(pic ? { pic: forActor(pic, pid) } : {}), ...(day ? { day } : {}) });
 }
+const becameDay = (what, r, note) => `You saw ${what}: the ${roleName(r)}. You became the ${roleName(r)}.${note}`;
 
 function logAction(s, step, actor, text, pic = null, extra = {}) {
   s.g.log.push({ step, actor, text, ...(pic ? { pic } : {}), ...extra });
@@ -489,7 +492,7 @@ function startStep(s, id, pid, actors) {
       const t = seen.length ? `${names(seen)} moved or looked at a card tonight.` : "Nobody else moved or looked at a card tonight.";
       const pic = [actorCard(g, pid), ...(seen.length ? [PIC.op("saw"), ...seen.map((x) => PIC.card(x, effRole(g, g.cards[x]), { hot: true, badge: "eyeoff" }))] : [])];
       logAction(s, id, pid, seen.length ? `${nameOf(s, pid)} (${roleName(id)}) saw that ${names(seen)} moved or looked at a card.` : `${nameOf(s, pid)} (${roleName(id)}) saw that nobody else moved or looked at a card.`, pic, { wake: true });
-      addInfo(s, pid, id, t, [], pic);
+      addInfo(s, pid, id, t, [], pic, t.replace("tonight", "last night"));
       return { kind: "ack", text: t };
     }
     case "unveiler":
@@ -588,7 +591,7 @@ function applyAction1(s, pid, id, prompt, msg) {
         g.copied[g.dealt[pid]] = r;
         const text = `You saw ${centerLabel(i).toLowerCase()}. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("copycat", r)}${wakeAgain(r)}`;
         const pic = [actorCard(g, pid, "copycat"), PIC.op("saw"), PIC.center(g, { [i]: { role: r, badge: "eye" } }), PIC.br, PIC.op("became"), PIC.card(pid, r, { actor: true, now: true })];
-        addInfo(s, pid, id, text, centerRow(g, [i]), pic);
+        addInfo(s, pid, id, text, centerRow(g, [i]), pic, becameDay(centerLabel(i).toLowerCase(), r, teamNote("copycat", r)));
         L(`${me} (${N.copycat}) looked at ${centerLabel(i).toLowerCase()} and became the ${roleName(r)}.`, pic);
         return { result: { text, cards: centerRow(g, [i]) } };
       }
@@ -661,7 +664,7 @@ function applyAction1(s, pid, id, prompt, msg) {
           return { result: { text, cards }, next: { ...next, as: ROLES[r].step, stage: 2, cards, text: `${text} ${next.text}` } };
         }
         const text = `You saw ${them}'s card. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("lookalike", r)}${wakeAgain(r)}`;
-        addInfo(s, pid, id, text, cards, pic);
+        addInfo(s, pid, id, text, cards, pic, becameDay(`${them}'s card`, r, teamNote("lookalike", r)));
         return { result: { text, cards } };
       }
       if (id === "investigator") {
@@ -698,7 +701,7 @@ function applyAction1(s, pid, id, prompt, msg) {
         const text = hide ? `You turned ${them}'s card face up. It's the ${roleName(r)}, so you turned it back face down. Only you saw it.` : `You turned ${them}'s card face up. It's the ${roleName(r)}. Everyone else sees it when the night ends, and it stays face up for the rest of the game.`;
         const pic = [AC(), PIC.op("flipped"), PIC.card(t, r, { hot: true, badge: hide ? "eye" : "all" })];
         const note = hide ? null : `${me} saw it right away. Everyone else sees it face up when the night ends.`;
-        addInfo(s, pid, id, text, cards, pic);
+        addInfo(s, pid, id, text, cards, pic, hide ? null : `You turned ${them}'s card face up: the ${roleName(r)}. It stays face up for the rest of the game.`);
         L(hide ? `${me} (${N.unveiler}) turned over ${them}'s card: the ${roleName(r)}, so they turned it back face down. Only ${me} saw it.` : `${me} (${N.unveiler}) turned ${them}'s card face up: the ${roleName(r)}. It stays face up for the rest of the game.`, pic, note ? { note } : {});
         return { result: { text, cards } };
       }

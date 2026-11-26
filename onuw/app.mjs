@@ -992,7 +992,7 @@ function myNightPanel() {
   const g = view.game;
   // Your night, drawn with the same pictures as the end screen (only what you saw is face up).
   const items = g.info.length
-    ? g.info.map((i) => `<li class="ms-ep">${i.pic ? eventEntry(i.text, i.pic, { me: myId }) : `<p>${esc(i.text)}</p>${resultCards(i.cards)}`}</li>`).join("")
+    ? g.info.map((i) => { const text = i.day ?? i.text; return `<li class="ms-ep">${i.pic ? eventEntry(text, i.pic, { me: myId }) : `<p>${esc(text)}</p>${resultCards(i.cards)}`}</li>`; }).join("")
     : `<li><p>No night actions.</p></li>`;
   return `<h2 class="ms-h2">Your Night</h2>
     <div class="ms-secret-head">

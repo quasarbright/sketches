@@ -730,3 +730,39 @@ test("the Revealer and a copy of it can flip the same card: no special behavior,
   assert.ok(logs.every((t) => /turned B's card face up: the Hunter/.test(t)));
   assert.equal(tableText(s), "B's Hunter was turned face up in the night. It stays face up for the rest of the game.");
 });
+
+// The Your Night modal opens only in the day, so its lines are told after the night: never "You'll
+// wake again", "will" or "when the night ends" (Pam, 2026-11-26). Every role, acting (not skipping),
+// on its own, copied by the Doppelganger and copied by the Copycat.
+test("night notes told in the day (the Your Night modal) never talk about the rest of the night", () => {
+  const acting = (s) => {
+    let guard = 0;
+    if (s.phase === "deal") { s.now = 0; for (const id of s.g.seats) handle(s, id, { t: "peeked" }, 0); }
+    while (s.phase === "night") {
+      assert.ok(guard++ < 500, "stuck");
+      for (const a of s.g.step.actors) {
+        for (let k = 0; k < 4 && !s.g.step.done[a]; k++) {
+          const p = s.g.step.prompts[a];
+          const others = s.g.seats.filter((t) => !(p.exclude || []).includes(t));
+          const tries = [{ target: others[0] }, { targets: others.slice(0, 2) }, { center: [0, 1] }, { center: 0 }, { ack: true }, { skip: true }];
+          for (const body of tries) { if (s.g.step.done[a] || s.g.step.prompts[a] !== p) break; handle(s, a, { t: "act", step: s.g.step.id, ...body }, s.now); }
+        }
+      }
+      s.now += 150; tick(s, s.now);
+    }
+    return s;
+  };
+  const lines = [], night = [];
+  const collect = (s) => { for (const list of Object.values(s.g.info)) for (const i of list) { lines.push(i.day ?? i.text); night.push(i.text); } };
+  const stepped = Object.keys(ROLES).filter((r) => ROLES[r].step && !["lookalike", "copycat"].includes(r));
+  for (const r of stepped) {
+    const others = { ...(ROLES[r].wolf ? { c: "villager", d: "jester" } : { c: "hunter", d: "jester" }), ...(r === "mason" ? { e: "mason" } : {}) };
+    collect(acting(rig({ a: r, b: "villager", ...others }, ["villager", "cursed", "prince"])));
+    collect(acting(rig({ a: "lookalike", b: r, ...others }, ["villager", "cursed", "prince"])));
+    if (r !== "mason") collect(acting(rig({ a: "copycat", b: "villager", ...others }, [r, "cursed", "werewolf"])));
+  }
+  assert.ok(night.some((l) => /You'll wake again/.test(l)) && night.some((l) => /when the night ends/.test(l)), "the night's own lines still say when");
+  assert.ok(lines.some((l) => /You became the Revealer/.test(l)), "the copies are covered");
+  assert.ok(lines.some((l) => /stays face up for the rest of the game/.test(l)), "the Revealer is covered");
+  for (const l of lines) assert.doesNotMatch(l, /You'll|\bwill\b|when the night ends|tonight/, l);
+});
