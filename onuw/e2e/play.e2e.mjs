@@ -297,9 +297,12 @@ test("every face-up card shows its team letter in every view: lobby, day, the ta
     await playNight(t.host, t.pages);
     // a face-up card on the day's table
     await t.host.evaluate(() => { const g = window.__onuw.state.g; const id = g.seats[1]; g.revealed = [{ pid: id, role: g.cards[id] }]; window.__onuw.publish(); });
-    for (const p of t.pages) await p.click("[data-flip=secret] [data-flip-tap]").catch(() => {});
     await t.host.waitForTimeout(600);
     await check("day");
+    for (const p of t.pages) await p.click("[data-act=mynight]");
+    await t.host.waitForTimeout(600);
+    await check("your night");
+    for (const p of t.pages) await p.keyboard.press("Escape");
     await toResults(t.host, t.pages);
     await t.host.waitForTimeout(600);
     await check("results");
@@ -308,23 +311,38 @@ test("every face-up card shows its team letter in every view: lobby, day, the ta
   }
 });
 
-test("mid-game, your card and night are face down until you tap Show, and hide again", async () => {
-  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"]);
+test("your card and night are behind the ? button, only in the day and the vote", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"], { watchers: ["Wes"] });
   await t.host.click("[data-act=start]");
   await dealAndReady(t.pages);
+  // not at night, and nothing about your card in the main area
+  await t.host.waitForSelector(".ms-night");
+  for (const p of t.pages) assert.equal(await p.locator("[data-act=mynight]").count(), 0);
   await playNight(t.host, t.pages);
   for (const p of t.pages) {
-    const name = await p.locator("[data-flip=secret] .ms-turner .is-front .ms-card-name").textContent();
-    const panel = p.locator("[data-flip=secret]");
-    assert.doesNotMatch(await panel.innerText(), new RegExp(name.trim()));
-    await p.click("[data-flip=secret] .is-back [data-flip-tap]");
-    await p.waitForTimeout(500);
-    assert.match(await panel.innerText(), new RegExp(name.trim()));
-    assert.ok(await p.locator("[data-flip=secret] .ms-notes li").count() >= 1);
-    await p.click("[data-flip=secret] .is-front button[data-flip-tap]");
-    await p.waitForTimeout(500);
-    assert.doesNotMatch(await panel.innerText(), new RegExp(name.trim()));
+    await p.waitForSelector(".ms-day");
+    assert.equal(await p.locator("main").getByText("Started", { exact: false }).count(), 0);
+    assert.equal(await p.locator("main .ms-notes").count(), 0);
+    await p.click("[data-act=mynight]");
+    const modal = p.locator(".ms-modal-mynight");
+    await modal.waitFor();
+    const name = (await modal.locator(".ms-secret-card .ms-card-name").textContent()).trim();
+    assert.match(await modal.innerText(), new RegExp(`You started as the ${name}`));
+    assert.ok(await modal.locator(".ms-notes li").count() >= 1);
+    await p.keyboard.press("Escape");
   }
+  // the spectator has no card, so no button
+  for (const p of t.specs) assert.equal(await p.locator("[data-act=mynight]").count(), 0);
+  // still there at the vote; gone at the results, and an open one closes
+  for (const p of t.pages) await p.click("[data-act=dayready]");
+  for (const p of t.pages) await p.waitForSelector(".ms-vote-list");
+  await t.pages[1].click("[data-act=mynight]");
+  await t.pages[1].locator(".ms-modal-mynight").waitFor();
+  await t.host.click("[data-act=host]"); await t.host.click("[data-what=h-endvote]");
+  await t.host.waitForFunction(() => window.__onuw.view.phase === "results");
+  await t.pages[1].waitForTimeout(600);
+  assert.equal(await t.pages[1].locator(".ms-modal-mynight").count(), 0);
+  for (const p of t.pages) assert.equal(await p.locator("[data-act=mynight]").count(), 0);
   assert.deepEqual(t.errors, []);
   await t.ctx.close();
 });

@@ -76,6 +76,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const ICONS = {
   users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
   info: `<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`,
+  help: `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>`,
   book: `<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>`,
   shield: `<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>`,
   link: `<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>`,
@@ -503,6 +504,7 @@ function topBar() {
   return `<header class="ms-top">
     <div class="ms-brand">${moonMark()}<span>${esc(TITLE)}</span></div>
     <div class="ms-top-actions">
+      ${myNightShown() ? `<button class="ms-icon-btn" data-act="mynight" aria-label="Your card and your night" data-tooltip="Your night: the card you started with and what you did">${icon("help")}</button>` : ""}
       <button class="ms-icon-btn" data-act="cheatsheet" aria-label="Cards in this game" data-tooltip="Cards in this game: what each one does, and how each team wins">${icon("book")}</button>
       <button class="ms-icon-btn" data-act="players" aria-label="Players" data-tooltip="Players: see who's here and change your name">${icon("users")}<span class="ms-count">${n}</span></button>
       ${v.isHost ? `<button class="ms-host-btn" data-act="host" aria-label="Host controls" data-tooltip="Host controls: skip ahead, end the vote, kick a player, start over">${icon("shield")}<span>Host</span></button>` : ""}
@@ -905,7 +907,6 @@ function nightScreen() {
     <div class="ms-label">Night</div>
     <h1 class="ms-h1">${shownResult ? `Your turn: the ${esc(shownResult.step === "wolves" ? "wolves" : NIGHT_STEPS.find((x) => x.id === shownResult.step)?.label ?? "")}` : p && !p.done ? `Your turn: the ${esc(st.id === "wolves" ? "wolves" : st.label)}` : "Everyone is asleep"}</h1>
     ${panel}
-    ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>`;
 }
@@ -983,34 +984,22 @@ function promptPanel(p, g) {
 
 // ---- day
 
-// Your starting card and what you learned at night, face down until you tap it and face up until
-// you tap it again. Shown at night, in the day and at the vote.
-function secretPanel(g) {
-  const up = !!ui.up.secret;
+// The ? button in the top bar: your starting card and what you did at night, in a modal. Only in the
+// day and the vote, for a seated player (the night has its own prompts and results).
+const myNightShown = () => screen === "room" && (view?.phase === "day" || view?.phase === "vote") && !!view.game?.myCard;
+
+function myNightPanel() {
+  const g = view.game;
   // Your night, drawn with the same pictures as the end screen (only what you saw is face up).
   const items = g.info.length
     ? g.info.map((i) => `<li class="ms-ep">${i.pic ? eventEntry(i.text, i.pic, { me: myId }) : `<p>${esc(i.text)}</p>${resultCards(i.cards)}`}</li>`).join("")
-    : `<li><p>${view.phase === "night" ? "Nothing yet." : "No night actions."}</p></li>`;
-  return `<section class="ms-panel ms-secret ms-flipscope ${up ? "is-up" : ""}" data-flip="secret">
+    : `<li><p>No night actions.</p></li>`;
+  return `<h2 class="ms-h2">Your Night</h2>
     <div class="ms-secret-head">
-      <div class="ms-turner ms-secret-card" data-flip-tap tabindex="0" role="button" aria-pressed="${up}" aria-label="Show or hide the card you started with and your night">
-        <div class="is-front">${card(g.myCard, { size: "sm" })}</div>
-        <div class="is-back">${cardBack({ size: "sm" })}</div>
-      </div>
-      <div class="ms-secret-text">
-        <h2 class="ms-h2">The Card You Started With</h2>
-        <div class="is-back">
-          <p class="ms-hint">Hidden. ${Tap()} Show to see it.</p>
-          <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eye")}<span>Show</span></button>
-        </div>
-        <div class="is-front">
-          <p>You started as the <b>${esc(ROLES[g.myCard].name)}</b>.</p>
-          <button class="ms-btn ms-sm-btn" data-flip-tap>${icon("eyeOff")}<span>Hide</span></button>
-        </div>
-      </div>
+      <div class="ms-secret-card">${card(g.myCard, { size: "sm" })}</div>
+      <p class="ms-secret-text">You started as the <b>${esc(ROLES[g.myCard].name)}</b>.</p>
     </div>
-    <ul class="ms-notes ms-eps is-front">${items}</ul>
-  </section>`;
+    <ul class="ms-notes ms-eps">${items}</ul>`;
 }
 
 // The Alpha Wolf's spare Werewolf card, drawn apart from the role cards. The one renderer for it:
@@ -1052,7 +1041,6 @@ function dayScreen() {
     </section>
     ${revealedPanel(g)}
     ${resultPanel()}
-    ${secretPanel(g)}
     ${inGameStrip()}
     <mike-footer></mike-footer>
   </main>
@@ -1102,7 +1090,6 @@ function voteScreen() {
         : `<button class="ms-target ${pick === p.id ? "is-on" : ""}" data-vote="${p.id}" aria-pressed="${pick === p.id}">${avatar(p.name, p.id)}<span>${esc(p.name)}</span>${g.myVote === p.id ? `<span class="ms-tag">your vote</span>` : ""}${!p.connected ? icon("wifiOff", "ms-ico-sm") : ""}</button>`).join("")}
     </div>
     ${revealedPanel(g)}
-    ${secretPanel(g)}
     <mike-footer></mike-footer>
   </main>
   ${bar(`<div class="ms-bar-note">${votedN} of ${live.length} voted${notYet.length ? `. Waiting for ${esc(waitNames(notYet))}.` : ""}</div>
@@ -1279,6 +1266,7 @@ function closePanel() {
 
 function refreshPanel(force = false) {
   if (!panel) return;
+  if (panel.kind === "mynight" && !myNightShown()) { closePanel(); return; }
   if (panel.kind === "players" || panel.kind === "host") {
     if (!view || screen !== "room") { closePanel(); return; }
     if (panel.kind === "host" && !view.isHost) { closePanel(); return; }
@@ -1287,6 +1275,7 @@ function refreshPanel(force = false) {
   if (panel.kind === "players") html = playersPanel();
   else if (panel.kind === "host") html = hostPanel();
   else if (panel.kind === "cheatsheet") html = cheatsheetPanel();
+  else if (panel.kind === "mynight") html = myNightPanel();
   else if (panel.kind === "settings") html = settingsPanel();
   else if (panel.kind.startsWith("info:")) html = infoPanel(panel.kind.slice(5));
   if (!force && html === panel.html) return;
@@ -1471,6 +1460,7 @@ function onClick(e) {
       return;
     }
     case "cheatsheet": openPanel("cheatsheet"); return;
+    case "mynight": openPanel("mynight"); return;
     case "submit-vote": if (ui.vote) send({ t: "vote", target: ui.vote }); return;
     case "result-ok": shownResult = null; render(); return;
     case "settings": openPanel("settings"); return;
