@@ -719,16 +719,16 @@ test("the Revealer leaves a village card face up for the day, but turns a wolf b
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   let now = nightTo(s, "unveiler");
   act(s, "a", { target: "b" }, now);
-  assert.equal(viewFor(s, "c", now).game.revealed, null, "nobody sees it during the night");
+  assert.deepEqual(viewFor(s, "c", now).game.revealed, [], "nobody sees it during the night");
   now = finishNight(s, now);
-  assert.deepEqual(viewFor(s, "c", now).game.revealed, { pid: "b", role: "seer" });
+  assert.deepEqual(viewFor(s, "c", now).game.revealed, [{ pid: "b", role: "seer" }]);
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
   now = nightTo(s, "unveiler");
   act(s, "a", { target: "c" }, now);
   now = finishNight(s, now);
-  assert.equal(viewFor(s, "b", now).game.revealed, null);
+  assert.deepEqual(viewFor(s, "b", now).game.revealed, []);
   assert.match(info(s, "a"), /turned it back face down/);
 });
 

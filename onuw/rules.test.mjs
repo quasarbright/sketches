@@ -290,7 +290,7 @@ test("the Revealer turns a Tanner or Dream Wolf card back face down", () => {
     const s = rig({ a: "unveiler", b: hidden, c: "villager" }, ["werewolf", "seer", "thief"]);
     nightTo(s, "unveiler"); act(s, "a", { target: "b" });
     finishNight(s);
-    assert.equal(s.g.revealed, null, hidden);
+    assert.deepEqual(s.g.revealed, [], hidden);
   }
 });
 
@@ -639,5 +639,21 @@ test("a Doppelganger card that copied a wolf turns the P.I. and is flipped back 
   nightTo(s, "lookalike"); act(s, "a", { target: "b" });
   nightTo(s, "unveiler"); act(s, "c", { target: "a" });
   finishNight(s);
-  assert.equal(s.g.revealed, null);
+  assert.deepEqual(s.g.revealed, []);
+});
+
+test("a Doppelganger that copied the Revealer turns a second card face up; both stay up, both are logged", () => {
+  const s = rig({ a: "lookalike", b: "hunter", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "werewolf", "thief"]);
+  nightTo(s, "lookalike"); act(s, "a", { target: "c" });
+  nightTo(s, "unveiler");
+  act(s, "c", { target: "b" });
+  act(s, "a", { target: "e" });
+  finishNight(s);
+  assert.deepEqual(s.g.revealed, [{ pid: "b", role: "hunter" }, { pid: "e", role: "seer" }]);
+  const logs = s.g.log.filter((l) => l.step === "unveiler").map((l) => l.text);
+  assert.equal(logs.length, 2);
+  assert.ok(logs.some((t) => /turned B's card face up: the Hunter/.test(t)));
+  assert.ok(logs.some((t) => /turned E's card face up: the Seer/.test(t)));
+  assert.match(s.g.info.c.map((i) => i.text).join(" "), /Hunter/);
+  assert.match(s.g.info.a.map((i) => i.text).join(" "), /Seer\. Everyone else sees it when the night ends/);
 });

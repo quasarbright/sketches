@@ -1047,8 +1047,8 @@ function dayScreen() {
       ${countdown(g.dayEndsAt, "ms-bigtime")}
       <p class="ms-lede">Discuss. Voting starts when the timer ends or everyone is ready.</p>
     </section>
-    ${resultPanel()}
     ${revealedPanel(g)}
+    ${resultPanel()}
     ${secretPanel(g)}
     ${inGameStrip()}
     <mike-footer></mike-footer>
@@ -1057,11 +1057,23 @@ function dayScreen() {
     <button class="ms-btn ${me?.dayReady ? "" : "ms-primary"} ms-wide" data-act="dayready">${me?.dayReady ? "Not Ready" : "Ready to Vote"}</button>`)}`;
 }
 
-// The card the Unveiler left face up, for everyone, through the day and the vote.
+// The table, for everyone through the day and the vote: every player's card face down, and any card
+// the Revealer (or a Doppelganger that copied it) left face up. Every phone shows the same thing.
 function revealedPanel(g) {
-  const rv = g.revealed;
-  if (!rv) return "";
-  return `<section class="ms-panel ms-revealed"><div class="ms-row">${wrap(card(rv.role, { size: "sm" }))}<p class="ms-lede">${esc(playerName(rv.pid))}'s card is face up: the ${esc(ROLES[rv.role].name)}.</p></div></section>`;
+  const seats = view.players.filter((p) => p.seated);
+  // in seat order, so the sentence reads in the same order as the table
+  const rv = seats.flatMap((p) => (g.revealed || []).filter((r) => r.pid === p.id));
+  if (!rv.length) return "";
+  const up = (pid) => rv.find((r) => r.pid === pid);
+  const what = rv.map((r) => `${playerName(r.pid)}'s ${ROLES[r.role].name}`);
+  const text = rv.length === 1
+    ? `The ${N.unveiler} turned ${playerName(rv[0].pid)}'s card face up in the night: the ${ROLES[rv[0].role].name}. It stays face up for the rest of the game.`
+    : `The ${N.unveiler} and the ${N.lookalike} turned these face up in the night: ${what.slice(0, -1).join(", ")} and ${what.at(-1)}. They stay face up for the rest of the game.`;
+  return `<section class="ms-panel ms-revealed">
+    <h2 class="ms-h2">The Table</h2>
+    <p class="ms-hint">${esc(text)}</p>
+    <div class="ms-daytable">${seats.map((p) => { const r = up(p.id); return epCard(r ? { who: p.id, role: r.role, hot: true, badge: "all" } : { who: p.id }, { me: myId }); }).join("")}</div>
+  </section>`;
 }
 
 // ---- vote
@@ -1174,15 +1186,15 @@ const eventEntry = (text, pic, opts, note) => `<div class="ms-ep-one"><p>${esc(t
 // the event touched; the eye means the actor saw it, the crossed-out eye that it moved or was
 // touched unseen. A card with no role is face down. With `me`, your own cards are labeled "You".
 const EP_OPS = { saw: ["eye", "saw"], "saw own": ["eye", "saw own"], swapped: ["swap", "swapped"], moved: ["hand", "moved"], became: ["copy", "became"], flipped: ["flipCard", "flipped"] };
+// One card in an event picture or on the day's table: its badge, its face (or back), its label.
+function epCard(c, { me } = {}) {
+  const label = /^c\d$/.test(c.who) ? `C${+c.who[1] + 1}` : c.who === "spare" ? "Spare" : `${c.who === me ? "You" : playerName(c.who)}${c.now ? " now" : ""}`;
+  const b = c.role ? c.badge : c.badge === "eyeoff" ? "eyeoff" : null;
+  const badge = b ? `<span class="ms-ep-badge ${b === "eyeoff" ? "is-off" : ""}" aria-label="${b === "eyeoff" ? "not seen" : b === "all" ? "seen by everyone" : "seen"}">${icon(b === "eyeoff" ? "eyeOff" : "eye")}</span>` : "";
+  return `<div class="ms-cardwrap ms-ep-card ${c.hot ? "is-hot" : ""} ${c.dim ? "is-dim" : ""} ${c.actor ? "is-actor" : ""}">${badge}${!c.role ? cardBack({ size: "sm" }) : card(c.role, { size: "sm", info: false })}<div class="ms-card-label">${esc(label)}</div>${c.badge === "all" ? `<div class="ms-ep-all">Seen by everyone</div>` : ""}</div>`;
+}
 function eventPic(pic, { me } = {}) {
-  const label = (c) => {
-    if (/^c\d$/.test(c.who)) return `C${+c.who[1] + 1}`;
-    if (c.who === "spare") return "Spare";
-    const n = c.who === me ? "You" : playerName(c.who);
-    return c.now ? `${n} now` : n;
-  };
-  const badge = (b) => (b ? `<span class="ms-ep-badge ${b === "eyeoff" ? "is-off" : ""}" aria-label="${b === "eyeoff" ? "not seen" : b === "all" ? "face up for everyone" : "seen"}">${icon(b === "eyeoff" ? "eyeOff" : "eye")}</span>` : "");
-  const one = (c) => `<div class="ms-cardwrap ms-ep-card ${c.hot ? "is-hot" : ""} ${c.dim ? "is-dim" : ""} ${c.actor ? "is-actor" : ""}">${badge(c.role ? c.badge : c.badge === "eyeoff" ? "eyeoff" : null)}${!c.role ? cardBack({ size: "sm" }) : card(c.role, { size: "sm", info: false })}<div class="ms-card-label">${esc(label(c))}</div>${c.badge === "all" ? `<div class="ms-ep-all">Seen by everyone</div>` : ""}</div>`;
+  const one = (c) => epCard(c, { me });
   const part = (it) => {
     if (it.t === "card") return one(it);
     if (it.t === "op") { const [ic, w] = EP_OPS[it.op] || ["arrow", it.op]; return `<div class="ms-ep-op">${icon(ic)}<span>${esc(w)}</span></div>`; }

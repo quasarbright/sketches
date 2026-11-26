@@ -280,7 +280,7 @@ function deal(s, now, rng) {
     copied: {},      // card id -> the role it became (Copycat, Lookalike, Investigator)
     actedEarly: {},  // Doppelgangers who already did their copied role's action
     touched: {},     // players who moved or looked at a card (for the Aura Reader)
-    revealed: null,  // { pid, role }: a card the Unveiler left face up
+    revealed: [],  // [{ pid, role }]: cards the Revealer (and a Doppelganger copy of it) left face up
     dayReady: {},
     votes: {},
     dayEndsAt: null,
@@ -666,7 +666,7 @@ function applyAction1(s, pid, id, prompt, msg) {
         const r = effRole(g, g.cards[t]);
         const cards = [{ label: them, role: r }];
         const hide = ROLES[r].wolf || r === "jester";
-        if (!hide) g.revealed = { pid: t, role: r };
+        if (!hide && !g.revealed.some((x) => x.pid === t)) g.revealed.push({ pid: t, role: r });
         const text = hide ? `You turned ${them}'s card face up. It's the ${roleName(r)}, so you turned it back face down. Only you saw it.` : `You turned ${them}'s card face up. It's the ${roleName(r)}. Everyone else sees it when the night ends, and it stays face up for the rest of the game.`;
         const pic = [AC(), PIC.op("flipped"), PIC.card(t, r, { hot: true, badge: hide ? "eye" : "all" })];
         const note = hide ? null : `${me} saw it right away. Everyone else sees it face up when the night ends.`;
@@ -884,7 +884,7 @@ export function viewFor(s, pid, now) {
     info: g.info[pid] || [],
     dayEndsAt: g.dayEndsAt,
     myVote: g.votes[pid] || null,
-    revealed: s.phase !== "night" || spectator ? g.revealed : null,
+    revealed: s.phase !== "night" || spectator ? g.revealed : [],
     result: null,
   };
   // Spectators see everything, at every moment: every card, the night log and the votes.
