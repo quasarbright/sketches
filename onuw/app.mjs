@@ -1057,6 +1057,9 @@ function dayScreen() {
     <button class="ms-btn ${me?.dayReady ? "" : "ms-primary"} ms-wide" data-act="dayready">${me?.dayReady ? "Not Ready" : "Ready to Vote"}</button>`)}`;
 }
 
+// Columns for n cards so the rows come out even (10 as 5+5, 9 as 5+4, 7 as 4+3), at most `max` wide.
+const evenCols = (n, max) => Math.ceil(n / Math.ceil(n / max));
+
 // The table, for everyone through the day and the vote: every player's card face down, and any card
 // the Revealer (or a Doppelganger that copied it) left face up. Every phone shows the same thing.
 function revealedPanel(g) {
@@ -1072,7 +1075,7 @@ function revealedPanel(g) {
   return `<section class="ms-panel ms-revealed">
     <h2 class="ms-h2">The Table</h2>
     <p class="ms-hint">${esc(text)}</p>
-    <div class="ms-daytable">${seats.map((p) => { const r = up(p.id); return epCard(r ? { who: p.id, role: r.role, hot: true, badge: "all" } : { who: p.id }, { me: myId }); }).join("")}</div>
+    <div class="ms-daytable" style="--cols:${evenCols(seats.length, 5)};--cols-n:${evenCols(seats.length, 4)}"><div class="ms-daytable-in">${seats.map((p) => { const r = up(p.id); return epCard(r ? { who: p.id, role: r.role, hot: true, badge: "all" } : { who: p.id }, { me: myId }); }).join("")}</div></div>
   </section>`;
 }
 

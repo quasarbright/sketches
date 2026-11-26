@@ -416,7 +416,10 @@
     .ms-ep-card.is-dim .ms-card { filter: grayscale(.7) brightness(.8); opacity: .8; }
     .ms-ep-card.is-actor .ms-card-label { color: #ffd88a; font-weight: 600; }
     /* the day's table: every seat face down, and any card the Revealer left face up */
-    .ms-daytable { --cw: 60px; display: grid; grid-template-columns: repeat(auto-fill, var(--cw)); justify-content: center; gap: 14px 16px; align-items: start; margin: 14px auto 0; max-width: calc(5 * var(--cw) + 4 * 16px); }
+    .ms-daytable { container: daytable / inline-size; margin-top: 14px; }
+    /* even rows, centered: cards shrink to fit the columns but never below 42px; on a narrow phone, 4 columns instead of 5 */
+    .ms-daytable-in { --c: var(--cols); --cw: max(42px, min(60px, (100cqw - (var(--c) - 1) * 16px) / var(--c))); display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 14px 16px; max-width: calc(var(--c) * var(--cw) + (var(--c) - 1) * 16px + 1px); margin: 0 auto; }
+    @container daytable (width < 274px) { .ms-daytable-in { --c: var(--cols-n); } }
     .ms-ep-badge { position: absolute; z-index: 3; top: calc(var(--cw) * 202 / 125 - 20px); right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ffd88a; color: #231a00; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel); }
     .ms-ep-badge.is-off { background: var(--panel-2); color: #ffd88a; border: 1px solid #ffd88a; }
     .ms-ep-badge svg { width: 15px; height: 15px; }
