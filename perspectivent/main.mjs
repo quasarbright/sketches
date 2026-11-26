@@ -68,10 +68,13 @@ const lensUniforms = {
   // the angle lenses: x = 0 off, 1 lat-long, 2 fisheye; y and z = half the view's angular width
   // and height (radians)
   lensSphere: { value: new THREE.Vector3(0, 1, 1) },
-  // Switching lenses blends the picture from the old lens to the new one: lensSphereA is the old
-  // lens (x = 0 is the f(z) lens in the table, which morphs on its own), and lensT runs 0 to 1
-  lensSphereA: { value: new THREE.Vector3(0, 1, 1) },
-  lensT: { value: 1 },
+  // Switching kinds of lens blends the picture between them. lensW is how much of each kind is in
+  // the picture (the f(z) lens in the table, lat-long, fisheye), adding up to 1; a switch slides
+  // it from whatever mix is on screen to all of the new kind, so a switch mid-blend starts from
+  // what you see. lensLL and lensFE are the lat-long's and the fisheye's half width and height.
+  lensW: { value: new THREE.Vector3(1, 0, 0) },
+  lensLL: { value: new THREE.Vector2(1, 1) },
+  lensFE: { value: new THREE.Vector2(1, 1) },
 };
 
 const LENS_PARS = /* glsl */`
@@ -80,8 +83,8 @@ uniform vec2 lensHalf;
 uniform vec4 lensRange;   // near, far, asinh(zMin/C), asinh(zMax/C)
 uniform float lensC;
 uniform float lensOn;
-uniform vec3 lensSphere, lensSphereA;
-uniform float lensT;
+uniform vec3 lensSphere, lensW;
+uniform vec2 lensLL, lensFE;
 varying float vLensDepth;
 varying vec2 vLensSign;
 varying vec4 vLensDir;
@@ -156,20 +159,32 @@ vec4 lensOne(vec4 mv, vec3 sph) {
   if (w < 0.04 || abs(g.x) < 0.04) { vLensSign = vec2(0.0); return vec4(0.0, 0.0, 2.0, 1.0); }
   return vec4(mv.x / lensHalf.x * (w / g.x), sy * mv.y / lensHalf.y, zl * w, w);
 }
-// the picture partway from the old lens to the new one: each point slides in a straight line from
-// where the old lens draws it to where the new one does
+// the picture partway between kinds of lens: each point is drawn at the mix of where each lens
+// draws it, so as the mix slides, the point slides in a straight line between them
 vec4 lensProject(vec4 mv) {
-  if (lensOn < 0.5 || lensT > 0.999) return lensOne(mv, lensSphere);
-  if (lensT < 0.001) return lensOne(mv, lensSphereA);
-  vec4 a = lensOne(mv, lensSphereA); vec2 sa = vLensSign; float da = vLensDepth;
-  vec4 b = lensOne(mv, lensSphere); vec2 sb = vLensSign; float db = vLensDepth;
-  // a point either lens can't draw (behind a flat lens, or too close) is dropped until it's done
-  bool hide = a.w <= 0.0 || b.w <= 0.0 || abs(a.z) > a.w || abs(b.z) > b.w;
-  vLensSign = hide ? vec2(0.0) : sa * sb;
-  vLensDepth = lensSphere.x > 0.5 ? db : da;
+  if (lensOn < 0.5) return lensOne(mv, vec3(0.0, 1.0, 1.0));
+  vec3 s0 = vec3(0.0, 1.0, 1.0), s1 = vec3(1.0, lensLL), s2 = vec3(2.0, lensFE);
+  if (lensW.x > 0.999) return lensOne(mv, s0);
+  if (lensW.y > 0.999) return lensOne(mv, s1);
+  if (lensW.z > 0.999) return lensOne(mv, s2);
+  vec2 ndc = vec2(0.0), sg = vec2(1.0);
+  float wsum = 0.0, dep = 0.0;
+  bool hide = false;
+  // a point any of the lenses can't draw (behind a flat lens, or too close) is dropped until the
+  // blend is done
+  for (int k = 0; k < 3; k++) {
+    float w = k == 0 ? lensW.x : k == 1 ? lensW.y : lensW.z;
+    if (w < 0.001) continue;
+    vec4 c = lensOne(mv, k == 0 ? s0 : k == 1 ? s1 : s2);
+    hide = hide || c.w <= 0.0 || abs(c.z) > c.w;
+    ndc += w * c.xy / max(c.w, 1e-6); wsum += w;
+    sg *= vLensSign; dep = vLensDepth; // (the angle lenses come last: their depth is the one kept)
+  }
+  vLensSign = hide ? vec2(0.0) : sg;
+  vLensDepth = dep;
   vLensDir = vec4(mv.xyz, atan(mv.x, -mv.z)); vLensP = fishAngles(mv.xyz);
   if (hide) return vec4(0.0, 0.0, 2.0, 1.0);
-  return vec4(mix(a.xy / a.w, b.xy / b.w, lensT), 2.0 * vLensDepth - 1.0, 1.0);
+  return vec4(ndc / wsum, 2.0 * vLensDepth - 1.0, 1.0);
 }
 `;
 
@@ -197,7 +212,7 @@ function lensify(mat, extra, uniforms = lensUniforms) {
         THREE.ShaderChunk.project_vertex.replace(
           "gl_Position = projectionMatrix * mvPosition;", "gl_Position = lensProject(mvPosition);"));
     sh.fragmentShader = sh.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nvarying vec2 vLensP;\nuniform vec3 lensSphere, lensSphereA;\nuniform float lensT;\nvarying vec3 vHazeW;\n" + HAZE)
+      .replace("#include <common>", "#include <common>\nvarying float vLensDepth;\nvarying vec2 vLensSign;\nvarying vec4 vLensDir;\nvarying vec2 vLensP;\nuniform vec3 lensW;\nvarying vec3 vHazeW;\n" + HAZE)
       .replace("void main() {", "void main() {\nif (min(abs(vLensSign.x), abs(vLensSign.y)) < 0.999) discard;\n"
         // On the sphere a triangle is drawn straight between its corners, which is only right when
         // it covers a small patch of longitude. One straddling the seam straight behind you (its
@@ -207,8 +222,7 @@ function lensify(mat, extra, uniforms = lensUniforms) {
         // The fisheye has one such spot, straight behind you, where every direction around the
         // edge of a 360° picture meets; the same test drops the triangles there.
         // (while blending between two lenses, each angle lens in the blend checks its own)
-        + "bool pvFish = (lensSphere.x > 1.5 && lensT > 0.001) || (lensSphereA.x > 1.5 && lensT < 0.999);"
-        + "bool pvLL = (abs(lensSphere.x - 1.0) < 0.5 && lensT > 0.001) || (abs(lensSphereA.x - 1.0) < 0.5 && lensT < 0.999);"
+        + "bool pvFish = lensW.z > 0.001, pvLL = lensW.y > 0.001;"
         + "if (pvFish && vLensDepth > -0.5) { vec3 dd = vLensDir.xyz; float sd = length(dd.xy);"
         + " float ad = acos(clamp(-dd.z / length(dd), -1.0, 1.0));"
         + " vec2 pd = sd < 1e-7 ? vec2(0.0) : dd.xy * (ad / sd);"
@@ -699,9 +713,9 @@ const skyUniforms = {
   skyG: { value: new THREE.Vector2(1, 1) },     // the lens at SKY_R, x and y
   skyHalf: { value: new THREE.Vector2(1, 1) },
   skyRot: { value: new THREE.Matrix3() },
-  skySphere: { value: new THREE.Vector3(0, 1, 1) }, // the angle lenses (see lensSphere)
-  skySphereA: { value: new THREE.Vector3(0, 1, 1) }, // and the old lens while switching (lensSphereA)
-  skyT: { value: 1 },
+  skyW: { value: new THREE.Vector3(1, 0, 0) }, // the mix of lenses (see lensW)
+  skyLL: { value: new THREE.Vector2(1, 1) },
+  skyFE: { value: new THREE.Vector2(1, 1) },
   horizon: { value: new THREE.Color(0xdde8f1) },
   mid: { value: new THREE.Color(0xa9c8e6) },
   zenith: { value: new THREE.Color(0x5f97cf) },
@@ -727,8 +741,8 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
   fragmentShader: /* glsl */`
     uniform vec2 skyG, skyHalf;
     uniform mat3 skyRot;
-    uniform vec3 skySphere, skySphereA;
-    uniform float skyT;
+    uniform vec3 skyW;
+    uniform vec2 skyLL, skyFE;
     uniform vec3 horizon, mid, zenith;
     ${SPHERE_PIX}
     ${HAZE}
@@ -749,7 +763,10 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMateri
     }
     void main() {
       // while switching lenses, the old lens's sky fades into the new one's
-      vec3 c = skyT > 0.999 ? skyColor(skySphere) : mix(skyColor(skySphereA), skyColor(skySphere), skyT);
+      vec3 c = vec3(0.0);
+      if (skyW.x > 0.001) c += skyW.x * skyColor(vec3(0.0, 1.0, 1.0));
+      if (skyW.y > 0.001) c += skyW.y * skyColor(vec3(1.0, skyLL));
+      if (skyW.z > 0.001) c += skyW.z * skyColor(vec3(2.0, skyFE));
       gl_FragColor = vec4(c, 1.0);
       #include <colorspace_fragment>
     }`,
@@ -1401,7 +1418,7 @@ const engineDemo = (() => {
       lensLUT: { value: tex }, lensHalf: { value: new THREE.Vector2(1, 1) },
       lensRange: { value: lensUniforms.lensRange.value.clone() }, lensC: { value: LUT.C },
       lensOn: { value: 1 }, lensSphere: { value: new THREE.Vector3(0, 1, 1) },
-      lensSphereA: { value: new THREE.Vector3(0, 1, 1) }, lensT: { value: 1 },
+      lensW: { value: new THREE.Vector3(1, 0, 0) }, lensLL: { value: new THREE.Vector2(1, 1) }, lensFE: { value: new THREE.Vector2(1, 1) },
     };
     sc = new THREE.Scene();
     const sky = new THREE.Color(`rgb(${SCENE3.sky})`);
@@ -1619,37 +1636,44 @@ const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quatern
 // side view's camera sits for it. While switching, both are blended, so the rays slide from the
 // old lens's paths to the new one's.
 const insetMain = new THREE.Vector3();
-const sideA = { rays: new Float32Array(rayPos.length), cam: new THREE.Vector3(), look: new THREE.Vector3(), fog: [0, 0] };
-const sideB = { rays: new Float32Array(rayPos.length), cam: new THREE.Vector3(), look: new THREE.Vector3(), fog: [0, 0] };
+// Each kind of lens in a blend: its rays (in the side view's segment layout) and where the side
+// view's camera sits for it. While switching, they're mixed in the same amounts as the picture, so
+// the rays slide from the old lens's paths to the new one's.
+const sides = [0, 1, 2].map(() => ({ rays: new Float32Array(rayPos.length), cam: new THREE.Vector3(), look: new THREE.Vector3(), fog: [0, 0] }));
+const _sph = new THREE.Vector3(), _look = new THREE.Vector3();
 function updateInset(aspect) {
   const eye = camera.position, q = camera.quaternion;
   const fwd = _w.set(0, 0, -1).applyQuaternion(q).clone();
-  const t = lensUniforms.lensT.value, B = lensUniforms.lensSphere.value, A = lensUniforms.lensSphereA.value;
-  const blending = t < 0.999;
-  insetSide(B, sideB, eye, fwd);
-  if (blending) insetSide(A, sideA, eye, fwd);
-  // what's drawn at the eye (sensor, eyeball, curved view) follows the lens the blend is closer to
-  const main = !blending || t >= 0.5 ? B : A;
-  insetMain.copy(main);
-  const angle = main.x > 0.5;
-  if (angle) updateSpherePatch(main);
+  const W = lensUniforms.lensW.value.toArray();
+  // what's drawn at the eye (sensor, eyeball, curved view) follows the kind most of the picture is
+  const main = mainKind();
+  kindSph(main, insetMain);
+  const angle = main > 0;
+  if (angle) updateSpherePatch(insetMain);
   for (const o of [sphereFill, sphereEdge]) { o.visible = angle; o.position.copy(eye); o.quaternion.copy(q); }
+  // a wide fisheye's view folds over itself as a surface, so it's drawn as its edge only (Pam)
+  sphereFill.visible = main === 1;
   const pl = insetPlane();
   for (const o of [planeFill, planeEdge]) {
     o.visible = !angle && pl.isPlane; o.position.copy(eye); o.quaternion.copy(q); o.scale.set(pl.px || 1, pl.py || 1, 1);
   }
   eyeball.visible = angle || !pl.isPlane; eyeball.position.copy(eye); eyeball.quaternion.copy(q); eyeball.scale.setScalar(2);
-  const mixf = (a, b) => a + (b - a) * t;
-  if (blending) {
-    for (let i = 0; i < rayPos.length; i++) rayPos[i] = mixf(sideA.rays[i], sideB.rays[i]);
-    insetCam.position.lerpVectors(sideA.cam, sideB.cam, t);
-    insetCam.lookAt(_v.lerpVectors(sideA.look, sideB.look, t));
-    insetFog.near = mixf(sideA.fog[0], sideB.fog[0]); insetFog.far = mixf(sideA.fog[1], sideB.fog[1]);
-  } else {
-    rayPos.set(sideB.rays);
-    insetCam.position.copy(sideB.cam); insetCam.lookAt(sideB.look);
-    [insetFog.near, insetFog.far] = sideB.fog;
+  rayPos.fill(0); insetCam.position.set(0, 0, 0); _look.set(0, 0, 0);
+  let fogN = 0, fogF = 0, wsum = 0;
+  for (let k = 0; k < 3; k++) {
+    if (W[k] < 0.001) continue;
+    const sd = sides[k], w = W[k];
+    insetSide(kindSph(k, _sph), sd, eye, fwd);
+    for (let i = 0; i < rayPos.length; i++) rayPos[i] += w * sd.rays[i];
+    insetCam.position.addScaledVector(sd.cam, w); _look.addScaledVector(sd.look, w);
+    fogN += w * sd.fog[0]; fogF += w * sd.fog[1]; wsum += w;
   }
+  if (Math.abs(wsum - 1) > 1e-6) {
+    for (let i = 0; i < rayPos.length; i++) rayPos[i] /= wsum;
+    insetCam.position.divideScalar(wsum); _look.divideScalar(wsum); fogN /= wsum; fogF /= wsum;
+  }
+  insetCam.lookAt(_look);
+  insetFog.near = fogN; insetFog.far = fogF;
   rayGeo.setPositions(rayPos);
   insetCam.aspect = aspect;
   insetCam.updateProjectionMatrix();
@@ -1787,6 +1811,14 @@ function resize() {
   document.querySelector(".pv-crosshair").style.top = top + h / 2 + "px";
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
+  // The open Lens panel stops above the button bar when the two would overlap (a narrow or short
+  // window); otherwise it can use the window's height. Past that its body scrolls.
+  const pan = document.querySelector("control-panel");
+  if (pan && !bg) {
+    const bar = document.querySelector(".pv-bar").getBoundingClientRect();
+    const pw = Math.min(300, innerWidth - 32), overlaps = bar.width > 0 && bar.right > innerWidth - 16 - pw - 8;
+    pan.style.maxHeight = Math.max(120, (overlaps ? bar.top - 8 : innerHeight - 16) - 16) + "px";
+  }
 }
 addEventListener("resize", resize);
 { const ro = new ResizeObserver(() => resize()); ro.observe($("hint")); ro.observe(document.querySelector(".pv-bar")); }
@@ -1806,14 +1838,14 @@ function frame(now) {
   if (state.sphere && state.fish) lensUniforms.lensSphere.value.set(2, ...fishHalf());
   else lensUniforms.lensSphere.value.set(state.sphere ? 1 : 0, THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
   stepKindMorph(now);
-  skyUniforms.skySphere.value.copy(lensUniforms.lensSphere.value);
-  skyUniforms.skySphereA.value.copy(lensUniforms.lensSphereA.value);
-  skyUniforms.skyT.value = lensUniforms.lensT.value;
+  skyUniforms.skyW.value.copy(lensUniforms.lensW.value);
+  skyUniforms.skyLL.value.copy(lensUniforms.lensLL.value);
+  skyUniforms.skyFE.value.copy(lensUniforms.lensFE.value);
   camera.updateMatrixWorld();
   updateSky();
   renderInset();
   // the ground painted behind follows whichever lens the blend is closer to
-  earthUniforms.earthSphere.value.copy(lensUniforms.lensT.value >= 0.5 ? lensUniforms.lensSphere.value : lensUniforms.lensSphereA.value);
+  earthUniforms.earthSphere.value.copy(kindSph(mainKind()));
   renderer.shadowMap.needsUpdate = true; // once a frame, for the main view; the side view reuses it
   renderer.render(scene, camera);
   if (!morphing && morph === null && wasMorphing) syncPanel();
@@ -1821,24 +1853,27 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 let wasMorphing = false;
-// Switching between kinds of lens (an f(z) lens, lat-long, fisheye) blends from the old one to the
-// new one over the same time the f(z) lenses morph in (see lensProject). Within one kind the lens
-// changes as its sliders move.
-let kindMorph = null; // { from: Vector3, t0, k }
-const lastKind = new THREE.Vector3(0, 1, 1);
+// Switching between kinds of lens (an f(z) lens, lat-long, fisheye) blends from the mix on screen
+// to all of the new kind, over the same time the f(z) lenses morph in (see lensProject). Within
+// one kind the lens changes as its sliders move.
+const kindFrom = new THREE.Vector3(1, 0, 0);
+let kindTarget = 0, kindT0 = -1;
 function stepKindMorph(now) {
-  const to = lensUniforms.lensSphere.value;
-  if (to.x !== lastKind.x) { // switched mid-blend: start from whichever lens it was closer to
-    kindMorph = { from: kindMorph && kindMorph.k < 0.5 ? kindMorph.from : lastKind.clone(), t0: now, k: 0 };
-  }
-  lastKind.copy(to);
-  if (!kindMorph) { lensUniforms.lensT.value = 1; lensUniforms.lensSphereA.value.copy(to); return; }
-  const u = Math.min(1, (now - kindMorph.t0) / MORPH_MS);
-  kindMorph.k = easeInOut(u);
-  lensUniforms.lensSphereA.value.copy(kindMorph.from);
-  lensUniforms.lensT.value = kindMorph.k;
-  if (u >= 1) kindMorph = null;
+  const W = lensUniforms.lensW.value;
+  const target = lensUniforms.lensSphere.value.x;
+  lensUniforms.lensLL.value.set(THREE.MathUtils.degToRad(state.aw / 2), THREE.MathUtils.degToRad(state.ah / 2));
+  lensUniforms.lensFE.value.set(...fishHalf());
+  if (target !== kindTarget) { kindFrom.copy(W); kindTarget = target; kindT0 = now; }
+  if (kindT0 < 0) return;
+  const u = Math.min(1, (now - kindT0) / MORPH_MS), k = easeInOut(u);
+  W.copy(kindFrom).multiplyScalar(1 - k).setComponent(target, W.getComponent(target) + k);
+  if (u >= 1) { W.set(0, 0, 0).setComponent(target, 1); kindT0 = -1; }
 }
+// the kind of lens most of the picture is, and a kind as the shader's angle-lens vector
+const mainKind = () => { const W = lensUniforms.lensW.value; return W.x >= W.y && W.x >= W.z ? 0 : W.y >= W.z ? 1 : 2; };
+const kindSph = (k, out = new THREE.Vector3()) => k === 0 ? out.set(0, 1, 1)
+  : k === 1 ? out.set(1, lensUniforms.lensLL.value.x, lensUniforms.lensLL.value.y)
+  : out.set(2, lensUniforms.lensFE.value.x, lensUniforms.lensFE.value.y);
 const redrawDiagram = () => {}; // the side view redraws every frame
 for (const id of ["s", "p", "fx", "fy"]) $(id).addEventListener("input", redrawDiagram);
 chipsEl.addEventListener("click", redrawDiagram);

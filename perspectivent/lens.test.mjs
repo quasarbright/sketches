@@ -371,7 +371,8 @@ test("the fisheye leaves pixels past 180° dark and its caption never rewraps mi
 // (f(z), lat-long, fisheye) blends every point from where the old lens draws it to where the new
 // one does, and the side view's rays slide from the old paths to the new ones.
 test("switching kinds of lens blends the picture and the side view's rays", () => {
-  assert.match(MAIN, /return vec4\(mix\(a\.xy \/ a\.w, b\.xy \/ b\.w, lensT\), 2\.0 \* vLensDepth - 1\.0, 1\.0\);/);
-  assert.match(MAIN, /lensUniforms\.lensT\.value = kindMorph\.k;/);
-  assert.match(MAIN, /for \(let i = 0; i < rayPos\.length; i\+\+\) rayPos\[i\] = mixf\(sideA\.rays\[i\], sideB\.rays\[i\]\);/);
+  assert.match(MAIN, /ndc \+= w \* c\.xy \/ max\(c\.w, 1e-6\); wsum \+= w;/);
+  // Pam: a switch mid-blend starts from the mix on screen, never from an end lens
+  assert.match(MAIN, /if \(target !== kindTarget\) \{ kindFrom\.copy\(W\); kindTarget = target; kindT0 = now; \}/);
+  assert.match(MAIN, /for \(let i = 0; i < rayPos\.length; i\+\+\) rayPos\[i\] \+= w \* sd\.rays\[i\];/);
 });

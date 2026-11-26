@@ -57,3 +57,36 @@ test("the Lens panel fits a 1400×860 window in every state", { skip: !chromium 
     await browser.close();
   }
 });
+
+// Pam, 2026-11-26: on short windows the open panel ran under the button bar. Wherever the two
+// overlap, the panel stops above the bar and scrolls instead.
+test("the open Lens panel stays above the button bar on short windows", { skip: !chromium && "playwright not installed", timeout: 300000 }, async () => {
+  const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  try {
+    const bad = [];
+    for (const [width, height] of [[960, 600], [800, 450]]) {
+      const page = await browser.newPage({ viewport: { width, height } });
+      await page.route("http://pv.test/**", (r) => {
+        const f = path.join(ROOT, decodeURIComponent(new URL(r.request().url()).pathname));
+        if (!existsSync(f)) return r.fulfill({ status: 404 });
+        r.fulfill({ status: 200, contentType: TYPES[f.split(".").pop()] || "application/octet-stream", body: readFileSync(f) });
+      });
+      await page.goto("http://pv.test/perspectivent/index.html");
+      await page.waitForSelector("#chips .pv-chip");
+      for (const id of ["perspective", "sphere", "fisheye"]) {
+        await page.click(`#chips .pv-chip[data-id="${id}"]`);
+        await page.waitForTimeout(150);
+        const r = await page.evaluate(() => {
+          const p = document.querySelector("control-panel").getBoundingClientRect();
+          const b = document.querySelector(".pv-bar").getBoundingClientRect();
+          return { bottom: p.bottom, barTop: b.top, overlapX: b.right > p.left && b.left < p.right };
+        });
+        if (r.overlapX && r.bottom > r.barTop) bad.push(`${width}×${height} ${id}: runs ${Math.round(r.bottom - r.barTop)}px under the bar`);
+      }
+      await page.close();
+    }
+    assert.deepEqual(bad, [], bad.join("\n"));
+  } finally {
+    await browser.close();
+  }
+});
