@@ -317,15 +317,13 @@ function logAction(s, step, actor, text, pic = null, extra = {}) {
 //   { t: "each", cards }   players who saw each other (wolves, Masons), no actor
 //   { t: "br" }            where a narrow row may wrap
 // badge: "eye" the actor saw it, "eyeoff" it was moved or touched unseen, "all" left face up for everyone.
-// The day table's sentence: says which role turned each card (the Revealer, or a Doppelganger or
-// Copycat that copied it), naming only roles that did. Mike: never "and the Doppelganger" when no
-// Doppelganger was involved. Cards come in the order given (seat order on the table).
+// The day table's sentence. It never says who turned a card, or even which role can (Mike: "we
+// shouldn't even say who revealed anything, just that cards were revealed"): nothing shown during the
+// day may give away which roles were dealt or acted. The night log after the game names who did it.
 export function tableLine(revealed, nameOf) {
-  const who = (x) => { const by = ["unveiler", "lookalike", "copycat"].filter((r) => (x.by || ["unveiler"]).includes(r)).map((r) => `the ${ROLES[r].name}`); return by.length > 1 ? `${by.slice(0, -1).join(", ")} and ${by.at(-1)}` : by[0]; };
-  const cap = (t) => t[0].toUpperCase() + t.slice(1);
-  if (revealed.length === 1) { const x = revealed[0]; return `${cap(who(x))} turned ${nameOf(x.pid)}'s card face up in the night: the ${ROLES[x.role].name}. It stays face up for the rest of the game.`; }
-  const parts = revealed.map((x) => `${who(x)} turned ${nameOf(x.pid)}'s ${ROLES[x.role].name} face up`);
-  return `In the night, ${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}. They stay face up for the rest of the game.`;
+  if (revealed.length === 1) { const x = revealed[0]; return `${nameOf(x.pid)}'s card was turned face up in the night: the ${ROLES[x.role].name}. It stays face up for the rest of the game.`; }
+  const what = revealed.map((x) => `${nameOf(x.pid)}'s ${ROLES[x.role].name}`);
+  return `These cards were turned face up in the night: ${what.slice(0, -1).join(", ")} and ${what.at(-1)}. They stay face up for the rest of the game.`;
 }
 
 export const PIC = {

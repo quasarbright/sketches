@@ -658,43 +658,43 @@ test("a Doppelganger that copied the Revealer turns a second card face up; both 
   assert.match(s.g.info.a.map((i) => i.text).join(" "), /Seer\. Everyone else sees it when the night ends/);
 });
 
-// The day table's sentence names only the roles that turned a card (Mike, 2026-11-26).
+// The day table's sentence names no acting role at all (Mike, 2026-11-26): only that cards were turned.
 const tableText = (s) => tableLine(s.g.revealed, (id) => id.toUpperCase());
 const OTHERS = ["Doppelganger", "Copycat", "Revealer"];
-const onlyNames = (text, roles) => { for (const r of OTHERS.filter((x) => !roles.includes(x))) assert.doesNotMatch(text, new RegExp(r), `${r} wasn't involved`); };
+const onlyNames = (text) => { for (const r of OTHERS) assert.doesNotMatch(text, new RegExp(r), `the day table never names ${r}`); };
 
-test("the table sentence: the Revealer alone", () => {
+test("the table sentence names no role: the Revealer alone", () => {
   const s = rig({ a: "unveiler", b: "hunter", c: "villager", d: "werewolf" }, ["seer", "villager", "thief"]);
   nightTo(s, "unveiler"); act(s, "a", { target: "b" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "The Revealer turned B's card face up in the night: the Hunter. It stays face up for the rest of the game.");
-  onlyNames(t, ["Revealer"]);
+  assert.equal(t, "B's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  onlyNames(t);
 });
 
-test("the table sentence: the Revealer and a Doppelganger that copied it", () => {
+test("the table sentence names no role: the Revealer and a Doppelganger that copied it", () => {
   const s = rig({ a: "lookalike", b: "hunter", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "werewolf", "thief"]);
   nightTo(s, "lookalike"); act(s, "a", { target: "c" });
   nightTo(s, "unveiler"); act(s, "c", { target: "b" }); act(s, "a", { target: "e" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "In the night, the Revealer turned B's Hunter face up and the Doppelganger turned E's Seer face up. They stay face up for the rest of the game.");
-  onlyNames(t, ["Revealer", "Doppelganger"]);
+  assert.equal(t, "These cards were turned face up in the night: B's Hunter and E's Seer. They stay face up for the rest of the game.");
+  onlyNames(t);
   assert.match(s.g.log.filter((l) => l.step === "unveiler").map((l) => l.text).join(" | "), /^C \(Revealer\) turned B's .* \| A \(Doppelganger, as the Revealer\) turned E's/);
 });
 
-test("the table sentence: a Copycat that copied a center Revealer turns a card face up on the Revealer's turn", () => {
+test("the table sentence names no role: a Copycat that copied a center Revealer turns a card face up on the Revealer's turn", () => {
   const s = rig({ a: "copycat", b: "hunter", c: "villager", d: "werewolf" }, ["unveiler", "villager", "thief"]);
   nightTo(s, "copycat"); act(s, "a", { center: 0 });
   nightTo(s, "unveiler"); act(s, "a", { target: "b" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "The Copycat turned B's card face up in the night: the Hunter. It stays face up for the rest of the game.");
-  onlyNames(t, ["Copycat"]);
+  assert.equal(t, "B's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  onlyNames(t);
   assert.match(s.g.log.find((l) => l.step === "unveiler").text, /^A \(Copycat, as the Revealer\) turned B's card face up/);
 });
 
-test("the table sentence: a Doppelganger that copied a Copycat-as-Revealer doesn't turn a card (Vampire rules), so only the Copycat is named", () => {
+test("the table sentence names no role: a Doppelganger that copied a Copycat-as-Revealer doesn't turn a card (Vampire rules)", () => {
   const s = rig({ a: "copycat", b: "lookalike", c: "hunter", d: "villager", e: "seer", f: "werewolf" }, ["unveiler", "villager", "thief"]);
   nightTo(s, "copycat"); act(s, "a", { center: 0 });
   nightTo(s, "lookalike"); act(s, "b", { target: "a" });
@@ -703,11 +703,12 @@ test("the table sentence: a Doppelganger that copied a Copycat-as-Revealer doesn
   act(s, "a", { target: "c" });
   finishNight(s);
   const t = tableText(s);
-  assert.equal(t, "The Copycat turned C's card face up in the night: the Hunter. It stays face up for the rest of the game.");
-  onlyNames(t, ["Copycat"]);
+  assert.equal(t, "C's card was turned face up in the night: the Hunter. It stays face up for the rest of the game.");
+  onlyNames(t);
 });
 
-test("the table sentence: all three roles, and one card turned by two of them", () => {
+test("the table sentence names no role: all three roles, and one card turned by two of them", () => {
   const t = tableLine([{ pid: "b", role: "hunter", by: ["unveiler", "lookalike"] }, { pid: "e", role: "seer", by: ["copycat"] }], (id) => id.toUpperCase());
-  assert.equal(t, "In the night, the Revealer and the Doppelganger turned B's Hunter face up and the Copycat turned E's Seer face up. They stay face up for the rest of the game.");
+  assert.equal(t, "These cards were turned face up in the night: B's Hunter and E's Seer. They stay face up for the rest of the game.");
+  onlyNames(t);
 });
