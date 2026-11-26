@@ -124,9 +124,9 @@ const types = [
     pic(seat("sleepwalker", "Eve", { actor: true, hot: true }), op("swap", "swapped"), center(["villager", "seer", "werewolf"], { 2: "eyeoff" })) + `<p class="mk-note">The crossed-out eye means Eve didn't see the card.</p>`),
   ev("Looks at a center card, then gives it to a player", "Cleo (Witch) looked at center card 1: the Werewolf.",
     pic(seat("witch", "Cleo", { actor: true }), op("eye", "saw"), center(["werewolf", "villager", "sleepwalker"], { 0: "eye" }))
-    + `<div class="mk-sub"><p>Then gave it to Ben, taking Ben's Seer into the center.</p>` + pic(seat("witch", "Cleo", { actor: true }), op("hand", "moved"), seat("werewolf", "Center 1", { hot: true }), op("swap", "swapped"), seat("seer", "Ben", { hot: true })) + `</div>`),
+    + `<div class="mk-sub"><p>Then gave it to Ben, taking Ben's Seer into the center.</p>` + pic(seat("witch", "Cleo", { actor: true }), op("hand", "moved"), seat("werewolf", "C1", { hot: true }), op("swap", "swapped"), seat("seer", "Ben", { hot: true })) + `</div>`),
   ev("Gives away the spare card", "Ben (Alpha Wolf) gave the spare Werewolf card to Ana, whose Seer went into the spare slot.",
-    pic(seat("packleader", "Ben", { actor: true }), op("hand", "moved"), seat("werewolf", "Spare card", { hot: true }), op("swap", "swapped"), seat("seer", "Ana", { hot: true }))),
+    pic(seat("packleader", "Ben", { actor: true }), op("hand", "moved"), seat("werewolf", "Spare", { hot: true }), op("swap", "swapped"), seat("seer", "Ana", { hot: true }))),
   ev("Copies a card, then acts as it", "Mike (Doppelganger) looked at Ana's card and became the Seer.",
     pic(seat("lookalike", "Mike", { actor: true }), op("eye", "saw"), seat("seer", "Ana", { hot: true, badge: "eye" }), BREAK, op("copy", "became"), seat("seer", "Mike now", { actor: true }))
     + `<div class="mk-sub">${`<p>Right away, Mike (as the Seer) looked at Ben's card: the Werewolf.</p>`
