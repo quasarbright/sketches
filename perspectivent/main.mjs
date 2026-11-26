@@ -294,14 +294,16 @@ function uploadShown() {
   }
   lutTex.needsUpdate = true;
 }
+// the view's half height on screen, sliding with the lens while it morphs (state.H is where it's going)
+let shownH = 1.4;
 function applyLens(animate) {
   const t = targetSamples();
   if (!t) return;
   if (animate) {
-    morph = { from: shown.slice(), to: t, t0: performance.now(), dur: MORPH_MS };
+    morph = { from: shown.slice(), to: t, fromH: shownH, toH: state.H, t0: performance.now(), dur: MORPH_MS };
   } else {
     morph = null;
-    shown.set(t);
+    shown.set(t); shownH = state.H;
     uploadShown();
   }
 }
@@ -311,8 +313,11 @@ function stepMorph(now) {
   if (!morph) return false;
   const u = Math.min(1, (now - morph.t0) / morph.dur);
   const k = easeInOut(u);
-  const { from, to } = morph;
-  for (let i = 0; i < shown.length; i++) shown[i] = from[i] + (to[i] - from[i]) * k;
+  // What slides is each ray's height at each distance, H·g(z) (Mike: switching between "ortho x,
+  // persp y" and "reverse" jumped, because the view's height H changed at once while only g slid)
+  const { from, to, fromH, toH } = morph;
+  shownH = fromH + (toH - fromH) * k;
+  for (let i = 0; i < shown.length; i++) shown[i] = (from[i] * fromH * (1 - k) + to[i] * toH * k) / shownH;
   uploadShown();
   if (u >= 1) morph = null;
   return true;
@@ -1682,7 +1687,7 @@ function updateInset(aspect) {
 // the back plane: where an f(z) lens's rays start, read off the lens at the eye (a point for a
 // camera; exactly the back-plane size when the lens has one, so a normal camera shows a point)
 function insetPlane() {
-  const hx = state.H * camera.aspect, hy = state.H;
+  const hx = shownH * camera.aspect, hy = shownH;
   const gx = lutFn(shown, 0), gy = lutFn(shown, 1);
   const sx = effS("x"), sy = effS(state.split ? "y" : "x");
   const g0x = !morph && sx != null ? sx : Math.max(0, gx(NEAR)), g0y = !morph && sy != null ? sy : Math.max(0, gy(NEAR));
@@ -1739,7 +1744,7 @@ function insetSide(sph, side, eye, fwd) {
   // off to your right, a little above and behind, upright, looking at the space in front of you
   const s0 = Math.max(1, py / (2 * hy));
   // far enough back to fit the screen and the back plane (40° lens: height / 0.73, plus margin)
-  const dist = 2.2 + 0.9 * state.D + 2.3 * state.H * Math.min(s0, 3);
+  const dist = 2.2 + 0.9 * state.D + 2.3 * shownH * Math.min(s0, 3);
   side.cam.copy(eye).add(_v.set(0.95, 0.42, 0.55).multiplyScalar(dist).applyQuaternion(_q));
   side.look.copy(eye).addScaledVector(fwd, state.D * 0.45);
   side.fog[0] = dist * 0.7; side.fog[1] = dist * 2.6;
@@ -1831,7 +1836,8 @@ function frame(now) {
   if (aboutOpen) { requestAnimationFrame(frame); return; }
   update(dt);
   const morphing = stepMorph(now);
-  lensUniforms.lensHalf.value.set(state.H * camera.aspect, state.H);
+  if (!morph) shownH = state.H;
+  lensUniforms.lensHalf.value.set(shownH * camera.aspect, shownH);
   placeNearTrack(player.pos.z);
   // the window's shape changed: keep an undistorted sphere undistorted
   if (state.sphere && state.ahFit && Math.abs(undistortedAh() - state.ah) > 0.01) syncPanel();

@@ -376,3 +376,11 @@ test("switching kinds of lens blends the picture and the side view's rays", () =
   assert.match(MAIN, /if \(target !== kindTarget\) \{ kindFrom\.copy\(W\); kindTarget = target; kindT0 = now; \}/);
   assert.match(MAIN, /for \(let i = 0; i < rayPos\.length; i\+\+\) rayPos\[i\] \+= w \* sd\.rays\[i\];/);
 });
+
+// Mike, 2026-11-26: "switching between ortho x persp y and reverse is not smooth". The view's height
+// H snapped to the new lens while only the shape g slid. What slides now is each ray's height at
+// each distance, H·g(z), so the whole picture morphs.
+test("an f(z) morph slides each ray's height, H·g(z), not just its shape", () => {
+  assert.match(MAIN, /shown\[i\] = \(from\[i\] \* fromH \* \(1 - k\) \+ to\[i\] \* toH \* k\) \/ shownH;/);
+  assert.match(MAIN, /lensUniforms\.lensHalf\.value\.set\(shownH \* camera\.aspect, shownH\);/);
+});
