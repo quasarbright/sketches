@@ -264,7 +264,7 @@ test("converging rays cross and keep going: the world past the crossing is upsid
 // the world (vertex shader), the sky and the ground painted behind, all with the same mapping.
 test("the sphere lens maps longitude across and latitude up, everywhere it draws", () => {
   assert.match(MAIN, /float lon = atan\(d\.x, -d\.z\), lat = asin\(clamp\(d\.y \/ r, -1\.0, 1\.0\)\);/);
-  assert.match(MAIN, /return vec4\(lon \/ lensSphere\.y, lat \/ lensSphere\.z,/);
+  assert.match(MAIN, /return vec4\(lon \/ sph\.y, lat \/ sph\.z,/);
   // the sky and the ground behind use one function for a pixel's direction
   assert.equal((MAIN.match(/spherePix\(vNdc, /g) || []).length, 2);
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
@@ -340,7 +340,7 @@ test("?background runs without the panel and hides the button bar", () => {
 // everywhere), fills the whole rectangle, and its spread is measured across the width, up to 360°.
 test("the fisheye places a direction by its angle from straight ahead, and lat-long is named so", () => {
   assert.match(MAIN, /float a = acos\(clamp\(-d\.z \/ r, -1\.0, 1\.0\)\);\s*return s < 1e-7 \* r \? vec2\(0\.0\) : d\.xy \* \(a \/ s\);/);
-  assert.match(MAIN, /return vec4\(p\.x \/ lensSphere\.y, p\.y \/ lensSphere\.z,/);
+  assert.match(MAIN, /return vec4\(p\.x \/ sph\.y, p\.y \/ sph\.z,/);
   // the sky and the ground behind invert the same mapping
   assert.match(MAIN, /if \(sph\.x > 1\.5\) \{ \/\/ the fisheye/);
   // same degrees per pixel across and up: the height follows the window's shape
@@ -358,11 +358,20 @@ test("the fisheye places a direction by its angle from straight ahead, and lat-l
 // slider moves (the numbers keep one width, and the "behind you" sentence is always there).
 test("the fisheye leaves pixels past 180° dark and its caption never rewraps mid-drag", () => {
   assert.match(MAIN, /bool fishOut\(vec2 ndc, vec3 sph\) \{ return sph\.x > 1\.5 && length\(ndc \* sph\.yz\) > /);
-  assert.match(MAIN, /if \(fishOut\(vNdc, skySphere\)\) c = /);
+  assert.match(MAIN, /if \(fishOut\(vNdc, sph\)\) c = /);
   assert.match(MAIN, /if \(sd\.y > -1e-4 \|\| fishOut\(vNdc, earthSphere\)\) discard;/);
   assert.match(MAIN, /<b>\$\{state\.fw\}° × .*More than 180° across or up and down, it sees behind you\.`;/);
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.match(html, /\.pv-caption\.pv-fish \{ min-height: calc\(5 \* 1\.35em\); \}/);
   assert.doesNotMatch(html, /pv-fixnum/, "Pam: fixed-width numbers left a hole in the sentence");
   assert.match(html, /angular width<\/span>\s*<span class="value" id="fwVal">/);
+});
+
+// Mike, 2026-11-26: "When we switch lenses, make the rays lerp". Switching between kinds of lens
+// (f(z), lat-long, fisheye) blends every point from where the old lens draws it to where the new
+// one does, and the side view's rays slide from the old paths to the new ones.
+test("switching kinds of lens blends the picture and the side view's rays", () => {
+  assert.match(MAIN, /return vec4\(mix\(a\.xy \/ a\.w, b\.xy \/ b\.w, lensT\), 2\.0 \* vLensDepth - 1\.0, 1\.0\);/);
+  assert.match(MAIN, /lensUniforms\.lensT\.value = kindMorph\.k;/);
+  assert.match(MAIN, /for \(let i = 0; i < rayPos\.length; i\+\+\) rayPos\[i\] = mixf\(sideA\.rays\[i\], sideB\.rays\[i\]\);/);
 });
