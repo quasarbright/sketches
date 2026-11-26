@@ -95,8 +95,7 @@ test("night steps follow the official wake order", () => {
   before("thief", "witch"); before("witch", "meddler");                                       // 6-B
   before("meddler", "aurareader"); before("aurareader", "imp"); before("imp", "sleepwalker"); // 7-C, 7-D
   before("nightowl", "scout"); before("scout", "watcher"); before("watcher", "unveiler");     // 9-C, 9-Z, 10
-  before("unveiler", "unveilercopy");                                                         // 10a: a copy of the Revealer, right after it
-  assert.equal(ids.at(-1), "unveilercopy", "the Revealer, then a copy of it, wake last");
+  assert.equal(ids.at(-1), "unveiler", "the Revealer wakes last");
 });
 
 test("a step runs for a card in the center too, so the night's length doesn't give it away", () => {
@@ -443,8 +442,7 @@ test("the Doppelganger wakes again on the turn of every shown-something role", (
     const extra = role === "apprentice" ? { c: "jester" } : role === "watcher" ? { c: "seer" } : { c: "werewolf" };
     const s = doppel(role, extra);
     assert.ok(s.g.step.done.a, role);
-    // a copy of the Revealer wakes in its own step, right after the Revealer (Daybreak #10a)
-    nightTo(s, role === "unveiler" ? "unveilercopy" : ROLES[role].step);
+    nightTo(s, ROLES[role].step);
     assert.ok(s.g.step.actors.includes("a"), `${role}: the Doppelganger wakes on its turn`);
   }
 });
@@ -649,7 +647,6 @@ test("a Doppelganger that copied the Revealer turns a second card face up; both 
   nightTo(s, "lookalike"); act(s, "a", { target: "c" });
   nightTo(s, "unveiler");
   act(s, "c", { target: "b" });
-  nightTo(s, "unveilercopy");
   act(s, "a", { target: "e" });
   finishNight(s);
   assert.deepEqual(s.g.revealed, [{ pid: "b", role: "hunter", by: ["unveiler"] }, { pid: "e", role: "seer", by: ["lookalike"] }]);
@@ -679,8 +676,7 @@ test("the table sentence names no role: the Revealer alone", () => {
 test("the table sentence names no role: the Revealer and a Doppelganger that copied it", () => {
   const s = rig({ a: "lookalike", b: "hunter", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "werewolf", "thief"]);
   nightTo(s, "lookalike"); act(s, "a", { target: "c" });
-  nightTo(s, "unveiler"); act(s, "c", { target: "b" });
-  nightTo(s, "unveilercopy"); act(s, "a", { target: "e" });
+  nightTo(s, "unveiler"); act(s, "c", { target: "b" }); act(s, "a", { target: "e" });
   finishNight(s);
   const t = tableText(s);
   assert.equal(t, "B's Hunter and E's Seer were turned face up in the night. They stay face up for the rest of the game.");
@@ -691,7 +687,7 @@ test("the table sentence names no role: the Revealer and a Doppelganger that cop
 test("the table sentence names no role: a Copycat that copied a center Revealer turns a card face up on the Revealer's turn", () => {
   const s = rig({ a: "copycat", b: "hunter", c: "villager", d: "werewolf" }, ["unveiler", "villager", "thief"]);
   nightTo(s, "copycat"); act(s, "a", { center: 0 });
-  nightTo(s, "unveilercopy"); act(s, "a", { target: "b" });
+  nightTo(s, "unveiler"); act(s, "a", { target: "b" });
   finishNight(s);
   const t = tableText(s);
   assert.equal(t, "B's Hunter was turned face up in the night. It stays face up for the rest of the game.");
@@ -703,7 +699,7 @@ test("the table sentence names no role: a Doppelganger that copied a Copycat-as-
   const s = rig({ a: "copycat", b: "lookalike", c: "hunter", d: "villager", e: "seer", f: "werewolf" }, ["unveiler", "villager", "thief"]);
   nightTo(s, "copycat"); act(s, "a", { center: 0 });
   nightTo(s, "lookalike"); act(s, "b", { target: "a" });
-  nightTo(s, "unveilercopy");
+  nightTo(s, "unveiler");
   assert.ok(!s.g.step.actors.includes("b"), "the Doppelganger doesn't wake as the Revealer");
   act(s, "a", { target: "c" });
   finishNight(s);
@@ -716,36 +712,4 @@ test("the table sentence names no role: all three roles, and one card turned by 
   const t = tableLine([{ pid: "b", role: "hunter", by: ["unveiler", "lookalike"] }, { pid: "e", role: "seer", by: ["copycat"] }], (id) => id.toUpperCase());
   assert.equal(t, "B's Hunter and E's Seer were turned face up in the night. They stay face up for the rest of the game.");
   onlyNames(t);
-});
-
-test("a copy of the Revealer wakes after it, sees the card it left face up, and can't pick that card", () => {
-  const s = rig({ a: "lookalike", b: "hunter", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "werewolf", "thief"]);
-  nightTo(s, "lookalike"); act(s, "a", { target: "c" });
-  nightTo(s, "unveiler");
-  assert.ok(!s.g.step.actors.includes("a"), "the copy doesn't wake with the Revealer");
-  act(s, "c", { target: "b" });
-  nightTo(s, "unveilercopy");
-  const pr = s.g.step.prompts.a;
-  assert.match(pr.text, /^B's card is face up: the Hunter\. You may turn another player's card face up/);
-  assert.ok(pr.exclude.includes("b"), "the face-up card can't be picked again");
-  assert.ok(act(s, "a", { target: "b" }).error, "picking it is refused");
-  act(s, "a", { target: "e" });
-  finishNight(s);
-  assert.deepEqual(s.g.revealed.map((x) => x.pid), ["b", "e"]);
-});
-
-test("a copy of the Revealer sees nothing when the Revealer turned a wolf back face down", () => {
-  const s = rig({ a: "lookalike", b: "werewolf", c: "unveiler", d: "villager", e: "seer" }, ["werewolf", "villager", "thief"]);
-  nightTo(s, "lookalike"); act(s, "a", { target: "c" });
-  nightTo(s, "unveiler"); act(s, "c", { target: "b" });
-  nightTo(s, "unveilercopy");
-  assert.match(s.g.step.prompts.a.text, /^You may turn another player's card face up/);
-  assert.ok(!s.g.step.prompts.a.exclude.includes("b"));
-});
-
-test("the copy step runs whenever the deck has the Revealer and a Doppelganger or Copycat, even if nobody acts in it", () => {
-  const s = rig({ a: "seer", b: "hunter", c: "villager", d: "werewolf" }, ["unveiler", "lookalike", "thief"]);
-  assert.ok(s.g.steps.includes("unveilercopy"));
-  const t = rig({ a: "unveiler", b: "hunter", c: "villager", d: "werewolf" }, ["seer", "villager", "thief"]);
-  assert.ok(!t.g.steps.includes("unveilercopy"), "no Doppelganger or Copycat in the deck");
 });

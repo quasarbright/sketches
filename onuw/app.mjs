@@ -1,7 +1,7 @@
 // The page: connection handling (host or guest), rendering every screen, and input.
 // The host runs engine.mjs and sends each player their own view; guests only render views.
 import { openModal } from "../shared/cohesion.js";
-import { ROLES, ROLE_ORDER, TEAMS, winRules, NIGHT_STEPS, stepInDeck, emblemSvg, deckSize } from "./roles.mjs";
+import { ROLES, ROLE_ORDER, TEAMS, winRules, NIGHT_STEPS, emblemSvg, deckSize } from "./roles.mjs";
 import * as E from "./engine.mjs";
 import { makeNet } from "./net.mjs";
 import { NAMES as N, TITLE } from "./skin.mjs";
@@ -955,7 +955,7 @@ function promptPanel(p, g) {
       } else {
         body = `${resultCards(p.cards)}<div class="ms-targets">${others.map(playerBtn).join("")}</div>`;
         ready = sel.length === 1;
-        confirm = !ready ? "Pick a player" : (p.as || p.step) === "thief" ? `Swap with ${playerName(sel[0])}` : ["unveiler", "unveilercopy"].includes(p.as || p.step) ? `Turn over ${playerName(sel[0])}'s card` : `Look at ${playerName(sel[0])}'s card`;
+        confirm = !ready ? "Pick a player" : (p.as || p.step) === "thief" ? `Swap with ${playerName(sel[0])}` : (p.as || p.step) === "unveiler" ? `Turn over ${playerName(sel[0])}'s card` : `Look at ${playerName(sel[0])}'s card`;
       }
       break;
     case "seer":
@@ -1371,7 +1371,7 @@ function infoPanel(r) {
   const T = TEAMS[R.team];
   // wake order within this game's deck (or the whole list when nothing is picked)
   const deck = view?.roles || {};
-  const steps = NIGHT_STEPS.filter((st) => (stepInDeck(st, (x) => deck[x]) || !Object.keys(deck).length) && !st.copyOf);
+  const steps = NIGHT_STEPS.filter((st) => st.roles.some((x) => deck[x]) || !Object.keys(deck).length);
   const stepId = R.wolf ? "wolves" : R.step;
   const stepIdx = steps.findIndex((st) => st.id === stepId);
   return `<div class="ms-info-modal">
