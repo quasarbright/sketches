@@ -656,6 +656,7 @@ test("a Doppelganger that copied the Revealer turns a second card face up; both 
   assert.ok(logs.some((t) => /turned E's card face up: the Seer/.test(t)));
   assert.match(s.g.info.c.map((i) => i.text).join(" "), /Hunter/);
   assert.match(s.g.info.a.map((i) => i.text).join(" "), /Seer\. Everyone else sees it when the night ends/);
+  assert.match(s.g.info.a[0].text, /You'll wake again at the end of the night, on the Revealer's turn\./);
 });
 
 // The day table's sentence names no acting role at all (Mike, 2026-11-26): only that cards were turned.

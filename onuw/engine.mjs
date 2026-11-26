@@ -317,6 +317,15 @@ function logAction(s, step, actor, text, pic = null, extra = {}) {
 //   { t: "each", cards }   players who saw each other (wolves, Masons), no actor
 //   { t: "br" }            where a narrow row may wrap
 // badge: "eye" the actor saw it, "eyeoff" it was moved or touched unseen, "all" left face up for everyone.
+// After a Doppelganger or Copycat copies a role that wakes later, say when: "on the Seer's turn", and
+// for a role that wakes at the end of the night, say that too (Pam, 2026-11-26).
+const LATE = ["nightowl", "unveiler"];
+function wakeAgain(r) {
+  if (ROLES[r].wolf) return " You'll wake again with the wolves.";
+  if (!ROLES[r].step) return "";
+  return LATE.includes(r) ? ` You'll wake again at the end of the night, on the ${roleName(r)}'s turn.` : ` You'll wake again on the ${roleName(r)}'s turn.`;
+}
+
 // The day table's sentence. It never says who turned a card, or even which role can (Mike: "we
 // shouldn't even say who revealed anything, just that cards were revealed"): nothing shown during the
 // day may give away which roles were dealt or acted. The night log after the game names who did it.
@@ -357,7 +366,10 @@ const actorCard = (g, pid, role = wakeRole(g, pid), o = {}) => PIC.card(pid, rol
 function nextStep(s, now, rng) {
   const g = s.g;
   g.stepIdx++;
-  if (g.stepIdx >= g.steps.length) { startDay(s, now); return; }
+  // Dawn: one more quiet step after the last turn, so the last actor (the Revealer) gets the same time
+  // with their result as everyone else, and the night's length says nothing (Pam, 2026-11-26).
+  if (g.stepIdx === g.steps.length) { g.step = { id: "dawn", actors: [], prompts: {}, done: {}, minEnd: now + s.timing.stepMin }; return; }
+  if (g.stepIdx > g.steps.length) { startDay(s, now); return; }
   const id = g.steps[g.stepIdx];
   const T = s.timing;
   const actors = g.seats.filter((pid) => {
@@ -574,7 +586,7 @@ function applyAction1(s, pid, id, prompt, msg) {
       if (id === "copycat") {
         const r = g.center[i];
         g.copied[g.dealt[pid]] = r;
-        const text = `You saw ${centerLabel(i).toLowerCase()}. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("copycat", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
+        const text = `You saw ${centerLabel(i).toLowerCase()}. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("copycat", r)}${wakeAgain(r)}`;
         const pic = [actorCard(g, pid, "copycat"), PIC.op("saw"), PIC.center(g, { [i]: { role: r, badge: "eye" } }), PIC.br, PIC.op("became"), PIC.card(pid, r, { actor: true, now: true })];
         addInfo(s, pid, id, text, centerRow(g, [i]), pic);
         L(`${me} (${N.copycat}) looked at ${centerLabel(i).toLowerCase()} and became the ${roleName(r)}.`, pic);
@@ -648,7 +660,7 @@ function applyAction1(s, pid, id, prompt, msg) {
             : startStep(s, ROLES[r].step, pid, [pid]);
           return { result: { text, cards }, next: { ...next, as: ROLES[r].step, stage: 2, cards, text: `${text} ${next.text}` } };
         }
-        const text = `You saw ${them}'s card. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("lookalike", r)}${ROLES[r].step || ROLES[r].wolf ? " You'll wake again on its turn." : ""}`;
+        const text = `You saw ${them}'s card. It's the ${roleName(r)}, so you're now the ${roleName(r)}.${teamNote("lookalike", r)}${wakeAgain(r)}`;
         addInfo(s, pid, id, text, cards, pic);
         return { result: { text, cards } };
       }

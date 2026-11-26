@@ -702,6 +702,8 @@ async function checkResults(names, roles) {
       const text = await res.innerText();
       assert.match(text, /^You /, `the ${pr.step} result isn't worded as what you did: ${text}`);
       await p.waitForTimeout(1500);
+      // a result stays until you press OK, but never carries into the day (the last turn's would single you out)
+      if ((await view(p)).phase !== "night") { assert.equal(await p.locator(".ms-result").count(), 0, `the ${pr.step} result carried into the day`); shown.push(pr.step); continue; }
       assert.equal(await res.count(), 1, `the ${pr.step} result went away by itself`);
       shown.push(pr.step);
       await p.click("[data-act=result-ok]");
@@ -714,7 +716,7 @@ async function checkResults(names, roles) {
   return shown;
 }
 
-test("every night action's result stays where you acted, as what you did, until you press OK", async () => {
+test("every night action's result stays where you acted, as what you did, until you press OK or the day starts", async () => {
   const a = await checkResults(["Mike", "Ana", "Ben", "Cleo", "Dan"],
     { werewolf: 1, seer: 1, thief: 1, meddler: 1, sleepwalker: 1, nightowl: 1, witch: 1, noviceseer: 1 });
   const b = await checkResults(["Mike", "Ana", "Ben", "Cleo", "Dan"],

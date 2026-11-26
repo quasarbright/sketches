@@ -436,7 +436,8 @@ function receiveView(v) {
     if (!acted.skipped) { shownResult = { step: acted.step, entries: v.game.info.slice(acted.from) }; render(); }
     acted = null;
   }
-  if ((v.phase === "lobby" || v.phase === "deal") && (shownResult || acted)) { shownResult = null; acted = null; render(); }
+  // a night result never carries into the day: the Revealer wakes last, so an open result would single them out
+  if (v.phase !== "night" && (shownResult || acted)) { shownResult = null; acted = null; render(); }
   // the game closes the moment your turn comes, or when the night ends
   if (wackOpen() && (v.phase !== "night" || (cur && !cur.done))) closeWack();
 }
@@ -761,6 +762,8 @@ function spectatorScreen() {
     const waiting = v.players.filter((p) => p.seated && p.connected && !p.ready);
     head = `<div class="ms-label">Dealing</div><h1 class="ms-h1">Players are looking at their cards</h1>
       <p class="ms-hint">${waiting.length ? `Waiting for ${esc(waitNames(waiting))}.` : "Night falls in a moment."}</p>`;
+  } else if (v.phase === "night" && g.stepId === "dawn") {
+    head = `${moonArc(g)}<div class="ms-label">Night · dawn</div><h1 class="ms-h1">Everyone is asleep</h1><p class="ms-hint">Day starts in a moment.</p>`;
   } else if (v.phase === "night") {
     head = `${moonArc(g)}<div class="ms-label">Night · turn ${g.stepIdx + 1} of ${g.steps.length}</div>
       <h1 class="ms-h1">The ${esc(st?.label ?? "night")} ${st?.id === "wolves" || st?.id === "masons" ? "are" : "is"} awake</h1>
@@ -853,7 +856,7 @@ function moonArc(g) {
     const a = Math.PI * (1 - t);
     return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
   };
-  const t = n && g.stepIdx != null ? (g.stepIdx + 0.5) / n : 0.5;
+  const t = n && g.stepIdx != null ? Math.min(1, (g.stepIdx + 0.5) / n) : 0.5;
   const [mx, my] = at(t);
   const ticks = n && g.stepIdx != null ? g.steps.map((_, i) => {
     const [x, y] = at((i + 0.5) / n);
