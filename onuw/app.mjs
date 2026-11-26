@@ -1068,10 +1068,7 @@ function revealedPanel(g) {
   const rv = seats.flatMap((p) => (g.revealed || []).filter((r) => r.pid === p.id));
   if (!rv.length) return "";
   const up = (pid) => rv.find((r) => r.pid === pid);
-  const what = rv.map((r) => `${playerName(r.pid)}'s ${ROLES[r.role].name}`);
-  const text = rv.length === 1
-    ? `The ${N.unveiler} turned ${playerName(rv[0].pid)}'s card face up in the night: the ${ROLES[rv[0].role].name}. It stays face up for the rest of the game.`
-    : `The ${N.unveiler} and the ${N.lookalike} turned these face up in the night: ${what.slice(0, -1).join(", ")} and ${what.at(-1)}. They stay face up for the rest of the game.`;
+  const text = E.tableLine(rv, playerName);
   return `<section class="ms-panel ms-revealed">
     <h2 class="ms-h2">The Table</h2>
     <p class="ms-hint">${esc(text)}</p>

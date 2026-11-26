@@ -280,7 +280,7 @@ function deal(s, now, rng) {
     copied: {},      // card id -> the role it became (Copycat, Lookalike, Investigator)
     actedEarly: {},  // Doppelgangers who already did their copied role's action
     touched: {},     // players who moved or looked at a card (for the Aura Reader)
-    revealed: [],  // [{ pid, role }]: cards the Revealer (and a Doppelganger copy of it) left face up
+    revealed: [],  // [{ pid, role, by }]: cards left face up, and the dealt roles that turned each (Revealer, or a Doppelganger or Copycat as it)
     dayReady: {},
     votes: {},
     dayEndsAt: null,
@@ -317,6 +317,17 @@ function logAction(s, step, actor, text, pic = null, extra = {}) {
 //   { t: "each", cards }   players who saw each other (wolves, Masons), no actor
 //   { t: "br" }            where a narrow row may wrap
 // badge: "eye" the actor saw it, "eyeoff" it was moved or touched unseen, "all" left face up for everyone.
+// The day table's sentence: says which role turned each card (the Revealer, or a Doppelganger or
+// Copycat that copied it), naming only roles that did. Mike: never "and the Doppelganger" when no
+// Doppelganger was involved. Cards come in the order given (seat order on the table).
+export function tableLine(revealed, nameOf) {
+  const who = (x) => { const by = ["unveiler", "lookalike", "copycat"].filter((r) => (x.by || ["unveiler"]).includes(r)).map((r) => `the ${ROLES[r].name}`); return by.length > 1 ? `${by.slice(0, -1).join(", ")} and ${by.at(-1)}` : by[0]; };
+  const cap = (t) => t[0].toUpperCase() + t.slice(1);
+  if (revealed.length === 1) { const x = revealed[0]; return `${cap(who(x))} turned ${nameOf(x.pid)}'s card face up in the night: the ${ROLES[x.role].name}. It stays face up for the rest of the game.`; }
+  const parts = revealed.map((x) => `${who(x)} turned ${nameOf(x.pid)}'s ${ROLES[x.role].name} face up`);
+  return `In the night, ${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}. They stay face up for the rest of the game.`;
+}
+
 export const PIC = {
   card: (who, role, o = {}) => ({ t: "card", who, role, ...o }),
   op: (op) => ({ t: "op", op }),
@@ -524,7 +535,9 @@ function applyAction1(s, pid, id, prompt, msg) {
   const me = nameOf(s, pid);
   // A Doppelganger acting right away as the role she copied: her line goes under the copy.
   const sub = !!prompt.as;
-  const L = (text, pic, extra = {}) => logAction(s, id, pid, sub ? text.replace(`${me} (`, `Right away, ${me} (as the `) : text, pic, sub ? { sub: true, ...extra } : extra);
+  // a Doppelganger or Copycat acting on the copied role's own turn is named as itself: "A (Copycat, as the Revealer)"
+  const copier = !sub && ROLES[id] && ["lookalike", "copycat"].includes(g.dealt[pid]) && g.dealt[pid] !== id ? g.dealt[pid] : null;
+  const L = (text, pic, extra = {}) => logAction(s, id, pid, sub ? text.replace(`${me} (`, `Right away, ${me} (as the `) : copier ? text.replace(`${me} (`, `${me} (${ROLES[copier].name}, as the `) : text, pic, sub ? { sub: true, ...extra } : extra);
   const myRole = id === "wolves" || !ROLES[id] ? wakeRole(g, pid) : id;
   const AC = (o) => actorCard(g, pid, myRole, o);
   if (msg.skip) {
@@ -666,7 +679,12 @@ function applyAction1(s, pid, id, prompt, msg) {
         const r = effRole(g, g.cards[t]);
         const cards = [{ label: them, role: r }];
         const hide = ROLES[r].wolf || r === "jester";
-        if (!hide && !g.revealed.some((x) => x.pid === t)) g.revealed.push({ pid: t, role: r });
+        if (!hide) {
+          // who turned it: the Revealer, or a Doppelganger or Copycat that copied it (by dealt role)
+          const was = g.revealed.find((x) => x.pid === t);
+          if (was) { if (!was.by.includes(g.dealt[pid])) was.by.push(g.dealt[pid]); }
+          else g.revealed.push({ pid: t, role: r, by: [g.dealt[pid]] });
+        }
         const text = hide ? `You turned ${them}'s card face up. It's the ${roleName(r)}, so you turned it back face down. Only you saw it.` : `You turned ${them}'s card face up. It's the ${roleName(r)}. Everyone else sees it when the night ends, and it stays face up for the rest of the game.`;
         const pic = [AC(), PIC.op("flipped"), PIC.card(t, r, { hot: true, badge: hide ? "eye" : "all" })];
         const note = hide ? null : `${me} saw it right away. Everyone else sees it face up when the night ends.`;

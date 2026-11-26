@@ -721,7 +721,7 @@ test("the Revealer leaves a village card face up for the day, but turns a wolf b
   act(s, "a", { target: "b" }, now);
   assert.deepEqual(viewFor(s, "c", now).game.revealed, [], "nobody sees it during the night");
   now = finishNight(s, now);
-  assert.deepEqual(viewFor(s, "c", now).game.revealed, [{ pid: "b", role: "seer" }]);
+  assert.deepEqual(viewFor(s, "c", now).game.revealed, [{ pid: "b", role: "seer", by: ["unveiler"] }]);
 
   s = room(["a", "b", "c"]);
   rig(s, { a: "unveiler", b: "seer", c: "werewolf" }, ["villager", "werewolf", "thief"]);
