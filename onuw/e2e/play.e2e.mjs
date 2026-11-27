@@ -383,6 +383,9 @@ async function picProblems(p, root) {
         if (!cards.length) continue;
         const text = seg.closest(".ms-ep-one, .ms-ep")?.querySelector("p")?.textContent.slice(0, 40);
         for (const c of cards) sizes.add(`${Math.round(box(c).width)}x${Math.round(box(c).height)}`);
+        for (const c of cards) if (box(c).width < 41.5) bad.push(`${text}: card ${Math.round(box(c).width)}px wide, under 42px`);
+        for (const c of cards) if (box(c).right > list.getBoundingClientRect().right + 9 || box(c).left < list.getBoundingClientRect().left - 1) bad.push(`${text}: card outside its list`);
+        for (const c of seg.querySelectorAll(".is-hot > .ms-card")) { const a = getComputedStyle(c, "::after"); if (a.content === "none" || a.borderTopWidth !== "3px" || +a.zIndex < 4) bad.push(`${text}: ring not drawn on all four sides above the band`); }
         // rows: cards whose tops are within half a card of each other
         const rows = [];
         for (const c of cards) { const r = rows.find((r) => Math.abs(box(r[0]).top - box(c).top) < box(c).height / 2); r ? r.push(c) : rows.push([c]); }
