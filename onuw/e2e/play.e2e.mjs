@@ -270,8 +270,8 @@ const cardProblems = (p, w) => p.evaluate((w) => [...document.querySelectorAll("
   const out = [];
   if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
   // event pictures (Your Night, the night log): names stay readable, 7px or more (Pam)
-  // and on the day's table on desktop (phones wait on Mike's pick)
-  if ((c.closest(".ms-eps") || (c.closest(".ms-daytable") && innerWidth >= 720)) && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
+  // and on the day's table
+  if ((c.closest(".ms-eps") || c.closest(".ms-daytable")) && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
   if (t.right > g.left - 2) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
   if (k.right - g.right < 2) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
   return out.length ? [`${where}: ${out.join(", ")}`] : [];
@@ -289,13 +289,30 @@ test("card names fit their band, clear of the team letter and the card edge, at 
   }
 });
 
+// Every eye badge sits inside its card (Mike: "make the eye circle not spill out of the card"), and
+// every highlighted card has its gold ring on all four sides.
+const badgeProblems = (p, w) => p.evaluate((w) => {
+  const out = [];
+  for (const b of document.querySelectorAll(".ms-ep-badge")) {
+    const r = b.getBoundingClientRect(); if (!r.width) continue;
+    const k = b.parentElement.querySelector(":scope > .ms-card").getBoundingClientRect();
+    if (r.left < k.left || r.right > k.right || r.top < k.top || r.bottom > k.bottom) out.push(`eye badge spills ${Math.round(Math.max(k.left - r.left, r.right - k.right, k.top - r.top, r.bottom - k.bottom))}px out of its card @${w}`);
+  }
+  for (const c of document.querySelectorAll(".ms-ep-card.is-hot > .ms-card")) {
+    if (!c.getBoundingClientRect().width) continue;
+    const a = getComputedStyle(c, "::after");
+    if (a.content === "none" || ["Top", "Right", "Bottom", "Left"].some((s) => a[`border${s}Width`] !== "3px")) out.push(`ring not on all four sides @${w}`);
+  }
+  return out;
+}, w);
+
 test("every face-up card shows its team letter in every view: lobby, day, the table, notes, event pictures, end screen, spectator", async () => {
   for (const width of [320, 390, 1440]) {
     const t = await newTable(["Mike", "Ana", "Ben", "Cleo", "Dev"], { watchers: ["Wes"] });
     for (const p of [...t.pages, ...t.specs]) await p.setViewportSize({ width, height: 900 });
     const all = [...t.pages, ...t.specs];
     const bad = [];
-    const check = async (stage) => { for (const p of all) bad.push(...(await cardProblems(p, width)).map((x) => `${stage}: ${x}`)); };
+    const check = async (stage) => { for (const p of all) bad.push(...[...(await cardProblems(p, width)), ...(await badgeProblems(p, width))].map((x) => `${stage}: ${x}`)); };
     await check("lobby");
     await t.host.click("[data-act=start]");
     await dealAndReady(t.pages);
@@ -359,16 +376,18 @@ test("the top bar's buttons say what they are on desktop and are icons alone on 
   await playNight(t.host, t.pages);
   const bar = (p) => p.evaluate(() => {
     const top = document.querySelector(".ms-top"), btns = [...top.querySelectorAll(".ms-top-actions > button")];
-    return { labels: btns.map((b) => b.innerText.replace(/\s+/g, " ").trim()), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))],
+    return { wrapped: [...top.querySelectorAll(".ms-top-label")].filter((l) => l.getClientRects().length > 1 || l.getBoundingClientRect().height > 28).map((l) => l.textContent),
+      labels: btns.map((b) => b.innerText.replace(/\s+/g, " ").trim()), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))],
       overflow: top.scrollWidth > top.clientWidth || btns.some((b) => b.getBoundingClientRect().right > innerWidth) };
   });
-  for (const [width, want] of [[1440, ["Your Night", "Rules", "Players 4", "Host"]], [720, ["Your Night", "Rules", "Players 4", "Host"]], [719, ["", "", "4", "Host"]], [320, ["", "", "4", "Host"]]]) {
+  for (const [width, want] of [[768, ["Your Night", "Rules", "Players 4", "Host"]], [1440, ["Your Night", "Rules", "Players 4", "Host"]], [720, ["Your Night", "Rules", "Players 4", "Host"]], [719, ["", "", "4", "Host"]], [320, ["", "", "4", "Host"]]]) {
     await t.host.setViewportSize({ width, height: 800 });
     await t.host.waitForTimeout(200);
     const b = await bar(t.host);
     assert.deepEqual(b.labels, want, `labels at ${width}`);
     assert.equal(b.heights.length, 1, `one height at ${width}`);
     assert.equal(b.overflow, false, `no overflow at ${width}`);
+    assert.deepEqual(b.wrapped, [], `labels on one line at ${width}`);
   }
   await t.ctx.close();
 });
@@ -427,16 +446,35 @@ test("event pictures: one card size, tops, labels and verbs lined up, in Your Ni
       await p.locator(".ms-modal-mynight").waitFor();
       await p.waitForTimeout(300);
       bad.push(...(await picProblems(p, ".ms-modal-mynight")).map((x) => `${width} your night: ${x}`));
-      bad.push(...(await cardProblems(p, width)).map((x) => `your night: ${x}`));
+      bad.push(...[...(await cardProblems(p, width)), ...(await badgeProblems(p, width))].map((x) => `your night: ${x}`));
       await p.keyboard.press("Escape");
     }
     await toResults(t.host, t.pages);
     await t.host.waitForTimeout(600);
     bad.push(...(await picProblems(t.host, ".ms-results")).map((x) => `${width} night log: ${x}`));
-    bad.push(...(await cardProblems(t.host, width)).map((x) => `night log: ${x}`));
+    bad.push(...[...(await cardProblems(t.host, width)), ...(await badgeProblems(t.host, width))].map((x) => `night log: ${x}`));
     assert.deepEqual(bad, []);
     await t.ctx.close();
   }
+});
+
+test("the day table: 5 across where cards fit at full size, rows of 3 with the last row short on phones", async () => {
+  const names = ["Mike", "Ana", "Ben", "Cleo", "Dev", "Eve", "Fay", "Gus", "Hal", "Ivy"];
+  const t = await newTable(names);
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  await playNight(t.host, t.pages);
+  await t.host.evaluate(() => { const g = window.__onuw.state.g; g.revealed = [{ pid: g.seats[2], role: "meddler", by: ["unveiler"] }]; window.__onuw.publish(); });
+  const p = t.pages[1];
+  await p.waitForSelector(".ms-daytable");
+  for (const [width, want] of [[320, [3, 3, 3, 1]], [375, [3, 3, 3, 1]], [768, [5, 5]], [1440, [5, 5]]]) {
+    await p.setViewportSize({ width, height: 900 });
+    await p.waitForTimeout(300);
+    const got = await p.evaluate(() => { const rows = {}; for (const c of document.querySelectorAll(".ms-daytable-in > .ms-ep-card")) { const r = c.getBoundingClientRect(); (rows[Math.round(r.top)] ||= []).push(Math.round(r.width)); } return Object.values(rows); });
+    assert.deepEqual(got.map((r) => r.length), want, `rows at ${width}`);
+    assert.ok(got.flat().every((w) => w >= 70), `cards at ${width}: ${got.flat()}`);
+  }
+  await t.ctx.close();
 });
 
 test("whack-a-wolf: waiting players can play, cards come halfway up, bonks score, villagers cost, and it closes when your turn comes", async () => {

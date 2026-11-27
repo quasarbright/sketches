@@ -1061,7 +1061,7 @@ function revealedPanel(g) {
   return `<section class="ms-panel ms-revealed">
     <h2 class="ms-h2">The Table</h2>
     <p class="ms-hint">${esc(text)}</p>
-    <div class="ms-daytable" style="--cols:${evenCols(seats.length, 5)};--cols-n:${evenCols(seats.length, 4)}"><div class="ms-daytable-in">${seats.map((p) => { const r = up(p.id); return epCard(r ? { who: p.id, role: r.role, hot: true, badge: "all" } : { who: p.id }, { me: myId }); }).join("")}</div></div>
+    <div class="ms-daytable" style="--cols:${evenCols(seats.length, 5)}"><div class="ms-daytable-in">${seats.map((p) => { const r = up(p.id); return epCard(r ? { who: p.id, role: r.role, hot: true, badge: "all" } : { who: p.id }, { me: myId }); }).join("")}</div></div>
   </section>`;
 }
 
