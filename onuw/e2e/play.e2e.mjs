@@ -269,6 +269,8 @@ const cardProblems = (p, w) => p.evaluate((w) => [...document.querySelectorAll("
   const glyph = document.createRange(); glyph.selectNodeContents(mark); const g = glyph.getBoundingClientRect();
   const out = [];
   if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
+  // event pictures (Your Night, the night log): names stay readable, 7px or more (Pam)
+  if (c.closest(".ms-eps") && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
   if (t.right > g.left - 2) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
   if (k.right - g.right < 2) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
   return out.length ? [`${where}: ${out.join(", ")}`] : [];
@@ -424,11 +426,13 @@ test("event pictures: one card size, tops, labels and verbs lined up, in Your Ni
       await p.locator(".ms-modal-mynight").waitFor();
       await p.waitForTimeout(300);
       bad.push(...(await picProblems(p, ".ms-modal-mynight")).map((x) => `${width} your night: ${x}`));
+      bad.push(...(await cardProblems(p, width)).map((x) => `your night: ${x}`));
       await p.keyboard.press("Escape");
     }
     await toResults(t.host, t.pages);
     await t.host.waitForTimeout(600);
     bad.push(...(await picProblems(t.host, ".ms-results")).map((x) => `${width} night log: ${x}`));
+    bad.push(...(await cardProblems(t.host, width)).map((x) => `night log: ${x}`));
     assert.deepEqual(bad, []);
     await t.ctx.close();
   }

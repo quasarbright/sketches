@@ -394,7 +394,7 @@
     @property --cw { syntax: "<length>"; inherits: true; initial-value: 60px; }
     .ms-eps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; container-type: inline-size; }
     .ms-notes.ms-eps { gap: 0; }
-    .ms-ep { --cw: max(42px, min(60px, calc((100cqw - 110px) / 4)));  /* never under 42px (Pam): a row that doesn't fit wraps */ display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
+    .ms-ep { --cw: clamp(42px, calc((100cqw - 64px) / 2), 72px);  /* card, verb, card fits on one line; longer rows wrap (Pam: names stay readable at 320) */ display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border); }
     .ms-ep:first-child { border-top: 0; padding-top: 4px; }
     .ms-ep-one { display: flex; flex-direction: column; gap: 10px; }
     .ms-ep p { margin: 0; line-height: 1.45; }
