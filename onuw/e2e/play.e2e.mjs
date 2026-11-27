@@ -270,7 +270,8 @@ const cardProblems = (p, w) => p.evaluate((w) => [...document.querySelectorAll("
   const out = [];
   if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
   // event pictures (Your Night, the night log): names stay readable, 7px or more (Pam)
-  if (c.closest(".ms-eps") && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
+  // and on the day's table on desktop (phones wait on Mike's pick)
+  if ((c.closest(".ms-eps") || (c.closest(".ms-daytable") && innerWidth >= 720)) && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
   if (t.right > g.left - 2) out.push(`text ${Math.round(g.left - t.right)}px from letter`);
   if (k.right - g.right < 2) out.push(`letter ${Math.round(k.right - g.right)}px from edge`);
   return out.length ? [`${where}: ${out.join(", ")}`] : [];
@@ -300,7 +301,7 @@ test("every face-up card shows its team letter in every view: lobby, day, the ta
     await dealAndReady(t.pages);
     await playNight(t.host, t.pages);
     // a face-up card on the day's table
-    await t.host.evaluate(() => { const g = window.__onuw.state.g; const id = g.seats[1]; g.revealed = [{ pid: id, role: g.cards[id] }]; window.__onuw.publish(); });
+    await t.host.evaluate(() => { const g = window.__onuw.state.g; const id = g.seats[1]; g.revealed = [{ pid: id, role: "meddler", by: ["unveiler"] }, { pid: g.seats[2], role: "lookalike", by: ["lookalike"] }]; window.__onuw.publish(); });  // the longest names
     await t.host.waitForTimeout(600);
     await check("day");
     for (const p of t.pages) await p.click("[data-act=mynight]");

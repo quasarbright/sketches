@@ -432,7 +432,7 @@
     /* the day's table: every seat face down, and any card the Revealer left face up */
     .ms-daytable { container: daytable / inline-size; margin-top: 14px; }
     /* even rows, centered: cards shrink to fit the columns but never below 42px; on a narrow phone, 4 columns instead of 5 */
-    .ms-daytable-in { --c: var(--cols); --g: min(16px, max(8px, (100cqw - var(--c) * 42px) / (var(--c) - 1))); --cw: max(42px, min(60px, (100cqw - (var(--c) - 1) * var(--g)) / var(--c)));
+    .ms-daytable-in { --c: var(--cols); --g: min(16px, max(8px, (100cqw - var(--c) * 42px) / (var(--c) - 1))); --cw: max(42px, min(72px, (100cqw - (var(--c) - 1) * var(--g)) / var(--c)));
       display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 14px var(--g); max-width: calc(var(--c) * var(--cw) + (var(--c) - 1) * var(--g) + 1px); margin: 0 auto; }
     /* gaps close down to 8px before the columns drop: 5 columns fit while each card stays 42px or wider */
     @container daytable (width < 242px) { .ms-daytable-in { --c: var(--cols-n); } }
