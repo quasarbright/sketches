@@ -269,6 +269,8 @@ const cardProblems = (p, w) => p.evaluate((w) => [...document.querySelectorAll("
   const glyph = document.createRange(); glyph.selectNodeContents(mark); const g = glyph.getBoundingClientRect();
   const out = [];
   if (name.scrollWidth > name.clientWidth + 1) out.push("overflows");
+  // names are left-justified, a small inset from the card's left edge (Mike: "shouldn't we just do left justified")
+  if (t.left - k.left > Math.max(.045 * k.width, 3) + 4) out.push(`name starts ${Math.round(t.left - k.left)}px in, not left-justified`);
   // event pictures (Your Night, the night log): names stay readable, 7px or more (Pam)
   // and on the day's table
   if ((c.closest(".ms-eps") || c.closest(".ms-daytable")) && parseFloat(getComputedStyle(name).fontSize) < 7) out.push(`name ${getComputedStyle(name).fontSize} tall, under 7px`);
