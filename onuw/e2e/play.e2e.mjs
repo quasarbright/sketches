@@ -377,7 +377,7 @@ test("the top bar's buttons say what they are on desktop and are icons alone on 
   await dealAndReady(t.pages);
   await playNight(t.host, t.pages);
   const bar = (p) => p.evaluate(() => {
-    const top = document.querySelector(".ms-top"), btns = [...top.querySelectorAll(".ms-top-actions > button")];
+    const top = document.querySelector(".ms-top"), btns = [...top.querySelectorAll(".ms-top-actions button")];
     return { wrapped: [...top.querySelectorAll(".ms-top-label")].filter((l) => l.getClientRects().length > 1 || l.getBoundingClientRect().height > 28).map((l) => l.textContent),
       labels: btns.map((b) => b.innerText.replace(/\s+/g, " ").trim()), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))],
       overflow: top.scrollWidth > top.clientWidth || btns.some((b) => b.getBoundingClientRect().right > innerWidth) };
@@ -476,6 +476,26 @@ test("the day table: 5 across where cards fit at full size, rows of 3 with the l
     assert.deepEqual(got.map((r) => r.length), want, `rows at ${width}`);
     assert.ok(got.flat().every((w) => w >= 70), `cards at ${width}: ${got.flat()}`);
   }
+  await t.ctx.close();
+});
+
+test("when the discussion starts, a hint under the Your Night button shows for about 5 seconds, then goes", async () => {
+  const t = await newTable(["Mike", "Ana", "Ben", "Cleo"], { watchers: ["Wes"] });
+  await t.host.click("[data-act=start]");
+  await dealAndReady(t.pages);
+  for (const p of t.pages) assert.equal(await p.locator(".ms-nighthint").count(), 0, "no hint at night");
+  await playNight(t.host, t.pages);
+  for (const p of t.pages) {
+    await p.waitForSelector(".ms-nighthint", { timeout: 3000 });
+    assert.match(await p.locator(".ms-nighthint").innerText(), /Your card and your night are here/);
+    // it sits under the button, inside the window
+    const [b, h] = await Promise.all([p.locator("[data-act=mynight]").boundingBox(), p.locator(".ms-nighthint").boundingBox()]);
+    assert.ok(h.y >= b.y + b.height && h.x + h.width <= (await p.evaluate(() => innerWidth)), `under the button, on screen: ${JSON.stringify([b, h])}`);
+  }
+  assert.equal(await t.specs[0].locator(".ms-nighthint").count(), 0, "spectators have no button and no hint");
+  await t.pages[0].waitForTimeout(5600);
+  for (const p of t.pages) assert.equal(await p.locator(".ms-nighthint").count(), 0, "gone after 5 seconds");
+  assert.deepEqual(t.errors, []);
   await t.ctx.close();
 });
 

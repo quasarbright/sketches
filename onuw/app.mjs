@@ -76,7 +76,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const ICONS = {
   users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
   info: `<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`,
-  help: `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>`,
+  history: `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>`,
   book: `<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>`,
   shield: `<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/>`,
   link: `<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>`,
@@ -403,9 +403,15 @@ function freshUi() {
   return { key: null, sel: [], center: [], up: {}, peeked: false };
 }
 
+// When the discussion starts, a small hint under the Your Night button for 5 seconds (Mike, 2026-11-27).
+let nightHintUntil = 0;
 function receiveView(v) {
   const prev = view;
   view = v;
+  if (prev && prev.phase !== "day" && v.phase === "day" && v.game?.myCard) {
+    nightHintUntil = Date.now() + 5000;
+    setTimeout(() => render(), 5050);
+  }
   clockOffset = v.now - now();
   if (lastHostId && v.hostId !== lastHostId && v.hostId !== myId) {
     const h = v.players.find((p) => p.id === v.hostId);
@@ -504,7 +510,7 @@ function topBar() {
   return `<header class="ms-top">
     <div class="ms-brand">${moonMark()}<span>${esc(TITLE)}</span></div>
     <div class="ms-top-actions">
-      ${myNightShown() ? `<button class="ms-icon-btn" data-act="mynight" aria-label="Your card and your night" data-tooltip="Your night: the card you started with and what you did">${icon("help")}<span class="ms-top-label">Your Night</span></button>` : ""}
+      ${myNightShown() ? `<span class="ms-tipwrap"><button class="ms-icon-btn" data-act="mynight" aria-label="Your card and your night" data-tooltip="Your night: the card you started with and what you did">${icon("history")}<span class="ms-top-label">Your Night</span></button>${nightHintUntil > Date.now() ? `<span class="ms-nighthint ${Date.now() > nightHintUntil - 4800 ? "is-shown" : ""}" role="status" style="--left:${Math.max(0, nightHintUntil - Date.now() - 400)}ms">Your card and your night are here</span>` : ""}</span>` : ""}
       <button class="ms-icon-btn" data-act="cheatsheet" aria-label="Cards in this game" data-tooltip="Cards in this game: what each one does, and how each team wins">${icon("book")}<span class="ms-top-label">Rules</span></button>
       <button class="ms-icon-btn" data-act="players" aria-label="Players" data-tooltip="Players: see who's here and change your name">${icon("users")}<span class="ms-top-label">Players</span><span class="ms-count">${n}</span></button>
       ${v.isHost ? `<button class="ms-host-btn" data-act="host" aria-label="Host controls" data-tooltip="Host controls: skip ahead, end the vote, kick a player, start over">${icon("shield")}<span>Host</span></button>` : ""}
@@ -562,8 +568,19 @@ function render() {
     }
     if (focused) { const el = document.getElementById(focused); if (el) { el.focus(); try { el.setSelectionRange(sel, sel); } catch {} } }
   }
+  placeNightHint();
   document.body.dataset.phase = view && screen === "room" ? view.phase : screen;
   refreshPanel();
+}
+
+// Keep the start-of-day hint on screen: slide it left by however much it would hang past the window's
+// right edge (8px margin), and move its arrow the other way so it still points at the button's icon.
+function placeNightHint() {
+  const h = document.querySelector(".ms-nighthint");
+  if (!h) return;
+  h.style.left = ""; h.style.removeProperty("--arrow");
+  const over = h.getBoundingClientRect().right - (document.documentElement.clientWidth - 8);
+  if (over > 0) { h.style.left = `${-4 - over}px`; h.style.setProperty("--arrow", `${20 + over}px`); }
 }
 
 function messageScreen(title, body, spinner = false, back = false, retry = false, first = "") {

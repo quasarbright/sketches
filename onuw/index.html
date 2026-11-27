@@ -106,6 +106,16 @@
     .ms-brand { display: flex; align-items: center; gap: 8px; font: 650 1.15rem var(--font-display); color: var(--accent); }
     .ms-moonmark { width: 26px; height: 26px; }
     .ms-top-actions { display: flex; gap: 8px; align-items: center; }
+    .ms-tipwrap { position: relative; display: inline-flex; }
+    /* the start-of-day hint: a small bubble under the Your Night button, its arrow on the button; fades out after 5 seconds */
+    .ms-nighthint { position: absolute; z-index: 6; top: calc(100% + 9px); left: -4px; padding: 6px 10px; border-radius: 8px; white-space: nowrap; pointer-events: none;
+      background: #ffd88a; color: #231a00; font: 600 .78rem/1.2 var(--font-ui); box-shadow: 0 6px 18px rgba(0,0,0,.45);
+      animation: ms-hint-in .2s ease-out both, ms-hint-out .4s ease-in var(--left, 4600ms) both; }
+    .ms-nighthint.is-shown { animation: ms-hint-out .4s ease-in var(--left, 4600ms) both; }  /* a re-render while it's up doesn't replay the fade-in */
+    .ms-nighthint::before { content: ""; position: absolute; top: -5px; left: var(--arrow, 20px); width: 10px; height: 10px; background: inherit; transform: rotate(45deg); border-radius: 2px; }
+    @keyframes ms-hint-in { from { opacity: 0; transform: translateY(-4px); } }
+    @keyframes ms-hint-out { to { opacity: 0; transform: translateY(-4px); } }
+    @media (prefers-reduced-motion: reduce) { .ms-nighthint { animation: ms-hint-out .01s linear var(--left, 4600ms) both; } }
     .ms-icon-btn { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 42px; height: 42px; padding: 0 10px;
       border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
     .ms-icon-btn:hover { background: var(--panel-2); }
