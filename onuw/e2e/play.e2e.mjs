@@ -487,7 +487,7 @@ test("when the discussion starts, a hint under the Your Night button shows for a
   await playNight(t.host, t.pages);
   for (const p of t.pages) {
     await p.waitForSelector(".ms-nighthint", { timeout: 3000 });
-    assert.match(await p.locator(".ms-nighthint").innerText(), /Your card and your night are here/);
+    assert.match(await p.locator(".ms-nighthint").innerText(), /^Night actions$/);
     // it sits under the button, inside the window
     const [b, h] = await Promise.all([p.locator("[data-act=mynight]").boundingBox(), p.locator(".ms-nighthint").boundingBox()]);
     assert.ok(h.y >= b.y + b.height && h.x + h.width <= (await p.evaluate(() => innerWidth)), `under the button, on screen: ${JSON.stringify([b, h])}`);
